@@ -101,6 +101,45 @@
   </header>
   <main>
 
+    <!-- Quét mạng -->
+    <div class="panel">
+      <h2>Quét mạng</h2>
+      <p class="muted">Quét UDP chỉ thấy camera cùng mạng LAN (không qua NAT). Dùng nmap để quét subnet.</p>
+
+      <div class="row">
+        <div>
+          <button id="scan-lan-btn">Quét LAN (ONVIF/Dahua/Hik)</button>
+        </div>
+        <div class="field" style="max-width:220px; margin-bottom:0">
+          <label for="scan-subnet">Subnet (CIDR)</label>
+          <input id="scan-subnet" placeholder="192.168.1.0/24">
+        </div>
+        <div>
+          <button class="secondary" id="scan-nmap-btn">Quét nmap</button>
+        </div>
+      </div>
+      <div class="msg" id="scan-msg"></div>
+
+      <div class="table-wrap" style="margin-top:14px">
+        <table id="scan-table">
+          <thead>
+            <tr>
+              <th>IP</th>
+              <th>Cổng</th>
+              <th>Hãng</th>
+              <th>Model</th>
+              <th>MAC</th>
+              <th>Nguồn</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="scan-tbody">
+            <tr><td colspan="7" class="muted">Chưa quét.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Kho camera -->
     <div class="panel">
       <h2>Kho camera</h2>
@@ -609,6 +648,82 @@
         document.getElementById('apply-count').textContent =
           selectedCameraIds().length + ' camera đã chọn';
       }
+    });
+
+    // --- network scan (Milestone 5) ---
+
+    let scanResults = [];
+
+    function renderScanResults() {
+      const tbody = document.getElementById('scan-tbody');
+      if (!scanResults.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="muted">Chưa quét.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = scanResults.map((r, i) => `
+        <tr>
+          <td>${escapeHtml(r.ip)}</td>
+          <td>${r.port ? escapeHtml(String(r.port)) : ''}</td>
+          <td>${escapeHtml(r.vendor || '')}</td>
+          <td>${escapeHtml(r.model || '')}</td>
+          <td>${escapeHtml(r.mac || '')}</td>
+          <td>${escapeHtml(r.via || '')}</td>
+          <td><button class="secondary" data-scan-add="${i}">Thêm vào kho</button></td>
+        </tr>
+      `).join('');
+    }
+
+    async function runScan(body, btn) {
+      const msg = document.getElementById('scan-msg');
+      msg.textContent = '';
+      msg.className = 'msg';
+      btn.disabled = true;
+      const prevLabel = btn.textContent;
+      btn.textContent = 'Đang quét...';
+      try {
+        scanResults = await api('/api/scan', { method: 'POST', body: JSON.stringify(body) });
+        renderScanResults();
+        msg.textContent = scanResults.length
+          ? `Tìm thấy ${scanResults.length} thiết bị.`
+          : 'Không tìm thấy thiết bị nào.';
+        msg.className = scanResults.length ? 'msg ok' : 'msg';
+      } catch (e) {
+        msg.textContent = 'Lỗi quét: ' + e.message;
+        msg.className = 'msg err';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = prevLabel;
+      }
+    }
+
+    document.getElementById('scan-lan-btn').addEventListener('click', () => {
+      runScan({ method: 'all' }, document.getElementById('scan-lan-btn'));
+    });
+
+    document.getElementById('scan-nmap-btn').addEventListener('click', () => {
+      const subnet = document.getElementById('scan-subnet').value.trim();
+      const msg = document.getElementById('scan-msg');
+      if (!subnet) {
+        msg.textContent = 'Nhập subnet dạng CIDR, ví dụ 192.168.1.0/24.';
+        msg.className = 'msg err';
+        return;
+      }
+      runScan({ method: 'nmap', subnet }, document.getElementById('scan-nmap-btn'));
+    });
+
+    document.getElementById('scan-tbody').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-scan-add]');
+      if (!btn) return;
+      const r = scanResults[parseInt(btn.dataset.scanAdd, 10)];
+      if (!r) return;
+      document.getElementById('f-host').value = r.ip || '';
+      document.getElementById('f-port').value = r.port || '';
+      if (r.vendor === 'dahua' || r.vendor === 'hikvision') {
+        document.getElementById('f-vendor').value = r.vendor;
+      }
+      document.getElementById('f-name').value = r.model || r.name || '';
+      document.getElementById('add-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.getElementById('f-host').focus();
     });
 
     loadCameras();

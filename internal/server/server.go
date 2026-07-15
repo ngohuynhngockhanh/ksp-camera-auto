@@ -63,6 +63,7 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/cameras/delete", s.requireAuth(http.HandlerFunc(s.handleCamerasDelete)))
 	s.mux.Handle("/api/probe", s.requireAuth(http.HandlerFunc(s.handleProbe)))
 	s.mux.Handle("/api/apply", s.requireAuth(http.HandlerFunc(s.handleApply)))
+	s.mux.Handle("/api/scan", s.requireAuth(http.HandlerFunc(s.handleScan)))
 
 	// Authenticated app + static assets.
 	fileServer := http.FileServer(http.FS(s.static))

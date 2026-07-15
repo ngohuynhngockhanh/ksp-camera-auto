@@ -10,6 +10,7 @@ import (
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/dahua"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/hik"
 )
 
 // Stream selects an encoded stream. Values match dahua.Stream: 0=main,
@@ -88,8 +89,18 @@ type Camera interface {
 }
 
 // Open dials the device according to its configured vendor and returns a
-// Camera implementation. Hikvision is not yet implemented (M6) and returns an
-// error so callers can degrade gracefully.
+// Camera implementation.
+//
+// Hikvision devices are controlled over ISAPI (HTTP), using the payload and
+// transport layer in internal/isapi via the internal/hik adapter. Note that
+// this is plain HTTP, not HTTPS: Device carries no per-device TLS flag yet,
+// and ISAPI over HTTP is what Hikvision cameras serve by default. Unlike
+// dahua.Dial, hik.Dial never touches the network -- it just builds the HTTP
+// client -- so Open() always succeeds for a well-formed Device and any
+// connectivity/credential problem surfaces from the first Probe/Apply call
+// instead. The user's actual hardware also exposes a proprietary binary
+// protocol on port 8000; that transport is a separate, later milestone (M6)
+// and is not implemented here.
 func Open(ctx context.Context, d config.Device, timeout time.Duration) (Camera, error) {
 	switch d.Vendor {
 	case config.VendorDahua:
@@ -99,7 +110,8 @@ func Open(ctx context.Context, d config.Device, timeout time.Duration) (Camera, 
 		}
 		return &dahuaCamera{client: cl}, nil
 	case config.VendorHikvision:
-		return nil, fmt.Errorf("hikvision not yet supported (M6)")
+		cl := hik.Dial(d.Host, d.Port, false, d.Username, d.Password, timeout)
+		return &hikCamera{client: cl}, nil
 	default:
 		return nil, fmt.Errorf("unknown vendor %q", d.Vendor)
 	}
@@ -260,6 +272,185 @@ func toStreamInfo(i dahua.StreamInfo) StreamInfo {
 		FPS:         i.FPS,
 		Compression: i.Compression,
 		Profile:     i.Profile,
+		AudioCodec:  i.AudioCodec,
+		AudioEnable: i.AudioEnable,
+		SmartCodec:  i.SmartCodec,
+	}
+}
+
+// hikCamera adapts *hik.Client to the Camera interface over ISAPI.
+//
+// Channel numbering: Profile.Channel is 0-based (matching the Dahua
+// convention, so the zero value targets a single-channel device's only
+// stream), while Hikvision's native ISAPI channel numbers are 1-based (101 =
+// channel 1 main stream). isapiChannel converts between the two at the
+// boundary; every hik.Client / isapi call below uses the converted value.
+type hikCamera struct {
+	client *hik.Client
+}
+
+func (h *hikCamera) Close() error { return h.client.Close() }
+
+// isapiChannel converts a vendor-neutral (0-based) Profile.Channel to
+// Hikvision's native (1-based) channel number.
+func isapiChannel(profileChannel int) int { return profileChannel + 1 }
+
+// Probe reads back main + sub1 + sub2 stream info for the default channel
+// (Profile.Channel's zero value, i.e. ISAPI channel 1).
+func (h *hikCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
+	ch := isapiChannel(0)
+	var out []StreamInfo
+	for _, s := range []int{StreamMain, StreamSub1, StreamSub2} {
+		info, err := h.client.GetStreamInfo(ctx, ch, s)
+		if err != nil {
+			return out, fmt.Errorf("probe stream %d: %w", s, err)
+		}
+		out = append(out, hikToStreamInfo(info))
+	}
+	return out, nil
+}
+
+// Apply pushes profile's settings to the device, one StepResult per action,
+// calling emit as each step completes (emit may be nil). It never returns
+// early on a per-step failure: every requested action is attempted so the
+// caller sees the full picture. For each requested stream the order is
+// codec -> resolution -> audio AAC -> smart codec.
+//
+// Unlike Dahua's SmartEncode (a single per-physical-channel switch), ISAPI's
+// smartCodec toggle is a resource on each compound streaming-channel id
+// (e.g. /ISAPI/Streaming/channels/101/smartCodec), so it is applied once per
+// requested stream here rather than once per profile.
+func (h *hikCamera) Apply(ctx context.Context, profile Profile, emit func(StepResult)) []StepResult {
+	var steps []StepResult
+	add := func(step StepResult) {
+		steps = append(steps, step)
+		if emit != nil {
+			emit(step)
+		}
+	}
+	ch := isapiChannel(profile.Channel)
+
+	for _, s := range profile.streams() {
+		streamName := streamLabel(s)
+
+		if profile.SetCodec {
+			add(h.applyCodec(ctx, ch, s, streamName, profile.Codec))
+		}
+		if profile.SetResolution {
+			add(h.applyResolution(ctx, ch, s, streamName, profile.Width, profile.Height))
+		}
+		if profile.SetAudioAAC {
+			add(h.applyAudioAAC(ctx, ch, s, streamName))
+		}
+		if profile.SetSmartCodec {
+			add(h.applySmartCodec(ctx, ch, s, streamName, profile.SmartCodec))
+		}
+	}
+
+	return steps
+}
+
+// hikCodec maps the vendor-neutral (Dahua-flavored) Profile.Codec value to a
+// Hikvision videoCodecType. Dahua encodes H.264 profile into the compression
+// string itself (H.264H = High, H.264B = Baseline); ISAPI has no
+// videoCodecType equivalent for that distinction (profile is a separate
+// field this milestone doesn't touch), so both collapse to plain H.264.
+func hikCodec(profileCodec string) string {
+	switch profileCodec {
+	case "H.265":
+		return isapiCodecH265
+	case "H.264", "H.264H", "H.264B":
+		return isapiCodecH264
+	case "MJPG":
+		return isapiCodecMJPEG
+	default:
+		return profileCodec
+	}
+}
+
+func (h *hikCamera) applyCodec(ctx context.Context, ch, s int, streamName, profileCodec string) StepResult {
+	codec := hikCodec(profileCodec)
+	step := StepResult{Step: fmt.Sprintf("codec %s", streamName), Detail: codec}
+	if err := h.client.SetCodec(ctx, ch, s, codec); err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	// Mirror Dahua's behavior: unsupported codecs can be silently ignored by
+	// the device, so a read-back is mandatory here, not best-effort.
+	info, err := h.client.GetStreamInfo(ctx, ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	step.OK = info.Codec == codec
+	if !step.OK {
+		step.Detail = fmt.Sprintf("codec không đổi được (cam không hỗ trợ?) — hiện tại: %s", info.Codec)
+		return step
+	}
+	step.Detail = fmt.Sprintf("codec %s OK", codec)
+	return step
+}
+
+func (h *hikCamera) applyResolution(ctx context.Context, ch, s int, streamName string, w, h2 int) StepResult {
+	step := StepResult{Step: fmt.Sprintf("resolution %s", streamName), Detail: fmt.Sprintf("%dx%d", w, h2)}
+	if err := h.client.SetResolution(ctx, ch, s, w, h2, 0); err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	info, err := h.client.GetStreamInfo(ctx, ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	step.OK = info.Width == w && info.Height == h2
+	if !step.OK {
+		step.Detail = fmt.Sprintf("độ phân giải không đổi được (đọc lại: %dx%d)", info.Width, info.Height)
+		return step
+	}
+	step.Detail = fmt.Sprintf("độ phân giải %dx%d OK", w, h2)
+	return step
+}
+
+func (h *hikCamera) applyAudioAAC(ctx context.Context, ch, s int, streamName string) StepResult {
+	step := StepResult{Step: fmt.Sprintf("audio AAC %s", streamName)}
+	if err := h.client.SetAudioAAC(ctx, ch, s); err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	step.OK = true
+	step.Detail = "AAC bật"
+	return step
+}
+
+func (h *hikCamera) applySmartCodec(ctx context.Context, ch, s int, streamName string, on bool) StepResult {
+	step := StepResult{Step: fmt.Sprintf("smart codec %s", streamName), Detail: onOff(on)}
+	if err := h.client.SetSmartCodec(ctx, ch, s, on); err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	step.OK = true
+	return step
+}
+
+// isapiCodecH264/H265/MJPEG mirror the isapi package's Codec* constants.
+// They're redeclared here (rather than importing internal/isapi's constants
+// directly into hikCodec's callers) purely so this file's vendor-facing
+// vocabulary stays self-contained and greppable; the values must stay in
+// sync with internal/isapi.CodecH264/CodecH265/CodecMJPEG.
+const (
+	isapiCodecH264  = "H.264"
+	isapiCodecH265  = "H.265"
+	isapiCodecMJPEG = "MJPEG"
+)
+
+func hikToStreamInfo(i hik.StreamInfo) StreamInfo {
+	return StreamInfo{
+		Channel:     i.Channel,
+		Stream:      i.Stream,
+		Width:       i.Width,
+		Height:      i.Height,
+		FPS:         i.FPS,
+		Compression: i.Codec,
 		AudioCodec:  i.AudioCodec,
 		AudioEnable: i.AudioEnable,
 		SmartCodec:  i.SmartCodec,
