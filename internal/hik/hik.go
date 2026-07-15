@@ -18,22 +18,36 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/isapi"
 )
 
-// Client is a Hikvision device handle backed by ISAPI over HTTP(S).
+// Client is a Hikvision device handle backed by an isapi.Client. The isapi
+// client may run over HTTP(S) (Dial) or over the proprietary port 8000 via the
+// optional cgo SDK backend (NewWithClient) — the operation set is identical.
 type Client struct {
-	isapi *isapi.Client
+	isapi  *isapi.Client
+	closer func() error
 }
 
-// Dial builds a Client talking ISAPI to host:port. https selects the scheme;
-// pass false for plain HTTP (ISAPI's default, and what Hikvision devices
-// serve out of the box). timeout bounds every request.
+// Dial builds a Client talking ISAPI to host:port over HTTP(S). https selects
+// the scheme; pass false for plain HTTP (ISAPI's default, and what Hikvision
+// devices serve out of the box). timeout bounds every request.
 func Dial(host string, port int, https bool, user, pass string, timeout time.Duration) *Client {
 	return &Client{isapi: isapi.New(host, port, https, user, pass, timeout)}
 }
 
-// Close releases resources held by the client. ISAPI is plain HTTP request/
-// response with no persistent session, so there is nothing to release; this
-// exists to satisfy callers that treat every vendor client uniformly.
-func (c *Client) Close() error { return nil }
+// NewWithClient builds a Client over a pre-constructed isapi.Client (e.g. one
+// backed by the SDK transport). closer, if non-nil, is invoked by Close to
+// release the underlying session (e.g. SDK logout).
+func NewWithClient(c *isapi.Client, closer func() error) *Client {
+	return &Client{isapi: c, closer: closer}
+}
+
+// Close releases resources held by the client. For the HTTP transport there is
+// nothing to release; for the SDK transport it logs out the session.
+func (c *Client) Close() error {
+	if c.closer != nil {
+		return c.closer()
+	}
+	return nil
+}
 
 // StreamInfo is a read-back summary of one stream's encode settings.
 type StreamInfo = isapi.StreamInfo

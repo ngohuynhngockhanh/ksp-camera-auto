@@ -244,7 +244,9 @@ func TestGetStreamChannelWrongCredsFails(t *testing.T) {
 
 func TestSetResolution(t *testing.T) {
 	fake := newFakeISAPIServer("admin", "hunter2")
-	fake.seedChannel(101, &StreamingChannel{ID: "101", Video: &Video{VideoCodecType: CodecH264}})
+	// Real devices always return these fields; raw-XML mutation replaces the
+	// existing tags rather than inventing them.
+	fake.seedChannel(101, &StreamingChannel{ID: "101", Video: &Video{VideoCodecType: CodecH264, VideoResolutionWidth: 1920, VideoResolutionHeight: 1080, MaxFrameRate: 3000}})
 	srv := httptest.NewServer(fake.handler())
 	defer srv.Close()
 	c := newTestClient(t, srv, "admin", "hunter2")
@@ -270,7 +272,7 @@ func TestSetResolution(t *testing.T) {
 
 func TestSetCodec(t *testing.T) {
 	fake := newFakeISAPIServer("admin", "hunter2")
-	fake.seedChannel(101, &StreamingChannel{ID: "101", Video: &Video{VideoResolutionWidth: 1920, VideoResolutionHeight: 1080}})
+	fake.seedChannel(101, &StreamingChannel{ID: "101", Video: &Video{VideoCodecType: CodecH264, VideoResolutionWidth: 1920, VideoResolutionHeight: 1080}})
 	srv := httptest.NewServer(fake.handler())
 	defer srv.Close()
 	c := newTestClient(t, srv, "admin", "hunter2")
@@ -304,7 +306,9 @@ func TestSetAudioAAC(t *testing.T) {
 	fake.mu.Lock()
 	sc := fake.channels[101]
 	fake.mu.Unlock()
-	if sc.Audio == nil || !sc.Audio.Enabled || sc.Audio.AudioCompressionType != "AAC" {
+	// SetAudioAAC changes only the audio codec (audioCompressionType); it does
+	// not force the enabled flag, matching the raw-mutation behaviour.
+	if sc.Audio == nil || sc.Audio.AudioCompressionType != "AAC" {
 		t.Fatalf("audio not set to AAC: %+v", sc.Audio)
 	}
 }

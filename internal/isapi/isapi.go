@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -18,16 +19,25 @@ const (
 	CodecMJPEG = "MJPEG"
 )
 
-// Client talks ISAPI (Hikvision's HTTP/XML control API) to one device.
-type Client struct {
-	baseURL string
-	http    *http.Client
+// Transport carries one ISAPI request (an HTTP-style method + "/ISAPI/..."
+// path, optional XML body) to a device and returns the response body. The
+// default implementation is HTTP+Digest; the optional cgo `hiksdk` backend
+// implements it over NET_DVR_STDXMLConfig so the exact same XML get/set logic
+// drives a device reachable only on the private port 8000.
+type Transport interface {
+	Do(ctx context.Context, method, path string, body []byte) ([]byte, error)
 }
 
-// New builds a Client for the device at host:port. https selects the scheme;
-// when true, TLS certificate verification is skipped because Hikvision
-// devices ship self-signed certificates by default. timeout bounds every
-// request (connect + read).
+// Client talks ISAPI (Hikvision's HTTP/XML control API) to one device over a
+// pluggable Transport.
+type Client struct {
+	rt Transport
+}
+
+// New builds a Client for the device at host:port over HTTP(S). https selects
+// the scheme; when true, TLS certificate verification is skipped because
+// Hikvision devices ship self-signed certificates by default. timeout bounds
+// every request (connect + read).
 func New(host string, port int, https bool, user, pass string, timeout time.Duration) *Client {
 	scheme := "http"
 	var tlsConf *tls.Config
@@ -37,11 +47,15 @@ func New(host string, port int, https bool, user, pass string, timeout time.Dura
 	}
 	baseTransport := &http.Transport{TLSClientConfig: tlsConf}
 	digest := NewDigestTransport(user, pass, baseTransport)
-	return &Client{
+	return &Client{rt: &httpTransport{
 		baseURL: fmt.Sprintf("%s://%s:%d", scheme, host, port),
 		http:    &http.Client{Transport: digest, Timeout: timeout},
-	}
+	}}
 }
+
+// NewWithTransport builds a Client over a custom Transport (e.g. the SDK
+// backend). All GET/PUT/Set logic is shared with the HTTP client.
+func NewWithTransport(rt Transport) *Client { return &Client{rt: rt} }
 
 // StreamingChannel mirrors the subset of ISAPI's
 // /ISAPI/Streaming/channels/{id} document this package understands. GET
@@ -118,11 +132,22 @@ func truncate(b []byte, n int) string {
 	return string(b[:n]) + "..."
 }
 
-// do issues an HTTP request against path (which must start with "/ISAPI"),
-// authenticating via the client's DigestTransport, and returns the response
-// body. Non-2xx HTTP statuses are still returned as data (some ISAPI errors
-// carry a useful ResponseStatus body alongside a 4xx) but also as an error.
+// do routes one request through the client's Transport.
 func (c *Client) do(ctx context.Context, method, path string, body []byte) ([]byte, error) {
+	return c.rt.Do(ctx, method, path, body)
+}
+
+// httpTransport is the default Transport: ISAPI over HTTP(S) with Digest auth.
+type httpTransport struct {
+	baseURL string
+	http    *http.Client
+}
+
+// Do issues an HTTP request against path (which must start with "/ISAPI"),
+// authenticating via the DigestTransport, and returns the response body.
+// Non-2xx HTTP statuses are still returned as data (some ISAPI errors carry a
+// useful ResponseStatus body alongside a 4xx) but also as an error.
+func (c *httpTransport) Do(ctx context.Context, method, path string, body []byte) ([]byte, error) {
 	url := c.baseURL + path
 	var reqBody io.Reader
 	if body != nil {
@@ -236,39 +261,77 @@ func (c *Client) putSmartCodec(ctx context.Context, id int, on bool) error {
 	return nil
 }
 
-// SetResolution sets the pixel resolution (and, when fps > 0, maxFrameRate =
-// fps*100) for one channel/stream via GET-modify-PUT. Pass fps <= 0 to leave
-// the frame rate untouched.
-func (c *Client) SetResolution(ctx context.Context, ch, stream, w, h, fps int) error {
-	id := channelID(ch, stream)
-	sc, err := c.GetStreamChannel(ctx, id)
+// streamPath is the ISAPI resource for a compound channel id.
+func streamPath(id int) string {
+	return fmt.Sprintf("/ISAPI/Streaming/channels/%d", id)
+}
+
+// mutateStreamChannel does a GET-modify-PUT that preserves the FULL device
+// document, replacing only the given <tag>value</tag> pairs in the raw XML.
+// Re-marshalling a trimmed Go struct is rejected by real devices/NVRs with
+// "Invalid XML Content" because the schema requires fields this package does
+// not model, so we edit the raw bytes instead.
+func (c *Client) mutateStreamChannel(ctx context.Context, id int, edits map[string]string) error {
+	path := streamPath(id)
+	raw, err := c.do(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return err
 	}
-	if sc.Video == nil {
-		sc.Video = &Video{}
+	for tag, val := range edits {
+		raw = replaceXMLTag(raw, tag, val)
 	}
-	sc.Video.VideoResolutionWidth = w
-	sc.Video.VideoResolutionHeight = h
+	resp, err := c.do(ctx, http.MethodPut, path, raw)
+	if err != nil {
+		return err
+	}
+	if err := checkResponseStatus(resp); err != nil {
+		return fmt.Errorf("isapi: PUT %s: %w", path, err)
+	}
+	return nil
+}
+
+// replaceXMLTag replaces the content of the first <tag>...</tag> in doc with
+// value. If the tag is absent the document is returned unchanged.
+func replaceXMLTag(doc []byte, tag, value string) []byte {
+	open := []byte("<" + tag + ">")
+	closeTag := []byte("</" + tag + ">")
+	i := bytes.Index(doc, open)
+	if i < 0 {
+		return doc
+	}
+	start := i + len(open)
+	rel := bytes.Index(doc[start:], closeTag)
+	if rel < 0 {
+		return doc
+	}
+	end := start + rel
+	out := make([]byte, 0, len(doc)-(end-start)+len(value))
+	out = append(out, doc[:start]...)
+	out = append(out, value...)
+	out = append(out, doc[end:]...)
+	return out
+}
+
+// SetResolution sets the pixel resolution (and, when fps > 0, maxFrameRate =
+// fps*100) for one channel/stream, preserving all other device fields. Pass
+// fps <= 0 to leave the frame rate untouched.
+func (c *Client) SetResolution(ctx context.Context, ch, stream, w, h, fps int) error {
+	edits := map[string]string{
+		"videoResolutionWidth":  strconv.Itoa(w),
+		"videoResolutionHeight": strconv.Itoa(h),
+	}
 	if fps > 0 {
-		sc.Video.MaxFrameRate = fps * 100
+		edits["maxFrameRate"] = strconv.Itoa(fps * 100)
 	}
-	return c.PutStreamChannel(ctx, id, sc)
+	return c.mutateStreamChannel(ctx, channelID(ch, stream), edits)
 }
 
 // SetCodec sets the video codec (CodecH264/CodecH265/CodecMJPEG, or any raw
 // videoCodecType the device accepts) for one channel/stream.
 func (c *Client) SetCodec(ctx context.Context, ch, stream int, codec string) error {
-	id := channelID(ch, stream)
-	sc, err := c.GetStreamChannel(ctx, id)
-	if err != nil {
-		return err
-	}
-	if sc.Video == nil {
-		sc.Video = &Video{}
-	}
-	sc.Video.VideoCodecType = codec
-	return c.PutStreamChannel(ctx, id, sc)
+	return c.mutateStreamChannel(ctx, channelID(ch, stream), map[string]string{
+		"videoCodecType": codec,
+	})
 }
 
 // SetSmartCodec toggles Smart Codec (H.264+/H.265+) for one channel/stream
@@ -285,19 +348,13 @@ func (c *Client) SetSmartCodec(ctx context.Context, ch, stream int, on bool) err
 	return c.putSmartCodec(ctx, id, on)
 }
 
-// SetAudioAAC forces the stream's audio codec to AAC and enables audio.
+// SetAudioAAC forces the stream's audio codec to AAC, preserving other device
+// fields. (Audio must already be enabled on the channel; the audio input codec
+// lives in the StreamingChannel document as audioCompressionType.)
 func (c *Client) SetAudioAAC(ctx context.Context, ch, stream int) error {
-	id := channelID(ch, stream)
-	sc, err := c.GetStreamChannel(ctx, id)
-	if err != nil {
-		return err
-	}
-	if sc.Audio == nil {
-		sc.Audio = &Audio{}
-	}
-	sc.Audio.Enabled = true
-	sc.Audio.AudioCompressionType = "AAC"
-	return c.PutStreamChannel(ctx, id, sc)
+	return c.mutateStreamChannel(ctx, channelID(ch, stream), map[string]string{
+		"audioCompressionType": "AAC",
+	})
 }
 
 // StreamInfo is a read-back summary of one stream's encode settings.

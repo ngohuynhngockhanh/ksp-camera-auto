@@ -110,7 +110,10 @@ func Open(ctx context.Context, d config.Device, timeout time.Duration) (Camera, 
 		}
 		return &dahuaCamera{client: cl}, nil
 	case config.VendorHikvision:
-		cl := hik.Dial(d.Host, d.Port, false, d.Username, d.Password, timeout)
+		cl, err := openHikClient(d, timeout)
+		if err != nil {
+			return nil, err
+		}
 		return &hikCamera{client: cl}, nil
 	default:
 		return nil, fmt.Errorf("unknown vendor %q", d.Vendor)
@@ -300,12 +303,22 @@ func isapiChannel(profileChannel int) int { return profileChannel + 1 }
 func (h *hikCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
 	ch := isapiChannel(0)
 	var out []StreamInfo
+	var firstErr error
 	for _, s := range []int{StreamMain, StreamSub1, StreamSub2} {
 		info, err := h.client.GetStreamInfo(ctx, ch, s)
 		if err != nil {
-			return out, fmt.Errorf("probe stream %d: %w", s, err)
+			// Many devices (e.g. NVR channels) expose only main+sub; a missing
+			// stream reports "notSupport". Skip it rather than failing the probe.
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
 		}
 		out = append(out, hikToStreamInfo(info))
+	}
+	// Only surface an error if nothing at all came back.
+	if len(out) == 0 && firstErr != nil {
+		return out, fmt.Errorf("probe: %w", firstErr)
 	}
 	return out, nil
 }

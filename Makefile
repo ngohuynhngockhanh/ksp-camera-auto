@@ -42,6 +42,16 @@ build-arm32:
 build-arm64:
 	GOOS=linux GOARCH=arm64 $(GO) build -ldflags '$(LDFLAGS)' -o $(DIST)/$(BINARY)-linux-arm64 $(PKG)
 
+# Optional Hikvision SDK (8000) build. Requires the HCNetSDK: set HIKSDK to the
+# SDK dir containing incEn/ and lib/. Produces a cgo binary (not static, amd64).
+# At runtime set KSPCAM_HIKSDK_PATH=$(HIKSDK)/lib. The SDK is never committed.
+build-hiksdk:
+	@test -n "$(HIKSDK)" || (echo "set HIKSDK=/path/to/HCNetSDK dir (with incEn/ and lib/)"; exit 1)
+	CGO_ENABLED=1 \
+	CGO_CPPFLAGS="-I$(HIKSDK)/incEn" \
+	CGO_LDFLAGS="-L$(HIKSDK)/lib -lhcnetsdk -Wl,-rpath,$(HIKSDK)/lib" \
+	$(GO) build -tags hiksdk -ldflags '$(LDFLAGS)' -o $(BINARY)-hiksdk $(PKG)
+
 clean:
-	rm -f $(BINARY)
+	rm -f $(BINARY) $(BINARY)-hiksdk
 	rm -rf $(DIST)
