@@ -11,6 +11,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/bulk"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/camera"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/importer"
 )
 
 // deviceTimeout bounds how long the API waits on a single camera connection.
@@ -147,6 +148,51 @@ func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
 	}
 	saved, _ := s.inv.Get(d.ID)
 	writeJSON(w, http.StatusOK, toView(saved))
+}
+
+// importReq is the body of POST /api/import (Shinobi monitor JSON).
+type importReq struct {
+	JSON      string `json:"json"`
+	HikPort   int    `json:"hikPort"`
+	DahuaPort int    `json:"dahuaPort"`
+}
+
+// handleImport parses a Shinobi monitor config, auto-detecting vendor +
+// credentials from each RTSP URL, and adds the cameras to the inventory.
+func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req importReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	if req.HikPort == 0 {
+		req.HikPort = s.cfg.Defaults.HikvisionPort
+	}
+	if req.DahuaPort == 0 {
+		req.DahuaPort = s.cfg.Defaults.DahuaPort
+	}
+	res, err := importer.ParseShinobi([]byte(req.JSON), req.HikPort, req.DahuaPort)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	added := make([]deviceView, 0, len(res.Devices))
+	for _, d := range res.Devices {
+		if err := s.inv.Upsert(d); err != nil {
+			continue
+		}
+		if d.ID == "" {
+			d.ID = d.Addr()
+		}
+		if saved, ok := s.inv.Get(d.ID); ok {
+			added = append(added, toView(saved))
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"added": added, "skipped": res.Skipped})
 }
 
 // idReq is a body carrying only a device ID, used by delete/probe.

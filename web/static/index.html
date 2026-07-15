@@ -198,6 +198,28 @@
       </div>
     </div>
 
+    <!-- Nhập từ Shinobi -->
+    <div class="panel">
+      <h2>Nhập từ Shinobi</h2>
+      <p class="muted">Dán JSON monitor của Shinobi. Tool tự bóc IP + tài khoản và đoán hãng từ đường dẫn RTSP (/Streaming/Channels → Hikvision, /cam/realmonitor → Dahua).</p>
+      <div class="row" style="margin-bottom:10px">
+        <div class="field" style="max-width:150px">
+          <label for="imp-hik-port">Cổng Hik</label>
+          <input id="imp-hik-port" type="number" value="80">
+        </div>
+        <div class="field" style="max-width:150px">
+          <label for="imp-dahua-port">Cổng Dahua</label>
+          <input id="imp-dahua-port" type="number" value="37777">
+        </div>
+      </div>
+      <div class="field">
+        <label for="imp-json">JSON Shinobi</label>
+        <textarea id="imp-json" rows="5" placeholder='[{"name":"Camera01","details":{"auto_host":"rtsp://user:pass@10.0.0.10:554/Streaming/Channels/101"}}]' style="width:100%; padding:9px 10px; border-radius:8px; border:1px solid #475569; background:#0f172a; color:#e2e8f0; font-size:.82rem; font-family:monospace;"></textarea>
+      </div>
+      <button id="imp-btn">Nhập vào kho</button>
+      <div class="msg" id="imp-msg"></div>
+    </div>
+
     <!-- Chỉnh hàng loạt -->
     <div class="panel">
       <h2>Chỉnh hàng loạt</h2>
@@ -796,6 +818,35 @@
       document.getElementById('f-name').value = r.model || r.name || '';
       document.getElementById('add-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
       document.getElementById('f-host').focus();
+    });
+
+    document.getElementById('imp-btn').addEventListener('click', async () => {
+      const msg = document.getElementById('imp-msg');
+      const raw = document.getElementById('imp-json').value.trim();
+      if (!raw) { msg.className = 'msg err'; msg.textContent = 'Dán JSON Shinobi vào đã.'; return; }
+      const btn = document.getElementById('imp-btn');
+      btn.disabled = true;
+      msg.className = 'msg'; msg.textContent = 'Đang nhập...';
+      try {
+        const res = await api('/api/import', {
+          method: 'POST',
+          body: JSON.stringify({
+            json: raw,
+            hikPort: parseInt(document.getElementById('imp-hik-port').value, 10) || 80,
+            dahuaPort: parseInt(document.getElementById('imp-dahua-port').value, 10) || 37777,
+          }),
+        });
+        const n = (res.added || []).length;
+        msg.className = 'msg ok';
+        msg.textContent = `Đã nhập ${n} camera` + (res.skipped ? `, bỏ qua ${res.skipped} (thiếu host).` : '.');
+        document.getElementById('imp-json').value = '';
+        await loadCameras();
+      } catch (e) {
+        msg.className = 'msg err';
+        msg.textContent = 'Lỗi: ' + e.message;
+      } finally {
+        btn.disabled = false;
+      }
     });
 
     loadCameras();
