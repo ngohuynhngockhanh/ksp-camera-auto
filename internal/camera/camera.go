@@ -40,8 +40,18 @@ type Profile struct {
 
 	SetAudioAAC bool `json:"setAudioAAC"`
 
-	Streams []int `json:"streams"` // which streams to touch; defaults to [main]
-	Channel int   `json:"channel"`
+	Streams  []int `json:"streams"`  // which streams to touch; defaults to [main]
+	Channel  int   `json:"channel"`  // single channel (back-compat); 0-based
+	Channels []int `json:"channels"` // multiple channels (NVR); 0-based; wins over Channel
+}
+
+// channelsList returns the 0-based channels to apply to: Channels if set,
+// otherwise the single Channel. Used to drive NVR multi-channel bulk apply.
+func (p Profile) channelsList() []int {
+	if len(p.Channels) > 0 {
+		return p.Channels
+	}
+	return []int{p.Channel}
 }
 
 // streams returns p.Streams, defaulting to [main] when empty.
@@ -154,25 +164,27 @@ func (d *dahuaCamera) Apply(ctx context.Context, profile Profile, emit func(Step
 			emit(step)
 		}
 	}
-	ch := profile.Channel
+	for _, ch := range profile.channelsList() {
+		for _, s := range profile.streams() {
+			ds := dahua.Stream(s)
+			streamName := fmt.Sprintf("K%d %s", ch+1, streamLabel(s))
 
-	for _, s := range profile.streams() {
-		ds := dahua.Stream(s)
-		streamName := streamLabel(s)
+			if profile.SetCodec {
+				add(d.applyCodec(ch, ds, streamName, profile.Codec, profile.CodecProfile))
+			}
+			if profile.SetResolution {
+				add(d.applyResolution(ch, ds, streamName, profile.Width, profile.Height))
+			}
+			if profile.SetAudioAAC {
+				add(d.applyAudioAAC(ch, ds, streamName))
+			}
+		}
 
-		if profile.SetCodec {
-			add(d.applyCodec(ch, ds, streamName, profile.Codec, profile.CodecProfile))
+		if profile.SetSmartCodec {
+			st := d.applySmartCodec(ch, profile.SmartCodec)
+			st.Step = fmt.Sprintf("smart codec K%d", ch+1)
+			add(st)
 		}
-		if profile.SetResolution {
-			add(d.applyResolution(ch, ds, streamName, profile.Width, profile.Height))
-		}
-		if profile.SetAudioAAC {
-			add(d.applyAudioAAC(ch, ds, streamName))
-		}
-	}
-
-	if profile.SetSmartCodec {
-		add(d.applySmartCodec(ch, profile.SmartCodec))
 	}
 
 	return steps
@@ -341,22 +353,23 @@ func (h *hikCamera) Apply(ctx context.Context, profile Profile, emit func(StepRe
 			emit(step)
 		}
 	}
-	ch := isapiChannel(profile.Channel)
+	for _, pc := range profile.channelsList() {
+		ch := isapiChannel(pc)
+		for _, s := range profile.streams() {
+			streamName := fmt.Sprintf("K%d %s", pc+1, streamLabel(s))
 
-	for _, s := range profile.streams() {
-		streamName := streamLabel(s)
-
-		if profile.SetCodec {
-			add(h.applyCodec(ctx, ch, s, streamName, profile.Codec))
-		}
-		if profile.SetResolution {
-			add(h.applyResolution(ctx, ch, s, streamName, profile.Width, profile.Height))
-		}
-		if profile.SetAudioAAC {
-			add(h.applyAudioAAC(ctx, ch, s, streamName))
-		}
-		if profile.SetSmartCodec {
-			add(h.applySmartCodec(ctx, ch, s, streamName, profile.SmartCodec))
+			if profile.SetCodec {
+				add(h.applyCodec(ctx, ch, s, streamName, profile.Codec))
+			}
+			if profile.SetResolution {
+				add(h.applyResolution(ctx, ch, s, streamName, profile.Width, profile.Height))
+			}
+			if profile.SetAudioAAC {
+				add(h.applyAudioAAC(ctx, ch, s, streamName))
+			}
+			if profile.SetSmartCodec {
+				add(h.applySmartCodec(ctx, ch, s, streamName, profile.SmartCodec))
+			}
 		}
 	}
 
