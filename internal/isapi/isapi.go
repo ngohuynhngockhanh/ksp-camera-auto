@@ -88,6 +88,10 @@ type Video struct {
 	VideoResolutionHeight   int         `xml:"videoResolutionHeight,omitempty"`
 	MaxFrameRate            int         `xml:"maxFrameRate,omitempty"` // fps*100, e.g. 2500 = 25fps
 	VideoQualityControlType string      `xml:"videoQualityControlType,omitempty"`
+	GovLength               int         `xml:"GovLength,omitempty"`
+	ConstantBitRate         int         `xml:"constantBitRate,omitempty"`
+	VBRUpperCap             int         `xml:"vbrUpperCap,omitempty"`
+	VBRAverageCap           int         `xml:"vbrAverageCap,omitempty"`
 	SmartCodec              *SmartCodec `xml:"SmartCodec,omitempty"`
 }
 
@@ -313,6 +317,201 @@ func replaceXMLTag(doc []byte, tag, value string) []byte {
 	return out
 }
 
+// hasXMLTag reports whether doc contains an opening <tag> element.
+func hasXMLTag(doc []byte, tag string) bool { return bytes.Contains(doc, []byte("<"+tag+">")) }
+
+// extractXMLString returns the content of the first <tag>...</tag> in doc,
+// or "" if the tag is absent.
+func extractXMLString(doc []byte, tag string) string {
+	open := []byte("<" + tag + ">")
+	closeTag := []byte("</" + tag + ">")
+	i := bytes.Index(doc, open)
+	if i < 0 {
+		return ""
+	}
+	start := i + len(open)
+	rel := bytes.Index(doc[start:], closeTag)
+	if rel < 0 {
+		return ""
+	}
+	return string(doc[start : start+rel])
+}
+
+// extractXMLInt returns the integer content of the first <tag>...</tag> in
+// doc, or 0 if the tag is absent or its content isn't a valid integer.
+func extractXMLInt(doc []byte, tag string) int {
+	s := extractXMLString(doc, tag)
+	if s == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// extractXMLInBlock returns the content of the first <tag>...</tag> that
+// occurs INSIDE the first <block>...</block> in doc, or "" if either is
+// absent. Mirrors replaceXMLTagInBlock's scoping.
+func extractXMLInBlock(doc []byte, block, tag string) string {
+	open := []byte("<" + block + ">")
+	closeB := []byte("</" + block + ">")
+	i := bytes.Index(doc, open)
+	if i < 0 {
+		return ""
+	}
+	rel := bytes.Index(doc[i:], closeB)
+	if rel < 0 {
+		return ""
+	}
+	end := i + rel
+	return extractXMLString(doc[i:end], tag)
+}
+
+// mutateStreamChannelStrict is like mutateStreamChannel but fails if any edit
+// tag is absent from the device document, so a setter cannot silently no-op
+// (replaceXMLTag leaves an absent tag unchanged).
+func (c *Client) mutateStreamChannelStrict(ctx context.Context, id int, edits map[string]string) error {
+	path := streamPath(id)
+	raw, err := c.do(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return err
+	}
+	for tag := range edits {
+		if !hasXMLTag(raw, tag) {
+			return fmt.Errorf("isapi: channel %d: <%s> not in StreamingChannel document (firmware does not expose it)", id, tag)
+		}
+	}
+	for tag, val := range edits {
+		raw = replaceXMLTag(raw, tag, val)
+	}
+	resp, err := c.do(ctx, http.MethodPut, path, raw)
+	if err != nil {
+		return err
+	}
+	if err := checkResponseStatus(resp); err != nil {
+		return fmt.Errorf("isapi: PUT %s: %w", path, err)
+	}
+	return nil
+}
+
+// gopEdits returns the raw-XML edits to set the I-frame interval to gopFrames.
+// Prefers <GovLength> (frames). If only <keyFrameInterval> exists it is used;
+// when kfiIsMS the value is converted frames->ms via fps from <maxFrameRate>.
+func gopEdits(raw []byte, gopFrames int, kfiIsMS bool) (map[string]string, error) {
+	if hasXMLTag(raw, "GovLength") {
+		return map[string]string{"GovLength": strconv.Itoa(gopFrames)}, nil
+	}
+	if hasXMLTag(raw, "keyFrameInterval") {
+		if kfiIsMS {
+			fps := 0
+			if m := extractXMLInt(raw, "maxFrameRate"); m > 0 {
+				fps = m / 100
+			}
+			if fps <= 0 {
+				return nil, fmt.Errorf("isapi: keyFrameInterval is ms but fps unknown (no maxFrameRate)")
+			}
+			return map[string]string{"keyFrameInterval": strconv.Itoa(gopFrames * 1000 / fps)}, nil
+		}
+		return map[string]string{"keyFrameInterval": strconv.Itoa(gopFrames)}, nil
+	}
+	return nil, fmt.Errorf("isapi: no GovLength/keyFrameInterval tag in document")
+}
+
+// bitrateEdits returns the raw-XML edits to set bitrate (Kbps) and optional
+// mode. When smartOn the device treats the configured bitrate as AVERAGE, so
+// the average/upper cap tag is written. Mode case matches the device's current
+// videoQualityControlType casing (some firmware serves lowercase vbr/cbr).
+func bitrateEdits(raw []byte, smartOn bool, kbps int, mode string) (map[string]string, error) {
+	edits := map[string]string{}
+	cur := extractXMLString(raw, "videoQualityControlType")
+	effMode := strings.ToUpper(cur)
+	if effMode == "" {
+		effMode = "VBR"
+	}
+	if mode != "" {
+		if !hasXMLTag(raw, "videoQualityControlType") {
+			return nil, fmt.Errorf("isapi: no videoQualityControlType tag to set mode")
+		}
+		v := strings.ToUpper(mode)
+		if cur != "" && cur == strings.ToLower(cur) {
+			v = strings.ToLower(mode)
+		}
+		edits["videoQualityControlType"] = v
+		effMode = strings.ToUpper(mode)
+	}
+	val := strconv.Itoa(kbps)
+	switch {
+	case smartOn:
+		switch {
+		case hasXMLTag(raw, "vbrAverageCap"):
+			edits["vbrAverageCap"] = val
+		case hasXMLTag(raw, "vbrUpperCap"):
+			edits["vbrUpperCap"] = val
+		case hasXMLTag(raw, "constantBitRate"):
+			edits["constantBitRate"] = val
+		default:
+			return nil, fmt.Errorf("isapi: smart codec on but no bitrate tag found")
+		}
+	case effMode == "CBR":
+		if !hasXMLTag(raw, "constantBitRate") {
+			return nil, fmt.Errorf("isapi: CBR requested but no constantBitRate tag")
+		}
+		edits["constantBitRate"] = val
+	default: // VBR
+		switch {
+		case hasXMLTag(raw, "vbrUpperCap"):
+			edits["vbrUpperCap"] = val
+		case hasXMLTag(raw, "constantBitRate"):
+			edits["constantBitRate"] = val
+		default:
+			return nil, fmt.Errorf("isapi: no VBR bitrate tag found")
+		}
+	}
+	return edits, nil
+}
+
+// SetGOP sets the I-frame interval (frames) for one channel/stream, preserving
+// all other device fields.
+func (c *Client) SetGOP(ctx context.Context, ch, stream, gopFrames int) error {
+	id := channelID(ch, stream)
+	raw, err := c.do(ctx, http.MethodGet, streamPath(id), nil)
+	if err != nil {
+		return err
+	}
+	// This firmware family exposes GovLength (frames); keep the ms path off by
+	// default and let gopEdits pick GovLength when present.
+	edits, err := gopEdits(raw, gopFrames, false)
+	if err != nil {
+		return err
+	}
+	return c.mutateStreamChannelStrict(ctx, id, edits)
+}
+
+// SetBitrate sets the video bitrate (Kbps) and, when mode is non-empty, the
+// bitrate control mode ("VBR"/"CBR") for one channel/stream, preserving all
+// other device fields. When Smart Codec is on, the device treats the
+// configured value as an average bitrate rather than a hard cap.
+func (c *Client) SetBitrate(ctx context.Context, ch, stream, kbps int, mode string) error {
+	id := channelID(ch, stream)
+	raw, err := c.do(ctx, http.MethodGet, streamPath(id), nil)
+	if err != nil {
+		return err
+	}
+	smartOn := bytes.Contains(raw, []byte("<SmartCodec>")) && extractXMLInBlock(raw, "SmartCodec", "enabled") == "true"
+	if !bytes.Contains(raw, []byte("<SmartCodec>")) {
+		if scRes, err := c.getSmartCodec(ctx, id); err == nil {
+			smartOn = scRes.Enabled
+		}
+	}
+	edits, err := bitrateEdits(raw, smartOn, kbps, mode)
+	if err != nil {
+		return err
+	}
+	return c.mutateStreamChannelStrict(ctx, id, edits)
+}
+
 // SetResolution sets the pixel resolution (and, when fps > 0, maxFrameRate =
 // fps*100) for one channel/stream, preserving all other device fields. Pass
 // fps <= 0 to leave the frame rate untouched.
@@ -463,6 +662,9 @@ func (c *Client) ProbeAll(ctx context.Context) ([]StreamInfo, error) {
 			if sc.Video.SmartCodec != nil {
 				info.SmartCodec = sc.Video.SmartCodec.Enabled
 			}
+			info.GOP = gopFromVideo(sc.Video)
+			info.BitrateMode = strings.ToUpper(sc.Video.VideoQualityControlType)
+			info.BitrateKbps = bitrateFromVideo(sc.Video, info.SmartCodec)
 		}
 		if sc.Audio != nil {
 			info.AudioCodec = sc.Audio.AudioCompressionType
@@ -484,6 +686,10 @@ type StreamInfo struct {
 	AudioCodec  string
 	AudioEnable bool
 	SmartCodec  bool
+
+	GOP         int
+	BitrateKbps int
+	BitrateMode string
 }
 
 // GetStreamInfo reads back the current encode settings for a channel/stream.
@@ -507,6 +713,8 @@ func (c *Client) GetStreamInfo(ctx context.Context, ch, stream int) (StreamInfo,
 		if sc.Video.SmartCodec != nil {
 			info.SmartCodec = sc.Video.SmartCodec.Enabled
 		}
+		info.GOP = gopFromVideo(sc.Video)
+		info.BitrateMode = strings.ToUpper(sc.Video.VideoQualityControlType)
 	}
 	if sc.Audio != nil {
 		info.AudioCodec = sc.Audio.AudioCompressionType
@@ -517,5 +725,38 @@ func (c *Client) GetStreamInfo(ctx context.Context, ch, stream int) (StreamInfo,
 			info.SmartCodec = scRes.Enabled
 		}
 	}
+	// Computed last so the smart-codec sub-resource fallback above (which can
+	// change info.SmartCodec) is reflected in the bitrate tag precedence.
+	if sc.Video != nil {
+		info.BitrateKbps = bitrateFromVideo(sc.Video, info.SmartCodec)
+	}
 	return info, nil
+}
+
+// gopFromVideo returns the I-frame interval in frames.
+func gopFromVideo(v *Video) int { return v.GovLength }
+
+// bitrateFromVideo picks the effective bitrate (Kbps) for read-back, matching
+// the tag precedence the setter writes: smart codec on -> average cap; CBR ->
+// constant; VBR -> upper cap. Falls back across tags a given firmware omits.
+func bitrateFromVideo(v *Video, smartOn bool) int {
+	if smartOn {
+		if v.VBRAverageCap > 0 {
+			return v.VBRAverageCap
+		}
+		if v.VBRUpperCap > 0 {
+			return v.VBRUpperCap
+		}
+		return v.ConstantBitRate
+	}
+	if strings.ToUpper(v.VideoQualityControlType) == "CBR" {
+		if v.ConstantBitRate > 0 {
+			return v.ConstantBitRate
+		}
+		return v.VBRUpperCap
+	}
+	if v.VBRUpperCap > 0 {
+		return v.VBRUpperCap
+	}
+	return v.ConstantBitRate
 }

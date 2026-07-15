@@ -348,10 +348,13 @@ func TestGetStreamInfo(t *testing.T) {
 	fake.seedChannel(102, &StreamingChannel{
 		ID: "102",
 		Video: &Video{
-			VideoCodecType:        CodecH264,
-			VideoResolutionWidth:  640,
-			VideoResolutionHeight: 480,
-			MaxFrameRate:          1500,
+			VideoCodecType:          CodecH264,
+			VideoResolutionWidth:    640,
+			VideoResolutionHeight:   480,
+			MaxFrameRate:            1500,
+			VideoQualityControlType: "VBR",
+			GovLength:               40,
+			VBRUpperCap:             2048,
 		},
 		Audio: &Audio{Enabled: true, AudioCompressionType: "AAC"},
 	})
@@ -374,6 +377,175 @@ func TestGetStreamInfo(t *testing.T) {
 	}
 	if !info.AudioEnable || info.AudioCodec != "AAC" {
 		t.Fatalf("unexpected audio: %+v", info)
+	}
+	if info.GOP != 40 {
+		t.Fatalf("GOP = %d, want 40", info.GOP)
+	}
+	if info.BitrateMode != "VBR" {
+		t.Fatalf("BitrateMode = %q, want VBR", info.BitrateMode)
+	}
+	if info.BitrateKbps != 2048 {
+		t.Fatalf("BitrateKbps = %d, want 2048", info.BitrateKbps)
+	}
+}
+
+func TestSetGOP(t *testing.T) {
+	fake := newFakeISAPIServer("admin", "hunter2")
+	fake.seedChannel(101, &StreamingChannel{
+		ID: "101",
+		Video: &Video{
+			VideoCodecType:        CodecH264,
+			VideoResolutionWidth:  1920,
+			VideoResolutionHeight: 1080,
+			GovLength:             25,
+		},
+	})
+	srv := httptest.NewServer(fake.handler())
+	defer srv.Close()
+	c := newTestClient(t, srv, "admin", "hunter2")
+
+	if err := c.SetGOP(context.Background(), 1, 0, 50); err != nil {
+		t.Fatalf("SetGOP: %v", err)
+	}
+
+	fake.mu.Lock()
+	sc := fake.channels[101]
+	fake.mu.Unlock()
+	if sc.Video.GovLength != 50 {
+		t.Fatalf("GovLength = %d, want 50", sc.Video.GovLength)
+	}
+	// The codec set before this call must survive the GET-modify-PUT cycle.
+	if sc.Video.VideoCodecType != CodecH264 {
+		t.Fatalf("codec clobbered by SetGOP: %q", sc.Video.VideoCodecType)
+	}
+}
+
+func TestSetBitrate(t *testing.T) {
+	fake := newFakeISAPIServer("admin", "hunter2")
+	fake.seedChannel(101, &StreamingChannel{
+		ID: "101",
+		Video: &Video{
+			VideoCodecType:          CodecH264,
+			VideoQualityControlType: "VBR",
+			VBRUpperCap:             1024,
+		},
+	})
+	srv := httptest.NewServer(fake.handler())
+	defer srv.Close()
+	c := newTestClient(t, srv, "admin", "hunter2")
+
+	if err := c.SetBitrate(context.Background(), 1, 0, 4096, ""); err != nil {
+		t.Fatalf("SetBitrate: %v", err)
+	}
+
+	fake.mu.Lock()
+	sc := fake.channels[101]
+	fake.mu.Unlock()
+	if sc.Video.VBRUpperCap != 4096 {
+		t.Fatalf("VBRUpperCap = %d, want 4096", sc.Video.VBRUpperCap)
+	}
+	if sc.Video.VideoCodecType != CodecH264 {
+		t.Fatalf("codec clobbered by SetBitrate: %q", sc.Video.VideoCodecType)
+	}
+}
+
+func TestGopEditsPrefersGovLength(t *testing.T) {
+	doc := []byte(`<StreamingChannel><Video><GovLength>40</GovLength></Video></StreamingChannel>`)
+	edits, err := gopEdits(doc, 50, false)
+	if err != nil {
+		t.Fatalf("gopEdits: %v", err)
+	}
+	if edits["GovLength"] != "50" {
+		t.Fatalf("edits = %+v, want GovLength=50", edits)
+	}
+	if _, ok := edits["keyFrameInterval"]; ok {
+		t.Fatalf("edits = %+v, should not touch keyFrameInterval when GovLength present", edits)
+	}
+}
+
+func TestGopEditsKeyFrameIntervalMs(t *testing.T) {
+	doc := []byte(`<StreamingChannel><Video><keyFrameInterval>2000</keyFrameInterval><maxFrameRate>2500</maxFrameRate></Video></StreamingChannel>`)
+	edits, err := gopEdits(doc, 50, true)
+	if err != nil {
+		t.Fatalf("gopEdits: %v", err)
+	}
+	// 50 frames @ 25fps (maxFrameRate=2500 -> fps=25) = 2000ms.
+	if edits["keyFrameInterval"] != "2000" {
+		t.Fatalf("edits = %+v, want keyFrameInterval=2000", edits)
+	}
+}
+
+func TestGopEditsMissingTagFails(t *testing.T) {
+	doc := []byte(`<StreamingChannel><Video></Video></StreamingChannel>`)
+	if _, err := gopEdits(doc, 50, false); err == nil {
+		t.Fatal("expected error when neither GovLength nor keyFrameInterval is present")
+	}
+}
+
+func TestBitrateEditsCBR(t *testing.T) {
+	doc := []byte(`<StreamingChannel><Video><videoQualityControlType>VBR</videoQualityControlType><constantBitRate>1024</constantBitRate></Video></StreamingChannel>`)
+	edits, err := bitrateEdits(doc, false, 2048, "CBR")
+	if err != nil {
+		t.Fatalf("bitrateEdits: %v", err)
+	}
+	if edits["constantBitRate"] != "2048" {
+		t.Fatalf("edits = %+v, want constantBitRate=2048", edits)
+	}
+	if edits["videoQualityControlType"] != "CBR" {
+		t.Fatalf("edits = %+v, want videoQualityControlType=CBR", edits)
+	}
+}
+
+func TestBitrateEditsVBRUpperCap(t *testing.T) {
+	doc := []byte(`<StreamingChannel><Video><videoQualityControlType>VBR</videoQualityControlType><vbrUpperCap>1024</vbrUpperCap></Video></StreamingChannel>`)
+	edits, err := bitrateEdits(doc, false, 2048, "")
+	if err != nil {
+		t.Fatalf("bitrateEdits: %v", err)
+	}
+	if edits["vbrUpperCap"] != "2048" {
+		t.Fatalf("edits = %+v, want vbrUpperCap=2048", edits)
+	}
+	if _, ok := edits["videoQualityControlType"]; ok {
+		t.Fatalf("edits = %+v, mode empty should not touch videoQualityControlType", edits)
+	}
+}
+
+func TestBitrateEditsSmartAverage(t *testing.T) {
+	doc := []byte(`<StreamingChannel><Video><videoQualityControlType>VBR</videoQualityControlType><vbrAverageCap>1024</vbrAverageCap><vbrUpperCap>2048</vbrUpperCap></Video></StreamingChannel>`)
+	edits, err := bitrateEdits(doc, true, 3072, "")
+	if err != nil {
+		t.Fatalf("bitrateEdits: %v", err)
+	}
+	if edits["vbrAverageCap"] != "3072" {
+		t.Fatalf("edits = %+v, want vbrAverageCap=3072", edits)
+	}
+	if _, ok := edits["vbrUpperCap"]; ok {
+		t.Fatalf("edits = %+v, should prefer vbrAverageCap over vbrUpperCap when smart on", edits)
+	}
+}
+
+func TestBitrateEditsSmartFallsBackToUpperCap(t *testing.T) {
+	doc := []byte(`<StreamingChannel><Video><videoQualityControlType>VBR</videoQualityControlType><vbrUpperCap>2048</vbrUpperCap></Video></StreamingChannel>`)
+	edits, err := bitrateEdits(doc, true, 3072, "")
+	if err != nil {
+		t.Fatalf("bitrateEdits: %v", err)
+	}
+	if edits["vbrUpperCap"] != "3072" {
+		t.Fatalf("edits = %+v, want vbrUpperCap=3072 (no vbrAverageCap tag on this firmware)", edits)
+	}
+}
+
+func TestBitrateEditsLowercaseMode(t *testing.T) {
+	doc := []byte(`<StreamingChannel><Video><videoQualityControlType>vbr</videoQualityControlType><constantBitRate>1024</constantBitRate></Video></StreamingChannel>`)
+	edits, err := bitrateEdits(doc, false, 2048, "CBR")
+	if err != nil {
+		t.Fatalf("bitrateEdits: %v", err)
+	}
+	if edits["videoQualityControlType"] != "cbr" {
+		t.Fatalf("edits = %+v, want lowercase videoQualityControlType=cbr to match device casing", edits)
+	}
+	if edits["constantBitRate"] != "2048" {
+		t.Fatalf("edits = %+v, want constantBitRate=2048", edits)
 	}
 }
 
