@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -29,6 +30,7 @@ type Server struct {
 	mux     *http.ServeMux
 	static  fs.FS
 	session *sessionStore
+	limiter *loginLimiter
 }
 
 // New builds a Server with routes registered.
@@ -43,6 +45,7 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 		mux:     http.NewServeMux(),
 		static:  static,
 		session: newSessionStore(12 * time.Hour),
+		limiter: newLoginLimiter(),
 	}
 	s.routes()
 	return s, nil
@@ -60,14 +63,18 @@ func (s *Server) routes() {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	// Authenticated JSON API.
-	s.mux.Handle("/api/cameras", s.requireAuth(http.HandlerFunc(s.handleCameras)))
-	s.mux.Handle("/api/cameras/delete", s.requireAuth(http.HandlerFunc(s.handleCamerasDelete)))
-	s.mux.Handle("/api/probe", s.requireAuth(http.HandlerFunc(s.handleProbe)))
-	s.mux.Handle("/api/apply", s.requireAuth(http.HandlerFunc(s.handleApply)))
-	s.mux.Handle("/api/scan", s.requireAuth(http.HandlerFunc(s.handleScan)))
-	s.mux.Handle("/api/import", s.requireAuth(http.HandlerFunc(s.handleImport)))
-	s.mux.Handle("/api/password", s.requireAuth(http.HandlerFunc(s.handlePassword)))
+	// Authenticated JSON API. api() gates on the session and caps the request
+	// body (DoS guard on constrained boxes).
+	api := func(h http.HandlerFunc) http.Handler {
+		return s.requireAuth(limitBody(8<<20, h))
+	}
+	s.mux.Handle("/api/cameras", api(s.handleCameras))
+	s.mux.Handle("/api/cameras/delete", api(s.handleCamerasDelete))
+	s.mux.Handle("/api/probe", api(s.handleProbe))
+	s.mux.Handle("/api/apply", api(s.handleApply))
+	s.mux.Handle("/api/scan", api(s.handleScan))
+	s.mux.Handle("/api/import", api(s.handleImport))
+	s.mux.Handle("/api/password", api(s.handlePassword))
 
 	// Authenticated app + static assets.
 	fileServer := http.FileServer(http.FS(s.static))
@@ -89,6 +96,68 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// limitBody caps the request body size to guard constrained boxes against
+// memory-exhaustion via oversized JSON payloads.
+func limitBody(n int64, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, n)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// loginLimiter throttles failed logins per client IP to blunt online brute
+// force against an internet-exposed login.
+type loginLimiter struct {
+	mu   sync.Mutex
+	fail map[string]*attempt
+}
+type attempt struct {
+	count int
+	until time.Time
+}
+
+func newLoginLimiter() *loginLimiter { return &loginLimiter{fail: map[string]*attempt{}} }
+
+// blocked reports whether ip is currently locked out.
+func (l *loginLimiter) blocked(ip string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	a := l.fail[ip]
+	return a != nil && a.count >= 5 && time.Now().Before(a.until)
+}
+
+func (l *loginLimiter) fail1(ip string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	a := l.fail[ip]
+	if a == nil {
+		a = &attempt{}
+		l.fail[ip] = a
+	}
+	a.count++
+	a.until = time.Now().Add(time.Minute)
+}
+
+func (l *loginLimiter) reset(ip string) {
+	l.mu.Lock()
+	delete(l.fail, ip)
+	l.mu.Unlock()
+}
+
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+// isHTTPS reports whether the request reached us over TLS (directly or via a
+// trusted reverse proxy) so the session cookie can be marked Secure.
+func isHTTPS(r *http.Request) bool {
+	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
 // wantsHTML reports whether the request looks like a browser navigation (so we
@@ -116,6 +185,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		s.serveStatic(w, r, "login.html")
 	case http.MethodPost:
+		ip := clientIP(r)
+		if s.limiter.blocked(ip) {
+			http.Redirect(w, r, "/login?err=locked", http.StatusSeeOther)
+			return
+		}
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "bad form", http.StatusBadRequest)
 			return
@@ -123,17 +197,20 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		user := r.PostFormValue("username")
 		pass := r.PostFormValue("password")
 		if s.checkCreds(user, pass) {
+			s.limiter.reset(ip)
 			token := s.session.create()
 			http.SetCookie(w, &http.Cookie{
 				Name:     sessionCookie,
 				Value:    token,
 				Path:     "/",
 				HttpOnly: true,
+				Secure:   isHTTPS(r),
 				SameSite: http.SameSiteLaxMode,
 			})
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
+		s.limiter.fail1(ip)
 		http.Redirect(w, r, "/login?err=1", http.StatusSeeOther)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

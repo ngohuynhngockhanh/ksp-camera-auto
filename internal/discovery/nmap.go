@@ -67,7 +67,9 @@ func ScanSubnet(ctx context.Context, cidr string) ([]Result, error) {
 		return nil, fmt.Errorf("nmap not found in PATH: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, path, "-Pn", "-sT", "-p", nmapPorts, "--open", cidr)
+	// "--" terminates option parsing so cidr can never be treated as an nmap
+	// flag even if validation above is ever weakened (defense in depth).
+	cmd := exec.CommandContext(ctx, path, "-Pn", "-sT", "-p", nmapPorts, "--open", "--", cidr)
 	out, err := cmd.Output()
 	if err != nil && len(out) == 0 {
 		if ee, ok := err.(*exec.ExitError); ok {
