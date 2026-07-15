@@ -1,0 +1,21 @@
+# Vendor SDKs / downloaded reference docs — never commit (per project rule)
+/docs-sdk/
+
+# Build output
+/dist/
+/kspcam
+/kspcam-*
+*.exe
+
+# Hik oracle dev tool build artifacts (links proprietary SDK)
+/tools/hik-oracle/hik-oracle
+/tools/hik-oracle/*.o
+
+# Runtime state / secrets
+/cameras.yaml
+/config.yaml
+*.log
+
+# OS / editor
+.DS_Store
+*.swp

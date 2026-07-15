@@ -1,0 +1,20 @@
+# ksp-camera-auto configuration.
+# Copy to config.yaml and adjust. All fields have safe defaults.
+
+server:
+  # Address the web UI listens on.
+  addr: ":2028"
+  # Login for the web UI.
+  username: "admin"
+  password: "inut12345"
+
+# Where the camera inventory is persisted (managed from the web UI).
+cameras_file: "cameras.yaml"
+
+# Default per-vendor config ports used when a camera entry omits its port.
+defaults:
+  hikvision_port: 8000   # Hikvision private/SDK port
+  dahua_port: 37777      # Dahua/KBVision DHIP port (37777, sometimes 8888)
+  # Default camera credentials to try when an entry omits them.
+  username: "admin"
+  password: "inut12345"
