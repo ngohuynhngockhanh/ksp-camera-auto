@@ -58,6 +58,12 @@ func (s *Server) routes() {
 		_, _ = w.Write([]byte("ok"))
 	})
 
+	// Authenticated JSON API.
+	s.mux.Handle("/api/cameras", s.requireAuth(http.HandlerFunc(s.handleCameras)))
+	s.mux.Handle("/api/cameras/delete", s.requireAuth(http.HandlerFunc(s.handleCamerasDelete)))
+	s.mux.Handle("/api/probe", s.requireAuth(http.HandlerFunc(s.handleProbe)))
+	s.mux.Handle("/api/apply", s.requireAuth(http.HandlerFunc(s.handleApply)))
+
 	// Authenticated app + static assets.
 	fileServer := http.FileServer(http.FS(s.static))
 	s.mux.Handle("/", s.requireAuth(fileServer))

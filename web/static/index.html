@@ -18,14 +18,69 @@
   header h1 { font-size: 1rem; margin: 0; }
   header a { color: #94a3b8; font-size: .85rem; text-decoration: none; }
   header a:hover { color: #e2e8f0; }
-  main { padding: 26px 22px; max-width: 960px; margin: 0 auto; }
+  main { padding: 26px 22px; max-width: 1100px; margin: 0 auto; }
   .panel {
     background: #1e293b; border: 1px solid #334155; border-radius: 12px;
     padding: 22px; margin-bottom: 18px;
   }
-  .panel h2 { margin: 0 0 10px; font-size: .95rem; }
+  .panel h2 { margin: 0 0 14px; font-size: .95rem; }
   .muted { color: #94a3b8; font-size: .85rem; }
   code { background: #0f172a; padding: 1px 6px; border-radius: 5px; }
+
+  label { display: block; font-size: .78rem; color: #cbd5e1; margin: 0 0 5px; }
+  input, select {
+    width: 100%; padding: 9px 10px; border-radius: 8px; border: 1px solid #475569;
+    background: #0f172a; color: #e2e8f0; font-size: .88rem;
+  }
+  input:focus, select:focus { outline: 2px solid #38bdf8; border-color: transparent; }
+  .field { margin-bottom: 12px; }
+
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+
+  button {
+    padding: 9px 16px; border: 0; border-radius: 8px;
+    background: #38bdf8; color: #0f172a; font-weight: 600; font-size: .85rem; cursor: pointer;
+  }
+  button:hover { background: #0ea5e9; }
+  button:disabled { background: #475569; color: #94a3b8; cursor: not-allowed; }
+  button.secondary { background: #334155; color: #e2e8f0; }
+  button.secondary:hover { background: #475569; }
+  button.danger { background: #7f1d1d; color: #fecaca; }
+  button.danger:hover { background: #991b1b; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #334155; vertical-align: top; }
+  th { color: #94a3b8; font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .02em; }
+  tr:last-child td { border-bottom: none; }
+  .table-wrap { overflow-x: auto; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+  .badge.ok { background: #064e3b; color: #6ee7b7; }
+  .badge.fail { background: #7f1d1d; color: #fecaca; }
+
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .checkbox-row input[type=checkbox] { width: auto; }
+  .checkbox-row label { margin: 0; }
+
+  .stream-picker { display: flex; gap: 14px; flex-wrap: wrap; }
+  .stream-picker label { display: flex; align-items: center; gap: 6px; font-size: .85rem; color: #e2e8f0; margin: 0; }
+  .stream-picker input { width: auto; }
+
+  .msg { margin-top: 10px; font-size: .82rem; }
+  .msg.err { color: #fca5a5; }
+  .msg.ok { color: #6ee7b7; }
+
+  .steps { margin: 0; padding-left: 16px; font-size: .8rem; color: #cbd5e1; }
+  .steps li.fail { color: #fca5a5; }
+  .steps li.ok { color: #6ee7b7; }
+
+  .probe-box { font-size: .78rem; color: #cbd5e1; margin-top: 4px; }
+
+  @media (max-width: 640px) {
+    main { padding: 16px 12px; }
+    .panel { padding: 16px; }
+  }
 </style>
 </head>
 <body>
@@ -34,14 +89,403 @@
     <a href="/logout">Đăng xuất</a>
   </header>
   <main>
+
+    <!-- Kho camera -->
     <div class="panel">
-      <h2>Bảng điều khiển</h2>
-      <p class="muted">
-        Khung giao diện đã sẵn sàng. Các mục Kho camera, Quét mạng và Chỉnh cấu hình
-        hàng loạt sẽ được lắp vào ở các mốc tiếp theo (M4/M5).
-      </p>
-      <p class="muted">Máy chủ chạy tại <code>:2028</code>.</p>
+      <h2>Kho camera</h2>
+
+      <form id="add-form">
+        <div class="grid">
+          <div class="field">
+            <label for="f-name">Tên</label>
+            <input id="f-name" name="name" placeholder="Camera cổng chính">
+          </div>
+          <div class="field">
+            <label for="f-host">Host / IP</label>
+            <input id="f-host" name="host" required placeholder="192.168.1.10">
+          </div>
+          <div class="field">
+            <label for="f-port">Cổng</label>
+            <input id="f-port" name="port" type="number" placeholder="37777">
+          </div>
+          <div class="field">
+            <label for="f-vendor">Hãng</label>
+            <select id="f-vendor" name="vendor">
+              <option value="dahua">Dahua / KBVision</option>
+              <option value="hikvision">Hikvision</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-username">Tài khoản</label>
+            <input id="f-username" name="username" placeholder="admin">
+          </div>
+          <div class="field">
+            <label for="f-password">Mật khẩu</label>
+            <input id="f-password" name="password" type="password" placeholder="••••••">
+          </div>
+        </div>
+        <button type="submit">Thêm camera</button>
+        <div class="msg" id="add-msg"></div>
+      </form>
+
+      <div class="table-wrap" style="margin-top:18px">
+        <table id="cam-table">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="select-all"></th>
+              <th>Tên</th>
+              <th>Host</th>
+              <th>Cổng</th>
+              <th>Hãng</th>
+              <th>Thông tin luồng</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="cam-tbody">
+            <tr><td colspan="7" class="muted">Đang tải...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
+
+    <!-- Chỉnh hàng loạt -->
+    <div class="panel">
+      <h2>Chỉnh hàng loạt</h2>
+      <p class="muted">Áp dụng cho các camera đã chọn ở bảng trên (tick chọn trước).</p>
+
+      <div class="field">
+        <label>Luồng áp dụng</label>
+        <div class="stream-picker">
+          <label><input type="checkbox" class="stream-cb" value="0" checked> Main</label>
+          <label><input type="checkbox" class="stream-cb" value="1"> Sub1</label>
+          <label><input type="checkbox" class="stream-cb" value="2"> Sub2</label>
+        </div>
+      </div>
+
+      <div class="field" style="max-width:160px">
+        <label for="p-channel">Kênh (channel)</label>
+        <input id="p-channel" type="number" value="0" min="0">
+      </div>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="p-res-enable">
+        <label for="p-res-enable">Đổi độ phân giải</label>
+      </div>
+      <div class="row" id="p-res-fields" style="display:none">
+        <div class="field" style="max-width:220px">
+          <label for="p-res-preset">Độ phân giải (16:9)</label>
+          <select id="p-res-preset">
+            <option value="3840x2160">3840 x 2160 (4K)</option>
+            <option value="2880x1620">2880 x 1620</option>
+            <option value="2560x1440">2560 x 1440 (QHD)</option>
+            <option value="1920x1080" selected>1920 x 1080 (FHD)</option>
+            <option value="1280x720">1280 x 720 (HD)</option>
+            <option value="640x360">640 x 360</option>
+            <option value="custom">Tuỳ chỉnh...</option>
+          </select>
+        </div>
+        <div class="field" style="max-width:110px">
+          <label for="p-width">Rộng</label>
+          <input id="p-width" type="number" value="1920">
+        </div>
+        <div class="field" style="max-width:110px">
+          <label for="p-height">Cao</label>
+          <input id="p-height" type="number" value="1080">
+        </div>
+      </div>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="p-smart-enable">
+        <label for="p-smart-enable">Đổi Smart Codec (H.264+/H.265+)</label>
+      </div>
+      <div class="field" id="p-smart-fields" style="display:none; max-width:160px">
+        <label for="p-smart-value">Smart Codec</label>
+        <select id="p-smart-value">
+          <option value="on">Bật</option>
+          <option value="off">Tắt</option>
+        </select>
+      </div>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="p-audio-enable">
+        <label for="p-audio-enable">Bật âm thanh AAC</label>
+      </div>
+
+      <button id="apply-btn">Áp dụng</button>
+      <span class="muted" id="apply-count"></span>
+      <div class="msg" id="apply-msg"></div>
+    </div>
+
+    <!-- Kết quả -->
+    <div class="panel">
+      <h2>Kết quả</h2>
+      <div class="table-wrap">
+        <table id="result-table">
+          <thead>
+            <tr>
+              <th>Camera</th>
+              <th>Host</th>
+              <th>Trạng thái</th>
+              <th>Chi tiết</th>
+            </tr>
+          </thead>
+          <tbody id="result-tbody">
+            <tr><td colspan="4" class="muted">Chưa có kết quả.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
   </main>
+
+  <script>
+    const jsonHeaders = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+
+    async function api(path, opts) {
+      const res = await fetch(path, Object.assign({ headers: jsonHeaders }, opts || {}));
+      if (res.status === 401) {
+        location.href = '/login';
+        throw new Error('unauthorized');
+      }
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (e) { /* not JSON */ }
+      if (!res.ok) {
+        const msg = (data && data.error) ? data.error : (text || res.statusText);
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    let cameras = [];
+    const probeCache = {}; // id -> streamInfo[]
+
+    function fmtStreamInfo(list) {
+      if (!list || !list.length) return '';
+      return list.map(s => {
+        const label = ['main','sub1','sub2'][s.stream] || ('s' + s.stream);
+        const audio = s.audioEnable ? (s.audioCodec || 'on') : 'tắt';
+        return `${label}: ${s.width}x${s.height} ${s.compression || ''} · audio ${audio} · smart ${s.smartCodec ? 'bật' : 'tắt'}`;
+      }).join('<br>');
+    }
+
+    function renderCameras() {
+      const tbody = document.getElementById('cam-tbody');
+      if (!cameras.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="muted">Chưa có camera nào. Thêm ở form phía trên.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = cameras.map(c => `
+        <tr data-id="${escapeHtml(c.id)}">
+          <td><input type="checkbox" class="cam-cb" value="${escapeHtml(c.id)}"></td>
+          <td>${escapeHtml(c.name || '(chưa đặt tên)')}</td>
+          <td>${escapeHtml(c.host)}</td>
+          <td>${c.port}</td>
+          <td>${escapeHtml(c.vendor)}</td>
+          <td class="probe-box" id="probe-${cssEscape(c.id)}">${fmtStreamInfo(probeCache[c.id]) || '<span class="muted">chưa dò</span>'}</td>
+          <td>
+            <button class="secondary" data-action="probe" data-id="${escapeHtml(c.id)}">Dò</button>
+            <button class="danger" data-action="delete" data-id="${escapeHtml(c.id)}">Xóa</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[ch]));
+    }
+    function cssEscape(s) { return String(s).replace(/[^a-zA-Z0-9_-]/g, '_'); }
+
+    async function loadCameras() {
+      try {
+        cameras = await api('/api/cameras');
+        renderCameras();
+      } catch (e) {
+        document.getElementById('cam-tbody').innerHTML =
+          `<tr><td colspan="7" class="msg err">Lỗi tải danh sách: ${escapeHtml(e.message)}</td></tr>`;
+      }
+    }
+
+    document.getElementById('add-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const msg = document.getElementById('add-msg');
+      msg.textContent = '';
+      msg.className = 'msg';
+      const body = {
+        name: document.getElementById('f-name').value.trim(),
+        host: document.getElementById('f-host').value.trim(),
+        port: parseInt(document.getElementById('f-port').value, 10) || 0,
+        vendor: document.getElementById('f-vendor').value,
+        username: document.getElementById('f-username').value,
+        password: document.getElementById('f-password').value,
+      };
+      try {
+        await api('/api/cameras', { method: 'POST', body: JSON.stringify(body) });
+        ev.target.reset();
+        document.getElementById('f-vendor').value = body.vendor;
+        msg.textContent = 'Đã thêm camera.';
+        msg.className = 'msg ok';
+        await loadCameras();
+      } catch (e) {
+        msg.textContent = 'Lỗi: ' + e.message;
+        msg.className = 'msg err';
+      }
+    });
+
+    document.getElementById('cam-tbody').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-action]');
+      if (!btn) return;
+      const id = btn.dataset.id;
+      if (btn.dataset.action === 'delete') {
+        if (!confirm('Xóa camera này khỏi kho?')) return;
+        btn.disabled = true;
+        try {
+          await api('/api/cameras/delete', { method: 'POST', body: JSON.stringify({ id }) });
+          delete probeCache[id];
+          await loadCameras();
+        } catch (e) {
+          alert('Lỗi xóa: ' + e.message);
+          btn.disabled = false;
+        }
+      } else if (btn.dataset.action === 'probe') {
+        btn.disabled = true;
+        const cell = document.getElementById('probe-' + cssEscape(id));
+        cell.innerHTML = '<span class="muted">đang dò...</span>';
+        try {
+          const info = await api('/api/probe', { method: 'POST', body: JSON.stringify({ id }) });
+          probeCache[id] = info;
+          cell.innerHTML = fmtStreamInfo(info);
+        } catch (e) {
+          cell.innerHTML = `<span class="msg err">${escapeHtml(e.message)}</span>`;
+        } finally {
+          btn.disabled = false;
+        }
+      }
+    });
+
+    document.getElementById('select-all').addEventListener('change', (ev) => {
+      document.querySelectorAll('.cam-cb').forEach(cb => cb.checked = ev.target.checked);
+    });
+
+    // --- bulk apply form wiring ---
+
+    const resEnable = document.getElementById('p-res-enable');
+    const resFields = document.getElementById('p-res-fields');
+    resEnable.addEventListener('change', () => resFields.style.display = resEnable.checked ? 'flex' : 'none');
+
+    const resPreset = document.getElementById('p-res-preset');
+    const widthInput = document.getElementById('p-width');
+    const heightInput = document.getElementById('p-height');
+    resPreset.addEventListener('change', () => {
+      if (resPreset.value === 'custom') return;
+      const [w, h] = resPreset.value.split('x').map(Number);
+      widthInput.value = w;
+      heightInput.value = h;
+    });
+
+    const smartEnable = document.getElementById('p-smart-enable');
+    const smartFields = document.getElementById('p-smart-fields');
+    smartEnable.addEventListener('change', () => smartFields.style.display = smartEnable.checked ? 'block' : 'none');
+
+    function selectedCameraIds() {
+      return Array.from(document.querySelectorAll('.cam-cb:checked')).map(cb => cb.value);
+    }
+
+    function buildProfile() {
+      const streams = Array.from(document.querySelectorAll('.stream-cb:checked')).map(cb => parseInt(cb.value, 10));
+      return {
+        setResolution: resEnable.checked,
+        width: parseInt(widthInput.value, 10) || 0,
+        height: parseInt(heightInput.value, 10) || 0,
+        setSmartCodec: smartEnable.checked,
+        smartCodec: document.getElementById('p-smart-value').value === 'on',
+        setAudioAAC: document.getElementById('p-audio-enable').checked,
+        streams: streams.length ? streams : [0],
+        channel: parseInt(document.getElementById('p-channel').value, 10) || 0,
+      };
+    }
+
+    function renderResults(results) {
+      const tbody = document.getElementById('result-tbody');
+      if (!results || !results.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="muted">Chưa có kết quả.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = results.map(r => {
+        const badge = r.ok
+          ? '<span class="badge ok">Thành công</span>'
+          : '<span class="badge fail">Thất bại</span>';
+        let detail = '';
+        if (r.steps && r.steps.length) {
+          detail += '<ul class="steps">' + r.steps.map(s =>
+            `<li class="${s.ok ? 'ok' : 'fail'}">${escapeHtml(s.step)}: ${escapeHtml(s.detail || '')}${s.err ? ' — ' + escapeHtml(s.err) : ''}</li>`
+          ).join('') + '</ul>';
+        }
+        if (r.err) {
+          detail += `<div class="msg err">${escapeHtml(r.err)}</div>`;
+        }
+        return `
+          <tr>
+            <td>${escapeHtml(r.name || r.deviceId)}</td>
+            <td>${escapeHtml(r.host || '')}</td>
+            <td>${badge}</td>
+            <td>${detail}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    document.getElementById('apply-btn').addEventListener('click', async () => {
+      const ids = selectedCameraIds();
+      const msg = document.getElementById('apply-msg');
+      msg.textContent = '';
+      msg.className = 'msg';
+      if (!ids.length) {
+        msg.textContent = 'Chọn ít nhất một camera ở bảng Kho camera.';
+        msg.className = 'msg err';
+        return;
+      }
+      const profile = buildProfile();
+      if (!profile.setResolution && !profile.setSmartCodec && !profile.setAudioAAC) {
+        msg.textContent = 'Chọn ít nhất một thiết lập để thay đổi.';
+        msg.className = 'msg err';
+        return;
+      }
+      const btn = document.getElementById('apply-btn');
+      btn.disabled = true;
+      msg.textContent = `Đang áp dụng cho ${ids.length} camera...`;
+      try {
+        const results = await api('/api/apply', {
+          method: 'POST',
+          body: JSON.stringify({ deviceIds: ids, profile }),
+        });
+        renderResults(results);
+        msg.textContent = 'Hoàn tất.';
+        msg.className = 'msg ok';
+        // Refresh probe cache for touched devices so the inventory table stays current.
+        for (const r of results) {
+          if (r.ok) delete probeCache[r.deviceId];
+        }
+        renderCameras();
+      } catch (e) {
+        msg.textContent = 'Lỗi: ' + e.message;
+        msg.className = 'msg err';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.querySelectorAll('.cam-cb, #select-all').forEach(() => {}); // reserved
+    document.getElementById('cam-tbody').addEventListener('change', (ev) => {
+      if (ev.target.classList.contains('cam-cb')) {
+        document.getElementById('apply-count').textContent =
+          selectedCameraIds().length + ' camera đã chọn';
+      }
+    });
+
+    loadCameras();
+  </script>
 </body>
 </html>
