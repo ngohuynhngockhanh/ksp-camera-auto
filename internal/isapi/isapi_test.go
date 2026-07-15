@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -562,5 +563,55 @@ func TestChannelIDMapping(t *testing.T) {
 		if got := channelID(tc.ch, tc.stream); got != tc.want {
 			t.Errorf("channelID(%d, %d) = %d, want %d", tc.ch, tc.stream, got, tc.want)
 		}
+	}
+}
+
+func TestReplaceXMLTagInNthBlock(t *testing.T) {
+	doc := []byte(`<VideoOverlay><TextOverlayList>` +
+		`<TextOverlay><id>1</id><enabled>false</enabled><displayText></displayText></TextOverlay>` +
+		`<TextOverlay><id>2</id><enabled>false</enabled><displayText></displayText></TextOverlay>` +
+		`</TextOverlayList></VideoOverlay>`)
+
+	out := replaceXMLTagInNthBlock(doc, "TextOverlay", 0, "displayText", "Cổng chính")
+	out = replaceXMLTagInNthBlock(out, "TextOverlay", 0, "enabled", "true")
+	// The second block must be untouched by edits scoped to the first.
+	if extractXMLInBlock(out, "TextOverlayList", "id") != "1" {
+		t.Fatalf("unexpected first id after edit: %s", out)
+	}
+	firstBlockEnd := strings.Index(string(out), "</TextOverlay>")
+	first := out[:firstBlockEnd]
+	if !strings.Contains(string(first), "<displayText>Cổng chính</displayText>") {
+		t.Errorf("first block displayText not set: %s", first)
+	}
+	if !strings.Contains(string(first), "<enabled>true</enabled>") {
+		t.Errorf("first block enabled not set: %s", first)
+	}
+	second := out[firstBlockEnd:]
+	if !strings.Contains(string(second), "<displayText></displayText>") || !strings.Contains(string(second), "<enabled>false</enabled>") {
+		t.Errorf("second block was modified by an edit scoped to the first: %s", second)
+	}
+
+	// Out-of-range block index leaves the document unchanged.
+	unchanged := replaceXMLTagInNthBlock(doc, "TextOverlay", 5, "displayText", "x")
+	if string(unchanged) != string(doc) {
+		t.Error("out-of-range block index should leave doc unchanged")
+	}
+}
+
+func TestGetOverlayTextUnsupported(t *testing.T) {
+	// A device whose overlays document has no TextOverlayList at all.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ISAPI/System/Video/inputs/channels/1/overlays", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<VideoOverlay></VideoOverlay>`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	host, portStr, _ := strings.Cut(strings.TrimPrefix(srv.URL, "http://"), ":")
+	port, _ := strconv.Atoi(portStr)
+	c := New(host, port, false, "u", "p", 5*time.Second)
+
+	if _, err := c.GetOverlayText(context.Background(), 1); err != ErrOverlayUnsupported {
+		t.Fatalf("want ErrOverlayUnsupported, got %v", err)
 	}
 }

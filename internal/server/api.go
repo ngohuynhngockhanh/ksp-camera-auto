@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/bulk"
@@ -359,6 +360,469 @@ func (s *Server) handleProbe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, info)
+}
+
+// openDeviceCamera resolves id from the inventory and opens a Camera with
+// the request's (or default) timeout, writing a JSON error and returning
+// ok=false on any failure. Callers must Close() the returned camera when
+// ok is true.
+func (s *Server) openDeviceCamera(w http.ResponseWriter, r *http.Request, id string, timeoutSeconds int) (cam camera.Camera, ctx context.Context, cancel context.CancelFunc, ok bool) {
+	d, found := s.inv.Get(id)
+	if !found {
+		writeErr(w, http.StatusNotFound, "device not found")
+		return nil, nil, nil, false
+	}
+	to := s.reqTimeout(timeoutSeconds)
+	ctx, cancel = context.WithTimeout(r.Context(), to)
+	cam, err := camera.Open(ctx, d, to)
+	if err != nil {
+		cancel()
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return nil, nil, nil, false
+	}
+	return cam, ctx, cancel, true
+}
+
+// handleSnapshot handles GET /api/snapshot?id=&channel=&stream=&timeoutSeconds=:
+// fetch a single JPEG frame. Deliberately GET-with-query-params (unlike the
+// rest of this API's POST-with-JSON-body convention) so a plain <img
+// src="/api/snapshot?..."> can load it directly — the session cookie is sent
+// automatically, no fetch/blob plumbing needed in the UI.
+func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	q := r.URL.Query()
+	id := q.Get("id")
+	channel := atoiDefault(q.Get("channel"), 0)
+	stream := atoiDefault(q.Get("stream"), 0)
+	timeoutSeconds := atoiDefault(q.Get("timeoutSeconds"), 0)
+
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, id, timeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	data, err := cam.Snapshot(ctx, channel, stream)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
+// atoiDefault parses s as an int, returning def on empty/invalid input.
+func atoiDefault(s string, def int) int {
+	if s == "" {
+		return def
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return def
+	}
+	return n
+}
+
+// handleChannelInfo handles GET /api/channel-info?id=&channel=&timeoutSeconds=:
+// read back one channel's device-side name and OSD text lines, for
+// prefilling the "sửa tên & OSD" edit panel.
+func (s *Server) handleChannelInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	q := r.URL.Query()
+	id := q.Get("id")
+	channel := atoiDefault(q.Get("channel"), 0)
+	timeoutSeconds := atoiDefault(q.Get("timeoutSeconds"), 0)
+
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, id, timeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	name, osdLines, osdSupported, err := cam.ChannelInfo(ctx, channel)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"name": name, "osdLines": osdLines, "osdSupported": osdSupported,
+	})
+}
+
+// channelWriteReq is the shared body shape for /api/channel-name and /api/osd.
+type channelWriteReq struct {
+	ID             string   `json:"id"`
+	Channel        int      `json:"channel"`
+	Name           string   `json:"name"`
+	Lines          []string `json:"lines"`
+	TimeoutSeconds int      `json:"timeoutSeconds"`
+}
+
+// handleChannelName handles POST /api/channel-name: write the device's own
+// channel name (distinct from our inventory label, which POST /api/cameras
+// already covers).
+func (s *Server) handleChannelName(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req channelWriteReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, req.ID, req.TimeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	if err := cam.SetChannelName(ctx, req.Channel, req.Name); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleOSD handles POST /api/osd: write free-text OSD overlay lines for a
+// channel. appliedLines may be less than len(lines) when the device has
+// fewer overlay slots than lines supplied.
+func (s *Server) handleOSD(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req channelWriteReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, req.ID, req.TimeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	applied, err := cam.SetOSDLines(ctx, req.Channel, req.Lines)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "appliedLines": applied})
+}
+
+// notDahuaErr is the message returned when a picture/network endpoint is hit
+// for a device whose Camera implementation doesn't support that
+// vendor-specific surface (i.e. anything but Dahua/KBVision).
+const notDahuaErr = "camera này không hỗ trợ tính năng này (chỉ Dahua/KBVision)"
+
+// handlePicture handles GET /api/picture?id=&channel=&timeoutSeconds= (read
+// color+options+caps) and POST /api/picture (write changes), mirroring the
+// GET/POST split already used by /api/channel-info + /api/channel-name.
+// Dahua-only: the underlying camera.Camera must implement
+// camera.PictureSettings (Hikvision does not).
+func (s *Server) handlePicture(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handlePictureGet(w, r)
+	case http.MethodPost:
+		s.handlePictureSet(w, r)
+	default:
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) handlePictureGet(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	id := q.Get("id")
+	channel := atoiDefault(q.Get("channel"), 0)
+	timeoutSeconds := atoiDefault(q.Get("timeoutSeconds"), 0)
+
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, id, timeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	ps, ok := cam.(camera.PictureSettings)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	color, options, err := ps.GetPicture(ctx, channel)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	resp := map[string]any{"color": color, "options": options}
+	if caps, err := ps.GetPictureCaps(ctx, channel); err == nil {
+		resp["caps"] = caps
+	} else {
+		// Capability flags are best-effort (a separate HTTP:80 CGI call,
+		// often unreachable when only the DVRIP port is forwarded/open) —
+		// the UI still gets color/options and just skips capability-based
+		// disabling.
+		resp["capsError"] = err.Error()
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// pictureSetReq is the body shape for POST /api/picture. Color/Options carry
+// only the fields being changed (merged server-side onto the live device
+// config), matching dahua.Client.SetPicture's GET-modify-SET semantics.
+type pictureSetReq struct {
+	ID             string         `json:"id"`
+	Channel        int            `json:"channel"`
+	Color          map[string]any `json:"color"`
+	Options        map[string]any `json:"options"`
+	TimeoutSeconds int            `json:"timeoutSeconds"`
+}
+
+func (s *Server) handlePictureSet(w http.ResponseWriter, r *http.Request) {
+	var req pictureSetReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, req.ID, req.TimeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	ps, ok := cam.(camera.PictureSettings)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	color, options, err := ps.SetPicture(ctx, req.Channel, req.Color, req.Options)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "color": color, "options": options})
+}
+
+// handleNetwork handles GET /api/network?id=&timeoutSeconds= (read the
+// device's static IP / DHCP config for every interface) and POST
+// /api/network (write one interface's static IP). Dahua-only. This is a
+// high-risk write (a bad IP/mask/gateway can make the device unreachable) —
+// dahua.Client.SetStaticIP validates every address before sending anything,
+// and the UI is expected to require an explicit user confirmation before
+// calling the POST at all.
+func (s *Server) handleNetwork(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleNetworkGet(w, r)
+	case http.MethodPost:
+		s.handleNetworkSet(w, r)
+	default:
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) handleNetworkGet(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	id := q.Get("id")
+	timeoutSeconds := atoiDefault(q.Get("timeoutSeconds"), 0)
+
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, id, timeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	ns, ok := cam.(camera.NetworkSettings)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	cfg, err := ns.GetNetworkConfig(ctx)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, cfg)
+}
+
+// staticIPReq is the body shape for POST /api/network.
+type staticIPReq struct {
+	ID             string   `json:"id"`
+	Interface      string   `json:"interface"`
+	DhcpEnable     bool     `json:"dhcpEnable"`
+	IPAddress      string   `json:"ipAddress"`
+	SubnetMask     string   `json:"subnetMask"`
+	Gateway        string   `json:"gateway"`
+	DNS            []string `json:"dns"`
+	TimeoutSeconds int      `json:"timeoutSeconds"`
+}
+
+func (s *Server) handleNetworkSet(w http.ResponseWriter, r *http.Request) {
+	var req staticIPReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	if req.Interface == "" {
+		writeErr(w, http.StatusBadRequest, "interface is required")
+		return
+	}
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, req.ID, req.TimeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	ns, ok := cam.(camera.NetworkSettings)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	if err := ns.SetStaticIP(ctx, req.Interface, req.DhcpEnable, req.IPAddress, req.SubnetMask, req.Gateway, req.DNS); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	cfg, err := ns.GetNetworkConfig(ctx)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "network": cfg})
+}
+
+// handleWiFi handles GET /api/wifi?id=&timeoutSeconds= (read the currently
+// configured SSID/security per Wi-Fi interface) and POST /api/wifi (write
+// SSID/password). Dahua-only. Reading is cheap/safe (rides the existing
+// DVRIP session); writing carries the same "could disconnect the device"
+// risk as /api/network, so the UI should require confirmation before POSTing.
+func (s *Server) handleWiFi(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleWiFiGet(w, r)
+	case http.MethodPost:
+		s.handleWiFiSet(w, r)
+	default:
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) handleWiFiGet(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	id := q.Get("id")
+	timeoutSeconds := atoiDefault(q.Get("timeoutSeconds"), 0)
+
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, id, timeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	ns, ok := cam.(camera.NetworkSettings)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	cfg, err := ns.GetWiFiConfig(ctx)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, cfg)
+}
+
+// wifiSetReq is the body shape for POST /api/wifi.
+type wifiSetReq struct {
+	ID             string `json:"id"`
+	Interface      string `json:"interface"`
+	SSID           string `json:"ssid"`
+	Password       string `json:"password"`
+	Encryption     string `json:"encryption"`
+	TimeoutSeconds int    `json:"timeoutSeconds"`
+}
+
+func (s *Server) handleWiFiSet(w http.ResponseWriter, r *http.Request) {
+	var req wifiSetReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	if req.Interface == "" || req.SSID == "" {
+		writeErr(w, http.StatusBadRequest, "interface and ssid are required")
+		return
+	}
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, req.ID, req.TimeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	ns, ok := cam.(camera.NetworkSettings)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	if err := ns.SetWiFiConfig(ctx, req.Interface, req.SSID, req.Password, req.Encryption); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleWiFiScan handles POST /api/wifi-scan: trigger a live Wi-Fi
+// access-point scan. Separate from GET /api/wifi (which just reads the
+// currently configured SSID) since a scan is a slow, active operation over a
+// different transport (HTTP CGI port 80, not the DVRIP session) — it may
+// fail with a clean error on setups where only the DVRIP port is reachable
+// (see docs/GOTCHAS.md's snapshot.cgi note for the same caveat).
+func (s *Server) handleWiFiScan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req struct {
+		ID             string `json:"id"`
+		TimeoutSeconds int    `json:"timeoutSeconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, req.ID, req.TimeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	ns, ok := cam.(camera.NetworkSettings)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	aps, err := ns.ScanWiFi(ctx)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"devices": aps})
 }
 
 // handleApply handles POST /api/apply: push a profile to a set of devices,

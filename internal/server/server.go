@@ -75,6 +75,14 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/scan", api(s.handleScan))
 	s.mux.Handle("/api/import", api(s.handleImport))
 	s.mux.Handle("/api/password", api(s.handlePassword))
+	s.mux.Handle("/api/snapshot", api(s.handleSnapshot))
+	s.mux.Handle("/api/channel-info", api(s.handleChannelInfo))
+	s.mux.Handle("/api/channel-name", api(s.handleChannelName))
+	s.mux.Handle("/api/osd", api(s.handleOSD))
+	s.mux.Handle("/api/picture", api(s.handlePicture))
+	s.mux.Handle("/api/network", api(s.handleNetwork))
+	s.mux.Handle("/api/wifi", api(s.handleWiFi))
+	s.mux.Handle("/api/wifi-scan", api(s.handleWiFiScan))
 
 	// Authenticated app + static assets.
 	fileServer := http.FileServer(http.FS(s.static))

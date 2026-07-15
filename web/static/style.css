@@ -114,11 +114,9 @@ button { font-family: inherit; }
 .nav-link svg { flex: none; width: 20px; height: 20px; }
 .nav-link:hover { background: var(--surface-2); color: var(--text); }
 .nav-link.active { background: var(--surface-2); color: var(--accent); border-left-color: var(--accent); }
-.nav-link .nav-badge { margin-left: auto; }
 @media (max-width: 1023px) {
   .nav-link { justify-content: center; padding: 10px; }
-  .nav-link span:not(.nav-badge) { display: none; }
-  .nav-link .nav-badge { margin-left: 0; position: absolute; transform: translate(10px, -10px); }
+  .nav-link span { display: none; }
 }
 
 .main-wrap { margin-left: var(--sidebar-w); min-height: 100vh; display: flex; flex-direction: column; }
@@ -162,7 +160,6 @@ button { font-family: inherit; }
 .bottomnav-item svg { width: 22px; height: 22px; flex: none; }
 .bottomnav-item span { white-space: nowrap; }
 .bottomnav-item.active { color: var(--accent); }
-.bottomnav-item .nav-badge { position: absolute; top: 2px; right: calc(50% - 20px); }
 
 .drawer-backdrop {
   display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, .5); z-index: 39;
@@ -303,12 +300,6 @@ td.actions-cell .btn { margin-right: 6px; }
 .badge.fail { background: var(--danger-bg); color: var(--danger); }
 .badge.info { background: var(--surface-2); color: var(--text-2); }
 
-.nav-badge {
-  background: var(--accent); color: var(--on-accent); border-radius: 999px; font-size: 10px; font-weight: 700;
-  min-width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px;
-}
-.nav-badge[hidden] { display: none; }
-
 .chip-list { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
 .chip {
   display: inline-flex; align-items: center; gap: 6px; background: var(--surface-2); color: var(--text);
@@ -346,8 +337,69 @@ dialog {
   border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 0; background: var(--surface);
   color: var(--text); max-width: min(420px, 90vw); width: 100%; box-shadow: var(--shadow-lg);
 }
+/* Scoped to [open]: an unconditional `display: flex` here would override the
+   browser's default `dialog:not([open]) { display: none }` rule, leaving the
+   dialog visually on-screen and intercepting clicks even after .close(). */
+dialog.dialog-wide[open] { max-width: min(960px, 94vw); max-height: 88vh; display: flex; flex-direction: column; }
+dialog.dialog-wide .dialog-body { overflow-y: auto; min-height: 0; }
 dialog::backdrop { background: rgba(0, 0, 0, .55); }
 .dialog-body { padding: 20px; }
+
+/* ---------- tabs (channel-edit dialog: Tên & OSD / Chỉnh màu) ---------- */
+
+.tab-strip { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.tab-btn {
+  background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-2);
+  font-size: .88rem; font-weight: 600; padding: 8px 4px; margin-bottom: -1px; cursor: pointer;
+}
+.tab-btn.active { color: var(--text); border-bottom-color: var(--info); }
+
+/* ---------- generic picture/network settings editor ---------- */
+
+.pf-section { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; background: var(--bg); }
+.pf-section > summary { padding: 10px 14px; font-weight: 600; font-size: .88rem; cursor: pointer; }
+.pf-section-body { padding: 4px 14px 14px; display: flex; flex-wrap: wrap; gap: 0 16px; }
+.pf-section-body .field-sm { flex: 1 1 180px; }
+.pf-section-disabled { opacity: .55; pointer-events: none; }
+.pf-subgroup { flex-basis: 100%; border-top: 1px dashed var(--border); margin-top: 8px; padding-top: 8px; }
+.pf-subgroup-title { font-size: .78rem; font-weight: 600; color: var(--text-2); margin-bottom: 4px; flex-basis: 100%; }
+
+.chip-btn { cursor: pointer; }
+.chip-btn:hover { background: var(--surface); }
+
+/* ---------- snapshot gallery ---------- */
+
+.gallery-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); margin-top: 12px; }
+.gallery-tile { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--bg); }
+.gallery-tile-img-wrap { position: relative; width: 100%; aspect-ratio: 16/9; background: var(--surface-2); display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
+.gallery-tile-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
+.gallery-tile-label { padding: 6px 8px; font-size: .74rem; color: var(--text-2); }
+.gallery-tile .btn { border-radius: 0; }
+.gallery-tile.gallery-tile-error .gallery-tile-img-wrap { cursor: pointer; padding: 8px; }
+.gallery-tile-err-msg {
+  font-size: .72rem; color: var(--danger); text-align: center; overflow-wrap: anywhere;
+  max-height: 100%; overflow-y: auto;
+}
+.gallery-tile-retry { font-size: .7rem; color: var(--muted); text-align: center; margin-top: 4px; }
+.gallery-tile-reload {
+  position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; padding: 0;
+  display: flex; align-items: center; justify-content: center; border: 0; border-radius: 999px;
+  background: rgba(0, 0, 0, .55); color: #fff; cursor: pointer;
+}
+.gallery-tile-reload:hover { background: rgba(0, 0, 0, .75); }
+
+/* ---------- lightbox ---------- */
+
+dialog.dialog-lightbox[open] { max-width: min(1100px, 96vw); }
+.lightbox-body { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.lightbox-label { font-size: .82rem; color: var(--text-2); align-self: flex-start; }
+#lightbox-img { max-width: 100%; max-height: 72vh; object-fit: contain; border-radius: var(--radius); background: var(--surface-2); }
+
+/* ---------- inline name edit (Kho camera table) ---------- */
+
+.cell-name { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
+.cell-name-input { width: 100%; font-size: inherit; }
+@media (max-width: 767px) { table.reflow td.cell-name { flex-wrap: wrap; } }
 .dialog-title { font-size: 1rem; font-weight: 600; margin-bottom: 8px; }
 .dialog-msg { color: var(--text-2); font-size: .88rem; white-space: pre-line; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); }

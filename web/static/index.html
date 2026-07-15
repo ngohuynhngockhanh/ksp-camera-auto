@@ -48,8 +48,7 @@
           </div>
           <div class="quick-actions">
             <button class="btn" data-goto="scan">Quét mạng</button>
-            <button class="btn btn-secondary" data-goto="cameras">Thêm camera</button>
-            <button class="btn btn-secondary" data-goto="bulk">Chỉnh hàng loạt</button>
+            <button class="btn btn-secondary" data-goto="cameras">Quản lý camera</button>
           </div>
           <div class="card">
             <div class="card-title">Hoạt động gần đây</div>
@@ -120,8 +119,16 @@
             </form>
           </div>
 
+          <div class="card" id="network-card" hidden>
+            <div class="card-title">Mạng (Dahua/KBVision) — <span id="net-device-name"></span></div>
+            <p class="card-sub">Chỉ đọc/ghi được qua cổng cấu hình DVRIP đang dùng để kết nối camera này. Quét Wi-Fi cần cổng HTTP (80) của camera — có thể không tới được nếu chỉ NAT cổng DVRIP.</p>
+            <div class="msg" id="net-msg"></div>
+            <div id="net-body"></div>
+          </div>
+
           <div class="card">
             <div class="card-title">Danh sách camera</div>
+            <p class="card-sub">Tick chọn camera để dùng cho Chỉnh hàng loạt / Đổi mật khẩu bên dưới.</p>
             <div class="table-wrap">
               <table class="reflow" id="cam-table">
                 <thead>
@@ -134,16 +141,12 @@
               </table>
             </div>
           </div>
-        </section>
 
-        <!-- Chỉnh hàng loạt -->
-        <section class="view" id="view-bulk" data-view="bulk">
-          <h2 class="page-title">Chỉnh hàng loạt</h2>
           <div class="card">
-            <p class="card-sub">Áp dụng cho các camera đã chọn ở Kho camera.</p>
+            <div class="card-title">Chỉnh hàng loạt</div>
+            <p class="card-sub">Áp dụng cho các camera đã tick chọn ở danh sách phía trên.</p>
             <div id="bulk-selection">
               <span class="muted" id="bulk-selected-count">Chưa chọn camera nào.</span>
-              <a href="#cameras" class="muted">Chọn ở Kho camera →</a>
             </div>
             <div class="chip-list" id="bulk-selected-chips"></div>
 
@@ -251,6 +254,7 @@
 
             <div class="sticky-actionbar">
               <button class="btn btn-secondary" id="probe-selected-btn">Dò các cam đã chọn</button>
+              <button class="btn btn-secondary" id="view-selected-btn">Xem hình hàng loạt</button>
               <button class="btn" id="apply-btn">Áp dụng</button>
               <span class="muted" id="apply-count"></span>
             </div>
@@ -276,6 +280,16 @@
               <button class="btn btn-danger" id="pw-btn">Đổi mật khẩu</button>
             </div>
             <p class="muted">Đổi xong tool tự cập nhật mật khẩu trong kho để vẫn kết nối được (không bị khóa ngoài).</p>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Kết quả</div>
+            <div class="table-wrap">
+              <table class="reflow" id="result-table">
+                <thead><tr><th>Camera</th><th>Host</th><th>Trạng thái</th><th>Chi tiết</th></tr></thead>
+                <tbody id="result-tbody"><tr><td colspan="4" class="empty-hint">Chưa có kết quả.</td></tr></tbody>
+              </table>
+            </div>
           </div>
         </section>
 
@@ -307,19 +321,6 @@
           </div>
         </section>
 
-        <!-- Kết quả -->
-        <section class="view" id="view-results" data-view="results">
-          <h2 class="page-title">Kết quả</h2>
-          <div class="card">
-            <div class="table-wrap">
-              <table class="reflow" id="result-table">
-                <thead><tr><th>Camera</th><th>Host</th><th>Trạng thái</th><th>Chi tiết</th></tr></thead>
-                <tbody id="result-tbody"><tr><td colspan="4" class="empty-hint">Chưa có kết quả.</td></tr></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
       </main>
     </div>
 
@@ -340,6 +341,58 @@
       <div class="dialog-actions">
         <button class="btn btn-secondary" id="confirm-cancel">Hủy</button>
         <button class="btn" id="confirm-ok">Xác nhận</button>
+      </div>
+    </dialog>
+
+    <dialog id="gallery-dialog" class="dialog-wide">
+      <div class="dialog-body">
+        <div class="dialog-title">Xem hình</div>
+        <div class="gallery-grid" id="gallery-grid"></div>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary" id="gallery-close">Đóng</button>
+      </div>
+    </dialog>
+
+    <dialog id="lightbox-dialog" class="dialog-wide dialog-lightbox">
+      <div class="dialog-body lightbox-body">
+        <div class="lightbox-label" id="lightbox-label"></div>
+        <img id="lightbox-img" alt="">
+      </div>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary" id="lightbox-reload">Tải lại</button>
+        <button class="btn btn-secondary" id="lightbox-close">Đóng</button>
+      </div>
+    </dialog>
+
+    <dialog id="channel-edit-dialog" class="dialog-wide">
+      <div class="dialog-body">
+        <div class="dialog-title" id="ce-title">Sửa tên &amp; OSD</div>
+        <div class="tab-strip" id="ce-tabs">
+          <button type="button" class="tab-btn active" data-ce-tab="name">Tên &amp; OSD</button>
+          <button type="button" class="tab-btn" id="ce-tab-btn-picture" data-ce-tab="picture" hidden>Chỉnh màu</button>
+        </div>
+
+        <div id="ce-panel-name">
+          <div class="msg" id="ce-msg"></div>
+          <div class="field">
+            <label for="ce-name">Tên trên camera (kênh)</label>
+            <input id="ce-name">
+          </div>
+          <div id="ce-osd-fields"></div>
+          <p class="muted" id="ce-osd-hint"></p>
+        </div>
+
+        <div id="ce-panel-picture" hidden>
+          <p class="card-sub">Đọc/ghi trực tiếp mọi thông số Dahua hỗ trợ cho kênh này (VideoColor + VideoInOptions, gồm cả profile Ban đêm/Ban ngày phụ). Trường bị camera báo không hỗ trợ sẽ bị khoá.</p>
+          <div class="msg" id="ce-picture-msg"></div>
+          <div id="ce-picture-body"></div>
+          <button class="btn section-gap" type="button" id="ce-picture-save">Lưu chỉnh màu</button>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary" id="ce-cancel">Đóng</button>
+        <button class="btn" id="ce-save">Lưu tên &amp; OSD</button>
       </div>
     </dialog>
 

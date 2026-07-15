@@ -11,6 +11,7 @@ package dahua
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -19,6 +20,14 @@ import (
 )
 
 const headerLen = 32
+
+// ErrDialUnreachable wraps the error from Dial when the initial TCP connect
+// itself failed (refused/timeout/no route) — as opposed to a failure once a
+// TCP session was established (wrong credentials, protocol mismatch). Callers
+// use this to decide whether retrying on a different port (e.g. KBVision's
+// 8888 instead of the DVRIP default 37777) is worth attempting, without
+// risking masking a real login failure as "unreachable".
+var ErrDialUnreachable = errors.New("dahua: connection unreachable")
 
 // Client is a connected, authenticated DVRIP session. Not safe for concurrent
 // use: each Call is a single request followed by a single response.
@@ -80,7 +89,7 @@ func Dial(addr, username, password string, timeout time.Duration) (*Client, erro
 	}
 	conn, err := net.DialTimeout("tcp", addr, timeout)
 	if err != nil {
-		return nil, fmt.Errorf("dial %s: %w", addr, err)
+		return nil, fmt.Errorf("dial %s: %w: %w", addr, ErrDialUnreachable, err)
 	}
 	c := &Client{conn: conn, timeout: timeout, user: username, pass: password}
 	if err := c.login(username, password); err != nil {

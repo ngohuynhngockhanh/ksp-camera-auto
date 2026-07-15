@@ -607,6 +607,254 @@ func (c *Client) SetAudioAAC(ctx context.Context, ch, stream int) error {
 	})
 }
 
+// GetSnapshot fetches a single JPEG frame for one channel/stream via
+// GET /ISAPI/Streaming/channels/{id}/picture (confirmed against this repo's
+// own docs-sdk/hikvision/hikvision-best-practices-README.md). The response
+// body is the raw JPEG — no XML envelope to unmarshal.
+func (c *Client) GetSnapshot(ctx context.Context, ch, stream int) ([]byte, error) {
+	id := channelID(ch, stream)
+	path := fmt.Sprintf("/ISAPI/Streaming/channels/%d/picture", id)
+	return c.do(ctx, http.MethodGet, path, nil)
+}
+
+// inputProxyChannelPath is the ISAPI resource for one remote-IP-camera
+// channel on an NVR (proxying a discrete IP camera per channel — confirmed
+// live: GET returns <InputProxyChannel><name>BAN 1</name>...). ch is the
+// native channel number, matching InputProxy's own <id>.
+func inputProxyChannelPath(ch int) string {
+	return fmt.Sprintf("/ISAPI/ContentMgmt/InputProxy/channels/%d", ch)
+}
+
+// inputProxyChannelsPath lists every InputProxy channel (all remote IP
+// cameras an NVR proxies) in one GET — used by ProbeAll to fetch every
+// channel's real name in a single request instead of N.
+func inputProxyChannelsPath() string { return "/ISAPI/ContentMgmt/InputProxy/channels" }
+
+// videoInputChannelPath is the ISAPI resource for one LOCAL/analog video
+// input channel — the fallback source of a channel's own name on devices
+// that aren't an NVR proxying remote IP cameras (a standalone IP camera, or
+// an analog-input NVR). Unverified live in this codebase: every Hikvision
+// device reachable during development turned out to be an InputProxy-style
+// NVR, where this resource returns "Invalid Operation" (confirmed).
+func videoInputChannelPath(ch int) string {
+	return fmt.Sprintf("/ISAPI/System/Video/inputs/channels/%d", ch)
+}
+
+// SetChannelName writes the device's own name for a channel — tried first as
+// an NVR's InputProxy remote-camera name (the common case: this repo's live
+// test NVR stores "BAN 1"/"BAN 2"/... there, confirmed live; the
+// StreamingChannel document's <channelName> field this package used to write
+// instead just holds an internal id-like default, e.g. "101", NOT the
+// operator-assigned name), falling back to the local video-input channel
+// name for devices where InputProxy doesn't apply.
+func (c *Client) SetChannelName(ctx context.Context, ch int, name string) error {
+	path := inputProxyChannelPath(ch)
+	raw, err := c.do(ctx, http.MethodGet, path, nil)
+	if err == nil && hasXMLTag(raw, "name") {
+		raw = replaceXMLTag(raw, "name", xmlEscaper.Replace(name))
+		resp, perr := c.do(ctx, http.MethodPut, path, raw)
+		if perr != nil {
+			return perr
+		}
+		return checkResponseStatus(resp)
+	}
+
+	path = videoInputChannelPath(ch)
+	raw, err = c.do(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return fmt.Errorf("isapi: channel %d exposes neither InputProxy nor Video/inputs name: %w", ch, err)
+	}
+	if !hasXMLTag(raw, "name") {
+		return fmt.Errorf("isapi: channel %d: no <name> tag in InputProxy or Video/inputs document", ch)
+	}
+	raw = replaceXMLTag(raw, "name", xmlEscaper.Replace(name))
+	resp, err := c.do(ctx, http.MethodPut, path, raw)
+	if err != nil {
+		return err
+	}
+	return checkResponseStatus(resp)
+}
+
+// GetChannelName reads back the device's own name for a channel — same
+// InputProxy-then-Video/inputs fallback order as SetChannelName.
+func (c *Client) GetChannelName(ctx context.Context, ch int) (string, error) {
+	raw, err := c.do(ctx, http.MethodGet, inputProxyChannelPath(ch), nil)
+	if err == nil {
+		if name := extractXMLString(raw, "name"); name != "" {
+			return name, nil
+		}
+	}
+	raw, err = c.do(ctx, http.MethodGet, videoInputChannelPath(ch), nil)
+	if err != nil {
+		return "", fmt.Errorf("isapi: channel %d exposes neither InputProxy nor Video/inputs name: %w", ch, err)
+	}
+	return extractXMLString(raw, "name"), nil
+}
+
+// inputProxyNames fetches every channel's real name in one request (the
+// InputProxyChannelList document). Best-effort: returns a nil map (not an
+// error) on any failure, so ProbeAll can fall back gracefully on devices
+// that aren't an InputProxy-style NVR.
+func (c *Client) inputProxyNames(ctx context.Context) map[int]string {
+	raw, err := c.do(ctx, http.MethodGet, inputProxyChannelsPath(), nil)
+	if err != nil {
+		return nil
+	}
+	var list struct {
+		Channels []struct {
+			ID   string `xml:"id"`
+			Name string `xml:"name"`
+		} `xml:"InputProxyChannel"`
+	}
+	if err := xml.Unmarshal(raw, &list); err != nil {
+		return nil
+	}
+	out := make(map[int]string, len(list.Channels))
+	for _, ch := range list.Channels {
+		if id, err := strconv.Atoi(ch.ID); err == nil {
+			out[id] = ch.Name
+		}
+	}
+	return out
+}
+
+// videoOverlay mirrors the subset of ISAPI's
+// /ISAPI/System/Video/inputs/channels/{id}/overlays document this package
+// understands: up to 4 free-text overlay lines (TextOverlayList). Field
+// names follow Hikvision's standard, stable ISAPI convention but are NOT
+// verified against a live device in this codebase (no ISAPI reference PDF
+// shipped, and the live test camera in this project's memory is only
+// reachable over the closed SDK port, not ISAPI-over-HTTP) — see
+// docs/GOTCHAS.md. GetOverlayText/SetOverlayText are written defensively:
+// SetOverlayText only ever writes tags it has just confirmed exist in the
+// device's own document (mutateStreamChannelStrict-style raw-XML edit), so
+// a wrong guess fails loudly instead of corrupting device config.
+type videoOverlay struct {
+	XMLName         xml.Name         `xml:"VideoOverlay"`
+	TextOverlayList *textOverlayList `xml:"TextOverlayList"`
+}
+
+type textOverlayList struct {
+	TextOverlay []textOverlay `xml:"TextOverlay"`
+}
+
+type textOverlay struct {
+	ID          string `xml:"id"`
+	Enabled     bool   `xml:"enabled"`
+	DisplayText string `xml:"displayText"`
+}
+
+// overlaysPath is the ISAPI resource for a channel's on-screen text overlays.
+// ch is the native (physical input) channel number — NOT the compound
+// streaming-channel id used by streamPath.
+func overlaysPath(ch int) string {
+	return fmt.Sprintf("/ISAPI/System/Video/inputs/channels/%d/overlays", ch)
+}
+
+// ErrOverlayUnsupported is returned by GetOverlayText/SetOverlayText when the
+// device's overlays document has no TextOverlayList (older firmware) or none
+// of its <TextOverlay> entries carry a <displayText> tag.
+var ErrOverlayUnsupported = fmt.Errorf("isapi: TextOverlayList/displayText not exposed by this device's overlays document")
+
+// GetOverlayText reads back the free-text overlay lines currently configured
+// on a channel, in TextOverlay list order. Returns ErrOverlayUnsupported if
+// the device doesn't expose TextOverlayList.
+func (c *Client) GetOverlayText(ctx context.Context, ch int) ([]string, error) {
+	body, err := c.do(ctx, http.MethodGet, overlaysPath(ch), nil)
+	if err != nil {
+		return nil, err
+	}
+	var ov videoOverlay
+	if err := xml.Unmarshal(body, &ov); err != nil {
+		return nil, fmt.Errorf("isapi: decode overlays channel %d: %w (body: %s)", ch, err, truncate(body, 200))
+	}
+	if ov.TextOverlayList == nil || len(ov.TextOverlayList.TextOverlay) == 0 {
+		return nil, ErrOverlayUnsupported
+	}
+	lines := make([]string, len(ov.TextOverlayList.TextOverlay))
+	for i, t := range ov.TextOverlayList.TextOverlay {
+		lines[i] = t.DisplayText
+	}
+	return lines, nil
+}
+
+// SetOverlayText writes up to the device's own number of TextOverlay slots
+// worth of free-text overlay lines for a channel (extra lines beyond that
+// are dropped; the count actually applied is returned). Like
+// mutateStreamChannelStrict, it edits the raw XML in place — replacing only
+// <displayText>/<enabled> inside each Nth <TextOverlay>...</TextOverlay>
+// block — instead of re-marshalling a trimmed struct, so unknown fields
+// (id, position, color, ...) this package doesn't model survive the PUT
+// unchanged. Returns ErrOverlayUnsupported if the device has no
+// TextOverlayList or no <displayText> tag in it.
+func (c *Client) SetOverlayText(ctx context.Context, ch int, lines []string) (applied int, err error) {
+	path := overlaysPath(ch)
+	raw, err := c.do(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return 0, err
+	}
+	var ov videoOverlay
+	if err := xml.Unmarshal(raw, &ov); err != nil {
+		return 0, fmt.Errorf("isapi: decode overlays channel %d: %w (body: %s)", ch, err, truncate(raw, 200))
+	}
+	if ov.TextOverlayList == nil || len(ov.TextOverlayList.TextOverlay) == 0 {
+		return 0, ErrOverlayUnsupported
+	}
+	if !bytes.Contains(raw, []byte("<displayText>")) {
+		return 0, ErrOverlayUnsupported
+	}
+	n := len(lines)
+	if slots := len(ov.TextOverlayList.TextOverlay); n > slots {
+		n = slots
+	}
+	for i := 0; i < n; i++ {
+		raw = replaceXMLTagInNthBlock(raw, "TextOverlay", i, "displayText", xmlEscaper.Replace(lines[i]))
+		raw = replaceXMLTagInNthBlock(raw, "TextOverlay", i, "enabled", boolStr(lines[i] != ""))
+	}
+	resp, err := c.do(ctx, http.MethodPut, path, raw)
+	if err != nil {
+		return 0, err
+	}
+	if err := checkResponseStatus(resp); err != nil {
+		return 0, fmt.Errorf("isapi: PUT %s: %w", path, err)
+	}
+	return n, nil
+}
+
+// replaceXMLTagInNthBlock replaces the first <tag>…</tag> inside the (0-based)
+// nth occurrence of <block>…</block> in doc, leaving every other block and
+// every field this package doesn't model byte-identical. Mirrors
+// replaceXMLTagInBlock but for documents with a repeated block (e.g. multiple
+// <TextOverlay> entries in a <TextOverlayList>).
+func replaceXMLTagInNthBlock(doc []byte, block string, n int, tag, value string) []byte {
+	open := []byte("<" + block + ">")
+	closeB := []byte("</" + block + ">")
+	pos := 0
+	for i := 0; i <= n; i++ {
+		rel := bytes.Index(doc[pos:], open)
+		if rel < 0 {
+			return doc
+		}
+		if i < n {
+			pos += rel + len(open)
+			continue
+		}
+		start := pos + rel
+		relEnd := bytes.Index(doc[start:], closeB)
+		if relEnd < 0 {
+			return doc
+		}
+		end := start + relEnd
+		seg := replaceXMLTag(doc[start:end], tag, value)
+		out := make([]byte, 0, len(doc)-(end-start)+len(seg))
+		out = append(out, doc[:start]...)
+		out = append(out, seg...)
+		out = append(out, doc[end:]...)
+		return out
+	}
+	return doc
+}
+
 var xmlEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&apos;")
 
 // SetUserPassword changes account id (1 = admin) to userName/newPass via
@@ -645,13 +893,24 @@ func (c *Client) ProbeAll(ctx context.Context) ([]StreamInfo, error) {
 	if err := xml.Unmarshal(body, &list); err != nil {
 		return nil, fmt.Errorf("isapi: decode channel list: %w (body: %s)", err, truncate(body, 200))
 	}
+	// One extra request for every channel's REAL name (InputProxy's <name>,
+	// e.g. "BAN 1") rather than N — <channelName> inside each StreamingChannel
+	// document is just an internal id-like default ("101"), not what an
+	// operator configures. Best-effort: nil on devices that aren't an
+	// InputProxy-style NVR (falls back to StreamingChannel's channelName).
+	names := c.inputProxyNames(ctx)
 	out := make([]StreamInfo, 0, len(list.Channels))
 	for _, sc := range list.Channels {
 		id, _ := strconv.Atoi(sc.ID)
 		if id == 0 {
 			continue
 		}
-		info := StreamInfo{Channel: id / 100, Stream: id%100 - 1}
+		channel := id / 100
+		name := sc.ChannelName
+		if n, ok := names[channel]; ok && n != "" {
+			name = n
+		}
+		info := StreamInfo{Channel: channel, Stream: id%100 - 1, Name: name}
 		if sc.Video != nil {
 			info.Width = sc.Video.VideoResolutionWidth
 			info.Height = sc.Video.VideoResolutionHeight
@@ -690,6 +949,13 @@ type StreamInfo struct {
 	GOP         int
 	BitrateKbps int
 	BitrateMode string
+
+	// Name is the device's own channelName for this channel (not our
+	// inventory label), and OSDLines is the on-screen text overlay content
+	// when the device exposes it. Both are best-effort: populated from
+	// GetChannelName/GetOverlayText, left empty if unsupported.
+	Name     string
+	OSDLines []string
 }
 
 // GetStreamInfo reads back the current encode settings for a channel/stream.
@@ -703,6 +969,13 @@ func (c *Client) GetStreamInfo(ctx context.Context, ch, stream int) (StreamInfo,
 	if err != nil {
 		return info, err
 	}
+	// StreamingChannel's channelName is the wrong source for a real name (see
+	// SetChannelName/GetChannelName) — left as a rough placeholder here on
+	// purpose: this function drives the hot apply-verify before/after loop
+	// (codec/resolution/GOP/bitrate), whose callers never read Name, so it's
+	// not worth an extra InputProxy round-trip on every step. ProbeAll (what
+	// the UI actually displays) uses the correct InputProxy-backed lookup.
+	info.Name = sc.ChannelName
 	if sc.Video != nil {
 		info.Width = sc.Video.VideoResolutionWidth
 		info.Height = sc.Video.VideoResolutionHeight

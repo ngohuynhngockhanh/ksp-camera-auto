@@ -52,6 +52,10 @@ func (c *Client) Close() error {
 // StreamInfo is a read-back summary of one stream's encode settings.
 type StreamInfo = isapi.StreamInfo
 
+// ErrOverlayUnsupported re-exports isapi.ErrOverlayUnsupported so callers in
+// internal/camera need not import internal/isapi directly.
+var ErrOverlayUnsupported = isapi.ErrOverlayUnsupported
+
 // GetStreamInfo reads back the current encode settings for a channel/stream.
 // ch is the native (1-based) Hikvision channel number; stream is 0-based
 // (0=main, 1=sub1, 2=sub2).
@@ -101,4 +105,33 @@ func (c *Client) SetGOP(ctx context.Context, ch, stream, gop int) error {
 // bitrate control mode ("VBR"/"CBR") for a channel/stream.
 func (c *Client) SetBitrate(ctx context.Context, ch, stream, kbps int, mode string) error {
 	return c.isapi.SetBitrate(ctx, ch, stream, kbps, mode)
+}
+
+// GetSnapshot fetches a single JPEG frame for a channel/stream.
+func (c *Client) GetSnapshot(ctx context.Context, ch, stream int) ([]byte, error) {
+	return c.isapi.GetSnapshot(ctx, ch, stream)
+}
+
+// SetChannelName writes the device's own channel name (distinct from our
+// inventory label).
+func (c *Client) SetChannelName(ctx context.Context, ch int, name string) error {
+	return c.isapi.SetChannelName(ctx, ch, name)
+}
+
+// GetChannelName reads back the device's own channel name.
+func (c *Client) GetChannelName(ctx context.Context, ch int) (string, error) {
+	return c.isapi.GetChannelName(ctx, ch)
+}
+
+// GetOverlayText reads back the on-screen text overlay lines for a channel.
+// Returns isapi.ErrOverlayUnsupported if the device doesn't expose them.
+func (c *Client) GetOverlayText(ctx context.Context, ch int) ([]string, error) {
+	return c.isapi.GetOverlayText(ctx, ch)
+}
+
+// SetOverlayText writes on-screen text overlay lines for a channel, applying
+// as many as the device has slots for (returned as applied). Returns
+// isapi.ErrOverlayUnsupported if the device doesn't expose them.
+func (c *Client) SetOverlayText(ctx context.Context, ch int, lines []string) (applied int, err error) {
+	return c.isapi.SetOverlayText(ctx, ch, lines)
 }

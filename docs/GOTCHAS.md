@@ -1,4 +1,4 @@
-# Gotchas & vendor quirks (hard-won, all verified live)
+# Gotchas & vendor quirks (hard-won, all verified live unless noted)
 
 ## Dahua / DVRIP
 - **Config port is DVRIP, not DHIP.** Sending a DHIP frame to 37777 gets no
@@ -39,6 +39,100 @@
   in the casing the device currently serves, or it may reject it.
 - **`keyFrameInterval` unit varies by firmware** (ms on most, frames on some);
   prefer `<GovLength>` (always frames) when the doc has it.
+
+## Channel name / OSD / snapshot
+- **Dahua channel name** (`ChannelTitle[Channel].Name`) — confirmed against the
+  official spec (§4.7) AND **live-verified** via `/api/channel-info` against a
+  real deployed camera (returned `"Bàn S1"`, a real operator-set label).
+- **Dahua 4-line custom OSD** (`VideoWidget[Channel].CustomTitle[index].Text`)
+  — the `.Text` field wasn't in the locally shipped v1.40 PDF (only
+  position/color/`EncodeBlend` were), but is **live-confirmed**: a real device
+  returned 4 real `CustomTitle` slots with actual venue-name text in slots 0–1
+  and empty strings in 2–3. `GetOSDLines`/`SetOSDLines`'s read path is proven;
+  `SetOSDLines`'s WRITE path (and the `EncodeBlend` toggle it also writes) is
+  still unverified — it requires a `Text` key to already exist (which it does
+  on real hardware per the above) before attempting a write, so a firmware
+  that genuinely lacks the key still fails loudly via `dahua.ErrOSDUnsupported`
+  instead of silently no-op'ing.
+- **Dahua snapshot** (`GET http://<host>:80/cgi-bin/snapshot.cgi?channel=<n>`,
+  0-based, Digest auth, confirmed against spec §4.1.3) — **live-tested and
+  confirmed UNREACHABLE from this environment**: the project's live Dahua test
+  camera is NAT'd with only the DVRIP port (37777→54273) forwarded; hitting
+  `/api/snapshot` against it correctly surfaces as a clean 502, not a hang or
+  crash. Verify on-LAN (port 80 reachable) before relying on this in
+  production. No sub-stream selector exists — the endpoint always returns
+  whatever encoder the device's snapshot pipeline uses; the `stream` parameter
+  is accepted at the API level but ignored for Dahua.
+- **Hikvision channel name — CORRECTED, was wrong initially.**
+  `/ISAPI/Streaming/channels/{id}`'s `<channelName>` field is **NOT** the
+  operator-assigned name — on the live NVR it just held an internal id-like
+  default (`"101"`, `"102"`...). The real name (live-confirmed: `"BAN 1"`,
+  `"BAN 2"`, ... on an NVR proxying 9 remote IP cameras) lives at
+  `/ISAPI/ContentMgmt/InputProxy/channels/{ch}` → `<name>`, `ch` = native
+  channel number. `/ISAPI/ContentMgmt/InputProxy/channels` (no id) lists every
+  channel's name in one GET — `ProbeAll` uses this instead of N per-channel
+  calls. Devices that AREN'T an NVR proxying remote IP cameras (standalone IP
+  camera, or an NVR with local/analog inputs) don't expose InputProxy at all —
+  `GetChannelName`/`SetChannelName` fall back to
+  `/ISAPI/System/Video/inputs/channels/{ch}` → `<name>` for those, but that
+  fallback path is **not live-verified** (every Hikvision device reachable in
+  this project turned out to be InputProxy-style; requesting
+  `System/Video/inputs/channels/1` on it returned `statusCode 4 "Invalid
+  Operation"`, confirming it doesn't apply there — but never tested where it
+  DOES apply).
+- **Hikvision snapshot** (`GET /ISAPI/Streaming/channels/{id}/picture`) —
+  **live-verified**: returned a genuine 704×576 JPEG (26 KB) from a real NVR
+  channel. Confirmed by this repo's own
+  `docs-sdk/hikvision/hikvision-best-practices-README.md` too.
+- **Hikvision OSD overlay** (`/ISAPI/System/Video/inputs/channels/{id}/overlays`,
+  `TextOverlayList/TextOverlay/{id,enabled,displayText}`) — the field names
+  were an educated guess from Hikvision's general ISAPI convention (no
+  reference doc for this endpoint ships in this repo) and are now
+  **live-verified for the READ path**: a real NVR channel returned genuine
+  overlay text (`"ATV BILLIARDS ARENA"`, an address line). Write path
+  (`SetOverlayText`) not live-tested. `GetOverlayText`/`SetOverlayText` return
+  `isapi.ErrOverlayUnsupported` if a device's document has no
+  `TextOverlayList`/`<displayText>`, so older firmware without this resource
+  fails loudly instead of returning empty/wrong data.
+- Both vendors' snapshot/OSD/name calls only support ISAPI-over-HTTP (port 80)
+  and DVRIP/HTTP CGI (port 37777+80) — the `hiksdk` (SDK, port 8000) transport
+  does not implement snapshot capture; see `internal/hiksdk` if that's ever
+  needed (would require a new C shim wrapping
+  `NET_DVR_CaptureJPEGPicture_NEW`).
+- **None of the WRITE paths** (`SetChannelName`, `SetOSDLines`,
+  `SetOverlayText`) have been exercised against a live device in this
+  session — only reads, deliberately, to avoid mutating the production-seeded
+  camera fleet without explicit operator sign-off. Confirm a write on one
+  camera before relying on it at scale.
+
+## Picture/color tuning + network config (Dahua/KBVision, unverified)
+- **`VideoColor`/`VideoInOptions`** (`internal/dahua/picture.go`) — same
+  caveat as OSD: `.Text`-style content fields and the day/night sub-profiles
+  are sourced from the spec PDF, **not live-verified**. `GetPicture`/
+  `SetPicture` deliberately return/accept raw `map[string]any` instead of a
+  hand-typed struct (~90 fields across VideoColor + VideoInOptions +
+  NightOptions + NormalOptions, varying by model per `GetVideoInputCaps`) —
+  see the package doc comment. Only unit-tested against synthetic maps
+  (`picture_test.go`); no write attempted against a live device.
+- **`Network`/`WLan`** (`internal/dahua/network.go`) are **object-shaped**
+  (keyed by interface name), the first tables in this codebase that aren't a
+  per-channel array — hence the separate `getObjectTable`/`setObjectTable`.
+  `SetStaticIP` validates every address (`net.ParseIP`) before sending
+  anything, specifically because a bad IP/mask/gateway on a camera's only
+  interface can make it unreachable. **Deliberately not live-tested** (read
+  or write) in this session — the project's live Dahua test camera is
+  NAT'd with only the DVRIP port forwarded, and mutating its network config
+  was explicitly out of scope for automated testing; only unit tests
+  (`network_test.go`) cover the validation/parsing logic.
+- **Wi-Fi AP scan** (`ScanWiFi`, CGI `wlan.cgi?action=scanWlanDevices`) hits
+  the same port-80-may-be-unreachable situation as `snapshot.cgi` — expect a
+  clean error, not a hang, when only the DVRIP port is NAT'd/forwarded.
+- **KBVision 8888 fallback** (`camera.Open`, `dahua.ErrDialUnreachable`) is
+  classified purely on whether the initial `net.DialTimeout` to the
+  configured port succeeded — a login/credential failure on 37777 is never
+  reclassified as "try 8888 instead". Covered by `dial_test.go` against a
+  closed port and a fake login-failure server; no real KBVision unit was
+  available to verify the fallback end-to-end.
 
 ## Importer / Shinobi
 - **`details` is a JSON-encoded STRING** from the live API (an exported dump has

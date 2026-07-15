@@ -64,6 +64,55 @@ Then all calls are JSON-RPC `{"method","params","id","session"}` over `\xf6` fra
 - **Audio AAC**: `MainFormat[0].Audio.Compression = "AAC"` + `AudioEnable = true`.
 - **Password change**: `userManager.modifyPassword {name, pwd, pwdOld}` (pwdOld =
   the current login credential; hash form varies by firmware).
+- **Channel name** (⚠ from the official spec PDF, not live-verified):
+  `configManager.getConfig {name:"ChannelTitle"}` → `table[ch].Name` (string).
+  Same table for get/set.
+- **4-line custom OSD** (⚠ NOT live-verified, see `docs/GOTCHAS.md`):
+  `configManager.getConfig {name:"VideoWidget"}` → `table[ch].CustomTitle[]`
+  (array, position/color/`EncodeBlend` confirmed by the spec PDF §4.9; the
+  `.Text` content field is the wider Dahua ecosystem's standard name but not
+  in the locally shipped v1.40 PDF).
+- **Snapshot** (⚠ NOT live-verified — plain HTTP, separate from this DVRIP
+  session): `GET http://<host>:80/cgi-bin/snapshot.cgi?channel=<n>` (0-based,
+  no sub-stream selector), Digest or Basic auth. See spec PDF §4.1.3.
+- **Picture/color tuning** (⚠ NOT live-verified, from the spec PDF §4.2/§4.3):
+  `configManager.getConfig {name:"VideoColor"}` → `table[ch][0]` (0 =
+  "Color Config 1"; only index 0 is used) with `Brightness`/`Contrast`/`Hue`/
+  `Saturation` (all `[0-100]`) + `TimeSection`. `configManager.getConfig
+  {name:"VideoInOptions"}` → `table[ch]` with `Flip`/`Mirror`/`Rotate90`
+  (`{0,1,2}`)/`WhiteBalance` (`{Disable,Auto,Custom,Sunny,Cloudy,Home,Office,
+  Night}`)/`GainRed`/`GainGreen`/`GainBlue` (effective only when
+  `WhiteBalance=Custom`)/`Backlight`/`ExposureMode`/`ExposureSpeed`/
+  `AntiFlicker`/`DayNightColor`/`ReferenceLevel`, plus two nested day/night
+  sub-profiles `NightOptions.*`/`NormalOptions.*` mirroring most of the same
+  fields (+ `SwitchMode`, `BrightnessThreshold`, `Sunrise*`/`Sunset*`,
+  `BacklightRegion[4]`). `internal/dahua/picture.go`'s `GetPicture`/
+  `SetPicture` read/write these as raw decoded maps rather than a hand-typed
+  struct — see that file's doc comment for why (field set varies by
+  model/firmware per `GetVideoInputCaps`). `GetVideoInputCaps` (§4.3.1, CGI
+  `devVideoInput.cgi?action=getCaps`, same port-80 caveat as Snapshot) reports
+  which fields a given channel actually supports.
+- **Network config** (⚠ NOT live-verified, spec PDF §5.2/§5.6): `Network` and
+  `WLan` are **object-shaped** (keyed by interface name, e.g. `eth0`; `WLan`
+  interfaces are typically `eth2`), unlike every table above which is an
+  array indexed by channel — `internal/dahua/network.go` adds a separate
+  `getObjectTable`/`setObjectTable` pair for this shape.
+  `Network.<iface>.{DhcpEnable,IPAddress,SubnetMask,DefaultGateway,
+  DnsServers[0..1],MTU,PhysicalAddress}` (`Network.DefaultInterface`/
+  `.Domain`/`.Hostname` are scalar siblings, not per-interface).
+  `WLan.<iface>.{Enable,Encryption,KeyType,KeyID,KeyFlag,Keys[0..3],LinkMode,
+  SSID}`. Both round-trip through the same DVRIP `configManager` session as
+  everything else — no port 80 needed to read/write static IP or Wi-Fi
+  credentials. **Wi-Fi AP scan is the one exception**: `GET
+  /cgi-bin/wlan.cgi?action=scanWlanDevices` (§5.6.3) is CGI-only, text/plain
+  `wlanDevice[N].{SSID,BSSID,AuthMode,LinkQuality}` response — same port-80 +
+  Digest transport as Snapshot, with the same "may be unreachable if only
+  DVRIP is NAT'd" caveat.
+- **KBVision port fallback**: some KBVision units serve DVRIP on **8888**
+  instead of 37777. `camera.Open()` retries on 8888 when the configured port
+  fails at the TCP-connect stage (`dahua.ErrDialUnreachable` — see
+  `dhip.go`'s `Dial`), never on a login/auth failure, and never persists the
+  fallback back into the saved inventory (per-connection only).
 
 Capabilities RPCs are unreliable across firmware — probe `getConfig`/read-back
 rather than assuming a fixed value set.

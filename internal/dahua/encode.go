@@ -30,6 +30,13 @@ type StreamInfo struct {
 	GOP            int    `json:"gop"`
 	BitRate        int    `json:"bitRate"`
 	BitRateControl string `json:"bitRateControl"`
+
+	// Name is the device's own ChannelTitle[Channel].Name, and OSDLines is
+	// VideoWidget[Channel].CustomTitle[].Text (see name.go). Populated once
+	// per channel by ProbeAll (not GetStreamInfo, which stays fast for the
+	// apply-verify before/after loop); best-effort, left empty on failure.
+	Name     string   `json:"name,omitempty"`
+	OSDLines []string `json:"osdLines,omitempty"`
 }
 
 // getTable fetches configManager.getConfig <name> and returns params.table.
@@ -248,16 +255,35 @@ func (c *Client) ProbeAll() ([]StreamInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	smart, _ := c.getTable("SmartEncode") // best-effort
+	smart, _ := c.getTable("SmartEncode")   // best-effort
+	titles, _ := c.getTable("ChannelTitle") // best-effort
+	widgets, _ := c.getTable("VideoWidget") // best-effort
 
 	var out []StreamInfo
 	for ci := 0; ci < len(table); ci++ {
+		name := ""
+		if ci < len(titles) {
+			if chObj, ok := titles[ci].(map[string]any); ok {
+				name, _ = chObj["Name"].(string)
+			}
+		}
+		var osdLines []string
+		if ci < len(widgets) {
+			if slots, err := customTitleSlots(widgets, ci); err == nil {
+				osdLines = make([]string, len(slots))
+				for i, s := range slots {
+					if obj, ok := s.(map[string]any); ok {
+						osdLines[i], _ = obj["Text"].(string)
+					}
+				}
+			}
+		}
 		for _, s := range []Stream{StreamMain, StreamSub1, StreamSub2} {
 			fmtObj, err := formatOf(table, ci, s)
 			if err != nil {
 				continue
 			}
-			info := StreamInfo{Channel: ci + 1, Stream: s}
+			info := StreamInfo{Channel: ci + 1, Stream: s, Name: name, OSDLines: osdLines}
 			fillFromFormat(&info, fmtObj)
 			if ci < len(smart) {
 				if so, ok := smart[ci].(map[string]any); ok {

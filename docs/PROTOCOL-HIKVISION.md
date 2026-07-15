@@ -44,6 +44,20 @@ the full doc, replace only the target tag values, PUT the whole doc back.
 - **Audio AAC**: `<Audio><audioCompressionType>AAC</audioCompressionType>`.
 - **Password change**: `PUT /ISAPI/Security/users/<id>` (id 1 = admin) with
   `<User><id>1</id><userName>…</userName><password>…</password></User>`.
+- **Channel name** (⚠ write path not live-verified): `<channelName>` inside the
+  StreamingChannel doc — already a struct field (`ChannelName`), just wasn't
+  read/written for this purpose before. Same `mutateStreamChannelStrict`
+  pattern as GOP/bitrate.
+- **Snapshot**: `GET /ISAPI/Streaming/channels/<id>/picture` → raw JPEG bytes,
+  no XML envelope. Confirmed by this repo's own
+  `docs-sdk/hikvision/hikvision-best-practices-README.md`; not tested live in
+  this codebase (the live test camera here is SDK-8000-only).
+- **OSD text overlay** (⚠ entirely unverified, see `docs/GOTCHAS.md`):
+  `GET/PUT /ISAPI/System/Video/inputs/channels/<id>/overlays` (note: `<id>` here
+  is the native channel number, NOT the compound streaming-channel id) →
+  `<VideoOverlay><TextOverlayList><TextOverlay><id>/<enabled>/<displayText></TextOverlay>…`.
+  Standard Hikvision ISAPI convention from general domain knowledge, not
+  confirmed against a live device or any reference doc in this repo.
 
 ## HCNetSDK on 8000 (the `hiksdk` build)
 

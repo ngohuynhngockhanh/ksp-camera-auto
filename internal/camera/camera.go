@@ -5,6 +5,7 @@ package camera
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -22,6 +23,10 @@ const (
 	StreamSub1
 	StreamSub2
 )
+
+// kbvisionFallbackPort is the DVRIP port some KBVision (Dahua OEM) devices
+// use instead of the 37777 default. See Open()'s VendorDahua case.
+const kbvisionFallbackPort = 8888
 
 // Profile describes which encode settings to apply to a set of streams. A
 // field is only applied when its "Set*" flag is true, so a Profile can carry
@@ -86,6 +91,17 @@ type StreamInfo struct {
 	GOP         int    `json:"gop"`
 	BitrateKbps int    `json:"bitrateKbps"`
 	BitrateMode string `json:"bitrateMode"`
+
+	// Name is the device's own channel name (not our inventory label).
+	// OSDLines is the on-screen custom-title text overlay, when the device
+	// exposes it. Both are populated once per channel (not duplicated per
+	// network call) and best-effort: left empty if the vendor/firmware
+	// doesn't support them. For Hikvision, Probe leaves OSDLines empty even
+	// on supported devices — reading it costs one extra request per channel,
+	// which Probe skips to stay cheap on large NVRs; use ChannelInfo to fetch
+	// it for one channel on demand (e.g. when a user opens its edit panel).
+	Name     string   `json:"name,omitempty"`
+	OSDLines []string `json:"osdLines,omitempty"`
 }
 
 // StepResult records the outcome of one applied action (e.g. "set resolution
@@ -109,7 +125,67 @@ type Camera interface {
 	// ChangePassword sets the device's account password (and username where the
 	// vendor supports it). Dahua changes the logged-in account's password.
 	ChangePassword(ctx context.Context, newUser, newPass string) error
+	// Snapshot fetches a single JPEG frame for one channel/stream. Dahua has
+	// no per-stream snapshot selector, so it ignores stream and always
+	// returns whatever its snapshot pipeline serves.
+	Snapshot(ctx context.Context, channel, stream int) ([]byte, error)
+	// ChannelInfo reads back the device's own name and OSD text lines for one
+	// channel. osdSupported is false (with a nil error) when the
+	// vendor/firmware doesn't expose OSD text at all, so callers can show
+	// "not supported" instead of an error.
+	ChannelInfo(ctx context.Context, channel int) (name string, osdLines []string, osdSupported bool, err error)
+	// SetChannelName writes the device's own channel name (distinct from our
+	// inventory label, which /api/cameras already covers).
+	SetChannelName(ctx context.Context, channel int, name string) error
+	// SetOSDLines writes free-text OSD lines for a channel, applying as many
+	// as the device has slots for (returned as applied). Returns an error
+	// wrapping ErrOSDUnsupported-equivalent state as osdSupported=false would
+	// from ChannelInfo — callers should check ChannelInfo first.
+	SetOSDLines(ctx context.Context, channel int, lines []string) (applied int, err error)
 	Close() error
+}
+
+// PictureSettings is implemented by cameras that support Dahua-style
+// color/picture tuning (VideoColor + VideoInOptions — brightness/contrast/
+// hue/saturation, flip/mirror/rotate, white balance, and the day/night
+// exposure sub-profiles). Only dahuaCamera implements it: Hikvision has no
+// equivalent in this codebase, and this deliberately isn't folded into the
+// common Camera interface (unlike ChannelInfo/OSD, which both vendors
+// support in some form) — callers must type-assert:
+//
+//	ps, ok := cam.(camera.PictureSettings)
+type PictureSettings interface {
+	// GetPicture reads back channel's current color+options config exactly
+	// as the device returns it (see dahua.GetPicture for why this is a raw
+	// map rather than a hand-typed struct).
+	GetPicture(ctx context.Context, channel int) (color, options map[string]any, err error)
+	// SetPicture merges colorChanges/optionsChanges into channel's config
+	// and returns the post-write, live device state, so callers can report
+	// which fields actually took (the device may clamp or ignore some).
+	SetPicture(ctx context.Context, channel int, colorChanges, optionsChanges map[string]any) (color, options map[string]any, err error)
+	// GetPictureCaps reads channel's video-input capability flags, so the UI
+	// can disable controls the device doesn't support.
+	GetPictureCaps(ctx context.Context, channel int) (map[string]any, error)
+}
+
+// NetworkSettings is implemented by cameras that support reading/writing
+// device-level network config (static IP, Wi-Fi). Only dahuaCamera
+// implements it. This is a genuinely high-risk surface — a bad IP/mask or
+// wrong Wi-Fi credential can make the device unreachable — so callers must
+// type-assert (`ns, ok := cam.(camera.NetworkSettings)`) and should always
+// read current config back after a write to confirm it applied as expected.
+type NetworkSettings interface {
+	GetNetworkConfig(ctx context.Context) (dahua.NetworkConfig, error)
+	// SetStaticIP writes one interface's IP config. See
+	// dahua.Client.SetStaticIP for validation (ip/mask/gateway/dns must be
+	// well-formed IPv4 or the call fails before touching the device).
+	SetStaticIP(ctx context.Context, iface string, dhcpEnable bool, ip, mask, gateway string, dns []string) error
+	GetWiFiConfig(ctx context.Context) (map[string]map[string]any, error)
+	SetWiFiConfig(ctx context.Context, iface, ssid, password, encryption string) error
+	// ScanWiFi triggers a live access-point scan. Requires the device's HTTP
+	// CGI port (80) to be reachable, unlike the rest of this interface which
+	// rides the existing DVRIP session.
+	ScanWiFi(ctx context.Context) ([]dahua.WiFiAP, error)
 }
 
 // Open dials the device according to its configured vendor and returns a
@@ -129,10 +205,22 @@ func Open(ctx context.Context, d config.Device, timeout time.Duration) (Camera, 
 	switch d.Vendor {
 	case config.VendorDahua:
 		cl, err := dahua.Dial(d.Addr(), d.Username, d.Password, timeout)
+		if err != nil && errors.Is(err, dahua.ErrDialUnreachable) && d.Port != kbvisionFallbackPort {
+			// KBVision (a Dahua OEM) sometimes serves DVRIP on 8888 instead of
+			// the 37777 default. Only retry when the configured port genuinely
+			// couldn't be reached at the TCP level (ErrDialUnreachable) so a
+			// real login/credential failure on 37777 is never masked by a
+			// second, confusing attempt. This fallback is per-connection only:
+			// it never rewrites d.Port in the saved inventory.
+			fallbackAddr := fmt.Sprintf("%s:%d", d.Host, kbvisionFallbackPort)
+			if cl2, err2 := dahua.Dial(fallbackAddr, d.Username, d.Password, timeout); err2 == nil {
+				cl, err = cl2, nil
+			}
+		}
 		if err != nil {
 			return nil, fmt.Errorf("dahua dial %s: %w", d.Addr(), err)
 		}
-		return &dahuaCamera{client: cl}, nil
+		return &dahuaCamera{client: cl, device: d, timeout: timeout}, nil
 	case config.VendorHikvision:
 		cl, err := openHikClient(d, timeout)
 		if err != nil {
@@ -144,15 +232,97 @@ func Open(ctx context.Context, d config.Device, timeout time.Duration) (Camera, 
 	}
 }
 
-// dahuaCamera adapts *dahua.Client to the Camera interface.
+// dahuaCamera adapts *dahua.Client to the Camera interface. device/timeout
+// are kept alongside the DVRIP client so Snapshot can open a separate plain
+// HTTP+Digest connection (Dahua's snapshot.cgi is not reachable over the
+// DVRIP session) without re-deriving credentials from anywhere else.
 type dahuaCamera struct {
-	client *dahua.Client
+	client  *dahua.Client
+	device  config.Device
+	timeout time.Duration
 }
 
 func (d *dahuaCamera) Close() error { return d.client.Close() }
 
 func (d *dahuaCamera) ChangePassword(ctx context.Context, newUser, newPass string) error {
 	return d.client.SetPassword(newPass)
+}
+
+// Snapshot fetches a single JPEG frame via Dahua's HTTP CGI (a separate
+// connection from the DVRIP session, see dahua.GetSnapshot); stream is
+// ignored (snapshot.cgi has no sub-stream selector).
+func (d *dahuaCamera) Snapshot(ctx context.Context, channel, stream int) ([]byte, error) {
+	return dahua.GetSnapshot(ctx, d.device.Host, d.device.Username, d.device.Password, channel, d.timeout)
+}
+
+// ChannelInfo reads back the channel's own name and OSD lines.
+func (d *dahuaCamera) ChannelInfo(ctx context.Context, channel int) (string, []string, bool, error) {
+	name, err := d.client.GetChannelTitle(channel)
+	if err != nil {
+		return "", nil, false, err
+	}
+	lines, err := d.client.GetOSDLines(channel)
+	if err != nil {
+		if errors.Is(err, dahua.ErrOSDUnsupported) {
+			return name, nil, false, nil
+		}
+		return name, nil, false, err
+	}
+	return name, lines, true, nil
+}
+
+// SetChannelName writes the device's own channel name.
+func (d *dahuaCamera) SetChannelName(ctx context.Context, channel int, name string) error {
+	return d.client.SetChannelTitle(channel, name)
+}
+
+// SetOSDLines writes free-text OSD lines for a channel.
+func (d *dahuaCamera) SetOSDLines(ctx context.Context, channel int, lines []string) (int, error) {
+	return d.client.SetOSDLines(channel, lines)
+}
+
+// GetPicture reads back the channel's current color+options config.
+func (d *dahuaCamera) GetPicture(ctx context.Context, channel int) (map[string]any, map[string]any, error) {
+	return d.client.GetPicture(channel)
+}
+
+// SetPicture merges colorChanges/optionsChanges into the channel's config
+// and returns the post-write, live device state.
+func (d *dahuaCamera) SetPicture(ctx context.Context, channel int, colorChanges, optionsChanges map[string]any) (map[string]any, map[string]any, error) {
+	return d.client.SetPicture(channel, colorChanges, optionsChanges)
+}
+
+// GetPictureCaps reads the channel's video-input capability flags via HTTP
+// CGI (a separate connection from the DVRIP session, same as Snapshot).
+func (d *dahuaCamera) GetPictureCaps(ctx context.Context, channel int) (map[string]any, error) {
+	return dahua.GetVideoInputCaps(ctx, d.device.Host, d.device.Username, d.device.Password, channel, d.timeout)
+}
+
+// GetNetworkConfig reads the device's static IP / DHCP config for every
+// interface.
+func (d *dahuaCamera) GetNetworkConfig(ctx context.Context) (dahua.NetworkConfig, error) {
+	return d.client.GetNetworkConfig()
+}
+
+// SetStaticIP writes one interface's IP configuration.
+func (d *dahuaCamera) SetStaticIP(ctx context.Context, iface string, dhcpEnable bool, ip, mask, gateway string, dns []string) error {
+	return d.client.SetStaticIP(iface, dhcpEnable, ip, mask, gateway, dns)
+}
+
+// GetWiFiConfig reads the device's Wi-Fi (WLan) config for every interface.
+func (d *dahuaCamera) GetWiFiConfig(ctx context.Context) (map[string]map[string]any, error) {
+	return d.client.GetWiFiConfig()
+}
+
+// SetWiFiConfig writes one Wi-Fi interface's SSID/password.
+func (d *dahuaCamera) SetWiFiConfig(ctx context.Context, iface, ssid, password, encryption string) error {
+	return d.client.SetWiFiConfig(iface, ssid, password, encryption)
+}
+
+// ScanWiFi triggers a live access-point scan via HTTP CGI (a separate
+// connection from the DVRIP session, same as Snapshot).
+func (d *dahuaCamera) ScanWiFi(ctx context.Context) ([]dahua.WiFiAP, error) {
+	return dahua.ScanWiFi(ctx, d.device.Host, d.device.Username, d.device.Password, d.timeout)
 }
 
 // Probe reads back main + sub1 + sub2 stream info for channel 0.
@@ -398,6 +568,8 @@ func toStreamInfo(i dahua.StreamInfo) StreamInfo {
 		GOP:         i.GOP,
 		BitrateKbps: i.BitRate,
 		BitrateMode: i.BitRateControl,
+		Name:        i.Name,
+		OSDLines:    i.OSDLines,
 	}
 }
 
@@ -416,6 +588,38 @@ func (h *hikCamera) Close() error { return h.client.Close() }
 
 func (h *hikCamera) ChangePassword(ctx context.Context, newUser, newPass string) error {
 	return h.client.SetPassword(ctx, newUser, newPass)
+}
+
+// Snapshot fetches a single JPEG frame for one channel/stream via ISAPI.
+func (h *hikCamera) Snapshot(ctx context.Context, channel, stream int) ([]byte, error) {
+	return h.client.GetSnapshot(ctx, isapiChannel(channel), stream)
+}
+
+// ChannelInfo reads back the channel's own name and OSD overlay lines.
+func (h *hikCamera) ChannelInfo(ctx context.Context, channel int) (string, []string, bool, error) {
+	ch := isapiChannel(channel)
+	name, err := h.client.GetChannelName(ctx, ch)
+	if err != nil {
+		return "", nil, false, err
+	}
+	lines, err := h.client.GetOverlayText(ctx, ch)
+	if err != nil {
+		if errors.Is(err, hik.ErrOverlayUnsupported) {
+			return name, nil, false, nil
+		}
+		return name, nil, false, err
+	}
+	return name, lines, true, nil
+}
+
+// SetChannelName writes the device's own channel name.
+func (h *hikCamera) SetChannelName(ctx context.Context, channel int, name string) error {
+	return h.client.SetChannelName(ctx, isapiChannel(channel), name)
+}
+
+// SetOSDLines writes free-text OSD overlay lines for a channel.
+func (h *hikCamera) SetOSDLines(ctx context.Context, channel int, lines []string) (int, error) {
+	return h.client.SetOverlayText(ctx, isapiChannel(channel), lines)
 }
 
 // isapiChannel converts a vendor-neutral (0-based) Profile.Channel to
@@ -668,5 +872,6 @@ func hikToStreamInfo(i hik.StreamInfo) StreamInfo {
 		GOP:         i.GOP,
 		BitrateKbps: i.BitrateKbps,
 		BitrateMode: i.BitrateMode,
+		Name:        i.Name,
 	}
 }
