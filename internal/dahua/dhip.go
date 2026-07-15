@@ -223,24 +223,54 @@ func (c *Client) writeRaw(b []byte) error {
 	return nil
 }
 
-// readFrame reads a 32-byte header and its payload. Payload length is the
-// little-endian uint32 at header[4:8] for both \xb0 login and \xf6 JSON frames.
+const maxFrame = 32 << 20 // 32 MiB sanity cap
+
+// readFrame reads a DVRIP frame and returns the first header + full payload.
+// Each frame is a 32-byte header + a chunk of length header[4:8]. A large JSON
+// (\xf6) response — e.g. an NVR's whole Encode config — is FRAGMENTED across
+// several such frames, with header[16:20] carrying the total JSON size; we
+// accumulate frames until we have all of it. \xb0 login frames are single.
 func (c *Client) readFrame() (header, payload []byte, err error) {
 	_ = c.conn.SetReadDeadline(time.Now().Add(c.timeout))
 	header = make([]byte, headerLen)
 	if _, err := io.ReadFull(c.conn, header); err != nil {
 		return nil, nil, fmt.Errorf("read header: %w", err)
 	}
-	n := binary.LittleEndian.Uint32(header[4:8])
-	if n == 0 {
+	chunk := binary.LittleEndian.Uint32(header[4:8])
+	total := binary.LittleEndian.Uint32(header[16:20])
+	if chunk == 0 {
 		return header, []byte{}, nil
 	}
-	if n > 8<<20 {
-		return nil, nil, fmt.Errorf("frame too large: %d", n)
+	if chunk > maxFrame || total > maxFrame {
+		return nil, nil, fmt.Errorf("frame too large: chunk=%d total=%d", chunk, total)
 	}
-	payload = make([]byte, n)
+	payload = make([]byte, chunk)
 	if _, err := io.ReadFull(c.conn, payload); err != nil {
 		return nil, nil, fmt.Errorf("read payload: %w", err)
+	}
+
+	// JSON (\xf6) responses fragment: keep reading (header + chunk) frames and
+	// appending their payloads until we have the full `total` bytes.
+	if header[0] == 0xf6 {
+		for uint32(len(payload)) < total {
+			_ = c.conn.SetReadDeadline(time.Now().Add(c.timeout))
+			h := make([]byte, headerLen)
+			if _, err := io.ReadFull(c.conn, h); err != nil {
+				return nil, nil, fmt.Errorf("read continuation header: %w", err)
+			}
+			cn := binary.LittleEndian.Uint32(h[4:8])
+			if cn == 0 {
+				break
+			}
+			if cn > maxFrame || uint32(len(payload))+cn > maxFrame {
+				return nil, nil, fmt.Errorf("continuation frame too large: %d", cn)
+			}
+			p := make([]byte, cn)
+			if _, err := io.ReadFull(c.conn, p); err != nil {
+				return nil, nil, fmt.Errorf("read continuation payload: %w", err)
+			}
+			payload = append(payload, p...)
+		}
 	}
 	return header, payload, nil
 }
