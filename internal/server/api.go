@@ -13,7 +13,7 @@ import (
 )
 
 // deviceTimeout bounds how long the API waits on a single camera connection.
-const deviceTimeout = 10 * time.Second
+const deviceTimeout = 15 * time.Second
 
 // deviceView is the JSON-safe projection of config.Device: passwords never
 // leave the server.

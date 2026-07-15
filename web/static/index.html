@@ -276,6 +276,7 @@
         <label for="p-audio-enable">Bật âm thanh AAC</label>
       </div>
 
+      <button id="probe-selected-btn" class="secondary">Dò các cam đã chọn</button>
       <button id="apply-btn">Áp dụng</button>
       <span class="muted" id="apply-count"></span>
       <div class="msg" id="apply-msg"></div>
@@ -330,10 +331,12 @@
     function fmtStreamInfo(list) {
       if (!list || !list.length) return '';
       return list.map(s => {
+        const ch = (s.channel ? 'K' + s.channel + ' ' : '');
         const label = ['main','sub1','sub2'][s.stream] || ('s' + s.stream);
         const audio = s.audioEnable ? (s.audioCodec || 'on') : 'tắt';
         const codec = s.compression ? (s.compression + (s.profile ? '/' + s.profile : '')) : '';
-        return `${label}: ${s.width}x${s.height} ${codec} · audio ${audio} · smart ${s.smartCodec ? 'bật' : 'tắt'}`;
+        const fps = (s.fps > 0 ? s.fps + 'fps' : 'fps theo nguồn');
+        return `${ch}${label}: ${s.width}x${s.height} ${codec} · ${fps} · audio ${audio} · smart ${s.smartCodec ? 'bật' : 'tắt'}`;
       }).join('<br>');
     }
 
@@ -464,6 +467,35 @@
     function selectedCameraIds() {
       return Array.from(document.querySelectorAll('.cam-cb:checked')).map(cb => cb.value);
     }
+
+    // Probe every selected camera (sequentially, to be gentle), updating each
+    // row's stream-info cell and the probe cache.
+    document.getElementById('probe-selected-btn').addEventListener('click', async () => {
+      const ids = selectedCameraIds();
+      const msg = document.getElementById('apply-msg');
+      if (!ids.length) { msg.className = 'msg err'; msg.textContent = 'Chưa chọn camera nào để dò.'; return; }
+      const btn = document.getElementById('probe-selected-btn');
+      btn.disabled = true;
+      let ok = 0, fail = 0;
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i];
+        msg.className = 'msg'; msg.textContent = `Đang dò ${i + 1}/${ids.length}: ${id} ...`;
+        const cell = document.getElementById('probe-' + cssEscape(id));
+        if (cell) cell.innerHTML = '<span class="muted">đang dò...</span>';
+        try {
+          const info = await api('/api/probe', { method: 'POST', body: JSON.stringify({ id }) });
+          probeCache[id] = info;
+          if (cell) cell.innerHTML = fmtStreamInfo(info);
+          ok++;
+        } catch (e) {
+          if (cell) cell.innerHTML = `<span class="msg err">${escapeHtml(e.message)}</span>`;
+          fail++;
+        }
+      }
+      msg.className = fail ? 'msg err' : 'msg ok';
+      msg.textContent = `Dò xong: ${ok} OK, ${fail} lỗi.`;
+      btn.disabled = false;
+    });
 
     function buildProfile() {
       const streams = Array.from(document.querySelectorAll('.stream-cb:checked')).map(cb => parseInt(cb.value, 10));
