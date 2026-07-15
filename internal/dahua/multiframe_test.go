@@ -55,3 +55,17 @@ func TestReadFrameSingleFrame(t *testing.T) {
 		t.Fatalf("single frame: got %q", got)
 	}
 }
+
+func TestReadFrameLoginFrameIgnoresTotal(t *testing.T) {
+	// A \xb0 login frame: header[16:20] is NOT a length (garbage on real NVRs).
+	// readFrame must read exactly header[4:8] bytes, not treat [16:20] as total.
+	payload := []byte("Realm:Login to X\r\nRandom:Y\r\n\r\n")
+	h := make([]byte, headerLen)
+	h[0] = 0xb0 // login marker
+	binary.LittleEndian.PutUint32(h[4:8], uint32(len(payload)))
+	binary.LittleEndian.PutUint32(h[16:20], 0xFFFFFFFF) // garbage "total"
+	got := readWire(t, append(h, payload...))
+	if !bytes.Equal(got, payload) {
+		t.Fatalf("login frame: got %q, want %q", got, payload)
+	}
+}

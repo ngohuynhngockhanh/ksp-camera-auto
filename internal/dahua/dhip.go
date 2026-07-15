@@ -239,12 +239,11 @@ func (c *Client) readFrame() (header, payload []byte, err error) {
 		return nil, nil, fmt.Errorf("read header: %w", err)
 	}
 	chunk := binary.LittleEndian.Uint32(header[4:8])
-	total := binary.LittleEndian.Uint32(header[16:20])
 	if chunk == 0 {
 		return header, []byte{}, nil
 	}
-	if chunk > maxFrame || total > maxFrame {
-		return nil, nil, fmt.Errorf("frame too large: chunk=%d total=%d", chunk, total)
+	if chunk > maxFrame {
+		return nil, nil, fmt.Errorf("frame too large: chunk=%d", chunk)
 	}
 	payload = make([]byte, chunk)
 	if _, err := io.ReadFull(c.conn, payload); err != nil {
@@ -252,8 +251,14 @@ func (c *Client) readFrame() (header, payload []byte, err error) {
 	}
 
 	// JSON (\xf6) responses fragment: keep reading (header + chunk) frames and
-	// appending their payloads until we have the full `total` bytes.
+	// appending their payloads until we have the full `total` bytes. header[16:20]
+	// is the total ONLY for JSON frames; on \xb0 login frames it is not a length,
+	// so this block must not run for them.
 	if header[0] == 0xf6 {
+		total := binary.LittleEndian.Uint32(header[16:20])
+		if total > maxFrame {
+			return nil, nil, fmt.Errorf("json frame too large: total=%d", total)
+		}
 		for uint32(len(payload)) < total {
 			_ = c.conn.SetReadDeadline(time.Now().Add(c.timeout))
 			h := make([]byte, headerLen)
