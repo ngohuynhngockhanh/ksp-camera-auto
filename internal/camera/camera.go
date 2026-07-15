@@ -40,6 +40,13 @@ type Profile struct {
 
 	SetAudioAAC bool `json:"setAudioAAC"`
 
+	SetGOP bool `json:"setGop"`
+	GOP    int  `json:"gop"` // I-frame interval, frames
+
+	SetBitrate  bool   `json:"setBitrate"`
+	Bitrate     int    `json:"bitrate"`     // Kbps
+	BitrateMode string `json:"bitrateMode"` // "" = keep current, "CBR", "VBR"
+
 	Streams  []int `json:"streams"`  // which streams to touch; defaults to [main]
 	Channel  int   `json:"channel"`  // single channel (back-compat); 0-based
 	Channels []int `json:"channels"` // multiple channels (NVR); 0-based; wins over Channel
@@ -75,6 +82,10 @@ type StreamInfo struct {
 	AudioCodec  string `json:"audioCodec"`
 	AudioEnable bool   `json:"audioEnable"`
 	SmartCodec  bool   `json:"smartCodec"`
+
+	GOP         int    `json:"gop"`
+	BitrateKbps int    `json:"bitrateKbps"`
+	BitrateMode string `json:"bitrateMode"`
 }
 
 // StepResult records the outcome of one applied action (e.g. "set resolution
@@ -161,8 +172,8 @@ func (d *dahuaCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
 // calling emit as each step completes so the caller can stream progress live
 // (emit may be nil). It never returns early on a per-step failure: every
 // requested action is attempted so the caller sees the full picture. For
-// each requested stream the order is codec -> resolution -> audio AAC, then
-// smart codec is applied once per channel.
+// each requested stream the order is codec -> resolution -> GOP -> bitrate ->
+// audio AAC, then smart codec is applied once per channel.
 func (d *dahuaCamera) Apply(ctx context.Context, profile Profile, emit func(StepResult)) []StepResult {
 	var steps []StepResult
 	add := func(step StepResult) {
@@ -181,6 +192,12 @@ func (d *dahuaCamera) Apply(ctx context.Context, profile Profile, emit func(Step
 			}
 			if profile.SetResolution {
 				add(d.applyResolution(ch, ds, streamName, profile.Width, profile.Height))
+			}
+			if profile.SetGOP {
+				add(d.applyGOP(ch, ds, streamName, profile.GOP))
+			}
+			if profile.SetBitrate {
+				add(d.applyBitrate(ch, ds, streamName, profile.Bitrate, profile.BitrateMode))
 			}
 			if profile.SetAudioAAC {
 				add(d.applyAudioAAC(ch, ds, streamName))
@@ -255,6 +272,80 @@ func (d *dahuaCamera) applyAudioAAC(ch int, s dahua.Stream, streamName string) S
 	return step
 }
 
+func (d *dahuaCamera) applyGOP(ch int, s dahua.Stream, streamName string, gop int) StepResult {
+	step := StepResult{Step: fmt.Sprintf("GOP %s", streamName), Detail: fmt.Sprintf("%d", gop)}
+	before, err := d.client.GetStreamInfo(ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	if before.GOP == gop {
+		step.OK = true
+		step.Detail = fmt.Sprintf("GOP đã đúng %d", gop)
+		return step
+	}
+	if err := d.client.SetGOP(ch, s, gop); err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	after, err := d.client.GetStreamInfo(ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	switch {
+	case after.GOP == gop:
+		step.OK = true
+		step.Detail = fmt.Sprintf("GOP %d OK", gop)
+	case after.GOP != before.GOP:
+		step.OK = true
+		step.Detail = fmt.Sprintf("yêu cầu GOP %d, thiết bị kẹp còn %d", gop, after.GOP)
+	default:
+		step.Detail = fmt.Sprintf("GOP không đổi được (đọc lại: %d)", after.GOP)
+	}
+	return step
+}
+
+func (d *dahuaCamera) applyBitrate(ch int, s dahua.Stream, streamName string, kbps int, mode string) StepResult {
+	label := fmt.Sprintf("%d Kbps", kbps)
+	if mode != "" {
+		label += " " + mode
+	}
+	step := StepResult{Step: fmt.Sprintf("bitrate %s", streamName), Detail: label}
+	before, err := d.client.GetStreamInfo(ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	modeOK := mode == "" || before.BitRateControl == mode
+	if before.BitRate == kbps && modeOK {
+		step.OK = true
+		step.Detail = fmt.Sprintf("bitrate đã đúng %s", label)
+		return step
+	}
+	if err := d.client.SetBitrate(ch, s, kbps, mode); err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	after, err := d.client.GetStreamInfo(ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	afterModeOK := mode == "" || after.BitRateControl == mode
+	switch {
+	case after.BitRate == kbps && afterModeOK:
+		step.OK = true
+		step.Detail = fmt.Sprintf("bitrate %s OK", label)
+	case after.BitRate != before.BitRate || after.BitRateControl != before.BitRateControl:
+		step.OK = true
+		step.Detail = fmt.Sprintf("yêu cầu %s, thiết bị nhận %d Kbps %s", label, after.BitRate, after.BitRateControl)
+	default:
+		step.Detail = fmt.Sprintf("bitrate không đổi được (đọc lại: %d Kbps %s)", after.BitRate, after.BitRateControl)
+	}
+	return step
+}
+
 func (d *dahuaCamera) applySmartCodec(ch int, on bool) StepResult {
 	step := StepResult{Step: "smart codec", Detail: onOff(on)}
 	if err := d.client.SetSmartCodec(ch, on); err != nil {
@@ -263,6 +354,13 @@ func (d *dahuaCamera) applySmartCodec(ch int, on bool) StepResult {
 	}
 	step.OK = true
 	return step
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 func onOff(b bool) string {
@@ -297,6 +395,9 @@ func toStreamInfo(i dahua.StreamInfo) StreamInfo {
 		AudioCodec:  i.AudioCodec,
 		AudioEnable: i.AudioEnable,
 		SmartCodec:  i.SmartCodec,
+		GOP:         i.GOP,
+		BitrateKbps: i.BitRate,
+		BitrateMode: i.BitRateControl,
 	}
 }
 
@@ -339,7 +440,9 @@ func (h *hikCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
 // calling emit as each step completes (emit may be nil). It never returns
 // early on a per-step failure: every requested action is attempted so the
 // caller sees the full picture. For each requested stream the order is
-// codec -> resolution -> audio AAC -> smart codec.
+// codec -> resolution -> smart codec -> GOP -> bitrate -> audio AAC. Smart
+// codec runs before GOP/bitrate so the bitrate step's smart-average branch
+// observes the stream's final smart-codec state.
 //
 // Unlike Dahua's SmartEncode (a single per-physical-channel switch), ISAPI's
 // smartCodec toggle is a resource on each compound streaming-channel id
@@ -364,11 +467,17 @@ func (h *hikCamera) Apply(ctx context.Context, profile Profile, emit func(StepRe
 			if profile.SetResolution {
 				add(h.applyResolution(ctx, ch, s, streamName, profile.Width, profile.Height))
 			}
-			if profile.SetAudioAAC {
-				add(h.applyAudioAAC(ctx, ch, s, streamName))
-			}
 			if profile.SetSmartCodec {
 				add(h.applySmartCodec(ctx, ch, s, streamName, profile.SmartCodec))
+			}
+			if profile.SetGOP {
+				add(h.applyGOP(ctx, ch, s, streamName, profile.GOP))
+			}
+			if profile.SetBitrate {
+				add(h.applyBitrate(ctx, ch, s, streamName, profile.Bitrate, profile.BitrateMode))
+			}
+			if profile.SetAudioAAC {
+				add(h.applyAudioAAC(ctx, ch, s, streamName))
 			}
 		}
 	}
@@ -448,6 +557,82 @@ func (h *hikCamera) applyAudioAAC(ctx context.Context, ch, s int, streamName str
 	return step
 }
 
+// applyGOP uses tolerance ±1 frame on the read-back equality check, to absorb
+// any rounding the device applies internally.
+func (h *hikCamera) applyGOP(ctx context.Context, ch, s int, streamName string, gop int) StepResult {
+	step := StepResult{Step: fmt.Sprintf("GOP %s", streamName), Detail: fmt.Sprintf("%d", gop)}
+	before, err := h.client.GetStreamInfo(ctx, ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	if abs(before.GOP-gop) <= 1 {
+		step.OK = true
+		step.Detail = fmt.Sprintf("GOP đã đúng %d", gop)
+		return step
+	}
+	if err := h.client.SetGOP(ctx, ch, s, gop); err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	after, err := h.client.GetStreamInfo(ctx, ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	switch {
+	case abs(after.GOP-gop) <= 1:
+		step.OK = true
+		step.Detail = fmt.Sprintf("GOP %d OK", gop)
+	case after.GOP != before.GOP:
+		step.OK = true
+		step.Detail = fmt.Sprintf("yêu cầu GOP %d, thiết bị kẹp còn %d", gop, after.GOP)
+	default:
+		step.Detail = fmt.Sprintf("GOP không đổi được (đọc lại: %d)", after.GOP)
+	}
+	return step
+}
+
+func (h *hikCamera) applyBitrate(ctx context.Context, ch, s int, streamName string, kbps int, mode string) StepResult {
+	label := fmt.Sprintf("%d Kbps", kbps)
+	if mode != "" {
+		label += " " + mode
+	}
+	step := StepResult{Step: fmt.Sprintf("bitrate %s", streamName), Detail: label}
+	before, err := h.client.GetStreamInfo(ctx, ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	modeOK := mode == "" || before.BitrateMode == mode
+	if before.BitrateKbps == kbps && modeOK {
+		step.OK = true
+		step.Detail = fmt.Sprintf("bitrate đã đúng %s", label)
+		return step
+	}
+	if err := h.client.SetBitrate(ctx, ch, s, kbps, mode); err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	after, err := h.client.GetStreamInfo(ctx, ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	afterModeOK := mode == "" || after.BitrateMode == mode
+	switch {
+	case after.BitrateKbps == kbps && afterModeOK:
+		step.OK = true
+		step.Detail = fmt.Sprintf("bitrate %s OK", label)
+	case after.BitrateKbps != before.BitrateKbps || after.BitrateMode != before.BitrateMode:
+		step.OK = true
+		step.Detail = fmt.Sprintf("yêu cầu %s, thiết bị nhận %d Kbps %s", label, after.BitrateKbps, after.BitrateMode)
+	default:
+		step.Detail = fmt.Sprintf("bitrate không đổi được (đọc lại: %d Kbps %s)", after.BitrateKbps, after.BitrateMode)
+	}
+	return step
+}
+
 func (h *hikCamera) applySmartCodec(ctx context.Context, ch, s int, streamName string, on bool) StepResult {
 	step := StepResult{Step: fmt.Sprintf("smart codec %s", streamName), Detail: onOff(on)}
 	if err := h.client.SetSmartCodec(ctx, ch, s, on); err != nil {
@@ -480,5 +665,8 @@ func hikToStreamInfo(i hik.StreamInfo) StreamInfo {
 		AudioCodec:  i.AudioCodec,
 		AudioEnable: i.AudioEnable,
 		SmartCodec:  i.SmartCodec,
+		GOP:         i.GOP,
+		BitrateKbps: i.BitrateKbps,
+		BitrateMode: i.BitrateMode,
 	}
 }

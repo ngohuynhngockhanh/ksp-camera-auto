@@ -298,6 +298,37 @@
       </div>
 
       <div class="checkbox-row">
+        <input type="checkbox" id="p-gop-enable">
+        <label for="p-gop-enable">Đổi khoảng I-frame (GOP, số khung hình)</label>
+      </div>
+      <div class="field" id="p-gop-fields" style="display:none; max-width:160px">
+        <label for="p-gop-value">GOP (khung hình)</label>
+        <input id="p-gop-value" type="number" value="50" min="1" max="400">
+      </div>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="p-bitrate-enable">
+        <label for="p-bitrate-enable">Đổi bitrate</label>
+      </div>
+      <div class="row" id="p-bitrate-fields" style="display:none">
+        <div class="field" style="max-width:160px">
+          <label for="p-bitrate-value">Kbps</label>
+          <input id="p-bitrate-value" type="number" value="2048" min="0">
+        </div>
+        <div class="field" style="max-width:200px">
+          <label for="p-bitrate-mode">Chế độ</label>
+          <select id="p-bitrate-mode">
+            <option value="">Giữ nguyên chế độ</option>
+            <option value="CBR">CBR</option>
+            <option value="VBR">VBR</option>
+          </select>
+        </div>
+        <div class="field" style="flex-basis:100%; margin-bottom:0">
+          <p class="muted" style="margin:0">Cam Hikvision đang bật Smart Codec sẽ hiểu đây là bitrate trung bình.</p>
+        </div>
+      </div>
+
+      <div class="checkbox-row">
         <input type="checkbox" id="p-audio-enable">
         <label for="p-audio-enable">Bật âm thanh AAC</label>
       </div>
@@ -384,7 +415,9 @@
         const audio = s.audioEnable ? (s.audioCodec || 'on') : 'tắt';
         const codec = s.compression ? (s.compression + (s.profile ? '/' + s.profile : '')) : '';
         const fps = (s.fps > 0 ? s.fps + 'fps' : 'fps theo nguồn');
-        return `${ch}${label}: ${s.width}x${s.height} ${codec} · ${fps} · audio ${audio} · smart ${s.smartCodec ? 'bật' : 'tắt'}`;
+        const gop = (s.gop > 0 ? ' · GOP ' + s.gop : '');
+        const bitrate = (s.bitrateKbps > 0 ? ' · ' + s.bitrateKbps + 'Kbps' + (s.bitrateMode ? ' ' + s.bitrateMode : '') : '');
+        return `${ch}${label}: ${s.width}x${s.height} ${codec} · ${fps} · audio ${audio} · smart ${s.smartCodec ? 'bật' : 'tắt'}${gop}${bitrate}`;
       }).join('<br>');
     }
 
@@ -530,6 +563,14 @@
     const smartFields = document.getElementById('p-smart-fields');
     smartEnable.addEventListener('change', () => smartFields.style.display = smartEnable.checked ? 'block' : 'none');
 
+    const gopEnable = document.getElementById('p-gop-enable');
+    const gopFields = document.getElementById('p-gop-fields');
+    gopEnable.addEventListener('change', () => gopFields.style.display = gopEnable.checked ? 'block' : 'none');
+
+    const bitrateEnable = document.getElementById('p-bitrate-enable');
+    const bitrateFields = document.getElementById('p-bitrate-fields');
+    bitrateEnable.addEventListener('change', () => bitrateFields.style.display = bitrateEnable.checked ? 'flex' : 'none');
+
     function selectedCameraIds() {
       return Array.from(document.querySelectorAll('.cam-cb:checked')).map(cb => cb.value);
     }
@@ -574,6 +615,11 @@
         height: parseInt(heightInput.value, 10) || 0,
         setSmartCodec: smartEnable.checked,
         smartCodec: document.getElementById('p-smart-value').value === 'on',
+        setGop: gopEnable.checked,
+        gop: parseInt(document.getElementById('p-gop-value').value, 10) || 0,
+        setBitrate: bitrateEnable.checked,
+        bitrate: parseInt(document.getElementById('p-bitrate-value').value, 10) || 0,
+        bitrateMode: document.getElementById('p-bitrate-mode').value,
         setAudioAAC: document.getElementById('p-audio-enable').checked,
         streams: streams.length ? streams : [0],
         channels: parseChannels(document.getElementById('p-channel').value),
@@ -745,7 +791,7 @@
         return;
       }
       const profile = buildProfile();
-      if (!profile.setCodec && !profile.setResolution && !profile.setSmartCodec && !profile.setAudioAAC) {
+      if (!profile.setCodec && !profile.setResolution && !profile.setSmartCodec && !profile.setAudioAAC && !profile.setGop && !profile.setBitrate) {
         msg.textContent = 'Chọn ít nhất một thiết lập để thay đổi.';
         msg.className = 'msg err';
         return;

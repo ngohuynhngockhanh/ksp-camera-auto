@@ -91,3 +91,14 @@ func (c *Client) SetSmartCodec(ctx context.Context, ch, stream int, on bool) err
 func (c *Client) SetAudioAAC(ctx context.Context, ch, stream int) error {
 	return c.isapi.SetAudioAAC(ctx, ch, stream)
 }
+
+// SetGOP sets the I-frame interval (frames) for a channel/stream.
+func (c *Client) SetGOP(ctx context.Context, ch, stream, gop int) error {
+	return c.isapi.SetGOP(ctx, ch, stream, gop)
+}
+
+// SetBitrate sets the video bitrate (Kbps) and, when mode is non-empty, the
+// bitrate control mode ("VBR"/"CBR") for a channel/stream.
+func (c *Client) SetBitrate(ctx context.Context, ch, stream, kbps int, mode string) error {
+	return c.isapi.SetBitrate(ctx, ch, stream, kbps, mode)
+}
