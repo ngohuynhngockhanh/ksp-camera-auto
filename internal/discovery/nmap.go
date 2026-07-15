@@ -20,6 +20,19 @@ var (
 	nmapPortRe = regexp.MustCompile(`^(\d+)/tcp\s+open`)
 )
 
+// safeScanTargetRe allows only IPv4 dotted-quads, an optional /prefix, and an
+// optional trailing dashed range (e.g. 192.168.1.0/24, 10.0.0.5, 192.168.1.1-254).
+var safeScanTargetRe = regexp.MustCompile(`^[0-9]{1,3}(\.[0-9]{1,3}){3}(-[0-9]{1,3})?(/[0-9]{1,2})?$`)
+
+// isSafeScanTarget rejects anything that isn't a plain IPv4 target/range/CIDR,
+// so a value can never be treated as an nmap flag or shell metacharacter.
+func isSafeScanTarget(s string) bool {
+	if strings.HasPrefix(s, "-") || strings.ContainsAny(s, " \t;|&$`") {
+		return false
+	}
+	return safeScanTargetRe.MatchString(s)
+}
+
 // vendorForPort maps a well-known port to the vendor family it most likely
 // belongs to. Port 80 is ambiguous (both vendors expose a web UI there) so it
 // intentionally yields an empty vendor.
@@ -39,8 +52,15 @@ func vendorForPort(port int) string {
 // routed subnets since it's a plain TCP connect probe rather than
 // UDP multicast/broadcast discovery — see the package doc comment.
 func ScanSubnet(ctx context.Context, cidr string) ([]Result, error) {
-	if strings.TrimSpace(cidr) == "" {
+	cidr = strings.TrimSpace(cidr)
+	if cidr == "" {
 		return nil, fmt.Errorf("subnet is required")
+	}
+	// Strictly validate the target so it can never be interpreted as an nmap
+	// option (argument injection): accept only a CIDR, a single IP, or a simple
+	// dashed range like 192.168.1.1-254. No leading '-', no spaces, no flags.
+	if !isSafeScanTarget(cidr) {
+		return nil, fmt.Errorf("invalid subnet %q (use CIDR like 192.168.1.0/24, an IP, or a.b.c.d-e range)", cidr)
 	}
 	path, err := exec.LookPath("nmap")
 	if err != nil {

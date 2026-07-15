@@ -18,6 +18,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/importer"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/server"
 )
 
@@ -29,6 +30,9 @@ func main() {
 	addr := flag.String("addr", "", "override listen address (e.g. :2028)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	hashPassword := flag.String("hash-password", "", "print a bcrypt hash for the given web-login password and exit")
+	importShinobi := flag.String("import-shinobi", "", "import cameras from a Shinobi monitors JSON file into the cameras file, then exit")
+	importHikPort := flag.Int("import-hik-port", 80, "config port assigned to imported Hikvision cameras (LAN ISAPI = 80)")
+	importDahuaPort := flag.Int("import-dahua-port", 37777, "config port assigned to imported Dahua cameras")
 	flag.Parse()
 
 	if *showVersion {
@@ -55,6 +59,25 @@ func main() {
 	inv, err := config.LoadInventory(cfg.CamerasFile)
 	if err != nil {
 		log.Fatalf("inventory: %v", err)
+	}
+
+	if *importShinobi != "" {
+		data, err := os.ReadFile(*importShinobi)
+		if err != nil {
+			log.Fatalf("read shinobi json: %v", err)
+		}
+		res, err := importer.ParseShinobi(data, *importHikPort, *importDahuaPort)
+		if err != nil {
+			log.Fatalf("import shinobi: %v", err)
+		}
+		n := 0
+		for _, d := range res.Devices {
+			if err := inv.Upsert(d); err == nil {
+				n++
+			}
+		}
+		log.Printf("imported %d cameras (skipped %d) into %s", n, res.Skipped, cfg.CamerasFile)
+		return
 	}
 
 	srv, err := server.New(cfg, inv)

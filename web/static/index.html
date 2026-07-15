@@ -213,6 +213,10 @@
         </div>
       </div>
       <div class="field">
+        <label for="imp-file">Chọn file JSON (hoặc dán bên dưới)</label>
+        <input id="imp-file" type="file" accept=".json,application/json,text/plain">
+      </div>
+      <div class="field">
         <label for="imp-json">JSON Shinobi</label>
         <textarea id="imp-json" rows="5" placeholder='[{"name":"Camera01","details":{"auto_host":"rtsp://user:pass@10.0.0.10:554/Streaming/Channels/101"}}]' style="width:100%; padding:9px 10px; border-radius:8px; border:1px solid #475569; background:#0f172a; color:#e2e8f0; font-size:.82rem; font-family:monospace;"></textarea>
       </div>
@@ -877,6 +881,22 @@
       document.getElementById('f-name').value = r.model || r.name || '';
       document.getElementById('add-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
       document.getElementById('f-host').focus();
+    });
+
+    document.getElementById('imp-file').addEventListener('change', (ev) => {
+      const f = ev.target.files && ev.target.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        document.getElementById('imp-json').value = reader.result || '';
+        const m = document.getElementById('imp-msg');
+        m.className = 'msg'; m.textContent = `Đã nạp file "${f.name}". Bấm "Nhập vào kho".`;
+      };
+      reader.onerror = () => {
+        const m = document.getElementById('imp-msg');
+        m.className = 'msg err'; m.textContent = 'Không đọc được file.';
+      };
+      reader.readAsText(f);
     });
 
     document.getElementById('imp-btn').addEventListener('click', async () => {

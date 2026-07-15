@@ -219,3 +219,18 @@ func TestMergeResultsPrefersMoreInfo(t *testing.T) {
 		t.Errorf("expected the more informative (onvif) entry to win, got %+v", out[1])
 	}
 }
+
+func TestIsSafeScanTarget(t *testing.T) {
+	ok := []string{"192.168.1.0/24", "10.0.0.5", "192.168.1.1-254", "172.16.0.0/16"}
+	for _, s := range ok {
+		if !isSafeScanTarget(s) {
+			t.Errorf("should accept %q", s)
+		}
+	}
+	bad := []string{"-oX /etc/passwd", "--script=x", "1.2.3.4; rm -rf /", "1.2.3.4 8.8.8.8", "$(whoami)", "1.2.3.4|nc", "", "example.com"}
+	for _, s := range bad {
+		if isSafeScanTarget(s) {
+			t.Errorf("should REJECT %q", s)
+		}
+	}
+}
