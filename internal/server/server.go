@@ -67,6 +67,7 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/apply", s.requireAuth(http.HandlerFunc(s.handleApply)))
 	s.mux.Handle("/api/scan", s.requireAuth(http.HandlerFunc(s.handleScan)))
 	s.mux.Handle("/api/import", s.requireAuth(http.HandlerFunc(s.handleImport)))
+	s.mux.Handle("/api/password", s.requireAuth(http.HandlerFunc(s.handlePassword)))
 
 	// Authenticated app + static assets.
 	fileServer := http.FileServer(http.FS(s.static))

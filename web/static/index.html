@@ -298,11 +298,33 @@
         <label for="p-audio-enable">Bật âm thanh AAC</label>
       </div>
 
+      <div class="field" style="max-width:220px">
+        <label for="g-timeout">Timeout mỗi cam (giây) — đầu ghi chậm để cao</label>
+        <input id="g-timeout" type="number" value="30" min="5" max="600">
+      </div>
+
       <button id="probe-selected-btn" class="secondary">Dò các cam đã chọn</button>
       <button id="apply-btn">Áp dụng</button>
       <span class="muted" id="apply-count"></span>
       <div class="msg" id="apply-msg"></div>
-      <p class="muted" style="margin:10px 0 4px">Nhật ký trực tiếp — áp dụng tuần tự từng camera một:</p>
+
+      <div style="border-top:1px solid #334155; margin:16px 0 12px; padding-top:14px">
+        <h2 style="font-size:.9rem">Đổi mật khẩu camera (cho các cam đã chọn)</h2>
+        <div class="row">
+          <div class="field" style="max-width:180px">
+            <label for="pw-user">Tài khoản mới</label>
+            <input id="pw-user" type="text" value="admin">
+          </div>
+          <div class="field" style="max-width:220px">
+            <label for="pw-pass">Mật khẩu mới</label>
+            <input id="pw-pass" type="text" value="smarthome12345">
+          </div>
+          <button id="pw-btn" class="danger" style="align-self:end">Đổi mật khẩu</button>
+        </div>
+        <p class="muted">Đổi xong tool tự cập nhật mật khẩu trong kho để vẫn kết nối được (không bị khóa ngoài).</p>
+      </div>
+
+      <p class="muted" style="margin:10px 0 4px">Nhật ký trực tiếp — chạy tuần tự từng camera một:</p>
       <div class="log-box" id="apply-log"></div>
     </div>
 
@@ -453,7 +475,7 @@
         if (!confirm('Xóa camera này khỏi kho?')) return;
         btn.disabled = true;
         try {
-          await api('/api/cameras/delete', { method: 'POST', body: JSON.stringify({ id }) });
+          await api('/api/cameras/delete', { method: 'POST', body: JSON.stringify({ id, timeoutSeconds: timeoutSec() }) });
           delete probeCache[id];
           await loadCameras();
         } catch (e) {
@@ -465,7 +487,7 @@
         const cell = document.getElementById('probe-' + cssEscape(id));
         cell.innerHTML = '<span class="muted">đang dò...</span>';
         try {
-          const info = await api('/api/probe', { method: 'POST', body: JSON.stringify({ id }) });
+          const info = await api('/api/probe', { method: 'POST', body: JSON.stringify({ id, timeoutSeconds: timeoutSec() }) });
           probeCache[id] = info;
           cell.innerHTML = fmtStreamInfo(info);
         } catch (e) {
@@ -523,7 +545,7 @@
         const cell = document.getElementById('probe-' + cssEscape(id));
         if (cell) cell.innerHTML = '<span class="muted">đang dò...</span>';
         try {
-          const info = await api('/api/probe', { method: 'POST', body: JSON.stringify({ id }) });
+          const info = await api('/api/probe', { method: 'POST', body: JSON.stringify({ id, timeoutSeconds: timeoutSec() }) });
           probeCache[id] = info;
           if (cell) cell.innerHTML = fmtStreamInfo(info);
           ok++;
@@ -630,11 +652,21 @@
     // "data: <json event>\n\n" chunks and renders each event live, building
     // up the same []DeviceResult shape the old non-streaming endpoint
     // returned so the results table keeps working unchanged.
+    function timeoutSec() {
+      return parseInt(document.getElementById('g-timeout').value, 10) || 30;
+    }
+
     async function streamApply(ids, profile) {
-      const resp = await fetch('/api/apply', {
+      return streamPost('/api/apply', { deviceIds: ids, profile, timeoutSeconds: timeoutSec() });
+    }
+
+    // streamPost POSTs a JSON body and consumes the "data: <event>\n\n" SSE
+    // stream, rendering each event to the live log. Used by apply + password.
+    async function streamPost(url, body) {
+      const resp = await fetch(url, {
         method: 'POST',
         headers: jsonHeaders,
-        body: JSON.stringify({ deviceIds: ids, profile }),
+        body: JSON.stringify(body),
       });
       if (resp.status === 401) {
         location.href = '/login';
@@ -736,6 +768,33 @@
       }
     });
 
+    document.getElementById('pw-btn').addEventListener('click', async () => {
+      const ids = selectedCameraIds();
+      const msg = document.getElementById('apply-msg');
+      msg.textContent = ''; msg.className = 'msg';
+      if (!ids.length) { msg.textContent = 'Chọn ít nhất một camera ở bảng Kho camera.'; msg.className = 'msg err'; return; }
+      const user = (document.getElementById('pw-user').value || 'admin').trim();
+      const pass = document.getElementById('pw-pass').value;
+      if (!pass) { msg.textContent = 'Nhập mật khẩu mới.'; msg.className = 'msg err'; return; }
+      if (!confirm(`Đổi mật khẩu ${ids.length} camera thành ${user} / ${pass}?\nKho sẽ tự cập nhật để vẫn kết nối được.`)) return;
+      const btn = document.getElementById('pw-btn'); btn.disabled = true;
+      clearLog();
+      msg.textContent = `Đang đổi mật khẩu ${ids.length} camera...`;
+      try {
+        const results = await streamPost('/api/password', {
+          deviceIds: ids, newUsername: user, newPassword: pass, timeoutSeconds: timeoutSec(),
+        });
+        renderResults(results);
+        msg.textContent = 'Hoàn tất.'; msg.className = 'msg ok';
+        for (const r of results) { if (r.ok) delete probeCache[r.deviceId]; }
+      } catch (e) {
+        msg.textContent = 'Lỗi: ' + e.message; msg.className = 'msg err';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // Include the timeout in Shinobi import too (parse is instant, but keep API uniform).
     document.querySelectorAll('.cam-cb, #select-all').forEach(() => {}); // reserved
     document.getElementById('cam-tbody').addEventListener('change', (ev) => {
       if (ev.target.classList.contains('cam-cb')) {

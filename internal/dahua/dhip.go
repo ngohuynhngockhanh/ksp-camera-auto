@@ -27,6 +27,8 @@ type Client struct {
 	sessionID uint32
 	id        uint32
 	timeout   time.Duration
+	user      string // remembered for operations needing the current credential
+	pass      string
 }
 
 // rpcResp is the generic JSON-RPC response envelope. Error is left raw because
@@ -80,7 +82,7 @@ func Dial(addr, username, password string, timeout time.Duration) (*Client, erro
 	if err != nil {
 		return nil, fmt.Errorf("dial %s: %w", addr, err)
 	}
-	c := &Client{conn: conn, timeout: timeout}
+	c := &Client{conn: conn, timeout: timeout, user: username, pass: password}
 	if err := c.login(username, password); err != nil {
 		conn.Close()
 		return nil, err

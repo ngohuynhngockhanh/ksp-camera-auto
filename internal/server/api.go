@@ -14,8 +14,21 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/importer"
 )
 
-// deviceTimeout bounds how long the API waits on a single camera connection.
-const deviceTimeout = 15 * time.Second
+// reqTimeout resolves a per-request device timeout: the request's
+// timeoutSeconds (clamped to 5..600s) if given, else the configured default.
+// The user can wait for slow NVRs by raising it from the web UI.
+func (s *Server) reqTimeout(sec int) time.Duration {
+	if sec <= 0 {
+		sec = s.cfg.Defaults.TimeoutSeconds
+	}
+	if sec < 5 {
+		sec = 5
+	}
+	if sec > 600 {
+		sec = 600
+	}
+	return time.Duration(sec) * time.Second
+}
 
 // deviceView is the JSON-safe projection of config.Device: passwords never
 // leave the server.
@@ -195,9 +208,98 @@ func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"added": added, "skipped": res.Skipped})
 }
 
+// passwordReq is the body of POST /api/password.
+type passwordReq struct {
+	DeviceIDs      []string `json:"deviceIds"`
+	NewUsername    string   `json:"newUsername"`
+	NewPassword    string   `json:"newPassword"`
+	TimeoutSeconds int      `json:"timeoutSeconds"`
+}
+
+// handlePassword changes the password on a set of devices, one at a time,
+// streaming progress like /api/apply. On success it updates the stored
+// credential in lock-step so the tool keeps working (no lockout).
+func (s *Server) handlePassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req passwordReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	if len(req.DeviceIDs) == 0 {
+		writeErr(w, http.StatusBadRequest, "deviceIds is required")
+		return
+	}
+	if req.NewUsername == "" {
+		req.NewUsername = s.cfg.Defaults.Username
+	}
+	if req.NewPassword == "" {
+		req.NewPassword = s.cfg.Defaults.NewPassword
+	}
+	to := s.reqTimeout(req.TimeoutSeconds)
+	ctx, cancel := context.WithTimeout(r.Context(), to*time.Duration(len(req.DeviceIDs)+1))
+	defer cancel()
+
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	flusher, _ := w.(http.Flusher)
+	emit := func(ev bulk.Event) {
+		if r.Context().Err() != nil {
+			return
+		}
+		b, err := json.Marshal(ev)
+		if err != nil {
+			return
+		}
+		if _, err := w.Write([]byte("data: " + string(b) + "\n\n")); err != nil {
+			return
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+
+	total := len(req.DeviceIDs)
+	for i, id := range req.DeviceIDs {
+		if ctx.Err() != nil {
+			break
+		}
+		d, ok := s.inv.Get(id)
+		emit(bulk.Event{Type: "device_start", DeviceID: id, Name: d.Name, Host: d.Host, Index: i + 1, Total: total})
+		if !ok {
+			emit(bulk.Event{Type: "device_done", DeviceID: id, OK: false, Err: "không có trong kho"})
+			continue
+		}
+		cam, err := camera.Open(ctx, d, to)
+		if err != nil {
+			emit(bulk.Event{Type: "device_done", DeviceID: id, Name: d.Name, OK: false, Err: err.Error()})
+			continue
+		}
+		err = cam.ChangePassword(ctx, req.NewUsername, req.NewPassword)
+		cam.Close()
+		if err != nil {
+			emit(bulk.Event{Type: "step", DeviceID: id, Name: d.Name, Step: "đổi mật khẩu", OK: false, Err: err.Error()})
+			emit(bulk.Event{Type: "device_done", DeviceID: id, Name: d.Name, OK: false, Err: err.Error()})
+			continue
+		}
+		// Update the stored credential so we can still connect.
+		d.Username, d.Password = req.NewUsername, req.NewPassword
+		_ = s.inv.Upsert(d)
+		emit(bulk.Event{Type: "step", DeviceID: id, Name: d.Name, Step: "đổi mật khẩu", Detail: "OK — đã cập nhật kho", OK: true})
+		emit(bulk.Event{Type: "device_done", DeviceID: id, Name: d.Name, OK: true})
+	}
+	emit(bulk.Event{Type: "done"})
+}
+
 // idReq is a body carrying only a device ID, used by delete/probe.
 type idReq struct {
-	ID string `json:"id"`
+	ID             string `json:"id"`
+	TimeoutSeconds int    `json:"timeoutSeconds"`
 }
 
 // handleCamerasDelete handles POST /api/cameras/delete.
@@ -240,10 +342,11 @@ func (s *Server) handleProbe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), deviceTimeout)
+	to := s.reqTimeout(req.TimeoutSeconds)
+	ctx, cancel := context.WithTimeout(r.Context(), to)
 	defer cancel()
 
-	cam, err := camera.Open(ctx, d, deviceTimeout)
+	cam, err := camera.Open(ctx, d, to)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
@@ -279,7 +382,8 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 
 	// Sequential apply can take a while for a large batch; scale the overall
 	// deadline by device count so a big inventory isn't cut off mid-run.
-	ctx, cancel := context.WithTimeout(r.Context(), deviceTimeout*time.Duration(len(req.DeviceIDs)+1))
+	to := s.reqTimeout(req.TimeoutSeconds)
+	ctx, cancel := context.WithTimeout(r.Context(), to*time.Duration(len(req.DeviceIDs)+1))
 	defer cancel()
 
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
@@ -306,5 +410,5 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	bulk.Apply(ctx, s.inv, req, deviceTimeout, emit)
+	bulk.Apply(ctx, s.inv, req, to, emit)
 }

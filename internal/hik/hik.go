@@ -65,6 +65,11 @@ func (c *Client) ProbeAll(ctx context.Context) ([]StreamInfo, error) {
 	return c.isapi.ProbeAll(ctx)
 }
 
+// SetPassword changes the admin account (id 1) to userName/newPass.
+func (c *Client) SetPassword(ctx context.Context, userName, newPass string) error {
+	return c.isapi.SetUserPassword(ctx, 1, userName, newPass)
+}
+
 // SetResolution sets the pixel resolution for a channel/stream. Pass fps<=0
 // to leave the frame rate untouched.
 func (c *Client) SetResolution(ctx context.Context, ch, stream, w, h, fps int) error {

@@ -95,6 +95,9 @@ type Camera interface {
 	// StepResult as it completes, so callers can stream progress live; the
 	// full slice is also returned. emit may be nil.
 	Apply(ctx context.Context, profile Profile, emit func(StepResult)) []StepResult
+	// ChangePassword sets the device's account password (and username where the
+	// vendor supports it). Dahua changes the logged-in account's password.
+	ChangePassword(ctx context.Context, newUser, newPass string) error
 	Close() error
 }
 
@@ -136,6 +139,10 @@ type dahuaCamera struct {
 }
 
 func (d *dahuaCamera) Close() error { return d.client.Close() }
+
+func (d *dahuaCamera) ChangePassword(ctx context.Context, newUser, newPass string) error {
+	return d.client.SetPassword(newPass)
+}
 
 // Probe reads back main + sub1 + sub2 stream info for channel 0.
 func (d *dahuaCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
@@ -305,6 +312,10 @@ type hikCamera struct {
 }
 
 func (h *hikCamera) Close() error { return h.client.Close() }
+
+func (h *hikCamera) ChangePassword(ctx context.Context, newUser, newPass string) error {
+	return h.client.SetPassword(ctx, newUser, newPass)
+}
 
 // isapiChannel converts a vendor-neutral (0-based) Profile.Channel to
 // Hikvision's native (1-based) channel number.

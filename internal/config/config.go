@@ -34,6 +34,11 @@ type Defaults struct {
 	DahuaPort     int    `yaml:"dahua_port"`
 	Username      string `yaml:"username"`
 	Password      string `yaml:"password"`
+	// TimeoutSeconds bounds one device operation; higher helps slow multi-channel
+	// NVRs. The web UI can override it per request.
+	TimeoutSeconds int `yaml:"timeout_seconds"`
+	// NewPassword is the default when bulk-changing a camera's password.
+	NewPassword string `yaml:"new_password"`
 }
 
 // Config is the top-level configuration document.
@@ -53,10 +58,12 @@ func Default() Config {
 		},
 		CamerasFile: "cameras.yaml",
 		Defaults: Defaults{
-			HikvisionPort: 8000,
-			DahuaPort:     37777,
-			Username:      "admin",
-			Password:      "inut12345",
+			HikvisionPort:  8000,
+			DahuaPort:      37777,
+			Username:       "admin",
+			Password:       "inut12345",
+			TimeoutSeconds: 30,
+			NewPassword:    "smarthome12345",
 		},
 	}
 }
@@ -102,6 +109,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Defaults.Username == "" {
 		c.Defaults.Username = d.Defaults.Username
+	}
+	if c.Defaults.TimeoutSeconds == 0 {
+		c.Defaults.TimeoutSeconds = d.Defaults.TimeoutSeconds
+	}
+	if c.Defaults.NewPassword == "" {
+		c.Defaults.NewPassword = d.Defaults.NewPassword
 	}
 	if c.Defaults.Password == "" {
 		c.Defaults.Password = d.Defaults.Password

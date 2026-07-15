@@ -15,8 +15,9 @@ import (
 
 // Request names the devices to touch and the profile to apply to each.
 type Request struct {
-	DeviceIDs []string       `json:"deviceIds"`
-	Profile   camera.Profile `json:"profile"`
+	DeviceIDs      []string       `json:"deviceIds"`
+	Profile        camera.Profile `json:"profile"`
+	TimeoutSeconds int            `json:"timeoutSeconds"`
 }
 
 // DeviceResult is the per-device outcome of an Apply run.

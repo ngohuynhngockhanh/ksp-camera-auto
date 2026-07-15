@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -355,6 +356,25 @@ func (c *Client) SetAudioAAC(ctx context.Context, ch, stream int) error {
 	return c.mutateStreamChannel(ctx, channelID(ch, stream), map[string]string{
 		"audioCompressionType": "AAC",
 	})
+}
+
+var xmlEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&apos;")
+
+// SetUserPassword changes account id (1 = admin) to userName/newPass via
+// PUT /ISAPI/Security/users/<id>.
+func (c *Client) SetUserPassword(ctx context.Context, id int, userName, newPass string) error {
+	doc := fmt.Sprintf(
+		`<?xml version="1.0" encoding="UTF-8"?><User><id>%d</id><userName>%s</userName><password>%s</password></User>`,
+		id, xmlEscaper.Replace(userName), xmlEscaper.Replace(newPass))
+	path := fmt.Sprintf("/ISAPI/Security/users/%d", id)
+	resp, err := c.do(ctx, http.MethodPut, path, []byte(doc))
+	if err != nil {
+		return err
+	}
+	if err := checkResponseStatus(resp); err != nil {
+		return fmt.Errorf("isapi: PUT %s: %w", path, err)
+	}
+	return nil
 }
 
 // streamingChannelList is /ISAPI/Streaming/channels: every channel/stream on
