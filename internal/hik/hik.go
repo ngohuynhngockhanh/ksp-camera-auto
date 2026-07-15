@@ -59,6 +59,12 @@ func (c *Client) GetStreamInfo(ctx context.Context, ch, stream int) (StreamInfo,
 	return c.isapi.GetStreamInfo(ctx, ch, stream)
 }
 
+// ProbeAll lists every channel/stream on the device in one request (an NVR
+// returns all its cameras).
+func (c *Client) ProbeAll(ctx context.Context) ([]StreamInfo, error) {
+	return c.isapi.ProbeAll(ctx)
+}
+
 // SetResolution sets the pixel resolution for a channel/stream. Pass fps<=0
 // to leave the frame rate untouched.
 func (c *Client) SetResolution(ctx context.Context, ch, stream, w, h, fps int) error {

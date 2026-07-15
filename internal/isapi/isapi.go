@@ -357,6 +357,52 @@ func (c *Client) SetAudioAAC(ctx context.Context, ch, stream int) error {
 	})
 }
 
+// streamingChannelList is /ISAPI/Streaming/channels: every channel/stream on
+// the device (an NVR returns all its cameras here) in one document.
+type streamingChannelList struct {
+	XMLName  xml.Name           `xml:"StreamingChannelList"`
+	Channels []StreamingChannel `xml:"StreamingChannel"`
+}
+
+// ProbeAll lists every channel/stream on the device in a single GET, so an
+// NVR's whole camera list comes back at once. Channel is the native channel
+// number (e.g. id 201 -> channel 2, stream 0).
+func (c *Client) ProbeAll(ctx context.Context) ([]StreamInfo, error) {
+	body, err := c.do(ctx, http.MethodGet, "/ISAPI/Streaming/channels", nil)
+	if err != nil {
+		return nil, err
+	}
+	var list streamingChannelList
+	if err := xml.Unmarshal(body, &list); err != nil {
+		return nil, fmt.Errorf("isapi: decode channel list: %w (body: %s)", err, truncate(body, 200))
+	}
+	out := make([]StreamInfo, 0, len(list.Channels))
+	for _, sc := range list.Channels {
+		id, _ := strconv.Atoi(sc.ID)
+		if id == 0 {
+			continue
+		}
+		info := StreamInfo{Channel: id / 100, Stream: id%100 - 1}
+		if sc.Video != nil {
+			info.Width = sc.Video.VideoResolutionWidth
+			info.Height = sc.Video.VideoResolutionHeight
+			if sc.Video.MaxFrameRate > 0 {
+				info.FPS = sc.Video.MaxFrameRate / 100
+			}
+			info.Codec = sc.Video.VideoCodecType
+			if sc.Video.SmartCodec != nil {
+				info.SmartCodec = sc.Video.SmartCodec.Enabled
+			}
+		}
+		if sc.Audio != nil {
+			info.AudioCodec = sc.Audio.AudioCompressionType
+			info.AudioEnable = sc.Audio.Enabled
+		}
+		out = append(out, info)
+	}
+	return out, nil
+}
+
 // StreamInfo is a read-back summary of one stream's encode settings.
 type StreamInfo struct {
 	Channel     int

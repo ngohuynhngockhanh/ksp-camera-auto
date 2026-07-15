@@ -174,7 +174,7 @@
             <input id="f-password" name="password" type="password" placeholder="••••••">
           </div>
         </div>
-        <button type="submit">Thêm camera</button>
+        <button type="submit">Thêm / Lưu camera</button>
         <div class="msg" id="add-msg"></div>
       </form>
 
@@ -356,6 +356,7 @@
           <td class="probe-box" id="probe-${cssEscape(c.id)}">${fmtStreamInfo(probeCache[c.id]) || '<span class="muted">chưa dò</span>'}</td>
           <td>
             <button class="secondary" data-action="probe" data-id="${escapeHtml(c.id)}">Dò</button>
+            <button class="secondary" data-action="edit" data-id="${escapeHtml(c.id)}">Sửa</button>
             <button class="danger" data-action="delete" data-id="${escapeHtml(c.id)}">Xóa</button>
           </td>
         </tr>
@@ -409,6 +410,23 @@
       const btn = ev.target.closest('button[data-action]');
       if (!btn) return;
       const id = btn.dataset.id;
+      if (btn.dataset.action === 'edit') {
+        const c = cameras.find(x => x.id === id);
+        if (!c) return;
+        document.getElementById('f-name').value = c.name || '';
+        document.getElementById('f-host').value = c.host || '';
+        document.getElementById('f-port').value = c.port || '';
+        document.getElementById('f-vendor').value = c.vendor || 'dahua';
+        document.getElementById('f-username').value = c.username || '';
+        const pw = document.getElementById('f-password');
+        pw.value = '';
+        pw.placeholder = 'để trống = giữ mật khẩu cũ';
+        const m = document.getElementById('add-msg');
+        m.className = 'msg'; m.textContent = 'Đang sửa "' + (c.name || c.host) + '". Đổi thông tin rồi bấm "Thêm/Lưu camera". (Đổi host/cổng sẽ tạo mục mới.)';
+        document.getElementById('add-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        document.getElementById('f-name').focus();
+        return;
+      }
       if (btn.dataset.action === 'delete') {
         if (!confirm('Xóa camera này khỏi kho?')) return;
         btn.disabled = true;

@@ -139,13 +139,13 @@ func (d *dahuaCamera) Close() error { return d.client.Close() }
 
 // Probe reads back main + sub1 + sub2 stream info for channel 0.
 func (d *dahuaCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
-	var out []StreamInfo
-	for _, s := range []dahua.Stream{dahua.StreamMain, dahua.StreamSub1, dahua.StreamSub2} {
-		info, err := d.client.GetStreamInfo(0, s)
-		if err != nil {
-			return out, fmt.Errorf("probe stream %d: %w", s, err)
-		}
-		out = append(out, toStreamInfo(info))
+	infos, err := d.client.ProbeAll()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]StreamInfo, 0, len(infos))
+	for _, i := range infos {
+		out = append(out, toStreamInfo(i))
 	}
 	return out, nil
 }
@@ -313,24 +313,13 @@ func isapiChannel(profileChannel int) int { return profileChannel + 1 }
 // Probe reads back main + sub1 + sub2 stream info for the default channel
 // (Profile.Channel's zero value, i.e. ISAPI channel 1).
 func (h *hikCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
-	ch := isapiChannel(0)
-	var out []StreamInfo
-	var firstErr error
-	for _, s := range []int{StreamMain, StreamSub1, StreamSub2} {
-		info, err := h.client.GetStreamInfo(ctx, ch, s)
-		if err != nil {
-			// Many devices (e.g. NVR channels) expose only main+sub; a missing
-			// stream reports "notSupport". Skip it rather than failing the probe.
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		out = append(out, hikToStreamInfo(info))
+	infos, err := h.client.ProbeAll(ctx)
+	if err != nil {
+		return nil, err
 	}
-	// Only surface an error if nothing at all came back.
-	if len(out) == 0 && firstErr != nil {
-		return out, fmt.Errorf("probe: %w", firstErr)
+	out := make([]StreamInfo, 0, len(infos))
+	for _, i := range infos {
+		out = append(out, hikToStreamInfo(i))
 	}
 	return out, nil
 }

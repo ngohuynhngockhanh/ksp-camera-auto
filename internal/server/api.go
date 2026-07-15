@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -112,7 +113,18 @@ func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
 		req.Username = s.cfg.Defaults.Username
 	}
 	if req.Password == "" {
-		req.Password = s.cfg.Defaults.Password
+		// Editing an existing camera with a blank password keeps the stored one
+		// (so users can fix the name/username without re-typing the password);
+		// a brand-new camera falls back to the configured default.
+		id := req.ID
+		if id == "" {
+			id = fmt.Sprintf("%s:%d", req.Host, req.Port)
+		}
+		if existing, ok := s.inv.Get(id); ok && existing.Password != "" {
+			req.Password = existing.Password
+		} else {
+			req.Password = s.cfg.Defaults.Password
+		}
 	}
 
 	d := config.Device{

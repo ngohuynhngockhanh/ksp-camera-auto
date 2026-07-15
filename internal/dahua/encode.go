@@ -181,6 +181,46 @@ func (c *Client) SetSmartCodec(ch int, on bool) error {
 	return c.setTable("SmartEncode", table)
 }
 
+// ProbeAll reads every channel's main + sub streams in a single pass (fetches
+// the Encode and SmartEncode configs once), so an NVR's whole camera list comes
+// back in two requests. Channel in the result is 1-based (camera number).
+func (c *Client) ProbeAll() ([]StreamInfo, error) {
+	table, err := c.getTable("Encode")
+	if err != nil {
+		return nil, err
+	}
+	smart, _ := c.getTable("SmartEncode") // best-effort
+
+	var out []StreamInfo
+	for ci := 0; ci < len(table); ci++ {
+		for _, s := range []Stream{StreamMain, StreamSub1, StreamSub2} {
+			fmtObj, err := formatOf(table, ci, s)
+			if err != nil {
+				continue
+			}
+			info := StreamInfo{Channel: ci + 1, Stream: s}
+			if v, ok := fmtObj["Video"].(map[string]any); ok {
+				info.Width = toInt(v["Width"])
+				info.Height = toInt(v["Height"])
+				info.FPS = toInt(v["FPS"])
+				info.Compression, _ = v["Compression"].(string)
+				info.Profile, _ = v["Profile"].(string)
+			}
+			if a, ok := fmtObj["Audio"].(map[string]any); ok {
+				info.AudioCodec, _ = a["Compression"].(string)
+			}
+			info.AudioEnable, _ = fmtObj["AudioEnable"].(bool)
+			if ci < len(smart) {
+				if so, ok := smart[ci].(map[string]any); ok {
+					info.SmartCodec, _ = so["Enable"].(bool)
+				}
+			}
+			out = append(out, info)
+		}
+	}
+	return out, nil
+}
+
 // GetStreamInfo reads back the current encode settings for a channel/stream.
 func (c *Client) GetStreamInfo(ch int, s Stream) (StreamInfo, error) {
 	info := StreamInfo{Channel: ch, Stream: s}
