@@ -29,16 +29,15 @@ type Client struct {
 	timeout   time.Duration
 }
 
-// rpcResp is the generic JSON-RPC response envelope.
+// rpcResp is the generic JSON-RPC response envelope. Error is left raw because
+// firmware returns it inconsistently: sometimes an object {code,message},
+// sometimes a bare string.
 type rpcResp struct {
 	ID      int             `json:"id"`
 	Session int64           `json:"session"`
 	Result  json.RawMessage `json:"result"`
 	Params  json.RawMessage `json:"params"`
-	Error   *struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	} `json:"error"`
+	Error   json.RawMessage `json:"error"`
 }
 
 func (r rpcResp) ok() bool {
@@ -47,6 +46,29 @@ func (r rpcResp) ok() bool {
 		return false
 	}
 	return true
+}
+
+// errMessage decodes Error whether it is an object {code,message} or a string.
+func (r rpcResp) errMessage() string {
+	raw := strings.TrimSpace(string(r.Error))
+	if raw == "" || raw == "null" {
+		return ""
+	}
+	var obj struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(r.Error, &obj); err == nil && obj.Message != "" {
+		if obj.Code != 0 {
+			return fmt.Sprintf("%s (code %d)", obj.Message, obj.Code)
+		}
+		return obj.Message
+	}
+	var s string
+	if err := json.Unmarshal(r.Error, &s); err == nil {
+		return s
+	}
+	return raw
 }
 
 // Dial connects and logs in to a Dahua/KBVision device over DVRIP.

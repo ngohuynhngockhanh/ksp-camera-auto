@@ -30,6 +30,10 @@ type Profile struct {
 	Width         int  `json:"width"`
 	Height        int  `json:"height"`
 
+	SetCodec     bool   `json:"setCodec"`
+	Codec        string `json:"codec"`        // Dahua compression value: H.265, H.264, H.264H, H.264B, MJPG
+	CodecProfile string `json:"codecProfile"` // optional: Main/High/Baseline
+
 	SetSmartCodec bool `json:"setSmartCodec"`
 	SmartCodec    bool `json:"smartCodec"`
 
@@ -56,6 +60,7 @@ type StreamInfo struct {
 	Height      int    `json:"height"`
 	FPS         int    `json:"fps"`
 	Compression string `json:"compression"`
+	Profile     string `json:"profile"`
 	AudioCodec  string `json:"audioCodec"`
 	AudioEnable bool   `json:"audioEnable"`
 	SmartCodec  bool   `json:"smartCodec"`
@@ -75,8 +80,10 @@ type StepResult struct {
 type Camera interface {
 	// Probe reads back current encode settings for the requested streams.
 	Probe(ctx context.Context) ([]StreamInfo, error)
-	// Apply pushes profile's settings to the device.
-	Apply(ctx context.Context, profile Profile) ([]StepResult, error)
+	// Apply pushes profile's settings to the device. emit is called with each
+	// StepResult as it completes, so callers can stream progress live; the
+	// full slice is also returned. emit may be nil.
+	Apply(ctx context.Context, profile Profile, emit func(StepResult)) []StepResult
 	Close() error
 }
 
@@ -118,30 +125,69 @@ func (d *dahuaCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
 	return out, nil
 }
 
-// Apply pushes profile's settings to the device, one StepResult per action.
-// It never returns early on a per-step failure: every requested action is
-// attempted so the caller sees the full picture.
-func (d *dahuaCamera) Apply(ctx context.Context, profile Profile) ([]StepResult, error) {
+// Apply pushes profile's settings to the device, one StepResult per action,
+// calling emit as each step completes so the caller can stream progress live
+// (emit may be nil). It never returns early on a per-step failure: every
+// requested action is attempted so the caller sees the full picture. For
+// each requested stream the order is codec -> resolution -> audio AAC, then
+// smart codec is applied once per channel.
+func (d *dahuaCamera) Apply(ctx context.Context, profile Profile, emit func(StepResult)) []StepResult {
 	var steps []StepResult
+	add := func(step StepResult) {
+		steps = append(steps, step)
+		if emit != nil {
+			emit(step)
+		}
+	}
 	ch := profile.Channel
 
 	for _, s := range profile.streams() {
 		ds := dahua.Stream(s)
 		streamName := streamLabel(s)
 
+		if profile.SetCodec {
+			add(d.applyCodec(ch, ds, streamName, profile.Codec, profile.CodecProfile))
+		}
 		if profile.SetResolution {
-			steps = append(steps, d.applyResolution(ch, ds, streamName, profile.Width, profile.Height))
+			add(d.applyResolution(ch, ds, streamName, profile.Width, profile.Height))
 		}
 		if profile.SetAudioAAC {
-			steps = append(steps, d.applyAudioAAC(ch, ds, streamName))
+			add(d.applyAudioAAC(ch, ds, streamName))
 		}
 	}
 
 	if profile.SetSmartCodec {
-		steps = append(steps, d.applySmartCodec(ch, profile.SmartCodec))
+		add(d.applySmartCodec(ch, profile.SmartCodec))
 	}
 
-	return steps, nil
+	return steps
+}
+
+func (d *dahuaCamera) applyCodec(ch int, s dahua.Stream, streamName string, compression, codecProfile string) StepResult {
+	step := StepResult{Step: fmt.Sprintf("codec %s", streamName), Detail: compression}
+	if err := d.client.SetCodec(ch, s, compression, codecProfile); err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	// The device silently ignores unsupported codecs (returns ok but doesn't
+	// change), so a read-back is mandatory here, not best-effort.
+	info, err := d.client.GetStreamInfo(ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	step.OK = info.Compression == compression
+	if !step.OK {
+		step.Detail = fmt.Sprintf("codec không đổi được (cam không hỗ trợ?) — hiện tại: %s", info.Compression)
+		return step
+	}
+	if codecProfile != "" && info.Profile != codecProfile {
+		step.OK = false
+		step.Detail = fmt.Sprintf("%s OK nhưng profile không đổi được (hiện tại: %s)", compression, info.Profile)
+		return step
+	}
+	step.Detail = fmt.Sprintf("codec %s OK", compression)
+	return step
 }
 
 func (d *dahuaCamera) applyResolution(ch int, s dahua.Stream, streamName string, w, h int) StepResult {
@@ -150,15 +196,17 @@ func (d *dahuaCamera) applyResolution(ch int, s dahua.Stream, streamName string,
 		step.Err = err.Error()
 		return step
 	}
-	if info, err := d.client.GetStreamInfo(ch, s); err == nil {
-		step.Detail = fmt.Sprintf("%dx%d (đọc lại: %dx%d)", w, h, info.Width, info.Height)
-		step.OK = info.Width == w && info.Height == h
-		if !step.OK {
-			step.Err = "read-back mismatch"
-		}
-	} else {
-		step.OK = true // set succeeded; read-back is best-effort
+	info, err := d.client.GetStreamInfo(ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
 	}
+	step.OK = info.Width == w && info.Height == h
+	if !step.OK {
+		step.Detail = fmt.Sprintf("độ phân giải không đổi được (đọc lại: %dx%d)", info.Width, info.Height)
+		return step
+	}
+	step.Detail = fmt.Sprintf("độ phân giải %dx%d OK", w, h)
 	return step
 }
 
@@ -211,6 +259,7 @@ func toStreamInfo(i dahua.StreamInfo) StreamInfo {
 		Height:      i.Height,
 		FPS:         i.FPS,
 		Compression: i.Compression,
+		Profile:     i.Profile,
 		AudioCodec:  i.AudioCodec,
 		AudioEnable: i.AudioEnable,
 		SmartCodec:  i.SmartCodec,

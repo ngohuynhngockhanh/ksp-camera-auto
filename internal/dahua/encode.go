@@ -22,6 +22,7 @@ type StreamInfo struct {
 	Height      int    `json:"height"`
 	FPS         int    `json:"fps"`
 	Compression string `json:"compression"`
+	Profile     string `json:"profile"`
 	AudioCodec  string `json:"audioCodec"`
 	AudioEnable bool   `json:"audioEnable"`
 	SmartCodec  bool   `json:"smartCodec"`
@@ -58,8 +59,8 @@ func (c *Client) setTable(name string, table []any) error {
 }
 
 func respErr(r rpcResp) string {
-	if r.Error != nil {
-		return fmt.Sprintf("%s (code %d)", r.Error.Message, r.Error.Code)
+	if msg := r.errMessage(); msg != "" {
+		return msg
 	}
 	return "result=false"
 }
@@ -123,8 +124,12 @@ func (c *Client) SetResolution(ch int, s Stream, w, h int) error {
 	return c.setTable("Encode", table)
 }
 
-// SetCompression sets the base codec, e.g. "H.265" or "H.264".
-func (c *Client) SetCompression(ch int, s Stream, codec string) error {
+// SetCodec sets the video codec/profile for a stream. compression is the Dahua
+// Video.Compression value (e.g. "H.265", "H.264", "H.264H" = High profile,
+// "H.264B" = Baseline, "MJPG"). If profile is non-empty it is also written to
+// Video.Profile ("Main"/"High"/"Baseline"). The device rejects unsupported
+// codecs with an explicit error, which callers surface in the progress log.
+func (c *Client) SetCodec(ch int, s Stream, compression, profile string) error {
 	table, err := c.getTable("Encode")
 	if err != nil {
 		return err
@@ -133,7 +138,13 @@ func (c *Client) SetCompression(ch int, s Stream, codec string) error {
 	if err != nil {
 		return err
 	}
-	subMap(fmtObj, "Video")["Compression"] = codec
+	video := subMap(fmtObj, "Video")
+	if compression != "" {
+		video["Compression"] = compression
+	}
+	if profile != "" {
+		video["Profile"] = profile
+	}
 	return c.setTable("Encode", table)
 }
 
@@ -186,6 +197,7 @@ func (c *Client) GetStreamInfo(ch int, s Stream) (StreamInfo, error) {
 		info.Height = toInt(v["Height"])
 		info.FPS = toInt(v["FPS"])
 		info.Compression, _ = v["Compression"].(string)
+		info.Profile, _ = v["Profile"].(string)
 	}
 	if a, ok := fmtObj["Audio"].(map[string]any); ok {
 		info.AudioCodec, _ = a["Compression"].(string)

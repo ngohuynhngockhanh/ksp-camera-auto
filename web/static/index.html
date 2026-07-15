@@ -77,6 +77,17 @@
 
   .probe-box { font-size: .78rem; color: #cbd5e1; margin-top: 4px; }
 
+  .log-box {
+    margin-top: 12px; background: #0b1120; border: 1px solid #334155; border-radius: 8px;
+    padding: 10px 12px; height: 260px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .78rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+  }
+  .log-box .l-time { color: #64748b; }
+  .log-box .l-ok { color: #6ee7b7; }
+  .log-box .l-err { color: #fca5a5; }
+  .log-box .l-info { color: #93c5fd; }
+  .log-box .l-step { color: #cbd5e1; }
+
   @media (max-width: 640px) {
     main { padding: 16px 12px; }
     .panel { padding: 16px; }
@@ -168,6 +179,21 @@
       </div>
 
       <div class="checkbox-row">
+        <input type="checkbox" id="p-codec-enable">
+        <label for="p-codec-enable">Đổi codec (H.264/H.265)</label>
+      </div>
+      <div class="field" id="p-codec-fields" style="display:none; max-width:220px">
+        <label for="p-codec-value">Codec</label>
+        <select id="p-codec-value">
+          <option value="H.265">H.265</option>
+          <option value="H.264" selected>H.264 (Main)</option>
+          <option value="H.264H">H.264 High</option>
+          <option value="H.264B">H.264 Baseline</option>
+          <option value="MJPG">MJPEG</option>
+        </select>
+      </div>
+
+      <div class="checkbox-row">
         <input type="checkbox" id="p-res-enable">
         <label for="p-res-enable">Đổi độ phân giải</label>
       </div>
@@ -214,6 +240,8 @@
       <button id="apply-btn">Áp dụng</button>
       <span class="muted" id="apply-count"></span>
       <div class="msg" id="apply-msg"></div>
+      <p class="muted" style="margin:10px 0 4px">Nhật ký trực tiếp — áp dụng tuần tự từng camera một:</p>
+      <div class="log-box" id="apply-log"></div>
     </div>
 
     <!-- Kết quả -->
@@ -265,7 +293,8 @@
       return list.map(s => {
         const label = ['main','sub1','sub2'][s.stream] || ('s' + s.stream);
         const audio = s.audioEnable ? (s.audioCodec || 'on') : 'tắt';
-        return `${label}: ${s.width}x${s.height} ${s.compression || ''} · audio ${audio} · smart ${s.smartCodec ? 'bật' : 'tắt'}`;
+        const codec = s.compression ? (s.compression + (s.profile ? '/' + s.profile : '')) : '';
+        return `${label}: ${s.width}x${s.height} ${codec} · audio ${audio} · smart ${s.smartCodec ? 'bật' : 'tắt'}`;
       }).join('<br>');
     }
 
@@ -371,6 +400,10 @@
 
     // --- bulk apply form wiring ---
 
+    const codecEnable = document.getElementById('p-codec-enable');
+    const codecFields = document.getElementById('p-codec-fields');
+    codecEnable.addEventListener('change', () => codecFields.style.display = codecEnable.checked ? 'block' : 'none');
+
     const resEnable = document.getElementById('p-res-enable');
     const resFields = document.getElementById('p-res-fields');
     resEnable.addEventListener('change', () => resFields.style.display = resEnable.checked ? 'flex' : 'none');
@@ -396,6 +429,9 @@
     function buildProfile() {
       const streams = Array.from(document.querySelectorAll('.stream-cb:checked')).map(cb => parseInt(cb.value, 10));
       return {
+        setCodec: codecEnable.checked,
+        codec: document.getElementById('p-codec-value').value,
+        codecProfile: '',
         setResolution: resEnable.checked,
         width: parseInt(widthInput.value, 10) || 0,
         height: parseInt(heightInput.value, 10) || 0,
@@ -437,6 +473,98 @@
       }).join('');
     }
 
+    // --- live log rendering ---
+
+    function logTime() {
+      const d = new Date();
+      const p = n => String(n).padStart(2, '0');
+      return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    }
+
+    function logLine(text, cls) {
+      const box = document.getElementById('apply-log');
+      const line = document.createElement('div');
+      line.innerHTML = `<span class="l-time">[${logTime()}]</span> <span class="${cls || ''}">${text}</span>`;
+      box.appendChild(line);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function clearLog() {
+      document.getElementById('apply-log').innerHTML = '';
+    }
+
+    // Consumes a POST /api/apply response streamed as
+    // "data: <json event>\n\n" chunks and renders each event live, building
+    // up the same []DeviceResult shape the old non-streaming endpoint
+    // returned so the results table keeps working unchanged.
+    async function streamApply(ids, profile) {
+      const resp = await fetch('/api/apply', {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ deviceIds: ids, profile }),
+      });
+      if (resp.status === 401) {
+        location.href = '/login';
+        throw new Error('unauthorized');
+      }
+      if (!resp.ok || !resp.body) {
+        const text = await resp.text().catch(() => '');
+        let msg = text || resp.statusText;
+        try { const j = JSON.parse(text); if (j && j.error) msg = j.error; } catch (e) { /* not JSON */ }
+        throw new Error(msg);
+      }
+
+      const results = [];
+      const byId = {};
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split('\n\n');
+        buf = parts.pop(); // last chunk may be incomplete; keep it for next read
+        for (const part of parts) {
+          const line = part.split('\n').find(l => l.startsWith('data: '));
+          if (!line) continue;
+          let ev;
+          try { ev = JSON.parse(line.slice(6)); } catch (e) { continue; }
+          handleEvent(ev, results, byId);
+        }
+      }
+      return results;
+    }
+
+    function handleEvent(ev, results, byId) {
+      if (ev.type === 'device_start') {
+        logLine(`▶ [${ev.index}/${ev.total}] ${escapeHtml(ev.name || ev.deviceId)} (${escapeHtml(ev.host || '')}) — bắt đầu`, 'l-info');
+        const r = { deviceId: ev.deviceId, name: ev.name, host: ev.host, ok: true, steps: [] };
+        byId[ev.deviceId] = r;
+        results.push(r);
+      } else if (ev.type === 'step') {
+        const cls = ev.ok ? 'l-ok' : 'l-err';
+        const text = ev.ok
+          ? escapeHtml(ev.detail || '')
+          : '✗ ' + escapeHtml(ev.detail || ev.err || '') + (ev.detail && ev.err ? ` — ${escapeHtml(ev.err)}` : '');
+        logLine(`&nbsp;&nbsp;&nbsp;• ${escapeHtml(ev.step)}: ${text}`, cls);
+        const r = byId[ev.deviceId];
+        if (r) r.steps.push({ step: ev.step, detail: ev.detail, ok: ev.ok, err: ev.err });
+      } else if (ev.type === 'device_done') {
+        const r = byId[ev.deviceId] || { deviceId: ev.deviceId, name: ev.name, host: ev.host, steps: [] };
+        r.ok = ev.ok;
+        r.err = ev.err;
+        if (ev.ok) {
+          logLine(`✓ ${escapeHtml(ev.name || ev.deviceId)}: HOÀN TẤT`, 'l-ok');
+        } else {
+          logLine(`✗ ${escapeHtml(ev.name || ev.deviceId)}: LỖI — ${escapeHtml(ev.err || '')}`, 'l-err');
+        }
+      } else if (ev.type === 'done') {
+        logLine('— Xong tất cả —', 'l-info');
+      }
+    }
+
     document.getElementById('apply-btn').addEventListener('click', async () => {
       const ids = selectedCameraIds();
       const msg = document.getElementById('apply-msg');
@@ -448,19 +576,17 @@
         return;
       }
       const profile = buildProfile();
-      if (!profile.setResolution && !profile.setSmartCodec && !profile.setAudioAAC) {
+      if (!profile.setCodec && !profile.setResolution && !profile.setSmartCodec && !profile.setAudioAAC) {
         msg.textContent = 'Chọn ít nhất một thiết lập để thay đổi.';
         msg.className = 'msg err';
         return;
       }
       const btn = document.getElementById('apply-btn');
       btn.disabled = true;
-      msg.textContent = `Đang áp dụng cho ${ids.length} camera...`;
+      clearLog();
+      msg.textContent = `Đang áp dụng tuần tự cho ${ids.length} camera...`;
       try {
-        const results = await api('/api/apply', {
-          method: 'POST',
-          body: JSON.stringify({ deviceIds: ids, profile }),
-        });
+        const results = await streamApply(ids, profile);
         renderResults(results);
         msg.textContent = 'Hoàn tất.';
         msg.className = 'msg ok';

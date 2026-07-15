@@ -200,8 +200,10 @@ func (s *Server) handleProbe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, info)
 }
 
-// handleApply handles POST /api/apply: push a profile to a set of devices
-// concurrently via the bulk orchestrator.
+// handleApply handles POST /api/apply: push a profile to a set of devices,
+// one at a time via the bulk orchestrator, streaming each progress event to
+// the client as a Server-Sent-Events-style body so the UI can render a live,
+// transparent log instead of waiting for the whole batch to finish.
 func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -217,9 +219,34 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Sequential apply can take a while for a large batch; scale the overall
+	// deadline by device count so a big inventory isn't cut off mid-run.
 	ctx, cancel := context.WithTimeout(r.Context(), deviceTimeout*time.Duration(len(req.DeviceIDs)+1))
 	defer cancel()
 
-	results := bulk.Apply(ctx, s.inv, req, deviceTimeout)
-	writeJSON(w, http.StatusOK, results)
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+
+	flusher, _ := w.(http.Flusher)
+
+	emit := func(ev bulk.Event) {
+		if r.Context().Err() != nil {
+			return
+		}
+		b, err := json.Marshal(ev)
+		if err != nil {
+			log.Printf("encode apply event: %v", err)
+			return
+		}
+		if _, err := w.Write([]byte("data: " + string(b) + "\n\n")); err != nil {
+			return
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+
+	bulk.Apply(ctx, s.inv, req, deviceTimeout, emit)
 }
