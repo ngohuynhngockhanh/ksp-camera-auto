@@ -346,7 +346,57 @@ func (c *Client) SetSmartCodec(ctx context.Context, ch, stream int, on bool) err
 			return fmt.Errorf("isapi: set base codec H.265 before enabling smart codec: %w", err)
 		}
 	}
+	// Prefer the INLINE <SmartCodec><enabled> element inside the StreamingChannel
+	// document: many cameras/NVR channels reject the standalone .../smartCodec
+	// sub-resource with "Invalid Operation". Fall back to the sub-resource only
+	// when the document has no inline SmartCodec element.
+	path := streamPath(id)
+	raw, err := c.do(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return err
+	}
+	if bytes.Contains(raw, []byte("<SmartCodec>")) {
+		raw = replaceXMLTagInBlock(raw, "SmartCodec", "enabled", boolStr(on))
+		resp, err := c.do(ctx, http.MethodPut, path, raw)
+		if err != nil {
+			return err
+		}
+		if err := checkResponseStatus(resp); err != nil {
+			return fmt.Errorf("isapi: PUT %s (inline SmartCodec): %w", path, err)
+		}
+		return nil
+	}
 	return c.putSmartCodec(ctx, id, on)
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+// replaceXMLTagInBlock replaces the first <tag>…</tag> that occurs INSIDE the
+// first <block>…</block> (so we edit e.g. SmartCodec's <enabled>, not the
+// Video/Audio <enabled> that also appear in the document).
+func replaceXMLTagInBlock(doc []byte, block, tag, value string) []byte {
+	open := []byte("<" + block + ">")
+	closeB := []byte("</" + block + ">")
+	i := bytes.Index(doc, open)
+	if i < 0 {
+		return doc
+	}
+	rel := bytes.Index(doc[i:], closeB)
+	if rel < 0 {
+		return doc
+	}
+	end := i + rel
+	seg := replaceXMLTag(doc[i:end], tag, value)
+	out := make([]byte, 0, len(doc)-(end-i)+len(seg))
+	out = append(out, doc[:i]...)
+	out = append(out, seg...)
+	out = append(out, doc[end:]...)
+	return out
 }
 
 // SetAudioAAC forces the stream's audio codec to AAC, preserving other device
