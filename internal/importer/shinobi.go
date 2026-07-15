@@ -12,16 +12,40 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 )
 
-// shinobiMonitor is the subset of a Shinobi monitor object we read.
+// shinobiMonitor is the subset of a Shinobi monitor object we read. Details is
+// raw because the live Shinobi API returns it as a JSON-ENCODED STRING, while an
+// exported/pretty JSON has it as a nested object — we handle both.
 type shinobiMonitor struct {
-	Name    string `json:"name"`
-	Mid     string `json:"mid"`
-	Host    string `json:"host"`
-	Details struct {
-		AutoHost string `json:"auto_host"` // rtsp://user:pass@host:port/path
-		Muser    string `json:"muser"`
-		Mpass    string `json:"mpass"`
-	} `json:"details"`
+	Name    string          `json:"name"`
+	Mid     string          `json:"mid"`
+	Host    string          `json:"host"`
+	Details json.RawMessage `json:"details"`
+}
+
+// shinobiDetails is the subset of a monitor's details we use.
+type shinobiDetails struct {
+	AutoHost string `json:"auto_host"` // rtsp://user:pass@host:port/path
+	Muser    string `json:"muser"`
+	Mpass    string `json:"mpass"`
+}
+
+// parseDetails decodes a monitor's details whether it's a JSON object or a
+// JSON-encoded string (Shinobi's API returns the latter).
+func parseDetails(raw json.RawMessage) shinobiDetails {
+	var d shinobiDetails
+	raw = json.RawMessage(strings.TrimSpace(string(raw)))
+	if len(raw) == 0 {
+		return d
+	}
+	if raw[0] == '"' { // a JSON string containing JSON
+		var s string
+		if json.Unmarshal(raw, &s) == nil {
+			_ = json.Unmarshal([]byte(s), &d)
+		}
+		return d
+	}
+	_ = json.Unmarshal(raw, &d)
+	return d
 }
 
 // Result reports what a parse produced.
@@ -41,9 +65,10 @@ func ParseShinobi(data []byte, hikPort, dahuaPort int) (Result, error) {
 	}
 	var res Result
 	for _, m := range mons {
-		host, user, pass := m.Host, m.Details.Muser, m.Details.Mpass
+		det := parseDetails(m.Details)
+		host, user, pass := m.Host, det.Muser, det.Mpass
 		var path string
-		if u, err := url.Parse(strings.TrimSpace(m.Details.AutoHost)); err == nil && u.Host != "" {
+		if u, err := url.Parse(strings.TrimSpace(det.AutoHost)); err == nil && u.Host != "" {
 			host = u.Hostname()
 			path = u.Path
 			if u.User != nil {

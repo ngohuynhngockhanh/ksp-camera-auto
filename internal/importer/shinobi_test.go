@@ -34,3 +34,19 @@ func TestParseShinobi(t *testing.T) {
 		t.Errorf("dahua detect wrong: %+v", dh)
 	}
 }
+
+func TestParseShinobiStringifiedDetails(t *testing.T) {
+	// Live Shinobi API returns details as a JSON-encoded STRING.
+	data := `[{"mid":"cam1","name":"StrCam","details":"{\"auto_host\":\"rtsp://u:p@10.0.0.7:554/Streaming/Channels/101\",\"muser\":\"u\",\"mpass\":\"p\"}"}]`
+	res, err := ParseShinobi([]byte(data), 80, 37777)
+	if err != nil {
+		t.Fatalf("ParseShinobi: %v", err)
+	}
+	if len(res.Devices) != 1 {
+		t.Fatalf("got %d devices, want 1", len(res.Devices))
+	}
+	d := res.Devices[0]
+	if d.Host != "10.0.0.7" || d.Vendor != config.VendorHikvision || d.Username != "u" || d.Password != "p" {
+		t.Errorf("stringified details parsed wrong: %+v", d)
+	}
+}
