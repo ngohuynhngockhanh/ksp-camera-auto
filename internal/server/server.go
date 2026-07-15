@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/web"
 )
@@ -145,11 +147,17 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
-// checkCreds compares credentials in constant time.
+// checkCreds validates the login. The username is compared in constant time;
+// the password is checked against a bcrypt hash when server.password_hash is
+// set, else against the plaintext server.password (constant time).
 func (s *Server) checkCreds(user, pass string) bool {
-	uOK := subtle.ConstantTimeCompare([]byte(user), []byte(s.cfg.Server.Username)) == 1
-	pOK := subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.Server.Password)) == 1
-	return uOK && pOK
+	if subtle.ConstantTimeCompare([]byte(user), []byte(s.cfg.Server.Username)) != 1 {
+		return false
+	}
+	if h := s.cfg.Server.PasswordHash; h != "" {
+		return bcrypt.CompareHashAndPassword([]byte(h), []byte(pass)) == nil
+	}
+	return subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.Server.Password)) == 1
 }
 
 func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request, name string) {

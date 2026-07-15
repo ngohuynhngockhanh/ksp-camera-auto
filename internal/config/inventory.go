@@ -45,6 +45,9 @@ func LoadInventory(path string) (*Inventory, error) {
 		return nil, fmt.Errorf("parse inventory %s: %w", path, err)
 	}
 	for _, d := range list {
+		if pt, err := Decrypt(d.Password); err == nil {
+			d.Password = pt
+		}
 		if d.ID == "" {
 			d.ID = d.Addr()
 		}
@@ -100,6 +103,12 @@ func (i *Inventory) save() error {
 		return nil
 	}
 	list := i.List()
+	// Encrypt passwords at rest (in-memory copies keep plaintext).
+	for idx := range list {
+		if enc, err := Encrypt(list[idx].Password); err == nil {
+			list[idx].Password = enc
+		}
+	}
 	data, err := yaml.Marshal(list)
 	if err != nil {
 		return fmt.Errorf("marshal inventory: %w", err)

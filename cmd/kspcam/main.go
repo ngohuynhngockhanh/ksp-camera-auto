@@ -7,12 +7,15 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/server"
@@ -25,10 +28,19 @@ func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	addr := flag.String("addr", "", "override listen address (e.g. :2028)")
 	showVersion := flag.Bool("version", false, "print version and exit")
+	hashPassword := flag.String("hash-password", "", "print a bcrypt hash for the given web-login password and exit")
 	flag.Parse()
 
 	if *showVersion {
 		log.Printf("kspcam %s", version)
+		return
+	}
+	if *hashPassword != "" {
+		h, err := bcrypt.GenerateFromPassword([]byte(*hashPassword), bcrypt.DefaultCost)
+		if err != nil {
+			log.Fatalf("hash: %v", err)
+		}
+		fmt.Println(string(h))
 		return
 	}
 

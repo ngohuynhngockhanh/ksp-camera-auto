@@ -23,6 +23,9 @@ type Server struct {
 	Addr     string `yaml:"addr"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+	// PasswordHash, if set, is a bcrypt hash checked instead of Password
+	// (generate with `kspcam --hash-password <pw>`).
+	PasswordHash string `yaml:"password_hash"`
 }
 
 // Defaults are applied to camera entries that omit a field.
