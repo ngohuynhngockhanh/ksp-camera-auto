@@ -19,3 +19,5 @@
 # OS / editor
 .DS_Store
 *.swp
+/tools/hik-oracle/oracle
+/tmp/hiksdk_log*
