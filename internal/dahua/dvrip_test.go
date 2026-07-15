@@ -91,3 +91,42 @@ func TestFormatOfNavigation(t *testing.T) {
 		t.Error("expected out-of-range channel error")
 	}
 }
+
+func TestFillFromFormat(t *testing.T) {
+	// Numbers come back as float64 and BitRateControl as a plain string,
+	// mirroring how encoding/json decodes the device's getConfig response.
+	fmtObj := map[string]any{
+		"Video": map[string]any{
+			"Width":          float64(1920),
+			"Height":         float64(1080),
+			"FPS":            float64(25),
+			"Compression":    "H.265",
+			"Profile":        "Main",
+			"GOP":            float64(50),
+			"BitRate":        float64(4096),
+			"BitRateControl": "CBR",
+		},
+		"Audio": map[string]any{
+			"Compression": "AAC",
+		},
+		"AudioEnable": true,
+	}
+	var info StreamInfo
+	fillFromFormat(&info, fmtObj)
+
+	if info.Width != 1920 || info.Height != 1080 {
+		t.Errorf("resolution = %dx%d, want 1920x1080", info.Width, info.Height)
+	}
+	if info.GOP != 50 {
+		t.Errorf("GOP = %d, want 50", info.GOP)
+	}
+	if info.BitRate != 4096 {
+		t.Errorf("BitRate = %d, want 4096", info.BitRate)
+	}
+	if info.BitRateControl != "CBR" {
+		t.Errorf("BitRateControl = %q, want CBR", info.BitRateControl)
+	}
+	if info.AudioCodec != "AAC" || !info.AudioEnable {
+		t.Errorf("audio = %+v", info)
+	}
+}

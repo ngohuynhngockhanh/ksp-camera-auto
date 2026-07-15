@@ -26,6 +26,10 @@ type StreamInfo struct {
 	AudioCodec  string `json:"audioCodec"`
 	AudioEnable bool   `json:"audioEnable"`
 	SmartCodec  bool   `json:"smartCodec"`
+
+	GOP            int    `json:"gop"`
+	BitRate        int    `json:"bitRate"`
+	BitRateControl string `json:"bitRateControl"`
 }
 
 // getTable fetches configManager.getConfig <name> and returns params.table.
@@ -163,6 +167,41 @@ func (c *Client) SetAudioAAC(ch int, s Stream) error {
 	return c.setTable("Encode", table)
 }
 
+// SetGOP sets the I-frame interval (frames) for a stream, using GET-modify-SET
+// on the Encode config.
+func (c *Client) SetGOP(ch int, s Stream, gop int) error {
+	table, err := c.getTable("Encode")
+	if err != nil {
+		return err
+	}
+	fmtObj, err := formatOf(table, ch, s)
+	if err != nil {
+		return err
+	}
+	subMap(fmtObj, "Video")["GOP"] = gop
+	return c.setTable("Encode", table)
+}
+
+// SetBitrate sets the video bitrate (Kbps) and, when mode is non-empty, the
+// bitrate control mode ("VBR"/"CBR") for a stream, using GET-modify-SET on
+// the Encode config.
+func (c *Client) SetBitrate(ch int, s Stream, kbps int, mode string) error {
+	table, err := c.getTable("Encode")
+	if err != nil {
+		return err
+	}
+	fmtObj, err := formatOf(table, ch, s)
+	if err != nil {
+		return err
+	}
+	video := subMap(fmtObj, "Video")
+	video["BitRate"] = kbps
+	if mode != "" {
+		video["BitRateControl"] = mode
+	}
+	return c.setTable("Encode", table)
+}
+
 // SetSmartCodec toggles Dahua "Smart Codec" (H.264+/H.265+) for a channel via
 // the SmartEncode config. Smart codec is a per-channel switch (not per-stream).
 func (c *Client) SetSmartCodec(ch int, on bool) error {
@@ -179,6 +218,26 @@ func (c *Client) SetSmartCodec(ch int, on bool) error {
 	}
 	chObj["Enable"] = on
 	return c.setTable("SmartEncode", table)
+}
+
+// fillFromFormat copies the Video/Audio fields out of a MainFormat/ExtraFormat
+// entry (fmtObj, as returned by formatOf) into info. Shared by ProbeAll and
+// GetStreamInfo so the two parses can't drift.
+func fillFromFormat(info *StreamInfo, fmtObj map[string]any) {
+	if v, ok := fmtObj["Video"].(map[string]any); ok {
+		info.Width = toInt(v["Width"])
+		info.Height = toInt(v["Height"])
+		info.FPS = toInt(v["FPS"])
+		info.Compression, _ = v["Compression"].(string)
+		info.Profile, _ = v["Profile"].(string)
+		info.GOP = toInt(v["GOP"])
+		info.BitRate = toInt(v["BitRate"])
+		info.BitRateControl, _ = v["BitRateControl"].(string)
+	}
+	if a, ok := fmtObj["Audio"].(map[string]any); ok {
+		info.AudioCodec, _ = a["Compression"].(string)
+	}
+	info.AudioEnable, _ = fmtObj["AudioEnable"].(bool)
 }
 
 // ProbeAll reads every channel's main + sub streams in a single pass (fetches
@@ -199,17 +258,7 @@ func (c *Client) ProbeAll() ([]StreamInfo, error) {
 				continue
 			}
 			info := StreamInfo{Channel: ci + 1, Stream: s}
-			if v, ok := fmtObj["Video"].(map[string]any); ok {
-				info.Width = toInt(v["Width"])
-				info.Height = toInt(v["Height"])
-				info.FPS = toInt(v["FPS"])
-				info.Compression, _ = v["Compression"].(string)
-				info.Profile, _ = v["Profile"].(string)
-			}
-			if a, ok := fmtObj["Audio"].(map[string]any); ok {
-				info.AudioCodec, _ = a["Compression"].(string)
-			}
-			info.AudioEnable, _ = fmtObj["AudioEnable"].(bool)
+			fillFromFormat(&info, fmtObj)
 			if ci < len(smart) {
 				if so, ok := smart[ci].(map[string]any); ok {
 					info.SmartCodec, _ = so["Enable"].(bool)
@@ -232,17 +281,7 @@ func (c *Client) GetStreamInfo(ch int, s Stream) (StreamInfo, error) {
 	if err != nil {
 		return info, err
 	}
-	if v, ok := fmtObj["Video"].(map[string]any); ok {
-		info.Width = toInt(v["Width"])
-		info.Height = toInt(v["Height"])
-		info.FPS = toInt(v["FPS"])
-		info.Compression, _ = v["Compression"].(string)
-		info.Profile, _ = v["Profile"].(string)
-	}
-	if a, ok := fmtObj["Audio"].(map[string]any); ok {
-		info.AudioCodec, _ = a["Compression"].(string)
-	}
-	info.AudioEnable, _ = fmtObj["AudioEnable"].(bool)
+	fillFromFormat(&info, fmtObj)
 
 	// Smart codec is a separate config.
 	if st, err := c.getTable("SmartEncode"); err == nil && ch < len(st) {

@@ -111,3 +111,87 @@ func TestLiveSettersRoundTrip(t *testing.T) {
 		t.Logf("restored main -> %dx%d", fin.Width, fin.Height)
 	}
 }
+
+func TestLiveGOPBitrateRoundTrip(t *testing.T) {
+	addr, user, pass := liveTarget(t)
+	c, err := Dial(addr, user, pass, 10*time.Second)
+	if err != nil {
+		t.Fatalf("dial/login: %v", err)
+	}
+	defer c.Close()
+
+	before, err := c.GetStreamInfo(0, StreamMain)
+	if err != nil {
+		t.Fatalf("GetStreamInfo: %v", err)
+	}
+	t.Logf("before: GOP=%d BitRate=%d BitRateControl=%q", before.GOP, before.BitRate, before.BitRateControl)
+
+	// 1) GOP round-trip: pick a value different from the current one.
+	newGOP := 50
+	if before.GOP == 50 {
+		newGOP = 60
+	}
+	if err := c.SetGOP(0, StreamMain, newGOP); err != nil {
+		t.Fatalf("SetGOP %d: %v", newGOP, err)
+	}
+	after, err := c.GetStreamInfo(0, StreamMain)
+	if err != nil {
+		t.Fatalf("GetStreamInfo after SetGOP: %v", err)
+	}
+	if after.GOP != newGOP {
+		t.Errorf("GOP not applied: want %d, got %d", newGOP, after.GOP)
+	} else {
+		t.Logf("GOP %d -> %d OK", before.GOP, after.GOP)
+	}
+	if before.GOP > 0 {
+		if err := c.SetGOP(0, StreamMain, before.GOP); err != nil {
+			t.Errorf("restore GOP: %v", err)
+		}
+		fin, _ := c.GetStreamInfo(0, StreamMain)
+		t.Logf("restored GOP -> %d", fin.GOP)
+	}
+
+	// 2) Bitrate round-trip. The device may clamp to a supported step, so only
+	//    require that the value CHANGED from before OR equals what we asked for.
+	newBR := before.BitRate + 512
+	if newBR <= 0 {
+		newBR = 2048
+	}
+	if err := c.SetBitrate(0, StreamMain, newBR, ""); err != nil {
+		t.Fatalf("SetBitrate %d: %v", newBR, err)
+	}
+	after, err = c.GetStreamInfo(0, StreamMain)
+	if err != nil {
+		t.Fatalf("GetStreamInfo after SetBitrate: %v", err)
+	}
+	t.Logf("bitrate: requested %d Kbps, device now %d Kbps (control %q)", newBR, after.BitRate, after.BitRateControl)
+	if after.BitRate == before.BitRate && after.BitRate != newBR {
+		t.Errorf("bitrate did not change: still %d Kbps (wanted %d)", after.BitRate, newBR)
+	}
+	if before.BitRate > 0 {
+		if err := c.SetBitrate(0, StreamMain, before.BitRate, ""); err != nil {
+			t.Errorf("restore bitrate: %v", err)
+		}
+		fin, _ := c.GetStreamInfo(0, StreamMain)
+		t.Logf("restored bitrate -> %d Kbps", fin.BitRate)
+	}
+
+	// 3) Optionally flip the bitrate control mode. Not all streams support both
+	//    CBR and VBR, so log rather than hard-fail on the mode flip.
+	if before.BitRateControl == "VBR" {
+		if err := c.SetBitrate(0, StreamMain, newBR, "CBR"); err != nil {
+			t.Logf("SetBitrate CBR (mode flip not supported?): %v", err)
+		} else {
+			flip, _ := c.GetStreamInfo(0, StreamMain)
+			t.Logf("mode flip VBR -> %q (bitrate %d Kbps)", flip.BitRateControl, flip.BitRate)
+			// Restore original mode + bitrate.
+			if before.BitRate > 0 {
+				if err := c.SetBitrate(0, StreamMain, before.BitRate, before.BitRateControl); err != nil {
+					t.Errorf("restore bitrate+mode: %v", err)
+				}
+				fin, _ := c.GetStreamInfo(0, StreamMain)
+				t.Logf("restored bitrate+mode -> %d Kbps %q", fin.BitRate, fin.BitRateControl)
+			}
+		}
+	}
+}
