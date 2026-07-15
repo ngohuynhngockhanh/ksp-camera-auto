@@ -28,6 +28,17 @@
   (`101,201,…`) in one call — probe the whole fleet cheaply.
 - **Port 8000 can't be black-box cloned** (encrypted handshake). Use ISAPI:80 on
   the LAN, or the cgo `hiksdk` build.
+- **`replaceXMLTag` silently no-ops on an ABSENT tag** → a setter can "succeed"
+  without changing anything. GOP/bitrate use `mutateStreamChannelStrict`, which
+  errors if any target tag is missing from the device doc. New setters that edit
+  raw XML must do the same.
+- **Bitrate = AVERAGE when Smart Codec is ON.** `SetBitrate` reads the final
+  smart-codec state first (so in `Apply` smart codec runs BEFORE bitrate), then
+  writes `<vbrAverageCap>`/`<vbrUpperCap>` accordingly.
+- **`videoQualityControlType` casing varies** (`VBR` vs `vbr`) — write the mode
+  in the casing the device currently serves, or it may reject it.
+- **`keyFrameInterval` unit varies by firmware** (ms on most, frames on some);
+  prefer `<GovLength>` (always frames) when the doc has it.
 
 ## Importer / Shinobi
 - **`details` is a JSON-encoded STRING** from the live API (an exported dump has
@@ -45,6 +56,10 @@
 - **Timeout.** Slow multi-channel NVRs need a higher per-device timeout; it's
   settable from the UI (5–600s, default 30).
 - **Changing resolution/codec restarts the encoder** → RTSP viewers drop briefly.
+  Changing GOP/bitrate carries the same caveat.
+- **Devices clamp GOP/bitrate to their supported range.** Apply-verify is
+  tri-state: exact match = OK; changed-but-different = OK (report the clamped
+  value); unchanged = fail loudly.
 
 ## Security (see the audit)
 - `nmap` subnet must be strictly validated (IPv4/CIDR/range) + passed after `--`

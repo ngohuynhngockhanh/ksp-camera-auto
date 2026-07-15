@@ -29,6 +29,18 @@ the full doc, replace only the target tag values, PUT the whole doc back.
      sub-resource with `Invalid Operation`.
   2. Standalone `PUT /ISAPI/Streaming/channels/<id>/smartCodec`. Fallback only.
   H.265+ requires the base codec to be H.265 first.
+- **I-frame interval (GOP)**: `<Video><GovLength>` in **frames** (verified live).
+  Some firmware exposes `<keyFrameInterval>` instead — often in **ms**, so
+  convert `frames→ms = gop*1000/fps` (fps = `maxFrameRate`/100); `gopEdits`
+  prefers `GovLength` when both exist.
+- **Bitrate**: `<Video>` children — `<videoQualityControlType>` = `VBR`/`CBR`
+  (case-sensitive; some firmware serves lowercase `vbr`/`cbr` and rejects the
+  wrong case, so mode writes match the device's current casing). VBR cap =
+  `<vbrUpperCap>` (Kbps), floor `<vbrLowerCap>`; CBR target = `<constantBitRate>`.
+  **When Smart Codec (H.264+/H.265+) is ON the device treats the configured
+  bitrate as AVERAGE** — write `<vbrAverageCap>` if present, else fall back to
+  `<vbrUpperCap>`/`<constantBitRate>`. Read-back (`bitrateFromVideo`) mirrors the
+  same precedence so verify doesn't false-fail.
 - **Audio AAC**: `<Audio><audioCompressionType>AAC</audioCompressionType>`.
 - **Password change**: `PUT /ISAPI/Security/users/<id>` (id 1 = admin) with
   `<User><id>1</id><userName>…</userName><password>…</password></User>`.

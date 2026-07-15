@@ -40,7 +40,8 @@ type Camera interface {
 ```
 
 `camera.Open(device)` dials the right client by `device.Vendor`. `Profile`
-carries which settings to change (resolution, codec, smart codec, AAC) and the
+carries which settings to change (resolution, codec, smart codec, AAC, I-frame
+interval/GOP, bitrate+mode) and the
 target `Channels`/`Streams`. Adapters iterate channel × stream, emit one
 `StepResult` per action (with GET read-back verification), and never fail the
 whole batch on one error.

@@ -55,6 +55,12 @@ Then all calls are JSON-RPC `{"method","params","id","session"}` over `\xf6` fra
   codec is **silently ignored** (no error) → always read back to verify.
 - **Smart Codec / H.265+**: SEPARATE config `SmartEncode.table[ch].Enable` (bool),
   per-channel.
+- **I-frame interval (GOP)**: `Video.GOP` (integer, **frames**; verified live —
+  e.g. 50/60).
+- **Bitrate**: `Video.BitRate` (integer, **Kbps**) + `Video.BitRateControl` =
+  `VBR`/`CBR`. Same `Encode` table as resolution/codec, so it round-trips through
+  the same `getTable`/`setTable`. The device may **clamp** to a supported step —
+  read back and report the accepted value rather than hard-failing.
 - **Audio AAC**: `MainFormat[0].Audio.Compression = "AAC"` + `AudioEnable = true`.
 - **Password change**: `userManager.modifyPassword {name, pwd, pwdOld}` (pwdOld =
   the current login credential; hash form varies by firmware).
