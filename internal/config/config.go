@@ -54,14 +54,14 @@ func Default() Config {
 		Server: Server{
 			Addr:     ":2028",
 			Username: "admin",
-			Password: "inut12345",
+			Password: "smarthome12345",
 		},
 		CamerasFile: "cameras.yaml",
 		Defaults: Defaults{
 			HikvisionPort:  8000,
 			DahuaPort:      37777,
 			Username:       "admin",
-			Password:       "inut12345",
+			Password:       "smarthome12345",
 			TimeoutSeconds: 30,
 			NewPassword:    "smarthome12345",
 		},

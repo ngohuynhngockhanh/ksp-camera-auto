@@ -6,7 +6,7 @@ server:
   addr: ":2028"
   # Login for the web UI.
   username: "admin"
-  password: "inut12345"
+  password: "smarthome12345"
   # Optional: bcrypt hash checked instead of `password` (generate with
   # `kspcam --hash-password <pw>`). Leave empty to use plaintext `password`.
   password_hash: ""
@@ -20,7 +20,7 @@ defaults:
   dahua_port: 37777      # Dahua/KBVision DHIP port (37777, sometimes 8888)
   # Default camera credentials to try when an entry omits them.
   username: "admin"
-  password: "inut12345"
+  password: "smarthome12345"
   # Per-device operation timeout in seconds (higher helps slow multi-channel
   # NVRs; the web UI can override it per request).
   timeout_seconds: 30
