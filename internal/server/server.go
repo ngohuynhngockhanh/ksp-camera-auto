@@ -45,7 +45,7 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 		mux:     http.NewServeMux(),
 		static:  static,
 		session: newSessionStore(12 * time.Hour),
-		limiter: newLoginLimiter(),
+		limiter: newLoginLimiter(cfg.Server.LoginMaxAttempts, time.Duration(cfg.Server.LoginLockoutMinutes)*time.Minute),
 	}
 	s.routes()
 	return s, nil
@@ -83,6 +83,7 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/network", api(s.handleNetwork))
 	s.mux.Handle("/api/wifi", api(s.handleWiFi))
 	s.mux.Handle("/api/wifi-scan", api(s.handleWiFiScan))
+	s.mux.Handle("/api/scan/try-password", api(s.handleTryPassword))
 
 	// Authenticated app + static assets.
 	fileServer := http.FileServer(http.FS(s.static))
@@ -116,24 +117,48 @@ func limitBody(n int64, next http.Handler) http.Handler {
 }
 
 // loginLimiter throttles failed logins per client IP to blunt online brute
-// force against an internet-exposed login.
+// force against an internet-exposed login. maxAttempts/lockout are set from
+// config.Server.LoginMaxAttempts/LoginLockoutMinutes (see newLoginLimiter).
 type loginLimiter struct {
-	mu   sync.Mutex
-	fail map[string]*attempt
+	mu          sync.Mutex
+	fail        map[string]*attempt
+	maxAttempts int
+	lockout     time.Duration
 }
 type attempt struct {
 	count int
 	until time.Time
 }
 
-func newLoginLimiter() *loginLimiter { return &loginLimiter{fail: map[string]*attempt{}} }
+// newLoginLimiter builds a limiter with the given threshold/lockout window.
+// maxAttempts <= 0 falls back to 5, lockout <= 0 falls back to 30 minutes —
+// config.Default() already sets both, so this only guards a caller that
+// builds a loginLimiter directly with a zero-value config.
+func newLoginLimiter(maxAttempts int, lockout time.Duration) *loginLimiter {
+	if maxAttempts <= 0 {
+		maxAttempts = 5
+	}
+	if lockout <= 0 {
+		lockout = 30 * time.Minute
+	}
+	return &loginLimiter{fail: map[string]*attempt{}, maxAttempts: maxAttempts, lockout: lockout}
+}
 
-// blocked reports whether ip is currently locked out.
+// blocked reports whether ip is currently locked out. Also opportunistically
+// prunes ip's entry once its lockout has fully expired, so the map doesn't
+// grow forever from IPs that failed once and never came back.
 func (l *loginLimiter) blocked(ip string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	a := l.fail[ip]
-	return a != nil && a.count >= 5 && time.Now().Before(a.until)
+	if a == nil {
+		return false
+	}
+	if time.Now().After(a.until) {
+		delete(l.fail, ip)
+		return false
+	}
+	return a.count >= l.maxAttempts
 }
 
 func (l *loginLimiter) fail1(ip string) {
@@ -145,7 +170,7 @@ func (l *loginLimiter) fail1(ip string) {
 		l.fail[ip] = a
 	}
 	a.count++
-	a.until = time.Now().Add(time.Minute)
+	a.until = time.Now().Add(l.lockout)
 }
 
 func (l *loginLimiter) reset(ip string) {

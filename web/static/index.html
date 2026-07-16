@@ -72,10 +72,33 @@
             <div class="msg" id="scan-msg"></div>
             <div class="table-wrap section-gap">
               <table class="reflow" id="scan-table">
-                <thead><tr><th>IP</th><th>Cổng</th><th>Hãng</th><th>Model</th><th>MAC</th><th>Nguồn</th><th></th></tr></thead>
-                <tbody id="scan-tbody"><tr><td colspan="7" class="empty-hint">Chưa quét.</td></tr></tbody>
+                <thead><tr>
+                  <th><input type="checkbox" id="scan-select-all" aria-label="Chọn tất cả"></th>
+                  <th>IP</th><th>Cổng</th><th>Hãng</th><th>Model</th><th>MAC</th><th>Nguồn</th><th>Trạng thái</th><th></th>
+                </tr></thead>
+                <tbody id="scan-tbody"><tr><td colspan="9" class="empty-hint">Chưa quét.</td></tr></tbody>
               </table>
             </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Thử mật khẩu hàng loạt</div>
+            <p class="card-sub">Chạy tuần tự (từng cam một, không song song) trên các dòng đã tick ở bảng trên — dòng nào đăng nhập được sẽ tô xanh. Không tự thêm vào kho hay đổi gì trên cam, chỉ kiểm tra.</p>
+            <div class="row">
+              <div class="field field-sm">
+                <label for="scan-try-user">Tài khoản</label>
+                <input id="scan-try-user" value="admin">
+              </div>
+              <div class="field field-sm">
+                <label for="scan-try-pass">Mật khẩu thử</label>
+                <input id="scan-try-pass" type="password" placeholder="••••••">
+              </div>
+              <button class="btn" id="scan-try-btn" disabled>Thử mật khẩu hàng loạt</button>
+              <span class="muted" id="scan-try-count"></span>
+            </div>
+            <div class="msg" id="scan-try-msg"></div>
+            <div class="progress" id="scan-try-progress"><div class="progress-fill" id="scan-try-progress-fill"></div></div>
+            <div class="progress-label" id="scan-try-progress-label"></div>
           </div>
         </section>
 

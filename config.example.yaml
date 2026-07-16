@@ -10,6 +10,11 @@ server:
   # Optional: bcrypt hash checked instead of `password` (generate with
   # `kspcam --hash-password <pw>`). Leave empty to use plaintext `password`.
   password_hash: ""
+  # Failed-login protection: an IP is locked out after this many consecutive
+  # wrong-password attempts, for this many minutes (reset on every further
+  # failed attempt while still locked).
+  login_max_attempts: 5
+  login_lockout_minutes: 30
 
 # Where the camera inventory is persisted (managed from the web UI).
 cameras_file: "cameras.yaml"

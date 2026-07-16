@@ -1571,20 +1571,33 @@ document.getElementById('pw-btn').addEventListener('click', async () => {
 function renderScanResults() {
   const tbody = document.getElementById('scan-tbody');
   if (!scanResults.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Chưa quét.</td></tr>';
-    return;
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Chưa quét.</td></tr>';
+  } else {
+    tbody.innerHTML = scanResults.map((r, i) => `
+      <tr>
+        <td><input type="checkbox" class="scan-cb" data-scan-idx="${i}" aria-label="Chọn ${escapeHtml(r.ip)}"></td>
+        <td data-label="IP">${escapeHtml(r.ip)}</td>
+        <td data-label="Cổng">${r.port ? escapeHtml(String(r.port)) : ''}</td>
+        <td data-label="Hãng">${escapeHtml(r.vendor || '')}</td>
+        <td data-label="Model">${escapeHtml(r.model || '')}</td>
+        <td data-label="MAC">${escapeHtml(r.mac || '')}</td>
+        <td data-label="Nguồn">${escapeHtml(r.via || '')}</td>
+        <td data-label="Trạng thái" id="scan-status-${i}"></td>
+        <td class="actions-cell"><button class="btn btn-secondary" data-scan-add="${i}">Thêm vào kho</button></td>
+      </tr>
+    `).join('');
   }
-  tbody.innerHTML = scanResults.map((r, i) => `
-    <tr>
-      <td data-label="IP">${escapeHtml(r.ip)}</td>
-      <td data-label="Cổng">${r.port ? escapeHtml(String(r.port)) : ''}</td>
-      <td data-label="Hãng">${escapeHtml(r.vendor || '')}</td>
-      <td data-label="Model">${escapeHtml(r.model || '')}</td>
-      <td data-label="MAC">${escapeHtml(r.mac || '')}</td>
-      <td data-label="Nguồn">${escapeHtml(r.via || '')}</td>
-      <td class="actions-cell"><button class="btn btn-secondary" data-scan-add="${i}">Thêm vào kho</button></td>
-    </tr>
-  `).join('');
+  updateScanTrySelection();
+}
+
+// updateScanTrySelection enables/disables the bulk try-password button and
+// updates its selected-count label based on how many .scan-cb rows are
+// ticked — mirrors the existing selectedCameraIds()/bulk-selected pattern
+// used by the camera table.
+function updateScanTrySelection() {
+  const n = document.querySelectorAll('.scan-cb:checked').length;
+  document.getElementById('scan-try-btn').disabled = n === 0;
+  document.getElementById('scan-try-count').textContent = n ? `${n} thiết bị đã chọn` : '';
 }
 
 async function runScan(body, btn) {
@@ -1622,16 +1635,121 @@ document.getElementById('scan-nmap-btn').addEventListener('click', () => {
 
 document.getElementById('scan-tbody').addEventListener('click', (ev) => {
   const btn = ev.target.closest('button[data-scan-add]');
-  if (!btn) return;
-  const r = scanResults[parseInt(btn.dataset.scanAdd, 10)];
-  if (!r) return;
-  document.getElementById('f-host').value = r.ip || '';
-  document.getElementById('f-port').value = r.port || '';
-  if (r.vendor === 'dahua' || r.vendor === 'hikvision') document.getElementById('f-vendor').value = r.vendor;
-  document.getElementById('f-name').value = r.model || r.name || '';
-  goto('cameras');
-  document.getElementById('add-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
-  document.getElementById('f-host').focus();
+  if (btn) {
+    const r = scanResults[parseInt(btn.dataset.scanAdd, 10)];
+    if (!r) return;
+    document.getElementById('f-host').value = r.ip || '';
+    document.getElementById('f-port').value = r.port || '';
+    if (r.vendor === 'dahua' || r.vendor === 'hikvision') document.getElementById('f-vendor').value = r.vendor;
+    document.getElementById('f-name').value = r.model || r.name || '';
+    goto('cameras');
+    document.getElementById('add-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.getElementById('f-host').focus();
+  }
+});
+document.getElementById('scan-tbody').addEventListener('change', (ev) => {
+  if (ev.target.classList.contains('scan-cb')) updateScanTrySelection();
+});
+document.getElementById('scan-select-all').addEventListener('change', (ev) => {
+  document.querySelectorAll('.scan-cb').forEach(cb => { cb.checked = ev.target.checked; });
+  updateScanTrySelection();
+});
+
+/* ---------- Thử mật khẩu hàng loạt (Quét mạng) ---------- */
+
+function setScanTryProgress(index, total, label) {
+  const bar = document.getElementById('scan-try-progress');
+  const fill = document.getElementById('scan-try-progress-fill');
+  const text = document.getElementById('scan-try-progress-label');
+  if (index == null) { bar.classList.remove('active'); text.textContent = ''; return; }
+  bar.classList.add('active');
+  fill.style.width = Math.round((index / total) * 100) + '%';
+  text.textContent = label || '';
+}
+
+// scanStatusBadge renders one row's Trạng thái cell: green "OK" on success,
+// red with the error (title tooltip) on failure.
+function scanStatusBadge(ev) {
+  if (ev.ok) return '<span class="badge ok">OK</span>';
+  return `<span class="badge fail" title="${escapeHtml(ev.err || '')}">Lỗi</span>`;
+}
+
+document.getElementById('scan-try-btn').addEventListener('click', async () => {
+  const idxs = Array.from(document.querySelectorAll('.scan-cb:checked')).map(cb => parseInt(cb.dataset.scanIdx, 10));
+  if (!idxs.length) return;
+  const username = document.getElementById('scan-try-user').value.trim();
+  const password = document.getElementById('scan-try-pass').value;
+  if (!username) { showToast('Cần nhập tài khoản.', 'err'); return; }
+
+  const targets = idxs.map(i => {
+    const r = scanResults[i];
+    return { ip: r.ip, vendor: r.vendor || '', port: r.port || 0, label: r.model || r.mac || '' };
+  });
+  // idxByIP maps back to the scanResults index so a "result" event (keyed by
+  // ip) can find its row again — two selected rows could share an IP only if
+  // the same device showed up via two discovery methods, in which case both
+  // get updated together, which is harmless.
+  const idxByIP = {};
+  idxs.forEach(i => {
+    const ip = scanResults[i].ip;
+    (idxByIP[ip] = idxByIP[ip] || []).push(i);
+  });
+
+  const btn = document.getElementById('scan-try-btn');
+  const msg = document.getElementById('scan-try-msg');
+  msg.textContent = ''; msg.className = 'msg';
+  idxs.forEach(i => { document.getElementById('scan-status-' + i).innerHTML = ''; });
+  setBusy(btn, true, 'Đang thử...');
+  let okCount = 0;
+  try {
+    const resp = await fetch('/api/scan/try-password', {
+      method: 'POST', headers: jsonHeaders,
+      body: JSON.stringify({ targets, username, password, timeoutSeconds: timeoutSec() }),
+    });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok || !resp.body) {
+      const text = await resp.text().catch(() => '');
+      let m = text || resp.statusText;
+      try { const j = JSON.parse(text); if (j && j.error) m = j.error; } catch (e) { /* not JSON */ }
+      throw new Error(m);
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split('\n\n');
+      buf = parts.pop();
+      for (const part of parts) {
+        const line = part.split('\n').find(l => l.startsWith('data: '));
+        if (!line) continue;
+        let ev;
+        try { ev = JSON.parse(line.slice(6)); } catch (e) { continue; }
+        if (ev.type === 'start') {
+          setScanTryProgress(ev.index, ev.total, `Đang thử ${ev.index}/${ev.total}: ${ev.ip}`);
+        } else if (ev.type === 'result') {
+          if (ev.ok) okCount++;
+          (idxByIP[ev.ip] || []).forEach(i => {
+            const cell = document.getElementById('scan-status-' + i);
+            if (cell) cell.innerHTML = scanStatusBadge(ev);
+          });
+        } else if (ev.type === 'done') {
+          setScanTryProgress(null);
+        }
+      }
+    }
+    msg.textContent = `Xong: ${okCount}/${idxs.length} đăng nhập được.`;
+    msg.className = okCount ? 'msg ok' : 'msg';
+  } catch (e) {
+    msg.textContent = 'Lỗi: ' + e.message;
+    msg.className = 'msg err';
+    showToast('Lỗi thử mật khẩu: ' + e.message, 'err');
+  } finally {
+    setBusy(btn, false);
+    setScanTryProgress(null);
+  }
 });
 
 /* ---------- Shinobi import ---------- */

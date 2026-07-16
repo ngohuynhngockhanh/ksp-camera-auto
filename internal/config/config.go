@@ -26,6 +26,12 @@ type Server struct {
 	// PasswordHash, if set, is a bcrypt hash checked instead of Password
 	// (generate with `kspcam --hash-password <pw>`).
 	PasswordHash string `yaml:"password_hash"`
+	// LoginMaxAttempts is how many consecutive failed logins from one IP
+	// trigger a lockout.
+	LoginMaxAttempts int `yaml:"login_max_attempts"`
+	// LoginLockoutMinutes is how long a locked-out IP is blocked for, reset
+	// on every further failed attempt while still locked (sliding window).
+	LoginLockoutMinutes int `yaml:"login_lockout_minutes"`
 }
 
 // Defaults are applied to camera entries that omit a field.
@@ -52,9 +58,11 @@ type Config struct {
 func Default() Config {
 	return Config{
 		Server: Server{
-			Addr:     ":2028",
-			Username: "admin",
-			Password: "smarthome12345",
+			Addr:                ":2028",
+			Username:            "admin",
+			Password:            "smarthome12345",
+			LoginMaxAttempts:    5,
+			LoginLockoutMinutes: 30,
 		},
 		CamerasFile: "cameras.yaml",
 		Defaults: Defaults{
@@ -97,6 +105,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Server.Password == "" {
 		c.Server.Password = d.Server.Password
+	}
+	if c.Server.LoginMaxAttempts == 0 {
+		c.Server.LoginMaxAttempts = d.Server.LoginMaxAttempts
+	}
+	if c.Server.LoginLockoutMinutes == 0 {
+		c.Server.LoginLockoutMinutes = d.Server.LoginLockoutMinutes
 	}
 	if c.CamerasFile == "" {
 		c.CamerasFile = d.CamerasFile
