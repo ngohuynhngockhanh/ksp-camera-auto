@@ -107,17 +107,17 @@ func GetSnapshotRTSP(ctx context.Context, host, user, pass string, channel int, 
 		}.Encode(),
 	}
 
-	// -threads 1 caps CPU/RAM per process; small -probesize/-analyzeduration
-	// cut ffmpeg's stream-probing overhead (we only need one keyframe, not a
-	// full format analysis); -rw_timeout aborts a dead RTSP socket in
-	// microseconds instead of hanging until the context deadline.
+	// Deliberately minimal flags: -nostdin/-threads 1 are safe caps on
+	// input/CPU, but stream-probing limiters (-probesize/-analyzeduration)
+	// and socket-timeout flags (-rw_timeout/-stimeout) vary by ffmpeg version
+	// and can make older builds fail to detect an H.265 RTSP stream at all —
+	// the concurrency semaphore above and the context deadline below already
+	// bound resources, so we don't need them. -skip_frame nokey + -frames:v 1
+	// still stop at the first keyframe (cheap single-frame grab).
 	cmd := exec.CommandContext(ctx, "ffmpeg",
 		"-nostdin",
 		"-threads", "1",
 		"-rtsp_transport", "tcp",
-		"-rw_timeout", "10000000",
-		"-analyzeduration", "1000000",
-		"-probesize", "500000",
 		"-skip_frame", "nokey",
 		"-i", u.String(),
 		"-frames:v", "1",
@@ -132,10 +132,13 @@ func GetSnapshotRTSP(ctx context.Context, host, user, pass string, channel int, 
 		if errors.Is(err, exec.ErrNotFound) {
 			return nil, fmt.Errorf("dahua: ffmpeg not installed: %w", err)
 		}
-		return nil, fmt.Errorf("dahua: ffmpeg snapshot %s: %w: %s", host, err, snapshotTruncate(stderr.Bytes(), 300))
+		// Show the TAIL of stderr — ffmpeg's actual error line comes after
+		// its multi-line build banner, so a head-truncation would only ever
+		// surface the version string, not the diagnosis.
+		return nil, fmt.Errorf("dahua: ffmpeg snapshot %s: %w: %s", host, err, snapshotTail(stderr.Bytes(), 300))
 	}
 	if stdout.Len() == 0 {
-		return nil, fmt.Errorf("dahua: ffmpeg snapshot %s: empty output: %s", host, snapshotTruncate(stderr.Bytes(), 300))
+		return nil, fmt.Errorf("dahua: ffmpeg snapshot %s: empty output: %s", host, snapshotTail(stderr.Bytes(), 300))
 	}
 	return stdout.Bytes(), nil
 }
@@ -183,4 +186,13 @@ func snapshotTruncate(b []byte, n int) string {
 		return string(b)
 	}
 	return string(b[:n]) + "..."
+}
+
+// snapshotTail returns the last n bytes of b (with a leading ellipsis when
+// truncated), used for ffmpeg stderr where the meaningful error is at the end.
+func snapshotTail(b []byte, n int) string {
+	if len(b) <= n {
+		return string(b)
+	}
+	return "..." + string(b[len(b)-n:])
 }
