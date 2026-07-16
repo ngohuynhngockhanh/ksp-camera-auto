@@ -105,6 +105,38 @@
   camera fleet without explicit operator sign-off. Confirm a write on one
   camera before relying on it at scale.
 
+## Snapshot: RTSP+ffmpeg beat CGI and NetSDK (live-verified 2026-07-16)
+- **Dahua NetSDK's `CLIENT_SnapPicture`/`CLIENT_SnapPictureEx`/`CLIENT_SnapPictureToFile`
+  are vehicle-DVR-only** — confirmed straight from the real header
+  (`dhnetsdk.h`, sourced from `github.com/hysios/dhnetsdk`, a third-party
+  Linux SDK mirror): they sit under the `车载设备接口` ("vehicle-mounted
+  device interface") section. Calling them against a standard IPC
+  (`NET_IPC_SERIAL`) fails immediately client-side with `NET_ILLEGAL_PARAM`
+  regardless of parameters — confirmed via packet capture (no snap-specific
+  bytes ever hit the wire; only the standard post-login capability probe
+  did). The only NetSDK path for a standard camera is
+  `CLIENT_CapturePictureEx`, which requires an active `CLIENT_RealPlayEx`
+  live stream and decodes client-side (H.264/H.265) — a much bigger lift
+  than a single RPC call, and not pursued.
+- **`snapshot.cgi` (`GetSnapshotCGI`) is unreliable on modern firmware**:
+  live-tested against 9 real Dahua cameras on `inut_205_50`'s LAN and got a
+  bare `Error\r\nBad Request!\r\n` from every one, auth notwithstanding.
+- **RTSP + ffmpeg (`GetSnapshotRTSP`) works and is now the default**:
+  `dahua.GetSnapshot` tries RTSP first (`rtsp://user:pass@host:554/cam/
+  realmonitor?channel=<n+1>&subtype=1`, sub-stream for a cheap decode,
+  `-skip_frame nokey -frames:v 1` to stop at the first keyframe rather than
+  transcode), falling back to CGI on failure. Live-verified end-to-end
+  through the deployed `/api/snapshot` on `inut_205_50` against a real
+  camera (21KB JPEG, correct OSD timestamp/venue text). Requires `ffmpeg` on
+  PATH on the deploy target — already present on the Armbian `inut_*` boxes
+  (Shinobi depends on it), not yet verified as a hard requirement to add to
+  the ansible role.
+- The original NAT'd `dahua-ip` test camera (45.251.114.38:54273) still
+  can't be reached this way: only its DVRIP port is forwarded, not
+  HTTP:80 or RTSP:554 — a port-forwarding gap on that specific device, not
+  a code issue. Both new paths and the old CGI path all need one of those
+  two ports opened for that particular camera.
+
 ## Picture/color tuning + network config (Dahua/KBVision, unverified)
 - **`VideoColor`/`VideoInOptions`** (`internal/dahua/picture.go`) — same
   caveat as OSD: `.Text`-style content fields and the day/night sub-profiles
