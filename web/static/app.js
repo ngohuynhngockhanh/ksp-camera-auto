@@ -334,7 +334,7 @@ function renderCameraSkeleton() {
 function renderCameras() {
   const tbody = document.getElementById('cam-tbody');
   if (!cameras.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Chưa có camera nào. Thêm ở form phía trên.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Chưa có camera nào. Thêm ở form phía trên.</td></tr>';
     renderDashboard();
     return;
   }
@@ -349,6 +349,8 @@ function renderCameras() {
       <td data-label="Host">${escapeHtml(c.host)}</td>
       <td data-label="Cổng">${c.port}</td>
       <td data-label="Hãng">${escapeHtml(c.vendor)}</td>
+      <td data-label="Tài khoản">${escapeHtml(c.username || '')}</td>
+      <td data-label="Mật khẩu"><code>${escapeHtml(c.password || '')}</code></td>
       <td data-label="Thông tin luồng" class="probe-box" id="probe-${cssEscape(c.id)}">${fmtStreamInfo(probeCache[c.id]) || '<span class="muted">chưa dò</span>'}</td>
       <td class="actions-cell">
         <button class="btn btn-secondary" data-action="probe" data-id="${escapeHtml(c.id)}">Dò</button>
@@ -440,7 +442,8 @@ document.getElementById('cam-tbody').addEventListener('click', async (ev) => {
     document.getElementById('f-vendor').value = c.vendor || 'dahua';
     document.getElementById('f-username').value = c.username || '';
     const pw = document.getElementById('f-password');
-    pw.value = '';
+    pw.value = c.password || '';
+    pw.type = 'text';
     pw.placeholder = 'để trống = giữ mật khẩu cũ';
     const m = document.getElementById('add-msg');
     m.className = 'msg'; m.textContent = 'Đang sửa "' + (c.name || c.host) + '". Đổi thông tin rồi bấm "Thêm/Lưu camera". (Đổi host/cổng sẽ tạo mục mới.)';

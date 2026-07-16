@@ -31,8 +31,12 @@ func (s *Server) reqTimeout(sec int) time.Duration {
 	return time.Duration(sec) * time.Second
 }
 
-// deviceView is the JSON-safe projection of config.Device: passwords never
-// leave the server.
+// deviceView is the JSON projection of config.Device sent to the (already
+// authenticated) web UI. Password is included in plain text — deliberately,
+// at the operator's request, so the fleet's stored credentials can be seen
+// without a blind reset — but this only ever reaches a session that already
+// passed login, the same trust boundary every other admin action here relies
+// on (ChangePassword, network/Wi-Fi config, etc.).
 type deviceView struct {
 	ID       string        `json:"id"`
 	Name     string        `json:"name"`
@@ -40,6 +44,7 @@ type deviceView struct {
 	Port     int           `json:"port"`
 	Vendor   config.Vendor `json:"vendor"`
 	Username string        `json:"username"`
+	Password string        `json:"password"`
 }
 
 func toView(d config.Device) deviceView {
@@ -50,6 +55,7 @@ func toView(d config.Device) deviceView {
 		Port:     d.Port,
 		Vendor:   d.Vendor,
 		Username: d.Username,
+		Password: d.Password,
 	}
 }
 
