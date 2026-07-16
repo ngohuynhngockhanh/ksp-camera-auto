@@ -2,6 +2,7 @@ package dahua
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,86 @@ import (
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/isapi"
 )
+
+// ErrPTZCodeNotContinuous is returned by PTZMoveContinuously for codes that
+// don't map to a pan/tilt/zoom Direction vector (Focus*/Iris*), so the caller
+// can fall back to the CGI path for those.
+var ErrPTZCodeNotContinuous = fmt.Errorf("dahua: PTZ code not a continuous pan/tilt/zoom move")
+
+// ptzDirection maps a PTZ code + speed to the [pan, tilt, zoom] Direction
+// vector ptz.moveContinuously takes: pan +right/-left, tilt +up/-down, zoom
+// +tele(in)/-wide(out). Returns ok=false for codes with no continuous-move
+// equivalent (focus/iris).
+func ptzDirection(code string, speed int) (pan, tilt, zoom int, ok bool) {
+	switch code {
+	case "Up":
+		return 0, speed, 0, true
+	case "Down":
+		return 0, -speed, 0, true
+	case "Left":
+		return -speed, 0, 0, true
+	case "Right":
+		return speed, 0, 0, true
+	case "LeftUp":
+		return -speed, speed, 0, true
+	case "RightUp":
+		return speed, speed, 0, true
+	case "LeftDown":
+		return -speed, -speed, 0, true
+	case "RightDown":
+		return speed, -speed, 0, true
+	case "ZoomTele":
+		return 0, 0, speed, true
+	case "ZoomWide":
+		return 0, 0, -speed, true
+	}
+	return 0, 0, 0, false
+}
+
+// PTZMoveContinuously drives pan/tilt/zoom over the existing DVRIP JSON-RPC
+// session (no HTTP CGI, so it works on firmware that rejects ptz.cgi with
+// "Bad Request"). It creates a PTZ control object (ptz.factory.instance) then
+// issues ptz.moveContinuously with a Direction vector; start=false sends a
+// zero vector to stop. channel is 0-based. speed is clamped to [1,8].
+// Returns ErrPTZCodeNotContinuous for focus/iris codes (use the CGI path).
+func (c *Client) PTZMoveContinuously(channel int, code string, speed int, start bool) error {
+	if speed < 1 {
+		speed = 1
+	}
+	if speed > 8 {
+		speed = 8
+	}
+	pan, tilt, zoom, ok := ptzDirection(code, speed)
+	if !ok {
+		return ErrPTZCodeNotContinuous
+	}
+	if !start {
+		pan, tilt, zoom = 0, 0, 0
+	}
+
+	inst, err := c.Call("ptz.factory.instance", map[string]any{"channel": channel})
+	if err != nil {
+		return err
+	}
+	if !inst.ok() {
+		return fmt.Errorf("dahua: ptz.factory.instance failed: %s", respErr(inst))
+	}
+	var objID int64
+	if err := json.Unmarshal(inst.Result, &objID); err != nil {
+		return fmt.Errorf("dahua: ptz.factory.instance: unexpected result %.60s: %w", inst.Result, err)
+	}
+
+	resp, err := c.CallObject("ptz.moveContinuously", objID, map[string]any{
+		"Direction": []int{pan, tilt, zoom},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.ok() {
+		return fmt.Errorf("dahua: ptz.moveContinuously failed: %s", respErr(resp))
+	}
+	return nil
+}
 
 // ptzCodes are the PTZ operation codes this package accepts, matching Dahua's
 // HTTP API (dahua_http_api_for_ipcsd-v1.40.pdf §7.2.3). Restricting to a

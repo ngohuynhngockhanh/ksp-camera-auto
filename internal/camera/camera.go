@@ -337,10 +337,25 @@ func (d *dahuaCamera) ScanWiFi(ctx context.Context) ([]dahua.WiFiAP, error) {
 	return dahua.ScanWiFi(ctx, d.device.Host, d.device.Username, d.device.Password, d.timeout)
 }
 
-// PTZMove issues one PTZ command via HTTP CGI (a separate connection from the
-// DVRIP session, same as Snapshot).
+// PTZMove issues one PTZ command, preferring the DVRIP JSON-RPC session (the
+// same one already open) since modern Dahua firmware tends to reject the HTTP
+// CGI (ptz.cgi) with "Bad Request" — the same pattern seen with snapshot.cgi.
+// Falls back to CGI when DVRIP can't express the move (focus/iris, which have
+// no continuous-move RPC here) or errors.
 func (d *dahuaCamera) PTZMove(ctx context.Context, channel int, code string, speed int, start bool) error {
-	return dahua.PTZMove(ctx, d.device.Host, d.device.Username, d.device.Password, channel, code, speed, start, d.timeout)
+	err := d.client.PTZMoveContinuously(channel, code, speed, start)
+	if err == nil {
+		return nil
+	}
+	// DVRIP couldn't do it (focus/iris, or an RPC error) — try CGI.
+	cgiErr := dahua.PTZMove(ctx, d.device.Host, d.device.Username, d.device.Password, channel, code, speed, start, d.timeout)
+	if cgiErr == nil {
+		return nil
+	}
+	if errors.Is(err, dahua.ErrPTZCodeNotContinuous) {
+		return cgiErr
+	}
+	return fmt.Errorf("dvrip: %v; cgi: %v", err, cgiErr)
 }
 
 // Probe reads back main + sub1 + sub2 stream info for channel 0.

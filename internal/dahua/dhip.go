@@ -193,6 +193,17 @@ func dvripErrString(code []byte) string {
 
 // Call issues a JSON-RPC method with params over the DVRIP JSON (\xf6) frame.
 func (c *Client) Call(method string, params any) (rpcResp, error) {
+	return c.callEnv(method, params, nil)
+}
+
+// CallObject is Call plus a top-level "object" field, needed by the
+// object-oriented RPC families (e.g. ptz.moveContinuously operates on the
+// handle returned by ptz.factory.instance).
+func (c *Client) CallObject(method string, object int64, params any) (rpcResp, error) {
+	return c.callEnv(method, params, &object)
+}
+
+func (c *Client) callEnv(method string, params any, object *int64) (rpcResp, error) {
 	c.id++
 	env := map[string]any{
 		"method":  method,
@@ -201,6 +212,9 @@ func (c *Client) Call(method string, params any) (rpcResp, error) {
 	}
 	if params != nil {
 		env["params"] = params
+	}
+	if object != nil {
+		env["object"] = *object
 	}
 	payload, err := json.Marshal(env)
 	if err != nil {
