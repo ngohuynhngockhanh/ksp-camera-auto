@@ -8,11 +8,38 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
+	"strconv"
 	"time"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/isapi"
 )
+
+// ffmpegSem caps how many ffmpeg snapshot processes may run at once across
+// the whole process. Each ffmpeg RTSP grab costs ~30-40 MB RSS plus decode
+// CPU, and the gallery ("Tất cả kênh" / "Xem hình hàng loạt") fires a
+// snapshot per channel — unbounded, that OOMs a small box. This bound makes
+// snapshot load flat regardless of how many the UI requests: excess calls
+// block on the channel until a slot frees. Default 2; override with
+// KSPCAM_FFMPEG_CONCURRENCY (e.g. 1 on the tightest boxes).
+var ffmpegSem = make(chan struct{}, ffmpegConcurrency())
+
+func ffmpegConcurrency() int {
+	if v := os.Getenv("KSPCAM_FFMPEG_CONCURRENCY"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 {
+			return n
+		}
+	}
+	return 2
+}
+
+// ffmpegSnapTimeout caps a single ffmpeg grab regardless of the (larger)
+// per-request timeout, so a hung/unreachable camera doesn't hold an ffmpeg
+// process — and its RAM, and a concurrency slot — for the full request
+// deadline. The overall request timeout still applies on top (whichever is
+// shorter wins).
+const ffmpegSnapTimeout = 12 * time.Second
 
 // GetSnapshot fetches a single JPEG frame for a channel, trying the RTSP
 // route first (GetSnapshotRTSP) and falling back to the HTTP CGI route
@@ -51,6 +78,21 @@ func GetSnapshot(ctx context.Context, host, user, pass string, channel int, time
 // missing or the stream is unreachable, so GetSnapshot's CGI fallback can
 // take over.
 func GetSnapshotRTSP(ctx context.Context, host, user, pass string, channel int, timeout time.Duration) ([]byte, error) {
+	if timeout <= 0 || timeout > ffmpegSnapTimeout {
+		timeout = ffmpegSnapTimeout
+	}
+
+	// Acquire a concurrency slot before spending the timeout budget or
+	// spawning anything, so a burst of gallery requests queues instead of
+	// launching a process each. Give up if the caller's context ends while
+	// we're still queued.
+	select {
+	case ffmpegSem <- struct{}{}:
+		defer func() { <-ffmpegSem }()
+	case <-ctx.Done():
+		return nil, fmt.Errorf("dahua: snapshot %s: %w (waiting for ffmpeg slot)", host, ctx.Err())
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -65,12 +107,21 @@ func GetSnapshotRTSP(ctx context.Context, host, user, pass string, channel int, 
 		}.Encode(),
 	}
 
+	// -threads 1 caps CPU/RAM per process; small -probesize/-analyzeduration
+	// cut ffmpeg's stream-probing overhead (we only need one keyframe, not a
+	// full format analysis); -rw_timeout aborts a dead RTSP socket in
+	// microseconds instead of hanging until the context deadline.
 	cmd := exec.CommandContext(ctx, "ffmpeg",
+		"-nostdin",
+		"-threads", "1",
 		"-rtsp_transport", "tcp",
+		"-rw_timeout", "10000000",
+		"-analyzeduration", "1000000",
+		"-probesize", "500000",
 		"-skip_frame", "nokey",
 		"-i", u.String(),
 		"-frames:v", "1",
-		"-q:v", "4",
+		"-q:v", "6",
 		"-f", "image2",
 		"-y", "-",
 	)

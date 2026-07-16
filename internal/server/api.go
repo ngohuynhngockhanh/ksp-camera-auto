@@ -405,14 +405,40 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	stream := atoiDefault(q.Get("stream"), 0)
 	timeoutSeconds := atoiDefault(q.Get("timeoutSeconds"), 0)
 
-	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, id, timeoutSeconds)
-	if !ok {
+	// A cache hit skips both opening the device (a DVRIP login for Dahua) and
+	// the ffmpeg decode — the point of the cache on low-RAM boxes. Resolve
+	// the device first so a bad id is still a clean 404 rather than a cached
+	// miss. `nocache` (or `_r` cache-bust) forces a fresh grab (the UI's
+	// reload buttons send it).
+	d, found := s.inv.Get(id)
+	if !found {
+		writeErr(w, http.StatusNotFound, "device not found")
 		return
 	}
-	defer cancel()
-	defer cam.Close()
+	key := fmt.Sprintf("%s|%d|%d", id, channel, stream)
+	force := q.Get("nocache") != "" || q.Get("_r") != ""
 
-	data, err := cam.Snapshot(ctx, channel, stream)
+	fetch := func() ([]byte, error) {
+		to := s.reqTimeout(timeoutSeconds)
+		ctx, cancel := context.WithTimeout(r.Context(), to)
+		defer cancel()
+		cam, err := camera.Open(ctx, d, to)
+		if err != nil {
+			return nil, err
+		}
+		defer cam.Close()
+		return cam.Snapshot(ctx, channel, stream)
+	}
+
+	var (
+		data []byte
+		err  error
+	)
+	if force {
+		data, err = fetch()
+	} else {
+		data, err = s.snaps.get(key, fetch)
+	}
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return

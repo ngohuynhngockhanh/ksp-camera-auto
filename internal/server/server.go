@@ -31,6 +31,7 @@ type Server struct {
 	static  fs.FS
 	session *sessionStore
 	limiter *loginLimiter
+	snaps   *snapCache
 }
 
 // New builds a Server with routes registered.
@@ -46,6 +47,7 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 		static:  static,
 		session: newSessionStore(12 * time.Hour),
 		limiter: newLoginLimiter(cfg.Server.LoginMaxAttempts, time.Duration(cfg.Server.LoginLockoutMinutes)*time.Minute),
+		snaps:   newSnapCache(),
 	}
 	s.routes()
 	return s, nil
