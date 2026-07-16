@@ -1244,7 +1244,15 @@ function renderLiteFields(options) {
     pictureFieldRow('Flip', 'Flip', !!options.Flip, 'options') +
     renderRotateStepper(options.Rotate90) +
     pictureFieldRow('DayNightColor', 'DayNightColor', options.DayNightColor, 'options') +
+    pictureFieldRow('ExposureMode', 'ExposureMode', options.ExposureMode, 'options') +
+    pictureFieldRow('Backlight', 'Backlight', toNum(options.Backlight, 0), 'options') +
     '</div>';
+}
+
+// toNum coerces v to a number for a number-typed pf row (Backlight etc.),
+// defaulting when the device didn't return the field at all.
+function toNum(v, def) {
+  return (typeof v === 'number') ? v : def;
 }
 
 // renderObjectFields recurses one level into nested objects (e.g.
