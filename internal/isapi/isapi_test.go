@@ -611,7 +611,7 @@ func TestGetOverlayTextUnsupported(t *testing.T) {
 	port, _ := strconv.Atoi(portStr)
 	c := New(host, port, false, "u", "p", 5*time.Second)
 
-	if _, err := c.GetOverlayText(context.Background(), 1); err != ErrOverlayUnsupported {
+	if _, _, err := c.GetOverlayText(context.Background(), 1); err != ErrOverlayUnsupported {
 		t.Fatalf("want ErrOverlayUnsupported, got %v", err)
 	}
 }

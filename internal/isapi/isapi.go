@@ -757,37 +757,42 @@ func overlaysPath(ch int) string {
 var ErrOverlayUnsupported = fmt.Errorf("isapi: TextOverlayList/displayText not exposed by this device's overlays document")
 
 // GetOverlayText reads back the free-text overlay lines currently configured
-// on a channel, in TextOverlay list order. Returns ErrOverlayUnsupported if
-// the device doesn't expose TextOverlayList.
-func (c *Client) GetOverlayText(ctx context.Context, ch int) ([]string, error) {
+// on a channel plus each slot's on-screen enable state, in TextOverlay list
+// order. Returns ErrOverlayUnsupported if the device doesn't expose
+// TextOverlayList.
+func (c *Client) GetOverlayText(ctx context.Context, ch int) (lines []string, enabled []bool, err error) {
 	body, err := c.do(ctx, http.MethodGet, overlaysPath(ch), nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var ov videoOverlay
 	if err := xml.Unmarshal(body, &ov); err != nil {
-		return nil, fmt.Errorf("isapi: decode overlays channel %d: %w (body: %s)", ch, err, truncate(body, 200))
+		return nil, nil, fmt.Errorf("isapi: decode overlays channel %d: %w (body: %s)", ch, err, truncate(body, 200))
 	}
 	if ov.TextOverlayList == nil || len(ov.TextOverlayList.TextOverlay) == 0 {
-		return nil, ErrOverlayUnsupported
+		return nil, nil, ErrOverlayUnsupported
 	}
-	lines := make([]string, len(ov.TextOverlayList.TextOverlay))
+	lines = make([]string, len(ov.TextOverlayList.TextOverlay))
+	enabled = make([]bool, len(ov.TextOverlayList.TextOverlay))
 	for i, t := range ov.TextOverlayList.TextOverlay {
 		lines[i] = t.DisplayText
+		enabled[i] = t.Enabled
 	}
-	return lines, nil
+	return lines, enabled, nil
 }
 
 // SetOverlayText writes up to the device's own number of TextOverlay slots
 // worth of free-text overlay lines for a channel (extra lines beyond that
-// are dropped; the count actually applied is returned). Like
-// mutateStreamChannelStrict, it edits the raw XML in place — replacing only
-// <displayText>/<enabled> inside each Nth <TextOverlay>...</TextOverlay>
-// block — instead of re-marshalling a trimmed struct, so unknown fields
-// (id, position, color, ...) this package doesn't model survive the PUT
-// unchanged. Returns ErrOverlayUnsupported if the device has no
-// TextOverlayList or no <displayText> tag in it.
-func (c *Client) SetOverlayText(ctx context.Context, ch int, lines []string) (applied int, err error) {
+// are dropped; the count actually applied is returned), plus each slot's
+// on-screen enable state. enabled[i] wins when present; a shorter enabled
+// slice (or nil) falls back to enabling exactly the slots getting non-empty
+// text — the old implicit behavior. Like mutateStreamChannelStrict, it edits
+// the raw XML in place — replacing only <displayText>/<enabled> inside each
+// Nth <TextOverlay>...</TextOverlay> block — instead of re-marshalling a
+// trimmed struct, so unknown fields (id, position, color, ...) this package
+// doesn't model survive the PUT unchanged. Returns ErrOverlayUnsupported if
+// the device has no TextOverlayList or no <displayText> tag in it.
+func (c *Client) SetOverlayText(ctx context.Context, ch int, lines []string, enabled []bool) (applied int, err error) {
 	path := overlaysPath(ch)
 	raw, err := c.do(ctx, http.MethodGet, path, nil)
 	if err != nil {
@@ -809,7 +814,11 @@ func (c *Client) SetOverlayText(ctx context.Context, ch int, lines []string) (ap
 	}
 	for i := 0; i < n; i++ {
 		raw = replaceXMLTagInNthBlock(raw, "TextOverlay", i, "displayText", xmlEscaper.Replace(lines[i]))
-		raw = replaceXMLTagInNthBlock(raw, "TextOverlay", i, "enabled", boolStr(lines[i] != ""))
+		on := lines[i] != ""
+		if i < len(enabled) {
+			on = enabled[i]
+		}
+		raw = replaceXMLTagInNthBlock(raw, "TextOverlay", i, "enabled", boolStr(on))
 	}
 	resp, err := c.do(ctx, http.MethodPut, path, raw)
 	if err != nil {

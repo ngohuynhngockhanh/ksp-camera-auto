@@ -129,19 +129,22 @@ type Camera interface {
 	// no per-stream snapshot selector, so it ignores stream and always
 	// returns whatever its snapshot pipeline serves.
 	Snapshot(ctx context.Context, channel, stream int) ([]byte, error)
-	// ChannelInfo reads back the device's own name and OSD text lines for one
-	// channel. osdSupported is false (with a nil error) when the
-	// vendor/firmware doesn't expose OSD text at all, so callers can show
-	// "not supported" instead of an error.
-	ChannelInfo(ctx context.Context, channel int) (name string, osdLines []string, osdSupported bool, err error)
+	// ChannelInfo reads back the device's own name and OSD text lines (plus
+	// each line's on-screen enable state) for one channel. osdSupported is
+	// false (with a nil error) when the vendor/firmware doesn't expose OSD
+	// text at all, so callers can show "not supported" instead of an error.
+	ChannelInfo(ctx context.Context, channel int) (name string, osdLines []string, osdEnabled []bool, osdSupported bool, err error)
 	// SetChannelName writes the device's own channel name (distinct from our
 	// inventory label, which /api/cameras already covers).
 	SetChannelName(ctx context.Context, channel int, name string) error
-	// SetOSDLines writes free-text OSD lines for a channel, applying as many
-	// as the device has slots for (returned as applied). Returns an error
-	// wrapping ErrOSDUnsupported-equivalent state as osdSupported=false would
-	// from ChannelInfo — callers should check ChannelInfo first.
-	SetOSDLines(ctx context.Context, channel int, lines []string) (applied int, err error)
+	// SetOSDLines writes free-text OSD lines and each line's on-screen enable
+	// state for a channel, applying as many as the device has slots for
+	// (returned as applied). enabled[i] wins when present; a shorter/nil
+	// enabled falls back to enabling exactly the lines getting non-empty
+	// text. Returns an error wrapping ErrOSDUnsupported-equivalent state as
+	// osdSupported=false would from ChannelInfo — callers should check
+	// ChannelInfo first.
+	SetOSDLines(ctx context.Context, channel int, lines []string, enabled []bool) (applied int, err error)
 	Close() error
 }
 
@@ -255,20 +258,20 @@ func (d *dahuaCamera) Snapshot(ctx context.Context, channel, stream int) ([]byte
 	return dahua.GetSnapshot(ctx, d.device.Host, d.device.Username, d.device.Password, channel, d.timeout)
 }
 
-// ChannelInfo reads back the channel's own name and OSD lines.
-func (d *dahuaCamera) ChannelInfo(ctx context.Context, channel int) (string, []string, bool, error) {
+// ChannelInfo reads back the channel's own name and OSD lines + enable state.
+func (d *dahuaCamera) ChannelInfo(ctx context.Context, channel int) (string, []string, []bool, bool, error) {
 	name, err := d.client.GetChannelTitle(channel)
 	if err != nil {
-		return "", nil, false, err
+		return "", nil, nil, false, err
 	}
-	lines, err := d.client.GetOSDLines(channel)
+	lines, enabled, err := d.client.GetOSDLines(channel)
 	if err != nil {
 		if errors.Is(err, dahua.ErrOSDUnsupported) {
-			return name, nil, false, nil
+			return name, nil, nil, false, nil
 		}
-		return name, nil, false, err
+		return name, nil, nil, false, err
 	}
-	return name, lines, true, nil
+	return name, lines, enabled, true, nil
 }
 
 // SetChannelName writes the device's own channel name.
@@ -276,9 +279,9 @@ func (d *dahuaCamera) SetChannelName(ctx context.Context, channel int, name stri
 	return d.client.SetChannelTitle(channel, name)
 }
 
-// SetOSDLines writes free-text OSD lines for a channel.
-func (d *dahuaCamera) SetOSDLines(ctx context.Context, channel int, lines []string) (int, error) {
-	return d.client.SetOSDLines(channel, lines)
+// SetOSDLines writes free-text OSD lines and enable state for a channel.
+func (d *dahuaCamera) SetOSDLines(ctx context.Context, channel int, lines []string, enabled []bool) (int, error) {
+	return d.client.SetOSDLines(channel, lines, enabled)
 }
 
 // GetPicture reads back the channel's current color+options config.
@@ -595,21 +598,22 @@ func (h *hikCamera) Snapshot(ctx context.Context, channel, stream int) ([]byte, 
 	return h.client.GetSnapshot(ctx, isapiChannel(channel), stream)
 }
 
-// ChannelInfo reads back the channel's own name and OSD overlay lines.
-func (h *hikCamera) ChannelInfo(ctx context.Context, channel int) (string, []string, bool, error) {
+// ChannelInfo reads back the channel's own name and OSD overlay lines +
+// enable state.
+func (h *hikCamera) ChannelInfo(ctx context.Context, channel int) (string, []string, []bool, bool, error) {
 	ch := isapiChannel(channel)
 	name, err := h.client.GetChannelName(ctx, ch)
 	if err != nil {
-		return "", nil, false, err
+		return "", nil, nil, false, err
 	}
-	lines, err := h.client.GetOverlayText(ctx, ch)
+	lines, enabled, err := h.client.GetOverlayText(ctx, ch)
 	if err != nil {
 		if errors.Is(err, hik.ErrOverlayUnsupported) {
-			return name, nil, false, nil
+			return name, nil, nil, false, nil
 		}
-		return name, nil, false, err
+		return name, nil, nil, false, err
 	}
-	return name, lines, true, nil
+	return name, lines, enabled, true, nil
 }
 
 // SetChannelName writes the device's own channel name.
@@ -617,9 +621,10 @@ func (h *hikCamera) SetChannelName(ctx context.Context, channel int, name string
 	return h.client.SetChannelName(ctx, isapiChannel(channel), name)
 }
 
-// SetOSDLines writes free-text OSD overlay lines for a channel.
-func (h *hikCamera) SetOSDLines(ctx context.Context, channel int, lines []string) (int, error) {
-	return h.client.SetOverlayText(ctx, isapiChannel(channel), lines)
+// SetOSDLines writes free-text OSD overlay lines and enable state for a
+// channel.
+func (h *hikCamera) SetOSDLines(ctx context.Context, channel int, lines []string, enabled []bool) (int, error) {
+	return h.client.SetOverlayText(ctx, isapiChannel(channel), lines, enabled)
 }
 
 // isapiChannel converts a vendor-neutral (0-based) Profile.Channel to

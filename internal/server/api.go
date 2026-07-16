@@ -449,22 +449,27 @@ func (s *Server) handleChannelInfo(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	defer cam.Close()
 
-	name, osdLines, osdSupported, err := cam.ChannelInfo(ctx, channel)
+	name, osdLines, osdEnabled, osdSupported, err := cam.ChannelInfo(ctx, channel)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"name": name, "osdLines": osdLines, "osdSupported": osdSupported,
+		"name": name, "osdLines": osdLines, "osdEnabled": osdEnabled, "osdSupported": osdSupported,
 	})
 }
 
 // channelWriteReq is the shared body shape for /api/channel-name and /api/osd.
+// Enabled carries each OSD line's on-screen toggle for /api/osd (ignored by
+// /api/channel-name); a shorter/omitted Enabled falls back to enabling
+// exactly the lines with non-empty text, so callers that don't care about
+// enable state keep the old behavior for free.
 type channelWriteReq struct {
 	ID             string   `json:"id"`
 	Channel        int      `json:"channel"`
 	Name           string   `json:"name"`
 	Lines          []string `json:"lines"`
+	Enabled        []bool   `json:"enabled"`
 	TimeoutSeconds int      `json:"timeoutSeconds"`
 }
 
@@ -515,7 +520,7 @@ func (s *Server) handleOSD(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	defer cam.Close()
 
-	applied, err := cam.SetOSDLines(ctx, req.Channel, req.Lines)
+	applied, err := cam.SetOSDLines(ctx, req.Channel, req.Lines, req.Enabled)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return

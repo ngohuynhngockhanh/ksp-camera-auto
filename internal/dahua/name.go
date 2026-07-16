@@ -44,19 +44,21 @@ func (c *Client) SetChannelTitle(ch int, name string) error {
 var ErrOSDUnsupported = fmt.Errorf("dahua: CustomTitle[].Text not present in this device's VideoWidget table (unverified field — see docs/GOTCHAS.md)")
 
 // GetOSDLines reads back the free-text custom OSD lines currently configured
-// for a channel (VideoWidget[Channel].CustomTitle[index].Text), in index
-// order (Dahua typically exposes up to 4 slots). Returns ErrOSDUnsupported
-// if no slot carries a "Text" key.
-func (c *Client) GetOSDLines(ch int) ([]string, error) {
+// for a channel (VideoWidget[Channel].CustomTitle[index].Text) plus each
+// slot's on-screen enable state (.EncodeBlend), in index order (Dahua
+// typically exposes up to 4 slots). Returns ErrOSDUnsupported if no slot
+// carries a "Text" key.
+func (c *Client) GetOSDLines(ch int) (lines []string, enabled []bool, err error) {
 	table, err := c.getTable("VideoWidget")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	slots, err := customTitleSlots(table, ch)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	lines := make([]string, len(slots))
+	lines = make([]string, len(slots))
+	enabled = make([]bool, len(slots))
 	found := false
 	for i, s := range slots {
 		obj, ok := s.(map[string]any)
@@ -67,20 +69,27 @@ func (c *Client) GetOSDLines(ch int) ([]string, error) {
 			found = true
 			lines[i] = t
 		}
+		if eb, ok := obj["EncodeBlend"].(bool); ok {
+			enabled[i] = eb
+		}
 	}
 	if !found {
-		return nil, ErrOSDUnsupported
+		return nil, nil, ErrOSDUnsupported
 	}
-	return lines, nil
+	return lines, enabled, nil
 }
 
 // SetOSDLines writes up to the device's own number of CustomTitle slots
-// worth of free-text OSD lines for a channel, enabling (EncodeBlend) each
-// slot it writes non-empty text to and disabling ones it clears. Returns the
-// count actually applied. Requires at least one CustomTitle slot to already
-// carry a "Text" key (from the GET half of the round-trip) before writing,
-// so an unsupported device fails loudly via ErrOSDUnsupported.
-func (c *Client) SetOSDLines(ch int, lines []string) (applied int, err error) {
+// worth of free-text OSD lines for a channel, plus each slot's on-screen
+// enable state (.EncodeBlend). enabled[i] wins when present; a shorter
+// enabled slice (or nil, for callers that don't care) falls back to
+// enabling exactly the slots getting non-empty text — the old implicit
+// behavior — so a slot's visibility isn't silently flipped by a caller that
+// only means to change its text. Returns the count actually applied.
+// Requires at least one CustomTitle slot to already carry a "Text" key (from
+// the GET half of the round-trip) before writing, so an unsupported device
+// fails loudly via ErrOSDUnsupported.
+func (c *Client) SetOSDLines(ch int, lines []string, enabled []bool) (applied int, err error) {
 	table, err := c.getTable("VideoWidget")
 	if err != nil {
 		return 0, err
@@ -111,7 +120,11 @@ func (c *Client) SetOSDLines(ch int, lines []string) (applied int, err error) {
 			continue
 		}
 		obj["Text"] = lines[i]
-		obj["EncodeBlend"] = lines[i] != ""
+		on := lines[i] != ""
+		if i < len(enabled) {
+			on = enabled[i]
+		}
+		obj["EncodeBlend"] = on
 		applied++
 	}
 	if err := c.setTable("VideoWidget", table); err != nil {

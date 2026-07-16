@@ -1071,12 +1071,22 @@ async function openChannelEdit(tile) {
     nameInput.value = info.name || '';
     if (info.osdSupported) {
       const lines = (info.osdLines && info.osdLines.length ? info.osdLines : ['', '', '', '']);
-      osdFields.innerHTML = lines.map((line, i) => `
-        <div class="field field-sm">
+      const osdEnabled = info.osdEnabled || [];
+      osdFields.innerHTML = lines.map((line, i) => {
+        // Default matches the server's own fallback (enable exactly the
+        // lines with text) when the device hasn't reported enable state.
+        const on = i < osdEnabled.length ? osdEnabled[i] : !!line;
+        return `
+        <div class="field field-sm ce-osd-row">
           <label>Dòng OSD ${i + 1}</label>
-          <input class="ce-osd-line" value="${escapeHtml(line || '')}">
-        </div>
-      `).join('');
+          <div class="row" style="align-items:center;gap:8px;flex-wrap:nowrap">
+            <input class="ce-osd-line" value="${escapeHtml(line || '')}" style="flex:1 1 auto">
+            <label class="checkbox-row" style="margin:0" title="Hiện trên hình">
+              <input type="checkbox" class="ce-osd-enable" ${on ? 'checked' : ''}><span class="muted">Hiện</span>
+            </label>
+          </div>
+        </div>`;
+      }).join('');
     } else {
       osdHint.textContent = 'Camera này không hỗ trợ (hoặc chưa xác minh) chỉnh OSD qua API — xem docs/GOTCHAS.md.';
     }
@@ -1099,6 +1109,7 @@ document.getElementById('ce-save').addEventListener('click', async () => {
   const msg = document.getElementById('ce-msg');
   const name = document.getElementById('ce-name').value;
   const lines = Array.from(document.querySelectorAll('.ce-osd-line')).map(el => el.value);
+  const enabled = Array.from(document.querySelectorAll('.ce-osd-enable')).map(el => el.checked);
   setBusy(btn, true, 'Đang lưu...');
   msg.textContent = ''; msg.className = 'msg';
   try {
@@ -1109,7 +1120,7 @@ document.getElementById('ce-save').addEventListener('click', async () => {
     if (lines.length) {
       const res = await api('/api/osd', {
         method: 'POST',
-        body: JSON.stringify({ id: channelEditTile.camId, channel: channelEditTile.channel, lines, timeoutSeconds: timeoutSec() }),
+        body: JSON.stringify({ id: channelEditTile.camId, channel: channelEditTile.channel, lines, enabled, timeoutSeconds: timeoutSec() }),
       });
       msg.textContent = `Đã lưu tên. OSD: áp dụng ${res.appliedLines}/${lines.length} dòng.`;
     } else {

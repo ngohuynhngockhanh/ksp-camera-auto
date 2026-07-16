@@ -123,15 +123,17 @@ func (c *Client) GetChannelName(ctx context.Context, ch int) (string, error) {
 	return c.isapi.GetChannelName(ctx, ch)
 }
 
-// GetOverlayText reads back the on-screen text overlay lines for a channel.
-// Returns isapi.ErrOverlayUnsupported if the device doesn't expose them.
-func (c *Client) GetOverlayText(ctx context.Context, ch int) ([]string, error) {
+// GetOverlayText reads back the on-screen text overlay lines for a channel
+// plus each slot's enable state. Returns isapi.ErrOverlayUnsupported if the
+// device doesn't expose them.
+func (c *Client) GetOverlayText(ctx context.Context, ch int) (lines []string, enabled []bool, err error) {
 	return c.isapi.GetOverlayText(ctx, ch)
 }
 
-// SetOverlayText writes on-screen text overlay lines for a channel, applying
-// as many as the device has slots for (returned as applied). Returns
-// isapi.ErrOverlayUnsupported if the device doesn't expose them.
-func (c *Client) SetOverlayText(ctx context.Context, ch int, lines []string) (applied int, err error) {
-	return c.isapi.SetOverlayText(ctx, ch, lines)
+// SetOverlayText writes on-screen text overlay lines and enable state for a
+// channel, applying as many as the device has slots for (returned as
+// applied). Returns isapi.ErrOverlayUnsupported if the device doesn't expose
+// them.
+func (c *Client) SetOverlayText(ctx context.Context, ch int, lines []string, enabled []bool) (applied int, err error) {
+	return c.isapi.SetOverlayText(ctx, ch, lines, enabled)
 }
