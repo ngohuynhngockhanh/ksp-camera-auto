@@ -974,6 +974,23 @@ document.getElementById('lightbox-dialog').addEventListener('click', (ev) => {
 let channelEditTile = null;
 let ceActiveTab = 'name';
 let picturePayload = null; // { color, options } as last fetched from /api/picture, for diffing on save
+let pictureMode = 'lite'; // 'lite' (curated WB/Flip/Rotate/DayNightColor) or 'full' (generic editor)
+
+// switchPictureMode toggles between the curated "Cơ bản" panel and the full
+// generic settings editor within the Chỉnh màu tab. Both panels stay
+// rendered simultaneously (loadPictureTab fills both); this just shows one.
+function switchPictureMode(mode) {
+  pictureMode = mode;
+  document.querySelectorAll('#ce-picture-mode-tabs .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.pfMode === mode));
+  document.getElementById('ce-picture-lite-body').hidden = mode !== 'lite';
+  document.getElementById('ce-picture-body').hidden = mode !== 'full';
+  document.getElementById('ce-picture-full-hint').hidden = mode !== 'full';
+}
+
+document.getElementById('ce-picture-mode-tabs').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('.tab-btn');
+  if (btn) switchPictureMode(btn.dataset.pfMode);
+});
 
 // switchCeTab shows the requested channel-edit-dialog panel ('name' or
 // 'picture') and lazily loads the Chỉnh màu tab's data the first time it's
@@ -993,6 +1010,39 @@ document.getElementById('ce-tabs').addEventListener('click', (ev) => {
   if (btn && !btn.hidden) switchCeTab(btn.dataset.ceTab);
 });
 
+// ceObjectURLs tracks blob: URLs handed to the preview image so they can be
+// revoked on the next load/dialog close, same leak-avoidance as the gallery.
+let ceObjectURLs = [];
+
+async function loadCePreview(tile, cacheBust) {
+  const wrap = document.getElementById('ce-preview-img-wrap');
+  wrap.innerHTML = '<span class="spinner"></span>';
+  ceObjectURLs.forEach(u => URL.revokeObjectURL(u));
+  ceObjectURLs = [];
+  let q = `id=${encodeURIComponent(tile.camId)}&channel=${tile.channel}&stream=${tile.stream}&timeoutSeconds=${timeoutSec()}`;
+  if (cacheBust) q += '&_r=' + Date.now();
+  try {
+    const resp = await fetch('/api/snapshot?' + q);
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      let msg = text || resp.statusText;
+      try { const j = JSON.parse(text); if (j && j.error) msg = j.error; } catch (e) { /* not JSON */ }
+      throw new Error(msg);
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    ceObjectURLs.push(url);
+    wrap.innerHTML = `<img src="${url}" alt="${escapeHtml(tile.camName)} K${tile.channel + 1}">`;
+  } catch (e) {
+    wrap.innerHTML = `<div class="gallery-tile-err-msg">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+document.getElementById('ce-preview-reload').addEventListener('click', () => {
+  if (channelEditTile) loadCePreview(channelEditTile, true);
+});
+
 async function openChannelEdit(tile) {
   channelEditTile = tile;
   picturePayload = null;
@@ -1006,10 +1056,13 @@ async function openChannelEdit(tile) {
   osdFields.innerHTML = '';
   osdHint.textContent = '';
   document.getElementById('ce-picture-body').innerHTML = '';
+  document.getElementById('ce-picture-lite-body').innerHTML = '';
   document.getElementById('ce-picture-msg').textContent = '';
+  switchPictureMode('lite');
   const cam = cameras.find(x => x.id === tile.camId);
   document.getElementById('ce-tab-btn-picture').hidden = !cam || cam.vendor !== 'dahua';
   switchCeTab('name');
+  loadCePreview(tile, false);
   msg.textContent = 'Đang tải...'; msg.className = 'msg';
   dlg.showModal();
   try {
@@ -1035,6 +1088,10 @@ async function openChannelEdit(tile) {
 }
 
 document.getElementById('ce-cancel').addEventListener('click', () => document.getElementById('channel-edit-dialog').close());
+document.getElementById('channel-edit-dialog').addEventListener('close', () => {
+  ceObjectURLs.forEach(u => URL.revokeObjectURL(u));
+  ceObjectURLs = [];
+});
 
 document.getElementById('ce-save').addEventListener('click', async () => {
   if (!channelEditTile) return;
@@ -1123,6 +1180,59 @@ function pictureFieldRow(fullKey, leafKey, value, section) {
   return `<div class="field field-sm pf-row"><label for="${id}">${escapeHtml(leafKey)}</label>${input}</div>`;
 }
 
+// ROTATE90_OPTIONS backs the "Cơ bản" tab's rotate stepper (prev/next
+// buttons cycling through the 3 values the device actually supports,
+// instead of a raw dropdown — "step xoay").
+const ROTATE90_OPTIONS = [['0', 'Không xoay'], ['1', 'Xoay 90° thuận'], ['2', 'Xoay 90° ngược']];
+
+function renderRotateStepper(value) {
+  let idx = ROTATE90_OPTIONS.findIndex(([v]) => v === String(value));
+  if (idx < 0) idx = 0;
+  return `
+    <div class="field field-sm pf-row">
+      <label>Xoay ảnh</label>
+      <div class="pf-stepper">
+        <button type="button" class="pf-stepper-btn" data-pf-rotate-prev aria-label="Xoay trước">&lt;</button>
+        <span class="pf-stepper-label" id="pf-rotate-label">${escapeHtml(ROTATE90_OPTIONS[idx][1])}</span>
+        <button type="button" class="pf-stepper-btn" data-pf-rotate-next aria-label="Xoay sau">&gt;</button>
+        <input type="hidden" id="pf-lite-Rotate90" data-pf-key="Rotate90" data-pf-section="options" value="${ROTATE90_OPTIONS[idx][0]}">
+      </div>
+    </div>`;
+}
+
+// wireRotateStepper hooks the prev/next buttons rendered by
+// renderRotateStepper — called once after inserting it into the DOM (the
+// buttons don't exist before that).
+function wireRotateStepper() {
+  const hidden = document.getElementById('pf-lite-Rotate90');
+  const label = document.getElementById('pf-rotate-label');
+  const prev = document.querySelector('[data-pf-rotate-prev]');
+  const next = document.querySelector('[data-pf-rotate-next]');
+  if (!hidden || !prev || !next) return;
+  const step = (delta) => {
+    let idx = ROTATE90_OPTIONS.findIndex(([v]) => v === hidden.value);
+    idx = (idx + delta + ROTATE90_OPTIONS.length) % ROTATE90_OPTIONS.length;
+    hidden.value = ROTATE90_OPTIONS[idx][0];
+    label.textContent = ROTATE90_OPTIONS[idx][1];
+  };
+  prev.addEventListener('click', () => step(-1));
+  next.addEventListener('click', () => step(1));
+}
+
+// renderLiteFields is the "Cơ bản" (lite) panel: a curated subset of
+// VideoInOptions — White Balance, Flip, Rotate (as a stepper), and the
+// day/night color mode — reusing pictureFieldRow so these stay visually and
+// behaviorally consistent with the full editor's equivalent fields.
+function renderLiteFields(options) {
+  options = options || {};
+  return '<div class="pf-section-body">' +
+    pictureFieldRow('WhiteBalance', 'WhiteBalance', options.WhiteBalance, 'options') +
+    pictureFieldRow('Flip', 'Flip', !!options.Flip, 'options') +
+    renderRotateStepper(options.Rotate90) +
+    pictureFieldRow('DayNightColor', 'DayNightColor', options.DayNightColor, 'options') +
+    '</div>';
+}
+
 // renderObjectFields recurses one level into nested objects (e.g.
 // FlashControl) inline, skipping keys in skipKeys (used to carve
 // NightOptions/NormalOptions out into their own top-level sections) and
@@ -1170,6 +1280,14 @@ function applyCapsDisabling(caps) {
   if (caps.WhiteBalance === '0') {
     document.querySelectorAll('[data-pf-key="WhiteBalance"], [data-pf-key$=".WhiteBalance"]').forEach(el => { el.disabled = true; });
   }
+  // The rotate stepper's prev/next buttons aren't [data-pf-key] elements
+  // themselves (only the hidden input backing them is) — grey them out too
+  // when that hidden input got locked above.
+  document.querySelectorAll('.pf-stepper [data-pf-key="Rotate90"]').forEach(hidden => {
+    if (hidden.disabled) {
+      hidden.closest('.pf-stepper').querySelectorAll('button').forEach(b => { b.disabled = true; });
+    }
+  });
   const body = document.getElementById('ce-picture-body');
   if (caps.SetColor === 'false') {
     const sec = body.querySelector('.pf-section-color');
@@ -1183,8 +1301,10 @@ function applyCapsDisabling(caps) {
 
 async function loadPictureTab(tile) {
   const body = document.getElementById('ce-picture-body');
+  const liteBody = document.getElementById('ce-picture-lite-body');
   const msg = document.getElementById('ce-picture-msg');
   body.innerHTML = '<span class="muted">Đang tải...</span>';
+  liteBody.innerHTML = '<span class="muted">Đang tải...</span>';
   msg.textContent = ''; msg.className = 'msg';
   try {
     const q = `id=${encodeURIComponent(tile.camId)}&channel=${tile.channel}&timeoutSeconds=${timeoutSec()}`;
@@ -1194,6 +1314,8 @@ async function loadPictureTab(tile) {
       ? `<p class="muted">Không đọc được thông tin hỗ trợ (caps): ${escapeHtml(info.capsError)} — mọi trường vẫn hiện, camera có thể bỏ qua trường không hỗ trợ khi lưu.</p>`
       : '';
     const options = info.options || {};
+    liteBody.innerHTML = renderLiteFields(options);
+    wireRotateStepper();
     body.innerHTML = capsHint +
       collapsibleSection('Màu sắc', renderObjectFields(info.color, '', null, 'color'), 'pf-section-color', true) +
       collapsibleSection('Ảnh chung', renderObjectFields(options, '', ['NightOptions', 'NormalOptions'], 'options'), 'pf-section-options', true) +
@@ -1203,6 +1325,7 @@ async function loadPictureTab(tile) {
     applyCapsDisabling(info.caps);
   } catch (e) {
     body.innerHTML = '';
+    liteBody.innerHTML = '';
     msg.textContent = 'Lỗi tải: ' + e.message;
     msg.className = 'msg err';
   }
@@ -1215,7 +1338,8 @@ async function loadPictureTab(tile) {
 function collectPictureChanges() {
   const color = {};
   const options = {};
-  document.querySelectorAll('#ce-picture-body [data-pf-key]').forEach(el => {
+  const containerId = pictureMode === 'lite' ? 'ce-picture-lite-body' : 'ce-picture-body';
+  document.querySelectorAll('#' + containerId + ' [data-pf-key]').forEach(el => {
     if (el.disabled) return;
     const key = el.dataset.pfKey;
     const section = el.dataset.pfSection;

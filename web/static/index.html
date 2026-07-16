@@ -368,26 +368,42 @@
     <dialog id="channel-edit-dialog" class="dialog-wide">
       <div class="dialog-body">
         <div class="dialog-title" id="ce-title">Sửa tên &amp; OSD</div>
-        <div class="tab-strip" id="ce-tabs">
-          <button type="button" class="tab-btn active" data-ce-tab="name">Tên &amp; OSD</button>
-          <button type="button" class="tab-btn" id="ce-tab-btn-picture" data-ce-tab="picture" hidden>Chỉnh màu</button>
-        </div>
-
-        <div id="ce-panel-name">
-          <div class="msg" id="ce-msg"></div>
-          <div class="field">
-            <label for="ce-name">Tên trên camera (kênh)</label>
-            <input id="ce-name">
+        <div class="ce-layout">
+          <div class="ce-preview">
+            <div class="ce-preview-img-wrap" id="ce-preview-img-wrap"><span class="spinner"></span></div>
+            <button class="btn btn-secondary btn-block" type="button" id="ce-preview-reload">Tải lại ảnh</button>
           </div>
-          <div id="ce-osd-fields"></div>
-          <p class="muted" id="ce-osd-hint"></p>
-        </div>
+          <div class="ce-form">
+            <div class="tab-strip" id="ce-tabs">
+              <button type="button" class="tab-btn active" data-ce-tab="name">Tên &amp; OSD</button>
+              <button type="button" class="tab-btn" id="ce-tab-btn-picture" data-ce-tab="picture" hidden>Chỉnh màu</button>
+            </div>
 
-        <div id="ce-panel-picture" hidden>
-          <p class="card-sub">Đọc/ghi trực tiếp mọi thông số Dahua hỗ trợ cho kênh này (VideoColor + VideoInOptions, gồm cả profile Ban đêm/Ban ngày phụ). Trường bị camera báo không hỗ trợ sẽ bị khoá.</p>
-          <div class="msg" id="ce-picture-msg"></div>
-          <div id="ce-picture-body"></div>
-          <button class="btn section-gap" type="button" id="ce-picture-save">Lưu chỉnh màu</button>
+            <div id="ce-panel-name">
+              <div class="msg" id="ce-msg"></div>
+              <div class="field">
+                <label for="ce-name">Tên trên camera (kênh)</label>
+                <input id="ce-name">
+              </div>
+              <div id="ce-osd-fields"></div>
+              <p class="muted" id="ce-osd-hint"></p>
+            </div>
+
+            <div id="ce-panel-picture" hidden>
+              <div class="tab-strip" id="ce-picture-mode-tabs">
+                <button type="button" class="tab-btn active" data-pf-mode="lite">Cơ bản</button>
+                <button type="button" class="tab-btn" data-pf-mode="full">Đầy đủ</button>
+              </div>
+              <div class="msg" id="ce-picture-msg"></div>
+
+              <div id="ce-picture-lite-body"></div>
+
+              <div id="ce-picture-body" hidden></div>
+              <p class="muted" id="ce-picture-full-hint" hidden>Đọc/ghi trực tiếp mọi thông số Dahua hỗ trợ cho kênh này (VideoColor + VideoInOptions, gồm cả profile Ban đêm/Ban ngày phụ). Trường bị camera báo không hỗ trợ sẽ bị khoá.</p>
+
+              <button class="btn section-gap" type="button" id="ce-picture-save">Lưu chỉnh màu</button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="dialog-actions">
