@@ -836,6 +836,45 @@ func (s *Server) handleWiFiScan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"devices": aps})
 }
 
+// handlePTZ handles POST /api/ptz: issue one PTZ start/stop command for a
+// Dahua camera. The UI's PTZ pad posts {start:true} on button press and
+// {start:false} on release (same code), so pan/tilt runs while held.
+func (s *Server) handlePTZ(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req struct {
+		ID             string `json:"id"`
+		Channel        int    `json:"channel"`
+		Code           string `json:"code"`
+		Speed          int    `json:"speed"`
+		Start          bool   `json:"start"`
+		TimeoutSeconds int    `json:"timeoutSeconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, req.ID, req.TimeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	ptz, ok := cam.(camera.PTZControl)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	if err := ptz.PTZMove(ctx, req.Channel, req.Code, req.Speed, req.Start); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 // handleApply handles POST /api/apply: push a profile to a set of devices,
 // one at a time via the bulk orchestrator, streaming each progress event to
 // the client as a Server-Sent-Events-style body so the UI can render a live,

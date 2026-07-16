@@ -84,6 +84,7 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/wifi", api(s.handleWiFi))
 	s.mux.Handle("/api/wifi-scan", api(s.handleWiFiScan))
 	s.mux.Handle("/api/scan/try-password", api(s.handleTryPassword))
+	s.mux.Handle("/api/ptz", api(s.handlePTZ))
 
 	// Authenticated app + static assets.
 	fileServer := http.FileServer(http.FS(s.static))

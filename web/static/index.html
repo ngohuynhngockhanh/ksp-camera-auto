@@ -400,6 +400,7 @@
             <div class="tab-strip" id="ce-tabs">
               <button type="button" class="tab-btn active" data-ce-tab="name">Tên &amp; OSD</button>
               <button type="button" class="tab-btn" id="ce-tab-btn-picture" data-ce-tab="picture" hidden>Chỉnh màu</button>
+              <button type="button" class="tab-btn" id="ce-tab-btn-ptz" data-ce-tab="ptz" hidden>PTZ</button>
             </div>
 
             <div id="ce-panel-name">
@@ -425,6 +426,34 @@
               <p class="muted" id="ce-picture-full-hint" hidden>Đọc/ghi trực tiếp mọi thông số Dahua hỗ trợ cho kênh này (VideoColor + VideoInOptions, gồm cả profile Ban đêm/Ban ngày phụ). Trường bị camera báo không hỗ trợ sẽ bị khoá.</p>
 
               <button class="btn section-gap" type="button" id="ce-picture-save">Lưu chỉnh màu</button>
+            </div>
+
+            <div id="ce-panel-ptz" hidden>
+              <p class="card-sub">Giữ nút để xoay/zoom, thả ra để dừng. Chỉ dùng được với camera Dahua có cơ cấu PTZ và mở cổng HTTP (80).</p>
+              <div class="msg" id="ce-ptz-msg"></div>
+              <div class="ptz-pad">
+                <button class="ptz-btn" data-ptz="LeftUp" aria-label="Trái trên">↖</button>
+                <button class="ptz-btn" data-ptz="Up" aria-label="Lên">↑</button>
+                <button class="ptz-btn" data-ptz="RightUp" aria-label="Phải trên">↗</button>
+                <button class="ptz-btn" data-ptz="Left" aria-label="Trái">←</button>
+                <button class="ptz-btn ptz-center" disabled>●</button>
+                <button class="ptz-btn" data-ptz="Right" aria-label="Phải">→</button>
+                <button class="ptz-btn" data-ptz="LeftDown" aria-label="Trái dưới">↙</button>
+                <button class="ptz-btn" data-ptz="Down" aria-label="Xuống">↓</button>
+                <button class="ptz-btn" data-ptz="RightDown" aria-label="Phải dưới">↘</button>
+              </div>
+              <div class="field field-sm section-gap">
+                <label for="ce-ptz-speed">Tốc độ (1–8)</label>
+                <input id="ce-ptz-speed" type="range" min="1" max="8" value="5">
+              </div>
+              <div class="row">
+                <button class="btn btn-secondary" data-ptz="ZoomTele">Zoom + (gần)</button>
+                <button class="btn btn-secondary" data-ptz="ZoomWide">Zoom − (xa)</button>
+              </div>
+              <div class="row section-gap">
+                <button class="btn btn-secondary" data-ptz="FocusFar">Nét xa</button>
+                <button class="btn btn-secondary" data-ptz="FocusNear">Nét gần</button>
+              </div>
             </div>
           </div>
         </div>

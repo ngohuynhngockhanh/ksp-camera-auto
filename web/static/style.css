@@ -394,6 +394,22 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
 .pf-stepper-btn:hover { background: var(--surface-2); }
 .pf-stepper-label { min-width: 90px; text-align: center; font-size: .85rem; }
 
+/* ---------- PTZ pad ---------- */
+
+.ptz-pad {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  max-width: 220px; margin: 12px 0;
+}
+.ptz-btn {
+  aspect-ratio: 1; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); font-size: 1.3rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; user-select: none; touch-action: none;
+}
+.ptz-btn:hover:not(:disabled) { background: var(--surface-2); }
+.ptz-btn:active:not(:disabled) { background: var(--info); color: #fff; }
+.ptz-btn.ptz-center { cursor: default; color: var(--muted); }
+.ptz-btn:disabled { opacity: .5; }
+
 /* ---------- snapshot gallery ---------- */
 
 .gallery-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); margin-top: 12px; }

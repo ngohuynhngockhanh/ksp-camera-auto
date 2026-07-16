@@ -995,6 +995,69 @@ document.getElementById('ce-picture-mode-tabs').addEventListener('click', (ev) =
   if (btn) switchPictureMode(btn.dataset.pfMode);
 });
 
+// Live-update a range slider's <output> readout as it's dragged. Delegated
+// on the lite panel so it covers sliders rendered later (backlight family).
+document.getElementById('ce-picture-lite-body').addEventListener('input', (ev) => {
+  if (ev.target.type !== 'range') return;
+  const out = ev.target.parentElement.querySelector('.pf-range-out');
+  if (out) out.textContent = ev.target.value;
+});
+
+/* ---------- PTZ pad (Dahua) ---------- */
+
+// sendPTZ fires one /api/ptz command. start=true begins motion, false stops
+// it; failures surface in the PTZ tab's message line (a stop that fails is
+// logged but not surfaced, to avoid masking the more useful start error).
+async function sendPTZ(code, start) {
+  if (!channelEditTile) return;
+  try {
+    await api('/api/ptz', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: channelEditTile.camId, channel: channelEditTile.channel, code,
+        speed: parseInt(document.getElementById('ce-ptz-speed').value, 10) || 5,
+        start, timeoutSeconds: timeoutSec(),
+      }),
+    });
+    if (start) { const m = document.getElementById('ce-ptz-msg'); m.textContent = ''; m.className = 'msg'; }
+  } catch (e) {
+    if (start) {
+      const m = document.getElementById('ce-ptz-msg');
+      m.textContent = 'Lỗi PTZ: ' + e.message + ' (camera có mở cổng 80 và hỗ trợ PTZ không?)';
+      m.className = 'msg err';
+    }
+  }
+}
+
+// Wire every [data-ptz] button as press-and-hold: pointerdown starts motion,
+// pointerup/leave/cancel stops it. ptzActive guards against a missed "up"
+// (e.g. pointer left the button) sending a stop for a code that never
+// started.
+let ptzActive = null;
+function ptzStart(code) {
+  if (ptzActive) return;
+  ptzActive = code;
+  sendPTZ(code, true);
+}
+function ptzStop() {
+  if (!ptzActive) return;
+  const code = ptzActive;
+  ptzActive = null;
+  sendPTZ(code, false);
+}
+document.getElementById('ce-panel-ptz').addEventListener('pointerdown', (ev) => {
+  const btn = ev.target.closest('[data-ptz]');
+  if (!btn) return;
+  ev.preventDefault();
+  btn.setPointerCapture?.(ev.pointerId);
+  ptzStart(btn.dataset.ptz);
+});
+document.getElementById('ce-panel-ptz').addEventListener('pointerup', ptzStop);
+document.getElementById('ce-panel-ptz').addEventListener('pointercancel', ptzStop);
+document.getElementById('ce-panel-ptz').addEventListener('pointerleave', ptzStop);
+// Belt-and-suspenders: if the dialog closes mid-press, stop the camera.
+document.getElementById('channel-edit-dialog').addEventListener('close', ptzStop);
+
 // switchCeTab shows the requested channel-edit-dialog panel ('name' or
 // 'picture') and lazily loads the Chỉnh màu tab's data the first time it's
 // opened for the current tile (picturePayload stays null until then).
@@ -1003,6 +1066,7 @@ function switchCeTab(tab) {
   document.querySelectorAll('#ce-tabs .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.ceTab === tab));
   document.getElementById('ce-panel-name').hidden = tab !== 'name';
   document.getElementById('ce-panel-picture').hidden = tab !== 'picture';
+  document.getElementById('ce-panel-ptz').hidden = tab !== 'ptz';
   if (tab === 'picture' && channelEditTile && !picturePayload) {
     loadPictureTab(channelEditTile);
   }
@@ -1064,6 +1128,8 @@ async function openChannelEdit(tile) {
   switchPictureMode('lite');
   const cam = cameras.find(x => x.id === tile.camId);
   document.getElementById('ce-tab-btn-picture').hidden = !cam || cam.vendor !== 'dahua';
+  document.getElementById('ce-tab-btn-ptz').hidden = !cam || cam.vendor !== 'dahua';
+  document.getElementById('ce-ptz-msg').textContent = '';
   switchCeTab('name');
   loadCePreview(tile, false);
   msg.textContent = 'Đang tải...'; msg.className = 'msg';
@@ -1239,20 +1305,50 @@ function wireRotateStepper() {
 // behaviorally consistent with the full editor's equivalent fields.
 function renderLiteFields(options) {
   options = options || {};
+  // Backlight family (Dahua VideoInOptions): three independent intensity
+  // fields the device returns, per dahua_http_api_for_ipcsd-v1.40.pdf §4.3.3
+  // — Backlight (BLC compensation, grade 0-n, 0=off), GlareInhibition (HLC
+  // highlight suppression, 0-100, 0=off), WideDynamicRange (WDR, 0-100,
+  // 0=off). Rendered as sliders only when the field is actually present in
+  // the device's response, so a camera that doesn't support one simply won't
+  // show it (rather than us guessing a synthetic "mode" enum that varies by
+  // firmware).
+  let backlight = '';
+  if ('Backlight' in options) backlight += pictureRangeRow('Backlight', 'Bù ngược sáng (BLC)', toNum(options.Backlight, 0), 'options', 100);
+  if ('GlareInhibition' in options) backlight += pictureRangeRow('GlareInhibition', 'Chống chói (HLC)', toNum(options.GlareInhibition, 0), 'options', 100);
+  if ('WideDynamicRange' in options) backlight += pictureRangeRow('WideDynamicRange', 'Dải tương phản rộng (WDR)', toNum(options.WideDynamicRange, 0), 'options', 100);
+
   return '<div class="pf-section-body">' +
     pictureFieldRow('WhiteBalance', 'WhiteBalance', options.WhiteBalance, 'options') +
     pictureFieldRow('Flip', 'Flip', !!options.Flip, 'options') +
     renderRotateStepper(options.Rotate90) +
     pictureFieldRow('DayNightColor', 'DayNightColor', options.DayNightColor, 'options') +
     pictureFieldRow('ExposureMode', 'ExposureMode', options.ExposureMode, 'options') +
-    pictureFieldRow('Backlight', 'Backlight', toNum(options.Backlight, 0), 'options') +
+    backlight +
     '</div>';
 }
 
-// toNum coerces v to a number for a number-typed pf row (Backlight etc.),
-// defaulting when the device didn't return the field at all.
+// toNum coerces v to a number for a number-typed pf row, defaulting when the
+// device didn't return the field at all.
 function toNum(v, def) {
   return (typeof v === 'number') ? v : def;
+}
+
+// pictureRangeRow renders a slider (with a live value readout) for an integer
+// intensity field. Carries the same data-pf-key/data-pf-type="number"
+// attributes pictureFieldRow uses, so collectPictureChanges picks it up with
+// no special handling. 0 means the feature is off for all three backlight
+// fields, so the slider naturally doubles as an on/off + intensity control.
+function pictureRangeRow(fullKey, label, value, section, max) {
+  const id = 'pf-' + fullKey.replace(/\./g, '-');
+  return `<div class="field field-sm pf-row" style="flex-basis:100%">
+    <label for="${id}">${escapeHtml(label)}</label>
+    <div class="row" style="align-items:center;gap:10px;flex-wrap:nowrap">
+      <input type="range" id="${id}" data-pf-key="${escapeHtml(fullKey)}" data-pf-section="${section}" data-pf-type="number"
+        min="0" max="${max}" value="${value}" style="flex:1 1 auto">
+      <output class="pf-range-out" for="${id}" style="min-width:2.5em;text-align:right">${value}</output>
+    </div>
+  </div>`;
 }
 
 // renderObjectFields recurses one level into nested objects (e.g.

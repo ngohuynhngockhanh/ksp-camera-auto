@@ -191,6 +191,15 @@ type NetworkSettings interface {
 	ScanWiFi(ctx context.Context) ([]dahua.WiFiAP, error)
 }
 
+// PTZControl is implemented by cameras that support live pan/tilt/zoom.
+// Only dahuaCamera implements it (Dahua HTTP CGI); callers type-assert.
+type PTZControl interface {
+	// PTZMove issues one PTZ command. start=true begins motion for code,
+	// start=false stops it — a UI pad calls start on press and stop on
+	// release. speed is the pan/tilt speed (1-8; ignored for zoom/focus).
+	PTZMove(ctx context.Context, channel int, code string, speed int, start bool) error
+}
+
 // Open dials the device according to its configured vendor and returns a
 // Camera implementation.
 //
@@ -326,6 +335,12 @@ func (d *dahuaCamera) SetWiFiConfig(ctx context.Context, iface, ssid, password, 
 // connection from the DVRIP session, same as Snapshot).
 func (d *dahuaCamera) ScanWiFi(ctx context.Context) ([]dahua.WiFiAP, error) {
 	return dahua.ScanWiFi(ctx, d.device.Host, d.device.Username, d.device.Password, d.timeout)
+}
+
+// PTZMove issues one PTZ command via HTTP CGI (a separate connection from the
+// DVRIP session, same as Snapshot).
+func (d *dahuaCamera) PTZMove(ctx context.Context, channel int, code string, speed int, start bool) error {
+	return dahua.PTZMove(ctx, d.device.Host, d.device.Username, d.device.Password, channel, code, speed, start, d.timeout)
 }
 
 // Probe reads back main + sub1 + sub2 stream info for channel 0.
