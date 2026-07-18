@@ -748,7 +748,7 @@ function renderNetworkBody(net, wifi) {
       <div class="field field-sm"><label for="net-dns1">DNS 1</label><input id="net-dns1" value="${escapeHtml(dns[0] || '')}" placeholder="8.8.8.8"></div>
       <div class="field field-sm"><label for="net-dns2">DNS 2</label><input id="net-dns2" value="${escapeHtml(dns[1] || '')}" placeholder="1.1.1.1"></div>
     </div>
-    <p class="muted">MAC: ${escapeHtml(iface.PhysicalAddress || '–')} · MTU: ${escapeHtml(String(iface.MTU == null ? '–' : iface.MTU))}</p>
+    <p class="muted" id="net-macmtu">MAC: ${escapeHtml(iface.PhysicalAddress || '–')} · MTU: ${escapeHtml(String(iface.MTU == null ? '–' : iface.MTU))}</p>
     <div class="checkbox-row"><input type="checkbox" id="net-confirm-risk"><label for="net-confirm-risk">Tôi hiểu đổi IP/gateway sai có thể khiến camera mất kết nối, phải vào tận nơi để sửa lại.</label></div>
     <button class="btn btn-danger" type="button" id="net-save-btn" disabled>Lưu cấu hình mạng</button>
   `;
@@ -774,6 +774,25 @@ function renderNetworkBody(net, wifi) {
 
   const dhcpCb = document.getElementById('net-dhcp');
   dhcpCb.addEventListener('change', () => { document.getElementById('net-static-fields').hidden = dhcpCb.checked; });
+
+  // Switching the interface dropdown reloads every field with that interface's
+  // own config (previously the form kept showing the default interface's IP).
+  const ifaceSel = document.getElementById('net-iface');
+  if (ifaceSel && ifaceSel.tagName === 'SELECT') {
+    ifaceSel.addEventListener('change', () => {
+      const ic = net.interfaces[ifaceSel.value] || {};
+      const idns = Array.isArray(ic.DnsServers) ? ic.DnsServers : [];
+      dhcpCb.checked = !!ic.DhcpEnable;
+      document.getElementById('net-static-fields').hidden = !!ic.DhcpEnable;
+      document.getElementById('net-ip').value = ic.IPAddress || '';
+      document.getElementById('net-mask').value = ic.SubnetMask || '';
+      document.getElementById('net-gw').value = ic.DefaultGateway || '';
+      document.getElementById('net-dns1').value = idns[0] || '';
+      document.getElementById('net-dns2').value = idns[1] || '';
+      const macmtu = document.getElementById('net-macmtu');
+      if (macmtu) macmtu.textContent = `MAC: ${ic.PhysicalAddress || '–'} · MTU: ${ic.MTU == null ? '–' : ic.MTU}`;
+    });
+  }
   const netConfirm = document.getElementById('net-confirm-risk');
   const netSaveBtn = document.getElementById('net-save-btn');
   netConfirm.addEventListener('change', () => { netSaveBtn.disabled = !netConfirm.checked; });

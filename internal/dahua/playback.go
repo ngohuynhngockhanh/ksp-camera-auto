@@ -27,7 +27,11 @@ func playbackRTSPURL(host, user, pass string, channel int, start, end time.Time)
 		Host:   fmt.Sprintf("%s:554", host),
 		Path:   "/cam/playback",
 		RawQuery: url.Values{
-			"channel":   {fmt.Sprintf("%d", channel+1)},
+			"channel": {fmt.Sprintf("%d", channel+1)},
+			// subtype 0 = main stream. Required by some models (e.g. the wired
+			// cams on inut_205_43 return "Invalid data" for playback without it);
+			// harmless on models that ignore it.
+			"subtype":   {"0"},
 			"starttime": {start.Format(f)},
 			"endtime":   {end.Format(f)},
 		}.Encode(),
