@@ -1277,7 +1277,7 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 	ext, ctype := "mp4", "video/mp4"
 	if q.Get("fast") != "" {
 		stream = dahua.StreamPlaybackFast
-		ext, ctype = "ts", "video/mp2t"
+		ext, ctype = "mp4", "video/mp4" // fast download is remuxed to fragmented MP4 (iPhone-friendly)
 	}
 	fname := fmt.Sprintf("playback_ch%d_%s.%s", channel, start.Format("20060102_150405"), ext)
 	w.Header().Set("Content-Type", ctype)

@@ -37,16 +37,44 @@ func StreamPlaybackFast(ctx context.Context, w io.Writer, host, user, pass strin
 	case <-ctx.Done():
 		return fmt.Errorf("dahua: fast playback %s: %w (waiting for a slot)", host, ctx.Err())
 	}
+
+	// The per-chunk output is MPEG-TS (the only container that concatenates), but
+	// HEVC-in-TS won't play in some players (VLC on iOS shows black). So pipe the
+	// concatenated TS through one final ffmpeg that re-containers it — copy, no
+	// re-encode — into a fragmented MP4, which iPhone/AVPlayer plays natively.
+	pr, pw := io.Pipe()
+	remux := exec.CommandContext(ctx, "ffmpeg",
+		"-nostdin", "-i", "pipe:0",
+		"-c", "copy",
+		"-movflags", "frag_keyframe+empty_moov+default_base_moof",
+		"-f", "mp4", "-y", "pipe:1",
+	)
+	remux.Stdin = pr
+	remux.Stdout = w
+	rerr := &tailWriter{max: 4096}
+	remux.Stderr = rerr
+	remuxDone := make(chan error, 1)
+	go func() { remuxDone <- remux.Run() }()
+
 	tsOffset := 0.0 // cumulative video seconds, so each chunk's timestamps continue the last
+	var loopErr error
 	for t := start; t.Before(end); t = t.Add(fastChunk) {
 		ce := t.Add(fastChunk)
 		if ce.After(end) {
 			ce = end
 		}
-		if err := streamChunkFast(ctx, w, host, user, pass, channel, t, ce, tsOffset); err != nil {
-			return err
+		if loopErr = streamChunkFast(ctx, pw, host, user, pass, channel, t, ce, tsOffset); loopErr != nil {
+			break
 		}
 		tsOffset += ce.Sub(t).Seconds()
+	}
+	_ = pw.Close() // EOF -> the remux ffmpeg finishes
+	remuxErr := <-remuxDone
+	if loopErr != nil {
+		return loopErr
+	}
+	if remuxErr != nil {
+		return fmt.Errorf("dahua: fast playback %s: remux: %w: %s", host, remuxErr, snapshotTail(rerr.buf, 300))
 	}
 	return nil
 }
