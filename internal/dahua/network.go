@@ -241,6 +241,7 @@ func (c *Client) ScanWiFiRPC(iface string) ([]WiFiAP, error) {
 			SSID        string `json:"SSID"`
 			BSSID       string `json:"BSSID"`
 			Encryption  string `json:"Encryption"`
+			Strength    int    `json:"Strength"`
 			LinkQuality int    `json:"LinkQuality"`
 		} `json:"wlanDevice"`
 	}
@@ -253,7 +254,14 @@ func (c *Client) ScanWiFiRPC(iface string) ([]WiFiAP, error) {
 		if d.Encryption != "" && d.Encryption != "Off" {
 			auth = "Encrypted"
 		}
-		out = append(out, WiFiAP{SSID: d.SSID, BSSID: d.BSSID, AuthMode: auth, LinkQuality: d.LinkQuality})
+		// Signal %: some firmware fills Strength (0-100) and leaves LinkQuality
+		// at 0 (seen on the wired cams on inut_205_43), others fill both. Prefer
+		// Strength, fall back to LinkQuality.
+		quality := d.Strength
+		if quality == 0 {
+			quality = d.LinkQuality
+		}
+		out = append(out, WiFiAP{SSID: d.SSID, BSSID: d.BSSID, AuthMode: auth, LinkQuality: quality})
 	}
 	return out, nil
 }
