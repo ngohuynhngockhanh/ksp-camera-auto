@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -132,28 +133,138 @@ func runRTSPProxy(ctx context.Context, client net.Conn, host, user, pass string)
 		}
 	}
 
-	// Media phase: relay both directions verbatim (interleaved RTP + any
-	// keepalive/teardown) until either side closes.
-	done := make(chan struct{}, 2)
-	go func() { io.Copy(client, io.MultiReader(bytes.NewReader(drain(camR)), camConn)); done <- struct{}{} }()
-	go func() { io.Copy(camConn, io.MultiReader(bytes.NewReader(drain(cr)), client)); done <- struct{}{} }()
-	<-done
+	// Media phase. Both directions carry TCP-interleaved RTP/RTCP frames
+	// ($-prefixed) mixed with RTSP messages, so a dumb byte relay is wrong:
+	// ffmpeg's periodic RTSP keepalive would be forwarded to the camera with
+	// the proxy's URI and no auth, and the camera would drop the session
+	// mid-download (observed: the stream ended at the first keepalive). Instead:
+	//   - camera->ffmpeg: relay interleaved frames; drop RTSP responses (they are
+	//     replies to the proxy's own keepalives).
+	//   - ffmpeg->camera: relay interleaved frames; answer ffmpeg's keepalive
+	//     RTSP requests LOCALLY (never forward them).
+	//   - the proxy independently keepalives the camera so its session stays up.
+	var camWrite, cliWrite sync.Mutex
+	writeCam := func(b []byte) error { camWrite.Lock(); defer camWrite.Unlock(); _, e := camConn.Write(b); return e }
+	writeCli := func(b []byte) error { cliWrite.Lock(); defer cliWrite.Unlock(); _, e := client.Write(b); return e }
+	errc := make(chan error, 3)
+
+	go func() { // camera -> ffmpeg
+		for {
+			frame, msg, err := readInterleavedOrMessage(camR)
+			if err != nil {
+				errc <- err
+				return
+			}
+			if frame != nil {
+				if err := writeCli(frame); err != nil {
+					errc <- err
+					return
+				}
+			}
+			_ = msg // RTSP response to our keepalive: drop
+		}
+	}()
+	go func() { // ffmpeg -> camera
+		for {
+			frame, msg, err := readInterleavedOrMessage(cr)
+			if err != nil {
+				errc <- err
+				return
+			}
+			if frame != nil {
+				if err := writeCam(frame); err != nil {
+					errc <- err
+					return
+				}
+				continue
+			}
+			// ffmpeg RTSP request (keepalive/teardown): answer locally.
+			cseq := headerValue(msg, "CSeq")
+			_ = writeCli([]byte("RTSP/1.0 200 OK\r\nCSeq: " + cseq + "\r\nSession: keep\r\n\r\n"))
+			if bytes.HasPrefix(msg, []byte("TEARDOWN")) {
+				errc <- nil
+				return
+			}
+		}
+	}()
+	go func() { // keep the camera session alive during long downloads
+		t := time.NewTicker(20 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				uri := "rtsp://" + camHostPort
+				req := "GET_PARAMETER " + uri + " RTSP/1.0\r\nCSeq: 9999\r\n"
+				if auth.nonce != "" {
+					req += "Authorization: " + auth.authHeader("GET_PARAMETER", uri) + "\r\n"
+				}
+				req += "\r\n"
+				_ = writeCam([]byte(req))
+			}
+		}
+	}()
+	<-errc
 	return nil
 }
 
-// drain returns whatever bytes a bufio.Reader has already buffered (so the
-// switch from request-parsing to raw relay doesn't lose the first interleaved
-// bytes that arrived alongside the PLAY response).
-func drain(r *bufio.Reader) []byte {
-	n := r.Buffered()
-	if n == 0 {
-		return nil
+// readInterleavedOrMessage reads either one TCP-interleaved RTP/RTCP frame
+// ($ + 1-byte channel + 2-byte big-endian length + payload) — returned as
+// `frame` verbatim for relay — or one RTSP message (request or response),
+// returned as `msg`. Exactly one is non-nil.
+func readInterleavedOrMessage(r *bufio.Reader) (frame, msg []byte, err error) {
+	first, err := r.Peek(1)
+	if err != nil {
+		return nil, nil, err
 	}
-	b, _ := r.Peek(n)
-	out := make([]byte, len(b))
-	copy(out, b)
-	r.Discard(n)
-	return out
+	if first[0] == '$' {
+		hdr, err := r.Peek(4)
+		if err != nil {
+			return nil, nil, err
+		}
+		n := int(hdr[2])<<8 | int(hdr[3])
+		buf := make([]byte, 4+n)
+		if _, err := io.ReadFull(r, buf); err != nil {
+			return nil, nil, err
+		}
+		return buf, nil, nil
+	}
+	// RTSP message: headers until blank line, then Content-Length body.
+	var b bytes.Buffer
+	contentLen := 0
+	for {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			return nil, nil, err
+		}
+		b.WriteString(line)
+		t := strings.TrimRight(line, "\r\n")
+		if t == "" {
+			break
+		}
+		if strings.HasPrefix(strings.ToLower(t), "content-length:") {
+			contentLen, _ = strconv.Atoi(strings.TrimSpace(t[len("content-length:"):]))
+		}
+	}
+	if contentLen > 0 {
+		body := make([]byte, contentLen)
+		if _, err := io.ReadFull(r, body); err != nil {
+			return nil, nil, err
+		}
+		b.Write(body)
+	}
+	return nil, b.Bytes(), nil
+}
+
+// headerValue returns the value of the named header in an RTSP message, or "".
+func headerValue(msg []byte, name string) string {
+	for _, line := range strings.Split(string(msg), "\r\n") {
+		if strings.HasPrefix(strings.ToLower(line), strings.ToLower(name)+":") {
+			return strings.TrimSpace(line[len(name)+1:])
+		}
+	}
+	return ""
 }
 
 // readRTSPRequest reads one RTSP request (request line + headers + optional
