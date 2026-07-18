@@ -457,7 +457,7 @@ document.getElementById('cam-tbody').addEventListener('click', async (ev) => {
     goto('cameras');
     document.getElementById('add-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
     document.getElementById('f-name').focus();
-    if (c.vendor === 'dahua') {
+    if (c.vendor === 'dahua' || c.vendor === 'hikvision') {
       openNetworkCard(c);
     } else {
       closeNetworkCard();
@@ -623,10 +623,11 @@ async function saveStaticIP() {
   setBusy(btn, true, 'Đang lưu...');
   msg.textContent = ''; msg.className = 'msg';
   try {
-    await api('/api/network', { method: 'POST', body: JSON.stringify(body) });
-    msg.textContent = 'Đã lưu cấu hình mạng.';
+    const res = await api('/api/network', { method: 'POST', body: JSON.stringify(body) });
+    const note = res && res.note ? res.note : 'Đã lưu cấu hình mạng.';
+    msg.textContent = note;
     msg.className = 'msg ok';
-    showToast('Đã lưu cấu hình mạng.', 'ok');
+    showToast(note, 'ok');
   } catch (e) {
     msg.textContent = 'Lỗi: ' + e.message;
     msg.className = 'msg err';

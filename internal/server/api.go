@@ -560,10 +560,11 @@ func (s *Server) handleOSD(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "appliedLines": applied})
 }
 
-// notDahuaErr is the message returned when a picture/network endpoint is hit
-// for a device whose Camera implementation doesn't support that
-// vendor-specific surface (i.e. anything but Dahua/KBVision).
-const notDahuaErr = "camera này không hỗ trợ tính năng này (chỉ Dahua/KBVision)"
+// notDahuaErr is the message returned when a vendor-specific endpoint is hit
+// for a device whose Camera implementation doesn't support that surface — e.g.
+// picture tuning / PTZ (Dahua/KBVision only), or network config on a vendor
+// that implements neither the Dahua nor the Hikvision path.
+const notDahuaErr = "camera này không hỗ trợ tính năng này"
 
 // handlePicture handles GET /api/picture?id=&channel=&timeoutSeconds= (read
 // color+options+caps) and POST /api/picture (write changes), mirroring the
@@ -735,9 +736,18 @@ func (s *Server) handleNetworkSet(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
+	// Reading the config back confirms it applied — but changing a static IP
+	// moves the device onto its NEW address, so this GET (still aimed at the
+	// old one) legitimately fails on success. Treat a read-back failure as a
+	// soft note, not an error: the write already returned OK. The UI shows the
+	// note and, for an IP change, the operator must re-add the device at the
+	// new address.
 	cfg, err := ns.GetNetworkConfig(ctx)
 	if err != nil {
-		writeErr(w, http.StatusBadGateway, err.Error())
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":   true,
+			"note": "đã áp dụng cấu hình. Không đọc lại được — thiết bị có thể đang khởi động lại và/hoặc đã chuyển sang IP mới. Hãy chờ ~30–60s rồi kết nối lại ở địa chỉ mới.",
+		})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "network": cfg})

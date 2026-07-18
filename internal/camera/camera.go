@@ -661,6 +661,65 @@ func (h *hikCamera) SetOSDLines(ctx context.Context, channel int, lines []string
 // Hikvision's native (1-based) channel number.
 func isapiChannel(profileChannel int) int { return profileChannel + 1 }
 
+// errHikWiFiUnsupported is returned by hikCamera's Wi-Fi methods: this
+// milestone implements static-IP config for Hikvision (LAN and Wi-Fi
+// interfaces alike) but not SSID/password provisioning or live AP scanning.
+// GetWiFiConfig returning an error makes the web UI hide the Wi-Fi SSID
+// section, exactly as it does for a Dahua device with no radio.
+var errHikWiFiUnsupported = errors.New("cấu hình SSID/mật khẩu Wi-Fi chưa hỗ trợ cho Hikvision (chỉ đặt IP tĩnh)")
+
+// GetNetworkConfig reads every interface's static IP / DHCP config over ISAPI
+// and maps it into the same NetworkConfig shape the Dahua path produces, so
+// the web API and UI render Hikvision network settings with no vendor-specific
+// branch. Interfaces are keyed by the device's own id ("1" = LAN, "2" = Wi-Fi
+// on wireless models); the first is reported as the default.
+func (h *hikCamera) GetNetworkConfig(ctx context.Context) (dahua.NetworkConfig, error) {
+	ifaces, err := h.client.GetNetworkInterfaces(ctx)
+	if err != nil {
+		return dahua.NetworkConfig{}, err
+	}
+	cfg := dahua.NetworkConfig{Interfaces: map[string]map[string]any{}}
+	for i, ni := range ifaces {
+		if i == 0 {
+			cfg.DefaultInterface = ni.ID
+		}
+		dns := make([]any, len(ni.DNS))
+		for j, d := range ni.DNS {
+			dns[j] = d
+		}
+		cfg.Interfaces[ni.ID] = map[string]any{
+			"DhcpEnable":      ni.DhcpEnable,
+			"IPAddress":       ni.IPAddress,
+			"SubnetMask":      ni.SubnetMask,
+			"DefaultGateway":  ni.DefaultGateway,
+			"DnsServers":      dns,
+			"PhysicalAddress": ni.MAC,
+			"MTU":             ni.MTU,
+		}
+	}
+	return cfg, nil
+}
+
+// SetStaticIP writes one interface's IP configuration over ISAPI. iface is the
+// device's own interface id ("1"/"2"), matching a key from GetNetworkConfig.
+func (h *hikCamera) SetStaticIP(ctx context.Context, iface string, dhcpEnable bool, ip, mask, gateway string, dns []string) error {
+	return h.client.SetStaticIP(ctx, iface, dhcpEnable, ip, mask, gateway, dns)
+}
+
+// GetWiFiConfig / SetWiFiConfig / ScanWiFi satisfy NetworkSettings but are not
+// implemented for Hikvision in this milestone (static IP only).
+func (h *hikCamera) GetWiFiConfig(ctx context.Context) (map[string]map[string]any, error) {
+	return nil, errHikWiFiUnsupported
+}
+
+func (h *hikCamera) SetWiFiConfig(ctx context.Context, iface, ssid, password, encryption string) error {
+	return errHikWiFiUnsupported
+}
+
+func (h *hikCamera) ScanWiFi(ctx context.Context) ([]dahua.WiFiAP, error) {
+	return nil, errHikWiFiUnsupported
+}
+
 // Probe reads back main + sub1 + sub2 stream info for the default channel
 // (Profile.Channel's zero value, i.e. ISAPI channel 1).
 func (h *hikCamera) Probe(ctx context.Context) ([]StreamInfo, error) {

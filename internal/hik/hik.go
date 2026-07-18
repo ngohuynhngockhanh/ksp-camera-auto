@@ -52,6 +52,10 @@ func (c *Client) Close() error {
 // StreamInfo is a read-back summary of one stream's encode settings.
 type StreamInfo = isapi.StreamInfo
 
+// NetworkInterface re-exports isapi.NetworkInterface so callers in
+// internal/camera need not import internal/isapi directly.
+type NetworkInterface = isapi.NetworkInterface
+
 // ErrOverlayUnsupported re-exports isapi.ErrOverlayUnsupported so callers in
 // internal/camera need not import internal/isapi directly.
 var ErrOverlayUnsupported = isapi.ErrOverlayUnsupported
@@ -110,6 +114,20 @@ func (c *Client) SetBitrate(ctx context.Context, ch, stream, kbps int, mode stri
 // GetSnapshot fetches a single JPEG frame for a channel/stream.
 func (c *Client) GetSnapshot(ctx context.Context, ch, stream int) ([]byte, error) {
 	return c.isapi.GetSnapshot(ctx, ch, stream)
+}
+
+// GetNetworkInterfaces reads every interface's IP configuration (static IP /
+// DHCP, per LAN and Wi-Fi interface) in one request.
+func (c *Client) GetNetworkInterfaces(ctx context.Context) ([]NetworkInterface, error) {
+	return c.isapi.GetNetworkInterfaces(ctx)
+}
+
+// SetStaticIP writes one interface's IP configuration (addressed by the
+// device's own interface id, e.g. "1"). See isapi.Client.SetStaticIP for
+// validation and the caveat that applying a new IP moves the device off its
+// current address.
+func (c *Client) SetStaticIP(ctx context.Context, ifaceID string, dhcpEnable bool, ip, mask, gateway string, dns []string) error {
+	return c.isapi.SetStaticIP(ctx, ifaceID, dhcpEnable, ip, mask, gateway, dns)
 }
 
 // SetChannelName writes the device's own channel name (distinct from our
