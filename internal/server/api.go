@@ -1259,18 +1259,21 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 
-	fname := fmt.Sprintf("playback_ch%d_%s.mp4", channel, start.Format("20060102_150405"))
-	w.Header().Set("Content-Type", "video/mp4")
+	// fast=1 uses the RTSP "Rate-Control: no" download mode (~7x realtime) via
+	// the in-process RTSP proxy; its output is chunked MPEG-TS. Normal playback
+	// (~1x realtime) is fragmented MP4.
+	stream := dahua.StreamPlayback
+	ext, ctype := "mp4", "video/mp4"
+	if q.Get("fast") != "" {
+		stream = dahua.StreamPlaybackFast
+		ext, ctype = "ts", "video/mp2t"
+	}
+	fname := fmt.Sprintf("playback_ch%d_%s.%s", channel, start.Format("20060102_150405"), ext)
+	w.Header().Set("Content-Type", ctype)
 	if q.Get("download") != "" {
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fname))
 	}
 	cw := &countingWriter{w: w}
-	// fast=1 uses the RTSP "Rate-Control: no" download mode (~6x realtime) via
-	// the in-process RTSP proxy; otherwise normal (~1x realtime) playback.
-	stream := dahua.StreamPlayback
-	if q.Get("fast") != "" {
-		stream = dahua.StreamPlaybackFast
-	}
 	if err := stream(ctx, cw, d.Host, d.Username, d.Password, channel, start, end); err != nil {
 		if cw.n == 0 {
 			// Nothing sent yet — the status line is still ours to set.

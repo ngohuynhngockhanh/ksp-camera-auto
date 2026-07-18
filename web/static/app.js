@@ -626,10 +626,10 @@ function renderPlayback(c) {
     <div class="row">
       <button class="btn btn-secondary" type="button" id="pb-list-btn">Xem timeline bản ghi</button>
       <button class="btn" type="button" id="pb-play-btn">Phát khoảng đã chọn</button>
-      <button class="btn btn-primary" type="button" id="pb-dl-btn">Tải MP4 (nhanh ~7x)</button>
+      <button class="btn btn-primary" type="button" id="pb-dl-btn">Tải nhanh ~7x (.ts, xem bằng VLC)</button>
       <button class="btn" type="button" id="pb-dl-slow-btn">Tải MP4 (thường)</button>
     </div>
-    <p class="muted">Tải/phát trực tiếp từ camera, không lưu trên box (bảo vệ eMMC). "Nhanh ~7x" dùng RTSP download-mode: 6-7 tiếng tải ~50-60 phút. Tốc độ thực tế tuỳ tải/băng thông camera.</p>
+    <p class="muted">Tải/phát trực tiếp từ camera, không lưu trên box (bảo vệ eMMC). "Nhanh ~7x" dùng RTSP download-mode, ra file .ts (VLC/trình phát mở tốt): 6-7 tiếng tải ~50-60 phút. Tốc độ tuỳ băng thông camera.</p>
     <div id="pb-timeline"></div>
     <video id="pb-video" controls style="width:100%;max-height:420px;background:#000;margin-top:.5rem" hidden></video>
   `;

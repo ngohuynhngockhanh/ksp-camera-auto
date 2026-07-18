@@ -12,23 +12,24 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
-// StreamPlaybackFast streams a channel's [start,end] recording to w as MP4 at
-// the camera's fast download rate (~6x realtime), versus the ~1x of normal
+// fastChunk is the video duration downloaded per RTSP session. Dahua drops a
+// "Rate-Control: no" fast session (and ffmpeg emits a session-breaking RTSP
+// keepalive) at ~30-60s of wall time, so each chunk must finish well within
+// that: 90s of video at ~7x realtime is ~13s of wall time, comfortably under
+// the limit. The chunks' MPEG-TS outputs concatenate into one continuous file.
+const fastChunk = 90 * time.Second
+
+// StreamPlaybackFast streams a channel's [start,end] recording to w as MPEG-TS
+// at the camera's fast download rate (~7x realtime), versus the ~1x of normal
 // playback (StreamPlayback). The speedup comes from the RTSP "Rate-Control: no"
-// header, which tells Dahua to send the recording as fast as the link allows
-// instead of pacing it to real time — confirmed live at ~6x on a wired cam.
-//
-// ffmpeg cannot set that header, so a tiny in-process RTSP proxy sits between
-// ffmpeg and the camera: ffmpeg connects to it unauthenticated over plain
-// interleaved-TCP RTSP, and the proxy (a) rewrites request URIs to the camera,
-// (b) performs digest authentication toward the camera, and (c) injects
-// "Rate-Control: no" into the PLAY request. All media is TCP-interleaved (no
-// UDP loss), remuxed with -c copy, and piped straight to w — nothing is written
-// to the box's disk.
+// header (ffmpeg can't set it, so a tiny in-process RTSP proxy injects it — see
+// runRTSPProxy). Because the camera drops a fast session after ~60s, the range
+// is downloaded in short back-to-back chunks whose MPEG-TS outputs concatenate
+// into one continuous, VLC-playable stream. Everything stays TCP-interleaved
+// and piped straight to w — nothing is written to the box's disk.
 func StreamPlaybackFast(ctx context.Context, w io.Writer, host, user, pass string, channel int, start, end time.Time) error {
 	select {
 	case playbackSem <- struct{}{}:
@@ -36,7 +37,21 @@ func StreamPlaybackFast(ctx context.Context, w io.Writer, host, user, pass strin
 	case <-ctx.Done():
 		return fmt.Errorf("dahua: fast playback %s: %w (waiting for a slot)", host, ctx.Err())
 	}
+	for t := start; t.Before(end); t = t.Add(fastChunk) {
+		ce := t.Add(fastChunk)
+		if ce.After(end) {
+			ce = end
+		}
+		if err := streamChunkFast(ctx, w, host, user, pass, channel, t, ce); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
+// streamChunkFast downloads one [start,end] chunk via the RTSP proxy + ffmpeg,
+// as MPEG-TS, appended to w.
+func streamChunkFast(ctx context.Context, w io.Writer, host, user, pass string, channel int, start, end time.Time) error {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("dahua: fast playback: listen: %w", err)
@@ -58,25 +73,31 @@ func StreamPlaybackFast(ctx context.Context, w io.Writer, host, user, pass strin
 		proxyErr <- runRTSPProxy(ctx, conn, host, user, pass)
 	}()
 
-	// ffmpeg talks plain RTSP to the proxy (no creds); the proxy authenticates
-	// to the camera. -rtsp_transport tcp keeps everything interleaved.
 	proxyURL := fmt.Sprintf("rtsp://%s%s", proxyAddr, camPath)
+	// -t bounds the OUTPUT to the chunk's video duration: the fast RTSP stream
+	// delivers the whole chunk in a few seconds, but the camera doesn't cleanly
+	// close the session afterwards, so without -t ffmpeg would block waiting for
+	// EOF until the camera's ~60s session timeout — making every chunk take ~60s
+	// regardless of how fast the data arrived. -t makes ffmpeg exit the moment it
+	// has muxed the chunk's worth of video.
+	dur := int(end.Sub(start).Seconds())
+	if dur < 1 {
+		dur = 1
+	}
 	cmd := exec.CommandContext(ctx, "ffmpeg",
 		"-nostdin",
 		"-rtsp_transport", "tcp",
 		"-i", proxyURL,
 		"-c", "copy",
 		"-fflags", "+genpts",
-		"-movflags", "frag_keyframe+empty_moov+default_base_moof",
-		"-f", "mp4",
+		"-t", strconv.Itoa(dur),
+		"-f", "mpegts",
 		"-y", "pipe:1",
 	)
 	cmd.Stdout = w
 	stderr := &tailWriter{max: 4096}
 	cmd.Stderr = stderr
 	runErr := cmd.Run()
-	// The proxy exits when ffmpeg closes the connection; drain its result but
-	// prefer ffmpeg's error for the caller.
 	select {
 	case <-proxyErr:
 	case <-time.After(time.Second):
@@ -133,138 +154,64 @@ func runRTSPProxy(ctx context.Context, client net.Conn, host, user, pass string)
 		}
 	}
 
-	// Media phase. Both directions carry TCP-interleaved RTP/RTCP frames
-	// ($-prefixed) mixed with RTSP messages, so a dumb byte relay is wrong:
-	// ffmpeg's periodic RTSP keepalive would be forwarded to the camera with
-	// the proxy's URI and no auth, and the camera would drop the session
-	// mid-download (observed: the stream ended at the first keepalive). Instead:
-	//   - camera->ffmpeg: relay interleaved frames; drop RTSP responses (they are
-	//     replies to the proxy's own keepalives).
-	//   - ffmpeg->camera: relay interleaved frames; answer ffmpeg's keepalive
-	//     RTSP requests LOCALLY (never forward them).
-	//   - the proxy independently keepalives the camera so its session stays up.
-	var camWrite, cliWrite sync.Mutex
-	writeCam := func(b []byte) error { camWrite.Lock(); defer camWrite.Unlock(); _, e := camConn.Write(b); return e }
-	writeCli := func(b []byte) error { cliWrite.Lock(); defer cliWrite.Unlock(); _, e := client.Write(b); return e }
-	errc := make(chan error, 3)
-
-	go func() { // camera -> ffmpeg
-		for {
-			frame, msg, err := readInterleavedOrMessage(camR)
-			if err != nil {
-				errc <- err
-				return
-			}
-			if frame != nil {
-				if err := writeCli(frame); err != nil {
-					errc <- err
-					return
-				}
-			}
-			_ = msg // RTSP response to our keepalive: drop
-		}
-	}()
-	go func() { // ffmpeg -> camera
-		for {
-			frame, msg, err := readInterleavedOrMessage(cr)
-			if err != nil {
-				errc <- err
-				return
-			}
-			if frame != nil {
-				if err := writeCam(frame); err != nil {
-					errc <- err
-					return
-				}
-				continue
-			}
-			// ffmpeg RTSP request (keepalive/teardown): answer locally.
-			cseq := headerValue(msg, "CSeq")
-			_ = writeCli([]byte("RTSP/1.0 200 OK\r\nCSeq: " + cseq + "\r\nSession: keep\r\n\r\n"))
-			if bytes.HasPrefix(msg, []byte("TEARDOWN")) {
-				errc <- nil
+	// Media phase: bulk-relay both directions with io.Copy. This is the fast
+	// path — a per-frame demux relay throttles throughput to ~3x, but a plain
+	// io.Copy sustains the camera's full ~7x. It carries the raw TCP-interleaved
+	// RTP/RTCP verbatim. The chunks are short enough (see fastChunk) that ffmpeg
+	// never sends its first RTSP keepalive, so no RTSP-message handling is needed
+	// here — a keepalive would otherwise be relayed to the camera and dropped.
+	// The bytes already buffered in cr/camR (interleaved data that arrived with
+	// the PLAY response) are prepended so none are lost on the reader switch.
+	done := make(chan struct{}, 2)
+	go func() {
+		// Bulk-relay camera -> ffmpeg with a rolling idle deadline: the fast
+		// Rate-Control:no burst delivers the whole chunk in a continuous stream,
+		// then goes silent (the camera does NOT close the session — it would
+		// otherwise linger until its ~60s timeout). Treating a few seconds of
+		// silence as end-of-chunk lets us close and let ffmpeg finish promptly,
+		// which is what keeps each chunk to ~burst-time + idle rather than ~60s.
+		if b := drainBuffered(camR); len(b) > 0 {
+			if _, err := client.Write(b); err != nil {
+				done <- struct{}{}
 				return
 			}
 		}
-	}()
-	go func() { // keep the camera session alive during long downloads
-		t := time.NewTicker(20 * time.Second)
-		defer t.Stop()
+		buf := make([]byte, 64*1024)
 		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				uri := "rtsp://" + camHostPort
-				req := "GET_PARAMETER " + uri + " RTSP/1.0\r\nCSeq: 9999\r\n"
-				if auth.nonce != "" {
-					req += "Authorization: " + auth.authHeader("GET_PARAMETER", uri) + "\r\n"
+			_ = camConn.SetReadDeadline(time.Now().Add(2500 * time.Millisecond))
+			n, err := camConn.Read(buf)
+			if n > 0 {
+				if _, werr := client.Write(buf[:n]); werr != nil {
+					break
 				}
-				req += "\r\n"
-				_ = writeCam([]byte(req))
+			}
+			if err != nil { // idle timeout (chunk done) or EOF or reset
+				break
 			}
 		}
+		done <- struct{}{}
 	}()
-	<-errc
+	go func() {
+		io.Copy(camConn, io.MultiReader(bytes.NewReader(drainBuffered(cr)), client))
+		done <- struct{}{}
+	}()
+	<-done
 	return nil
 }
 
-// readInterleavedOrMessage reads either one TCP-interleaved RTP/RTCP frame
-// ($ + 1-byte channel + 2-byte big-endian length + payload) — returned as
-// `frame` verbatim for relay — or one RTSP message (request or response),
-// returned as `msg`. Exactly one is non-nil.
-func readInterleavedOrMessage(r *bufio.Reader) (frame, msg []byte, err error) {
-	first, err := r.Peek(1)
-	if err != nil {
-		return nil, nil, err
+// drainBuffered returns the bytes a bufio.Reader has already buffered, so the
+// switch from request-parsing to raw relay doesn't drop the interleaved bytes
+// that arrived alongside the PLAY response.
+func drainBuffered(r *bufio.Reader) []byte {
+	n := r.Buffered()
+	if n == 0 {
+		return nil
 	}
-	if first[0] == '$' {
-		hdr, err := r.Peek(4)
-		if err != nil {
-			return nil, nil, err
-		}
-		n := int(hdr[2])<<8 | int(hdr[3])
-		buf := make([]byte, 4+n)
-		if _, err := io.ReadFull(r, buf); err != nil {
-			return nil, nil, err
-		}
-		return buf, nil, nil
-	}
-	// RTSP message: headers until blank line, then Content-Length body.
-	var b bytes.Buffer
-	contentLen := 0
-	for {
-		line, err := r.ReadString('\n')
-		if err != nil {
-			return nil, nil, err
-		}
-		b.WriteString(line)
-		t := strings.TrimRight(line, "\r\n")
-		if t == "" {
-			break
-		}
-		if strings.HasPrefix(strings.ToLower(t), "content-length:") {
-			contentLen, _ = strconv.Atoi(strings.TrimSpace(t[len("content-length:"):]))
-		}
-	}
-	if contentLen > 0 {
-		body := make([]byte, contentLen)
-		if _, err := io.ReadFull(r, body); err != nil {
-			return nil, nil, err
-		}
-		b.Write(body)
-	}
-	return nil, b.Bytes(), nil
-}
-
-// headerValue returns the value of the named header in an RTSP message, or "".
-func headerValue(msg []byte, name string) string {
-	for _, line := range strings.Split(string(msg), "\r\n") {
-		if strings.HasPrefix(strings.ToLower(line), strings.ToLower(name)+":") {
-			return strings.TrimSpace(line[len(name)+1:])
-		}
-	}
-	return ""
+	b, _ := r.Peek(n)
+	out := make([]byte, len(b))
+	copy(out, b)
+	_, _ = r.Discard(n)
+	return out
 }
 
 // readRTSPRequest reads one RTSP request (request line + headers + optional
