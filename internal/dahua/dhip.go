@@ -38,6 +38,7 @@ type Client struct {
 	timeout   time.Duration
 	user      string // remembered for operations needing the current credential
 	pass      string
+	realm     string // login realm ("Login to XXXX"), for the modifyPassword hash
 }
 
 // rpcResp is the generic JSON-RPC response envelope. Error is left raw because
@@ -123,6 +124,7 @@ func (c *Client) login(username, password string) error {
 	if err != nil {
 		return err
 	}
+	c.realm = realm
 
 	// Step 2: send login hash (\xa0\x05 frame) and check the response ErrorCode.
 	hash := dvripLoginHash(username, password, realm, random)
