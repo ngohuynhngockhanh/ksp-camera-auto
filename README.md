@@ -48,6 +48,8 @@ Copy file tương ứng lên thiết bị và chạy — không cần cài gì t
 4. **Chỉnh hàng loạt** — tick chọn cam, chọn luồng (Main/Sub1/Sub2) + kênh, bật những thứ muốn đổi
    (độ phân giải / codec / smart codec / AAC), bấm **Áp dụng**.
 5. **Log** — theo dõi tiến trình từng cam, từng bước, trực tiếp.
+6. **Trợ giúp** — tab trong app: tìm kiếm (gõ không dấu vẫn khớp) + chatbox gợi ý tính năng.
+   Nội dung sinh từ `docs/help/*.md` bằng `make docs`; xem [docs/HELP.md](docs/HELP.md).
 
 ## Kết nối tới camera (quan trọng)
 

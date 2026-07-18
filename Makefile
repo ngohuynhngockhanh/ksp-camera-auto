@@ -8,7 +8,7 @@ GO ?= go
 export CGO_ENABLED=0
 
 .PHONY: all build run test tidy vet fmt clean build-all \
-        build-amd64 build-arm32 build-arm64
+        build-amd64 build-arm32 build-arm64 docs docs-check
 
 all: build
 
@@ -51,6 +51,14 @@ build-hiksdk:
 	CGO_CPPFLAGS="-I$(HIKSDK)/incEn" \
 	CGO_LDFLAGS="-L$(HIKSDK)/lib -lhcnetsdk -Wl,-rpath,$(HIKSDK)/lib" \
 	$(GO) build -tags hiksdk -ldflags '$(LDFLAGS)' -o $(BINARY)-hiksdk $(PKG)
+
+# Help bundle: docs/help/*.md -> web/static/help/help-index.json (committed,
+# embedded via go:embed). docs-check fails if a route/tab has no help article.
+docs:
+	$(GO) run ./tools/docgen
+
+docs-check:
+	$(GO) run ./tools/docgen -check
 
 clean:
 	rm -f $(BINARY) $(BINARY)-hiksdk

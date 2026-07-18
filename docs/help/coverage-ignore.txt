@@ -1,0 +1,6 @@
+// Các surface không cần bài trợ giúp riêng (docgen -check bỏ qua).
+// Route: ghi nguyên đường dẫn; tab: ghi #hash. Comment bắt đầu bằng //.
+/healthz
+/
+// Tab Trợ giúp không cần bài trợ giúp về chính nó.
+#help

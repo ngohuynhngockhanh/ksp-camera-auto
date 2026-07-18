@@ -502,3 +502,56 @@ dialog.dialog-lightbox[open] { max-width: min(1100px, 96vw); }
 .muted { color: var(--muted); font-size: .85rem; }
 .empty-hint { color: var(--muted); font-size: .85rem; padding: 12px 0; }
 .section-gap { margin-top: 20px; }
+
+/* ---------- help view (#help) ---------- */
+
+.help-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .help-layout { grid-template-columns: 1fr; } }
+
+.btn-sm { padding: 5px 10px; font-size: .8rem; }
+
+.help-sec-title { font-weight: 600; margin: 14px 0 6px; color: var(--text-2); font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; }
+.help-toc { list-style: none; margin: 0; padding: 0; }
+.help-toc li { margin: 0; }
+.help-toc a { display: block; padding: 6px 8px; border-radius: var(--radius); color: var(--text); text-decoration: none; }
+.help-toc a:hover { background: var(--surface-2); color: var(--accent); }
+
+.help-hit { display: block; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); margin-top: 10px; text-decoration: none; color: var(--text); transition: border-color var(--transition), background var(--transition); }
+.help-hit:hover { border-color: var(--accent); background: var(--surface-2); }
+.help-hit-title { font-weight: 600; margin-bottom: 2px; }
+.help-hit-snippet { color: var(--muted); font-size: .82rem; }
+.help-hit mark, .chat-msg mark { background: var(--warning-bg); color: inherit; border-radius: 3px; padding: 0 1px; }
+
+.help-art-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.help-art-sec { color: var(--muted); font-size: .8rem; }
+.help-art-title { margin: 0 0 10px; font-size: 1.25rem; }
+.help-art-body h2 { font-size: 1.02rem; margin: 18px 0 8px; }
+.help-art-body h3 { font-size: .92rem; margin: 14px 0 6px; }
+.help-art-body p, .help-art-body li { font-size: .88rem; line-height: 1.55; color: var(--text-2); }
+.help-art-body ul, .help-art-body ol { padding-left: 22px; margin: 8px 0; }
+.help-art-body code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: .82em; }
+.help-art-body pre { background: var(--log-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; overflow-x: auto; }
+.help-art-body pre code { background: none; padding: 0; }
+.help-art-body blockquote { margin: 10px 0; padding: 8px 12px; border-left: 3px solid var(--warning); background: var(--warning-bg); border-radius: 0 var(--radius) var(--radius) 0; font-size: .86rem; }
+.help-art-body a { color: var(--accent); }
+.help-table { overflow-x: auto; }
+.help-table table { border-collapse: collapse; width: 100%; font-size: .84rem; }
+.help-table th, .help-table td { border: 1px solid var(--border); padding: 6px 9px; text-align: left; }
+.help-table th { background: var(--surface-2); }
+.help-related { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--border); font-size: .84rem; }
+.help-related a { color: var(--accent); text-decoration: none; }
+
+.help-chat { position: sticky; top: calc(var(--topbar-h) + 12px); }
+@media (max-width: 900px) { .help-chat { position: static; } }
+.chat-log { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; margin-bottom: 10px; }
+.chat-log:empty { display: none; }
+.chat-msg { border-radius: var(--radius); padding: 8px 10px; font-size: .85rem; }
+.chat-msg p { margin: 0 0 4px; }
+.chat-msg.user { background: var(--accent); color: var(--on-accent); align-self: flex-end; max-width: 85%; }
+.chat-msg.bot { background: var(--surface-2); align-self: flex-start; width: 100%; }
+.chat-card { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); padding: 8px 10px; margin-top: 8px; }
+.chat-card-title { font-weight: 600; font-size: .85rem; }
+.chat-card-snippet { color: var(--muted); font-size: .78rem; margin: 3px 0 8px; }
+.chat-card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.chat-form { display: flex; gap: 8px; }
+.chat-form input { flex: 1; min-width: 0; }

@@ -344,6 +344,33 @@
           </div>
         </section>
 
+        <!-- Trợ giúp -->
+        <section class="view" id="view-help" data-view="help">
+          <h2 class="page-title">Trợ giúp</h2>
+          <div class="help-layout">
+            <div class="help-main">
+              <div class="card">
+                <div class="field">
+                  <input id="help-search" type="search" autocomplete="off"
+                         placeholder="Tìm trong trợ giúp… (vd: đổi mật khẩu, wifi, độ phân giải)">
+                </div>
+                <div id="help-results" class="help-results"></div>
+              </div>
+              <div class="card" id="help-article" hidden></div>
+            </div>
+            <div class="card help-chat">
+              <div class="card-title">Hỏi nhanh</div>
+              <p class="card-sub">Gõ việc bạn muốn làm, công cụ sẽ gợi ý tính năng phù hợp.</p>
+              <div id="chat-log" class="chat-log"></div>
+              <div class="chip-list" id="chat-chips"></div>
+              <form id="chat-form" class="chat-form">
+                <input id="chat-input" type="text" autocomplete="off" placeholder="Ví dụ: tôi muốn đổi mật khẩu hàng loạt">
+                <button class="btn" type="submit">Gửi</button>
+              </form>
+            </div>
+          </div>
+        </section>
+
       </main>
     </div>
 
@@ -466,5 +493,6 @@
 
   </div>
   <script src="app.js"></script>
+  <script src="help.js"></script>
 </body>
 </html>

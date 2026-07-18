@@ -13,6 +13,7 @@ const ICONS = {
   logout: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>',
   edit: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
   reload: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>',
+  help: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5.1.8c0 1.6-2.6 2.2-2.6 3.5"/><path d="M12 17h.01"/></svg>',
 };
 
 // Nav config shared by sidebar / bottom-nav / drawer. Kho camera / Chỉnh
@@ -23,6 +24,9 @@ const NAV_ITEMS = [
   { hash: 'scan', label: 'Quét mạng', short: 'Quét', icon: ICONS.radar, bottom: true },
   { hash: 'cameras', label: 'Kho camera', short: 'Camera', icon: ICONS.camera, bottom: true },
   { hash: 'import', label: 'Nhập Shinobi', short: 'Nhập', icon: ICONS.upload, bottom: true },
+  // bottom: false — mobile bottom nav stays at 4 items; help is reachable
+  // from the sidebar and the drawer.
+  { hash: 'help', label: 'Trợ giúp', short: 'Trợ giúp', icon: ICONS.help, bottom: false },
 ];
 // Old bookmarks/links to the now-merged tabs still land on #cameras.
 const HASH_ALIASES = { bulk: 'cameras', results: 'cameras' };
@@ -234,7 +238,9 @@ function fmtStreamInfo(list) {
 /* ---------- routing ---------- */
 
 function currentHash() {
-  let h = (location.hash || '#dashboard').slice(1);
+  // Keep only the view part: "#help/wifi" routes to the help view, and
+  // help.js reads the article id from the full location.hash itself.
+  let h = (location.hash || '#dashboard').slice(1).split('/')[0];
   if (HASH_ALIASES[h]) h = HASH_ALIASES[h];
   return NAV_ITEMS.some(n => n.hash === h) ? h : 'dashboard';
 }
@@ -264,7 +270,7 @@ function buildNav() {
     </a>`).join('');
 
   const bottomnav = document.getElementById('bottomnav');
-  bottomnav.innerHTML = NAV_ITEMS.map(n => `
+  bottomnav.innerHTML = NAV_ITEMS.filter(n => n.bottom !== false).map(n => `
     <a class="bottomnav-item" href="#${n.hash}" data-nav-hash="${n.hash}">${n.icon}<span>${n.short || n.label}</span></a>
   `).join('') + `
     <button class="bottomnav-item" id="drawer-open-btn" type="button">${ICONS.dots}<span>Menu</span></button>
@@ -272,6 +278,7 @@ function buildNav() {
 
   const drawer = document.getElementById('drawer-nav');
   drawer.innerHTML = `
+    <a class="drawer-item" href="#help" data-nav-hash="help">${ICONS.help}<span>Trợ giúp</span></a>
     <button class="drawer-item" id="drawer-theme-btn" type="button">${ICONS.moon}<span>Đổi giao diện sáng/tối</span></button>
     <a class="drawer-item" href="/logout">${ICONS.logout}<span>Đăng xuất</span></a>
   `;
