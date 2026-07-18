@@ -670,7 +670,7 @@ function renderNetworkBody(net, wifi) {
     html += `<input type="hidden" id="net-wifi-iface" value="${escapeHtml(wifiIfaceName)}">`;
     html += `
       <div class="field field-sm"><label for="net-wifi-ssid">SSID</label><input id="net-wifi-ssid" value="${escapeHtml(wifiIface.SSID || '')}"></div>
-      <div class="field field-sm"><label for="net-wifi-pass">Mật khẩu Wi-Fi (để trống = giữ nguyên)</label><input id="net-wifi-pass" type="password" placeholder="••••••"></div>
+      <div class="field field-sm"><label for="net-wifi-pass">Mật khẩu Wi-Fi (để trống = giữ nguyên)</label><input id="net-wifi-pass" type="text" placeholder="nhập mật khẩu Wi-Fi mới"></div>
       <div class="row"><button class="btn btn-secondary" type="button" id="net-wifi-scan-btn">Quét Wi-Fi</button></div>
       <div id="net-wifi-scan-results"></div>
       <div class="checkbox-row"><input type="checkbox" id="net-wifi-confirm-risk"><label for="net-wifi-confirm-risk">Tôi hiểu đổi Wi-Fi sai có thể khiến camera mất kết nối.</label></div>

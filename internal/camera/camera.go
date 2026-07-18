@@ -376,9 +376,15 @@ func (d *dahuaCamera) SetWiFiConfig(ctx context.Context, iface, ssid, password, 
 	return d.client.SetWiFiConfig(iface, ssid, password, encryption)
 }
 
-// ScanWiFi triggers a live access-point scan via HTTP CGI (a separate
-// connection from the DVRIP session, same as Snapshot).
+// ScanWiFi triggers a live access-point scan. Prefers the DVRIP-native
+// netApp.scanWLanDevices (rides the existing session, works on NAT'd/DVRIP-only
+// cameras where CGI port 80 is unreachable), falling back to the HTTP CGI scan
+// for firmware that doesn't expose the RPC — mirroring the PTZ DVRIP-then-CGI
+// strategy.
 func (d *dahuaCamera) ScanWiFi(ctx context.Context) ([]dahua.WiFiAP, error) {
+	if aps, err := d.client.ScanWiFiRPC(""); err == nil {
+		return aps, nil
+	}
 	return dahua.ScanWiFi(ctx, d.device.Host, d.device.Username, d.device.Password, d.timeout)
 }
 

@@ -219,6 +219,45 @@ type WiFiAP struct {
 	LinkQuality int    `json:"linkQuality"`
 }
 
+// ScanWiFiRPC triggers a live Wi-Fi access-point scan over the existing DVRIP
+// session via netApp.scanWLanDevices, which returns the AP list in one call:
+// {"wlanDevice":[{"SSID","BSSID","Encryption","LinkQuality","AuthMode",...}]}.
+// This is the DVRIP-native counterpart to the CGI-only ScanWiFi (wlan.cgi on
+// port 80), which the NAT'd/DVRIP-only cameras in the field don't serve —
+// confirmed live against a DH-C5A. iface defaults to "wlan0" when empty.
+func (c *Client) ScanWiFiRPC(iface string) ([]WiFiAP, error) {
+	if iface == "" {
+		iface = "wlan0"
+	}
+	resp, err := c.Call("netApp.scanWLanDevices", map[string]any{"Name": iface})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.ok() {
+		return nil, fmt.Errorf("netApp.scanWLanDevices failed: %s", respErr(resp))
+	}
+	var p struct {
+		WlanDevice []struct {
+			SSID        string `json:"SSID"`
+			BSSID       string `json:"BSSID"`
+			Encryption  string `json:"Encryption"`
+			LinkQuality int    `json:"LinkQuality"`
+		} `json:"wlanDevice"`
+	}
+	if err := json.Unmarshal(resp.Params, &p); err != nil {
+		return nil, fmt.Errorf("netApp.scanWLanDevices: decode: %w", err)
+	}
+	out := make([]WiFiAP, 0, len(p.WlanDevice))
+	for _, d := range p.WlanDevice {
+		auth := "Open"
+		if d.Encryption != "" && d.Encryption != "Off" {
+			auth = "Encrypted"
+		}
+		out = append(out, WiFiAP{SSID: d.SSID, BSSID: d.BSSID, AuthMode: auth, LinkQuality: d.LinkQuality})
+	}
+	return out, nil
+}
+
 var wlanDeviceLineRe = regexp.MustCompile(`^wlanDevice\[(\d+)\]\.(\w+)=(.*)$`)
 
 // parseWlanDevices decodes the text/plain "wlanDevice[N].Field=Value" body
