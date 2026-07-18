@@ -37,21 +37,26 @@ func StreamPlaybackFast(ctx context.Context, w io.Writer, host, user, pass strin
 	case <-ctx.Done():
 		return fmt.Errorf("dahua: fast playback %s: %w (waiting for a slot)", host, ctx.Err())
 	}
+	tsOffset := 0.0 // cumulative video seconds, so each chunk's timestamps continue the last
 	for t := start; t.Before(end); t = t.Add(fastChunk) {
 		ce := t.Add(fastChunk)
 		if ce.After(end) {
 			ce = end
 		}
-		if err := streamChunkFast(ctx, w, host, user, pass, channel, t, ce); err != nil {
+		if err := streamChunkFast(ctx, w, host, user, pass, channel, t, ce, tsOffset); err != nil {
 			return err
 		}
+		tsOffset += ce.Sub(t).Seconds()
 	}
 	return nil
 }
 
 // streamChunkFast downloads one [start,end] chunk via the RTSP proxy + ffmpeg,
-// as MPEG-TS, appended to w.
-func streamChunkFast(ctx context.Context, w io.Writer, host, user, pass string, channel int, start, end time.Time) error {
+// as MPEG-TS, appended to w. tsOffset (seconds) shifts this chunk's output
+// timestamps so they continue the previous chunk's — without it every chunk's
+// PTS restarts near 0 and the concatenated .ts stutters/freezes at each
+// boundary in players (VLC).
+func streamChunkFast(ctx context.Context, w io.Writer, host, user, pass string, channel int, start, end time.Time, tsOffset float64) error {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("dahua: fast playback: listen: %w", err)
@@ -91,6 +96,11 @@ func streamChunkFast(ctx context.Context, w io.Writer, host, user, pass string, 
 		"-c", "copy",
 		"-fflags", "+genpts",
 		"-t", strconv.Itoa(dur),
+		// Continue timestamps from the previous chunk so the concatenated .ts is
+		// monotonic (no per-chunk PTS reset -> no VLC freeze at boundaries).
+		"-output_ts_offset", strconv.FormatFloat(tsOffset, 'f', 3, 64),
+		"-muxpreload", "0", "-muxdelay", "0",
+		"-mpegts_flags", "+resend_headers",
 		"-f", "mpegts",
 		"-y", "pipe:1",
 	)
