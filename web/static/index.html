@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ksp-camera-auto</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2338bdf8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='6' width='12' height='12' rx='2'/%3E%3Cpath d='M15 10l6-3v10l-6-3'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="vis-timeline-graph2d.min.css">
 <link rel="stylesheet" href="style.css">
 <script>
   // Apply saved theme before first paint to avoid a flash of the wrong theme.
@@ -318,6 +319,49 @@
           </div>
         </section>
 
+        <!-- Xem lại video (timeline review) -->
+        <section class="view" id="view-review" data-view="review">
+          <div class="review-toolbar">
+            <div class="field field-sm"><label for="rv-cam">Camera</label><select id="rv-cam"></select></div>
+            <div class="field field-sm" style="max-width:6rem"><label for="rv-channel">Kênh</label><input id="rv-channel" type="number" min="0" value="0"></div>
+            <div class="rv-quick" id="rv-quick"></div>
+            <button class="btn btn-secondary" type="button" id="rv-reload">Tải clip mới</button>
+          </div>
+          <div class="review-stage">
+            <div class="review-video-wrap">
+              <video id="rv-video" playsinline preload="metadata" poster="/logo.png"></video>
+            </div>
+            <div id="rv-timeline"></div>
+            <div class="review-markers-hint muted">Kéo <b style="color:#2ecc71">▮ xanh</b> và <b style="color:#f1c40f">▮ vàng</b> trên timeline để chọn đoạn cắt · <b style="color:#e74c3c">▮ đỏ</b> = vị trí phát</div>
+            <div class="review-controls">
+              <button class="btn" type="button" id="rv-play">▶ Phát</button>
+              <button class="btn btn-secondary" type="button" data-seek="-10">-10s</button>
+              <button class="btn btn-secondary" type="button" data-seek="-5">-5s</button>
+              <button class="btn btn-secondary" type="button" data-seek="-2">-2s</button>
+              <button class="btn btn-secondary" type="button" data-seek="2">+2s</button>
+              <button class="btn btn-secondary" type="button" data-seek="5">+5s</button>
+              <div class="field field-sm" style="max-width:6rem"><label for="rv-speed">Tốc độ</label>
+                <select id="rv-speed">
+                  <option value="0.05">0.05x</option><option value="0.1">0.1x</option><option value="0.25">0.25x</option>
+                  <option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="1.5">1.5x</option>
+                  <option value="2">2x</option><option value="4">4x</option><option value="8">8x</option>
+                </select>
+              </div>
+              <label class="checkbox-row" style="margin:0"><input type="checkbox" id="rv-auto" checked> Tự phát đoạn kế</label>
+            </div>
+            <div class="review-cut">
+              <span class="muted">Đoạn đã chọn: <b id="rv-range">—</b></span>
+              <button class="btn btn-primary" type="button" id="rv-download">⬇ Tải nhanh (.ts)</button>
+              <button class="btn btn-secondary" type="button" id="rv-download-mp4">Tải MP4 thường</button>
+              <button class="btn btn-secondary" type="button" id="rv-qr">QR tải về ĐT</button>
+            </div>
+            <div class="msg" id="rv-msg"></div>
+          </div>
+          <div id="rv-qr-modal" class="rv-qr-modal" hidden>
+            <div class="rv-qr-box"><div id="rv-qr-canvas"></div><p class="muted">Quét QR bằng điện thoại để tải đoạn đã chọn</p><button class="btn btn-secondary" type="button" id="rv-qr-close">Đóng</button></div>
+          </div>
+        </section>
+
         <!-- Nhập từ Shinobi -->
         <section class="view" id="view-import" data-view="import">
           <h2 class="page-title">Nhập từ Shinobi</h2>
@@ -496,5 +540,8 @@
   </div>
   <script src="app.js"></script>
   <script src="help.js"></script>
+  <script src="vis-timeline-graph2d.min.js"></script>
+  <script src="qrcode.min.js"></script>
+  <script src="review.js"></script>
 </body>
 </html>

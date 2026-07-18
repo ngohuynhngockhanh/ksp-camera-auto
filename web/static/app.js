@@ -23,6 +23,7 @@ const NAV_ITEMS = [
   { hash: 'dashboard', label: 'Tổng quan', short: 'Tổng quan', icon: ICONS.home, bottom: true },
   { hash: 'scan', label: 'Quét mạng', short: 'Quét', icon: ICONS.radar, bottom: true },
   { hash: 'cameras', label: 'Kho camera', short: 'Camera', icon: ICONS.camera, bottom: true },
+  { hash: 'review', label: 'Xem lại', short: 'Xem lại', icon: ICONS.radar, bottom: false },
   { hash: 'import', label: 'Nhập Shinobi', short: 'Nhập', icon: ICONS.upload, bottom: true },
   // bottom: false — mobile bottom nav stays at 4 items; help is reachable
   // from the sidebar and the drawer.
@@ -256,6 +257,7 @@ function setRoute() {
   closeDrawer();
   if (hash === 'cameras') renderBulkSelection();
   if (hash === 'dashboard') renderDashboard();
+  if (hash === 'review' && window.reviewOnShow) window.reviewOnShow();
 }
 
 function goto(hash) { location.hash = '#' + hash; }
@@ -612,31 +614,19 @@ function localDatetimeValue(d) {
 // button to list recorded segments (the timeline), an inline HTML5 player, and
 // a download link. Playback/download stream straight from the camera via the
 // server (RTSP remux, nothing stored on the box).
+// renderPlayback now just links to the dedicated "Xem lại" timeline view — the
+// full playback/download UI lives there (web/static/review.js).
 function renderPlayback(c) {
   const el = document.getElementById('maint-playback');
   if (!el) return;
-  const now = new Date();
-  const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
   el.innerHTML = `
-    <div class="row">
-      <div class="field field-sm"><label for="pb-start">Từ</label><input id="pb-start" type="datetime-local" value="${localDatetimeValue(hourAgo)}"></div>
-      <div class="field field-sm"><label for="pb-end">Đến</label><input id="pb-end" type="datetime-local" value="${localDatetimeValue(now)}"></div>
-      <div class="field field-sm"><label for="pb-channel">Kênh</label><input id="pb-channel" type="number" min="0" value="0" style="width:5rem"></div>
-    </div>
-    <div class="row">
-      <button class="btn btn-secondary" type="button" id="pb-list-btn">Xem timeline bản ghi</button>
-      <button class="btn" type="button" id="pb-play-btn">Phát khoảng đã chọn</button>
-      <button class="btn btn-primary" type="button" id="pb-dl-btn">Tải nhanh ~7x (.ts, xem bằng VLC)</button>
-      <button class="btn" type="button" id="pb-dl-slow-btn">Tải MP4 (thường)</button>
-    </div>
-    <p class="muted">Tải/phát trực tiếp từ camera, không lưu trên box (bảo vệ eMMC). "Nhanh ~7x" dùng RTSP download-mode, ra file .ts (VLC/trình phát mở tốt): 6-7 tiếng tải ~50-60 phút. Tốc độ tuỳ băng thông camera.</p>
-    <div id="pb-timeline"></div>
-    <video id="pb-video" controls style="width:100%;max-height:420px;background:#000;margin-top:.5rem" hidden></video>
+    <p class="muted">Xem lại &amp; tải video (timeline, cắt đoạn, tải nhanh) đã chuyển sang trang riêng.</p>
+    <button class="btn btn-primary" type="button" id="pb-open-review">Mở trang Xem lại →</button>
   `;
-  document.getElementById('pb-list-btn').addEventListener('click', () => loadRecordings(c));
-  document.getElementById('pb-play-btn').addEventListener('click', () => playRange(c, false, false));
-  document.getElementById('pb-dl-btn').addEventListener('click', () => playRange(c, true, true));
-  document.getElementById('pb-dl-slow-btn').addEventListener('click', () => playRange(c, true, false));
+  document.getElementById('pb-open-review').addEventListener('click', () => {
+    if (c && c.id) window._rvPreselect = c.id;
+    goto('review');
+  });
 }
 
 // pbParams reads the current start/end/channel from the playback picker.

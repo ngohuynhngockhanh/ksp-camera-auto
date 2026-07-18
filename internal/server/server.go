@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"io/fs"
 	"log"
@@ -32,6 +33,7 @@ type Server struct {
 	session *sessionStore
 	limiter *loginLimiter
 	snaps   *snapCache
+	dlKey   []byte // HMAC key for short-lived tokenized playback/download links (QR)
 }
 
 // New builds a Server with routes registered.
@@ -48,6 +50,10 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 		session: newSessionStore(12 * time.Hour),
 		limiter: newLoginLimiter(cfg.Server.LoginMaxAttempts, time.Duration(cfg.Server.LoginLockoutMinutes)*time.Minute),
 		snaps:   newSnapCache(),
+		dlKey:   make([]byte, 32),
+	}
+	if _, err := rand.Read(s.dlKey); err != nil {
+		return nil, fmt.Errorf("gen download key: %w", err)
 	}
 	s.routes()
 	return s, nil
@@ -91,7 +97,16 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/storage", api(s.handleStorage))
 	s.mux.Handle("/api/autoreboot", api(s.handleAutoReboot))
 	s.mux.Handle("/api/recordings", api(s.handleRecordings))
-	s.mux.Handle("/api/playback", api(s.handlePlayback))
+	s.mux.Handle("/api/playback-token", api(s.handlePlaybackToken))
+	// /api/playback accepts EITHER a session OR a valid signed token (so a phone
+	// scanning the QR download link, with no session cookie, can still fetch it).
+	s.mux.Handle("/api/playback", limitBody(8<<20, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.authed(r) || s.validPlaybackToken(r) {
+			s.handlePlayback(w, r)
+			return
+		}
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	})))
 
 	// Authenticated app + static assets.
 	fileServer := http.FileServer(http.FS(s.static))

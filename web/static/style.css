@@ -555,3 +555,37 @@ dialog.dialog-lightbox[open] { max-width: min(1100px, 96vw); }
 .chat-card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .chat-form { display: flex; gap: 8px; }
 .chat-form input { flex: 1; min-width: 0; }
+
+/* ===== Xem lại video (timeline review) ===== */
+.review-toolbar { display:flex; gap:10px; flex-wrap:wrap; align-items:end; margin-bottom:12px; }
+.rv-quick { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.review-stage { display:flex; flex-direction:column; gap:10px; }
+.review-video-wrap { background:#000; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+#rv-video { display:block; width:100%; max-height:60vh; aspect-ratio:16/9; background:#000; object-fit:contain; }
+#rv-timeline { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); }
+.review-markers-hint { font-size:.8rem; }
+.review-controls, .review-cut { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.review-cut { border-top:1px solid var(--border); padding-top:10px; }
+
+/* vis-timeline dark theming to match tokens */
+#rv-timeline .vis-timeline { border:none; font-family:inherit; }
+#rv-timeline .vis-panel.vis-center, #rv-timeline .vis-panel.vis-left, #rv-timeline .vis-panel.vis-right,
+#rv-timeline .vis-panel.vis-top, #rv-timeline .vis-panel.vis-bottom { border-color:var(--border); }
+#rv-timeline .vis-time-axis .vis-text { color:var(--text-2); }
+#rv-timeline .vis-time-axis .vis-grid.vis-minor { border-color:var(--border); }
+#rv-timeline .vis-time-axis .vis-grid.vis-major { border-color:var(--border); }
+#rv-timeline .vis-item.rv-rec { background-color:var(--accent); border-color:var(--accent-strong); color:var(--on-accent); }
+#rv-timeline .vis-item.rv-ev { background-color:var(--warning); border-color:var(--warning); color:#1a1a1a; }
+#rv-timeline .vis-item.vis-range { border-radius:3px; }
+
+/* draggable cut/playhead markers (vis custom times) */
+#rv-timeline .vis-custom-time { width:4px; cursor:ew-resize; }
+#rv-timeline .vis-custom-time.cutStart { background-color:#2ecc71; }
+#rv-timeline .vis-custom-time.cutEnd { background-color:#f1c40f; }
+#rv-timeline .vis-custom-time.playhead { background-color:#e74c3c; }
+#rv-timeline .vis-custom-time > .vis-custom-time-marker { background:rgba(0,0,0,.75); color:#fff; border-radius:4px; font-size:12px; padding:2px 5px; }
+
+/* QR modal */
+.rv-qr-modal { position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; z-index:2000; }
+.rv-qr-box { background:#fff; color:#000; padding:20px; border-radius:var(--radius-lg); text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px; }
+.rv-qr-box .muted { color:#333; }

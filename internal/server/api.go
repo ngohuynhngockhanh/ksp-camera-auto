@@ -2,6 +2,9 @@ package server
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1234,6 +1237,10 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "thời gian kết thúc phải sau thời gian bắt đầu")
 		return
 	}
+	if end.Sub(start) > 24*time.Hour {
+		writeErr(w, http.StatusBadRequest, "khoảng thời gian tối đa là 24 giờ")
+		return
+	}
 	channel := atoiDefault(q.Get("channel"), 0)
 
 	// Playback is pure RTSP+ffmpeg and deliberately does NOT open a DVRIP
@@ -1284,4 +1291,44 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 		// connection so the client sees a truncated (failed) download.
 		log.Printf("playback %s ch%d: stream error after %d bytes: %v", q.Get("id"), channel, cw.n, err)
 	}
+}
+
+// playbackSig is the HMAC that authorizes a specific tokenized playback link
+// (used by the QR download so a phone with no session cookie can fetch a
+// pre-authorized clip). It binds the token to the exact playback params + expiry.
+func (s *Server) playbackSig(id string, channel int, start, end, fast, download, exp string) string {
+	mac := hmac.New(sha256.New, s.dlKey)
+	fmt.Fprintf(mac, "%s|%d|%s|%s|%s|%s|%s", id, channel, start, end, fast, download, exp)
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// validPlaybackToken reports whether the request carries a valid, unexpired
+// signed playback token matching its own query params.
+func (s *Server) validPlaybackToken(r *http.Request) bool {
+	q := r.URL.Query()
+	tok, exp := q.Get("token"), q.Get("exp")
+	if tok == "" || exp == "" {
+		return false
+	}
+	expUnix, err := strconv.ParseInt(exp, 10, 64)
+	if err != nil || time.Now().Unix() > expUnix {
+		return false
+	}
+	want := s.playbackSig(q.Get("id"), atoiDefault(q.Get("channel"), 0), q.Get("start"), q.Get("end"), q.Get("fast"), q.Get("download"), exp)
+	return hmac.Equal([]byte(tok), []byte(want))
+}
+
+// handlePlaybackToken issues a short-lived signed token for the playback params
+// the caller intends to use, so the review UI can build a QR download link that
+// works on a phone without a session. Session-gated (only an authenticated
+// operator can mint tokens).
+func (s *Server) handlePlaybackToken(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	q := r.URL.Query()
+	exp := strconv.FormatInt(time.Now().Add(6*time.Hour).Unix(), 10)
+	tok := s.playbackSig(q.Get("id"), atoiDefault(q.Get("channel"), 0), q.Get("start"), q.Get("end"), q.Get("fast"), q.Get("download"), exp)
+	writeJSON(w, http.StatusOK, map[string]string{"token": tok, "exp": exp})
 }
