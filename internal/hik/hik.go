@@ -122,6 +122,11 @@ func (c *Client) GetNetworkInterfaces(ctx context.Context) ([]NetworkInterface, 
 	return c.isapi.GetNetworkInterfaces(ctx)
 }
 
+// Reboot restarts the device (ISAPI PUT /ISAPI/System/reboot, with retry).
+func (c *Client) Reboot(ctx context.Context) error {
+	return c.isapi.Reboot(ctx)
+}
+
 // SetStaticIP writes one interface's IP configuration (addressed by the
 // device's own interface id, e.g. "1"). See isapi.Client.SetStaticIP for
 // validation and the caveat that applying a new IP moves the device off its

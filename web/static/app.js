@@ -533,6 +533,99 @@ async function openNetworkCard(c) {
     msg.textContent = 'Lỗi tải cấu hình mạng: ' + e.message;
     msg.className = 'msg err';
   }
+  renderMaintenance(c);
+}
+
+// formatBytes renders a byte count as a human-readable GB/MB string.
+function formatBytes(n) {
+  if (!n || n < 0) return '0';
+  const gb = n / (1024 * 1024 * 1024);
+  if (gb >= 1) return gb.toFixed(1) + ' GB';
+  return (n / (1024 * 1024)).toFixed(0) + ' MB';
+}
+
+// renderMaintenance fills the "Bảo trì" section: a reboot button (all
+// vendors), plus storage status/format and scheduled auto-reboot (Dahua only).
+async function renderMaintenance(c) {
+  const el = document.getElementById('net-maint');
+  const isDahua = c.vendor === 'dahua';
+  let html = `<div class="row"><button class="btn btn-danger" type="button" id="maint-reboot-btn">Khởi động lại camera</button></div>`;
+  if (isDahua) {
+    html += `<div class="card-title section-gap">Thẻ nhớ / Lưu trữ</div><div id="maint-storage"><p class="muted">Đang đọc thẻ nhớ...</p></div>`;
+    html += `<div class="card-title section-gap">Tự khởi động lại</div><div id="maint-autoreboot"><p class="muted">Đang đọc lịch...</p></div>`;
+  }
+  el.innerHTML = html;
+  document.getElementById('maint-reboot-btn').addEventListener('click', () => rebootDevice(c));
+  if (!isDahua) return;
+  const q = `id=${encodeURIComponent(c.id)}&timeoutSeconds=${timeoutSec()}`;
+  // Storage
+  try {
+    const s = await api('/api/storage?' + q);
+    const devs = (s && s.devices) || [];
+    if (!devs.length) {
+      document.getElementById('maint-storage').innerHTML = '<p class="muted">Không phát hiện thẻ nhớ (chưa gắn thẻ).</p>';
+    } else {
+      let sh = '';
+      for (const d of devs) {
+        const det = (d.details && d.details[0]) || {};
+        const err = det.isError || det.isNeedFormat;
+        sh += `<p>Thiết bị <b>${escapeHtml(d.name)}</b> · trạng thái: ${escapeHtml(d.state || '?')}${err ? ' · <span style="color:#c0392b">CẦN FORMAT/LỖI</span>' : ''}<br>
+          Dung lượng: ${formatBytes(det.totalBytes)} · đã dùng: ${formatBytes(det.usedBytes)}${det.type ? ' · ' + escapeHtml(det.type) : ''}</p>
+          <div class="row"><button class="btn btn-danger" type="button" data-fmt="${escapeHtml(d.name)}">Format ${escapeHtml(d.name)} (xoá sạch dữ liệu)</button></div>`;
+      }
+      const box = document.getElementById('maint-storage');
+      box.innerHTML = sh;
+      box.querySelectorAll('button[data-fmt]').forEach(b => b.addEventListener('click', () => formatStorage(c, b.getAttribute('data-fmt'))));
+    }
+  } catch (e) {
+    document.getElementById('maint-storage').innerHTML = `<p class="msg err">Lỗi đọc thẻ nhớ: ${escapeHtml(e.message)}</p>`;
+  }
+  // Auto-reboot
+  try {
+    const ar = await api('/api/autoreboot?' + q);
+    const h = (ar.hour == null ? 4 : ar.hour), m = (ar.minute == null ? 0 : ar.minute);
+    document.getElementById('maint-autoreboot').innerHTML = `
+      <div class="checkbox-row"><input type="checkbox" id="ar-enable" ${ar.enable ? 'checked' : ''}><label for="ar-enable">Bật tự khởi động lại hằng ngày</label></div>
+      <div class="row">
+        <div class="field field-sm"><label for="ar-hour">Giờ (0–23)</label><input id="ar-hour" type="number" min="0" max="23" value="${h}"></div>
+        <div class="field field-sm"><label for="ar-min">Phút (0–59)</label><input id="ar-min" type="number" min="0" max="59" value="${m}"></div>
+      </div>
+      <button class="btn btn-secondary" type="button" id="ar-save-btn">Lưu lịch tự khởi động lại</button>`;
+    document.getElementById('ar-save-btn').addEventListener('click', () => saveAutoReboot(c));
+  } catch (e) {
+    document.getElementById('maint-autoreboot').innerHTML = `<p class="msg err">Lỗi đọc lịch: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+async function rebootDevice(c) {
+  const label = c.name || c.host;
+  const ok = await showConfirm('Khởi động lại', `Khởi động lại camera "${label}"? Camera sẽ mất kết nối ~30–60s.`, { danger: true, okLabel: 'Khởi động lại' });
+  if (!ok) return;
+  try {
+    const res = await api('/api/reboot', { method: 'POST', body: JSON.stringify({ id: c.id, timeoutSeconds: timeoutSec() }) });
+    showToast((res && res.note) || 'Đã gửi lệnh khởi động lại.', 'ok');
+  } catch (e) { showToast('Lỗi khởi động lại: ' + e.message, 'err'); }
+}
+
+async function formatStorage(c, name) {
+  const label = c.name || c.host;
+  const ok = await showConfirm('Format thẻ nhớ', `Format "${name}" trên camera "${label}"? Toàn bộ dữ liệu ghi hình trên thẻ sẽ bị XOÁ SẠCH.`, { danger: true, okLabel: 'Format (xoá sạch)' });
+  if (!ok) return;
+  try {
+    const res = await api('/api/storage', { method: 'POST', body: JSON.stringify({ id: c.id, name, timeoutSeconds: timeoutSec() }) });
+    showToast((res && res.note) || 'Đã gửi lệnh format.', 'ok');
+    setTimeout(() => renderMaintenance(c), 4000);
+  } catch (e) { showToast('Lỗi format: ' + e.message, 'err'); }
+}
+
+async function saveAutoReboot(c) {
+  const enable = document.getElementById('ar-enable').checked;
+  const hour = parseInt(document.getElementById('ar-hour').value, 10) || 0;
+  const minute = parseInt(document.getElementById('ar-min').value, 10) || 0;
+  try {
+    await api('/api/autoreboot', { method: 'POST', body: JSON.stringify({ id: c.id, enable, day: 0, hour, minute, timeoutSeconds: timeoutSec() }) });
+    showToast(enable ? `Đã bật tự khởi động lại ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} hằng ngày.` : 'Đã tắt tự khởi động lại.', 'ok');
+  } catch (e) { showToast('Lỗi lưu lịch: ' + e.message, 'err'); }
 }
 
 function renderNetworkBody(net, wifi) {

@@ -191,6 +191,28 @@ type NetworkSettings interface {
 	ScanWiFi(ctx context.Context) ([]dahua.WiFiAP, error)
 }
 
+// Rebooter is implemented by cameras that support a remote reboot. Both
+// dahuaCamera (DVRIP magicBox.reboot) and hikCamera (ISAPI /System/reboot)
+// implement it; callers type-assert.
+type Rebooter interface {
+	Reboot(ctx context.Context) error
+}
+
+// StorageManager is implemented by cameras that expose on-device storage
+// (SD card) info and formatting. Dahua-only. Formatting erases all recordings,
+// so the UI must require explicit confirmation before calling Format.
+type StorageManager interface {
+	GetStorageInfo(ctx context.Context) ([]dahua.StorageDevice, error)
+	FormatStorage(ctx context.Context, name string) error
+}
+
+// AutoRebootConfig is implemented by cameras that expose a scheduled
+// auto-reboot (Dahua's AutoMaintain table). Dahua-only.
+type AutoRebootConfig interface {
+	GetAutoReboot(ctx context.Context) (dahua.AutoReboot, error)
+	SetAutoReboot(ctx context.Context, ar dahua.AutoReboot) error
+}
+
 // PTZControl is implemented by cameras that support live pan/tilt/zoom.
 // Only dahuaCamera implements it (Dahua HTTP CGI); callers type-assert.
 type PTZControl interface {
@@ -286,6 +308,29 @@ func (d *dahuaCamera) ChannelInfo(ctx context.Context, channel int) (string, []s
 // SetChannelName writes the device's own channel name.
 func (d *dahuaCamera) SetChannelName(ctx context.Context, channel int, name string) error {
 	return d.client.SetChannelTitle(channel, name)
+}
+
+// Reboot restarts the device via DVRIP magicBox.reboot.
+func (d *dahuaCamera) Reboot(ctx context.Context) error { return d.client.Reboot() }
+
+// GetStorageInfo reads the device's SD-card / storage status.
+func (d *dahuaCamera) GetStorageInfo(ctx context.Context) ([]dahua.StorageDevice, error) {
+	return d.client.GetStorageInfo()
+}
+
+// FormatStorage formats one storage device by name — ERASES ALL DATA.
+func (d *dahuaCamera) FormatStorage(ctx context.Context, name string) error {
+	return d.client.FormatStorage(name)
+}
+
+// GetAutoReboot reads the scheduled auto-reboot (AutoMaintain).
+func (d *dahuaCamera) GetAutoReboot(ctx context.Context) (dahua.AutoReboot, error) {
+	return d.client.GetAutoReboot()
+}
+
+// SetAutoReboot writes the scheduled auto-reboot (AutoMaintain).
+func (d *dahuaCamera) SetAutoReboot(ctx context.Context, ar dahua.AutoReboot) error {
+	return d.client.SetAutoReboot(ar)
 }
 
 // SetOSDLines writes free-text OSD lines and enable state for a channel.
@@ -719,6 +764,9 @@ func (h *hikCamera) SetWiFiConfig(ctx context.Context, iface, ssid, password, en
 func (h *hikCamera) ScanWiFi(ctx context.Context) ([]dahua.WiFiAP, error) {
 	return nil, errHikWiFiUnsupported
 }
+
+// Reboot restarts the device via ISAPI /System/reboot.
+func (h *hikCamera) Reboot(ctx context.Context) error { return h.client.Reboot(ctx) }
 
 // Probe reads back main + sub1 + sub2 stream info for the default channel
 // (Profile.Channel's zero value, i.e. ISAPI channel 1).

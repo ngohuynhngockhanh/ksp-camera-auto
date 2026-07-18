@@ -12,6 +12,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/bulk"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/camera"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/dahua"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/importer"
 )
 
@@ -961,4 +962,180 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	bulk.Apply(ctx, s.inv, req, to, emit)
+}
+
+// handleReboot handles POST /api/reboot — restart one device now. Works for
+// any camera implementing camera.Rebooter (Dahua via DVRIP, Hikvision via
+// ISAPI). High-impact but reversible; the UI requires a confirmation.
+func (s *Server) handleReboot(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req struct {
+		ID             string `json:"id"`
+		TimeoutSeconds int    `json:"timeoutSeconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, req.ID, req.TimeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	rb, ok := cam.(camera.Rebooter)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	if err := rb.Reboot(ctx); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "note": "đã gửi lệnh khởi động lại. Camera sẽ mất kết nối ~30–60s."})
+}
+
+// handleStorage handles GET /api/storage?id=&timeoutSeconds= (read SD-card /
+// storage status) and POST /api/storage (format one device — ERASES ALL DATA).
+// Dahua-only.
+func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleStorageGet(w, r)
+	case http.MethodPost:
+		s.handleStorageFormat(w, r)
+	default:
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) handleStorageGet(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, q.Get("id"), atoiDefault(q.Get("timeoutSeconds"), 0))
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	sm, ok := cam.(camera.StorageManager)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	info, err := sm.GetStorageInfo(ctx)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"devices": info})
+}
+
+func (s *Server) handleStorageFormat(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID             string `json:"id"`
+		Name           string `json:"name"`
+		TimeoutSeconds int    `json:"timeoutSeconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	if req.Name == "" {
+		writeErr(w, http.StatusBadRequest, "name (thiết bị lưu trữ) là bắt buộc")
+		return
+	}
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, req.ID, req.TimeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	sm, ok := cam.(camera.StorageManager)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	if err := sm.FormatStorage(ctx, req.Name); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "note": "đã gửi lệnh format. Thẻ đang được định dạng, đọc lại sau ít giây."})
+}
+
+// handleAutoReboot handles GET /api/autoreboot?id=&timeoutSeconds= (read the
+// scheduled auto-reboot) and POST /api/autoreboot (write it). Dahua-only.
+func (s *Server) handleAutoReboot(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleAutoRebootGet(w, r)
+	case http.MethodPost:
+		s.handleAutoRebootSet(w, r)
+	default:
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) handleAutoRebootGet(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, q.Get("id"), atoiDefault(q.Get("timeoutSeconds"), 0))
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	ar, ok := cam.(camera.AutoRebootConfig)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	cfg, err := ar.GetAutoReboot(ctx)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, cfg)
+}
+
+func (s *Server) handleAutoRebootSet(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID             string `json:"id"`
+		Enable         bool   `json:"enable"`
+		Day            int    `json:"day"`
+		Hour           int    `json:"hour"`
+		Minute         int    `json:"minute"`
+		TimeoutSeconds int    `json:"timeoutSeconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, req.ID, req.TimeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	arc, ok := cam.(camera.AutoRebootConfig)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	if err := arc.SetAutoReboot(ctx, dahua.AutoReboot{Enable: req.Enable, Day: req.Day, Hour: req.Hour, Minute: req.Minute}); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	cfg, err := arc.GetAutoReboot(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "autoReboot": cfg})
 }
