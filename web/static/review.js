@@ -186,8 +186,16 @@
       const tok = await api('/api/playback-token?' + q);
       const url = `${location.origin}${playbackURL(p, '&fast=1&download=1')}&exp=${tok.exp}&token=${tok.token}`;
       const box = $('rv-qr-canvas'); box.innerHTML = '';
-      new QRCode(box, { text: url, width: 220, height: 220 });
-      $('rv-qr-modal').hidden = false;
+      $('rv-qr-modal').hidden = false; // show first so QRCode can size the element
+      try {
+        // correctLevel L = max data capacity (the tokenized URL is long); H overflows.
+        new QRCode(box, { text: url, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.L });
+      } catch (err) {
+        box.innerHTML = '<p style="color:#c0392b">Link quá dài cho QR.</p>';
+      }
+      // Always show a tappable link fallback (works even if the QR fails to render).
+      const link = document.getElementById('rv-qr-link');
+      if (link) { link.href = url; link.textContent = 'Hoặc bấm vào đây để tải trên máy này'; }
     } catch (e) { showToast('Lỗi tạo QR: ' + e.message, 'err'); }
   }
 })();
