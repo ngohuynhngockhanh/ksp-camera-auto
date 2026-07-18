@@ -1265,7 +1265,13 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fname))
 	}
 	cw := &countingWriter{w: w}
-	if err := dahua.StreamPlayback(ctx, cw, d.Host, d.Username, d.Password, channel, start, end); err != nil {
+	// fast=1 uses the RTSP "Rate-Control: no" download mode (~6x realtime) via
+	// the in-process RTSP proxy; otherwise normal (~1x realtime) playback.
+	stream := dahua.StreamPlayback
+	if q.Get("fast") != "" {
+		stream = dahua.StreamPlaybackFast
+	}
+	if err := stream(ctx, cw, d.Host, d.Username, d.Password, channel, start, end); err != nil {
 		if cw.n == 0 {
 			// Nothing sent yet — the status line is still ours to set.
 			writeErr(w, http.StatusBadGateway, err.Error())

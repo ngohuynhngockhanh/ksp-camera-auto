@@ -626,15 +626,17 @@ function renderPlayback(c) {
     <div class="row">
       <button class="btn btn-secondary" type="button" id="pb-list-btn">Xem timeline bản ghi</button>
       <button class="btn" type="button" id="pb-play-btn">Phát khoảng đã chọn</button>
-      <button class="btn" type="button" id="pb-dl-btn">Tải MP4 khoảng đã chọn</button>
+      <button class="btn btn-primary" type="button" id="pb-dl-btn">Tải MP4 (nhanh ~7x)</button>
+      <button class="btn" type="button" id="pb-dl-slow-btn">Tải MP4 (thường)</button>
     </div>
-    <p class="muted">Tải/phát trực tiếp từ camera, không lưu trên box. Khoảng dài (nhiều giờ) vẫn tải được; tốc độ tuỳ tải của camera.</p>
+    <p class="muted">Tải/phát trực tiếp từ camera, không lưu trên box (bảo vệ eMMC). "Nhanh ~7x" dùng RTSP download-mode: 6-7 tiếng tải ~50-60 phút. Tốc độ thực tế tuỳ tải/băng thông camera.</p>
     <div id="pb-timeline"></div>
     <video id="pb-video" controls style="width:100%;max-height:420px;background:#000;margin-top:.5rem" hidden></video>
   `;
   document.getElementById('pb-list-btn').addEventListener('click', () => loadRecordings(c));
-  document.getElementById('pb-play-btn').addEventListener('click', () => playRange(c, false));
-  document.getElementById('pb-dl-btn').addEventListener('click', () => playRange(c, true));
+  document.getElementById('pb-play-btn').addEventListener('click', () => playRange(c, false, false));
+  document.getElementById('pb-dl-btn').addEventListener('click', () => playRange(c, true, true));
+  document.getElementById('pb-dl-slow-btn').addEventListener('click', () => playRange(c, true, false));
 }
 
 // pbParams reads the current start/end/channel from the playback picker.
@@ -674,11 +676,12 @@ async function loadRecordings(c) {
 // playRange plays (download=false) or downloads (download=true) the selected
 // time range. Playback points an HTML5 <video> at /api/playback; download
 // navigates to the same endpoint with download=1 so the browser saves the file.
-function playRange(c, download) {
+function playRange(c, download, fast) {
   const p = pbParams(c);
   if (!p.start || !p.end) { showToast('Chọn khoảng thời gian.', 'err'); return; }
   if (p.end <= p.start) { showToast('Thời gian kết thúc phải sau thời gian bắt đầu.', 'err'); return; }
-  const base = `/api/playback?id=${encodeURIComponent(p.id)}&channel=${p.channel}&start=${encodeURIComponent(p.start)}&end=${encodeURIComponent(p.end)}`;
+  let base = `/api/playback?id=${encodeURIComponent(p.id)}&channel=${p.channel}&start=${encodeURIComponent(p.start)}&end=${encodeURIComponent(p.end)}`;
+  if (fast) base += '&fast=1';
   if (download) {
     window.location.href = base + '&download=1';
     showToast('Đang tải MP4... (khoảng dài có thể mất thời gian)', 'ok');
