@@ -90,6 +90,8 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/reboot", api(s.handleReboot))
 	s.mux.Handle("/api/storage", api(s.handleStorage))
 	s.mux.Handle("/api/autoreboot", api(s.handleAutoReboot))
+	s.mux.Handle("/api/recordings", api(s.handleRecordings))
+	s.mux.Handle("/api/playback", api(s.handlePlayback))
 
 	// Authenticated app + static assets.
 	fileServer := http.FileServer(http.FS(s.static))

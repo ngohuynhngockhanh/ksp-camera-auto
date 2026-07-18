@@ -553,6 +553,7 @@ async function renderMaintenance(c) {
   if (isDahua) {
     html += `<div class="card-title section-gap">Thẻ nhớ / Lưu trữ</div><div id="maint-storage"><p class="muted">Đang đọc thẻ nhớ...</p></div>`;
     html += `<div class="card-title section-gap">Tự khởi động lại</div><div id="maint-autoreboot"><p class="muted">Đang đọc lịch...</p></div>`;
+    html += `<div class="card-title section-gap">Xem lại video</div><div id="maint-playback"></div>`;
   }
   el.innerHTML = html;
   document.getElementById('maint-reboot-btn').addEventListener('click', () => rebootDevice(c));
@@ -594,6 +595,98 @@ async function renderMaintenance(c) {
     document.getElementById('ar-save-btn').addEventListener('click', () => saveAutoReboot(c));
   } catch (e) {
     document.getElementById('maint-autoreboot').innerHTML = `<p class="msg err">Lỗi đọc lịch: ${escapeHtml(e.message)}</p>`;
+  }
+  renderPlayback(c);
+}
+
+// pad2 zero-pads to 2 digits.
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+// localDatetimeValue formats a Date as the value an <input type=datetime-local>
+// expects (YYYY-MM-DDTHH:MM), in local wall-clock.
+function localDatetimeValue(d) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+// renderPlayback builds the "Xem lại video" panel: a time-range picker, a
+// button to list recorded segments (the timeline), an inline HTML5 player, and
+// a download link. Playback/download stream straight from the camera via the
+// server (RTSP remux, nothing stored on the box).
+function renderPlayback(c) {
+  const el = document.getElementById('maint-playback');
+  if (!el) return;
+  const now = new Date();
+  const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+  el.innerHTML = `
+    <div class="row">
+      <div class="field field-sm"><label for="pb-start">Từ</label><input id="pb-start" type="datetime-local" value="${localDatetimeValue(hourAgo)}"></div>
+      <div class="field field-sm"><label for="pb-end">Đến</label><input id="pb-end" type="datetime-local" value="${localDatetimeValue(now)}"></div>
+      <div class="field field-sm"><label for="pb-channel">Kênh</label><input id="pb-channel" type="number" min="0" value="0" style="width:5rem"></div>
+    </div>
+    <div class="row">
+      <button class="btn btn-secondary" type="button" id="pb-list-btn">Xem timeline bản ghi</button>
+      <button class="btn" type="button" id="pb-play-btn">Phát khoảng đã chọn</button>
+      <button class="btn" type="button" id="pb-dl-btn">Tải MP4 khoảng đã chọn</button>
+    </div>
+    <p class="muted">Tải/phát trực tiếp từ camera, không lưu trên box. Khoảng dài (nhiều giờ) vẫn tải được; tốc độ tuỳ tải của camera.</p>
+    <div id="pb-timeline"></div>
+    <video id="pb-video" controls style="width:100%;max-height:420px;background:#000;margin-top:.5rem" hidden></video>
+  `;
+  document.getElementById('pb-list-btn').addEventListener('click', () => loadRecordings(c));
+  document.getElementById('pb-play-btn').addEventListener('click', () => playRange(c, false));
+  document.getElementById('pb-dl-btn').addEventListener('click', () => playRange(c, true));
+}
+
+// pbParams reads the current start/end/channel from the playback picker.
+function pbParams(c) {
+  const start = document.getElementById('pb-start').value;
+  const end = document.getElementById('pb-end').value;
+  const channel = parseInt(document.getElementById('pb-channel').value, 10) || 0;
+  return { id: c.id, start, end, channel };
+}
+
+async function loadRecordings(c) {
+  const tl = document.getElementById('pb-timeline');
+  const p = pbParams(c);
+  if (!p.start || !p.end) { showToast('Chọn khoảng thời gian.', 'err'); return; }
+  tl.innerHTML = '<p class="muted">Đang tải danh sách bản ghi (qua cổng cấu hình camera, có thể chậm nếu camera đang bận)...</p>';
+  try {
+    const q = `id=${encodeURIComponent(p.id)}&channel=${p.channel}&start=${encodeURIComponent(p.start)}&end=${encodeURIComponent(p.end)}&timeoutSeconds=${timeoutSec()}`;
+    const res = await api('/api/recordings?' + q);
+    const recs = (res && res.recordings) || [];
+    if (!recs.length) { tl.innerHTML = '<p class="muted">Không có bản ghi trong khoảng này.</p>'; return; }
+    tl.innerHTML = '<div class="chip-list">' + recs.map((r, i) => {
+      const st = r.startTime.slice(11), en = r.endTime.slice(11);
+      const ev = (r.events && r.events.length) ? ' 👤' : '';
+      return `<button type="button" class="chip chip-btn" data-pb-idx="${i}" data-start="${escapeHtml(r.startTime)}" data-end="${escapeHtml(r.endTime)}">${st}–${en} (${r.duration}s)${ev}</button>`;
+    }).join('') + '</div>';
+    tl.querySelectorAll('[data-pb-idx]').forEach(b => b.addEventListener('click', () => {
+      // Fill the pickers with this segment and play it.
+      document.getElementById('pb-start').value = b.dataset.start.replace(' ', 'T').slice(0, 16);
+      document.getElementById('pb-end').value = b.dataset.end.replace(' ', 'T').slice(0, 16);
+      playRange(c, false);
+    }));
+  } catch (e) {
+    tl.innerHTML = `<p class="msg err">Lỗi tải danh sách: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+// playRange plays (download=false) or downloads (download=true) the selected
+// time range. Playback points an HTML5 <video> at /api/playback; download
+// navigates to the same endpoint with download=1 so the browser saves the file.
+function playRange(c, download) {
+  const p = pbParams(c);
+  if (!p.start || !p.end) { showToast('Chọn khoảng thời gian.', 'err'); return; }
+  if (p.end <= p.start) { showToast('Thời gian kết thúc phải sau thời gian bắt đầu.', 'err'); return; }
+  const base = `/api/playback?id=${encodeURIComponent(p.id)}&channel=${p.channel}&start=${encodeURIComponent(p.start)}&end=${encodeURIComponent(p.end)}`;
+  if (download) {
+    window.location.href = base + '&download=1';
+    showToast('Đang tải MP4... (khoảng dài có thể mất thời gian)', 'ok');
+  } else {
+    const v = document.getElementById('pb-video');
+    v.hidden = false;
+    v.src = base;
+    v.play().catch(() => {});
   }
 }
 

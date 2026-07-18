@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -1138,4 +1139,140 @@ func (s *Server) handleAutoRebootSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "autoReboot": cfg})
+}
+
+// parsePlaybackTime accepts the wall-clock time formats the recordings/playback
+// UI sends (datetime-local gives "2006-01-02T15:04", with or without seconds;
+// the API also accepts a space separator). The time is treated as the device's
+// own local wall clock — parsed and re-formatted without any timezone shift, so
+// the digits reach the camera unchanged.
+func parsePlaybackTime(s string) (time.Time, error) {
+	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02 15:04:05", "2006-01-02 15:04"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("thời gian %q không hợp lệ (định dạng YYYY-MM-DDTHH:MM:SS)", s)
+}
+
+// handleRecordings handles GET /api/recordings?id=&channel=&start=&end= —
+// list stored recording segments (the playback timeline) for one channel over
+// a time range. Dahua-only.
+func (s *Server) handleRecordings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	q := r.URL.Query()
+	start, err := parsePlaybackTime(q.Get("start"))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	end, err := parsePlaybackTime(q.Get("end"))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	channel := atoiDefault(q.Get("channel"), 0)
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, q.Get("id"), atoiDefault(q.Get("timeoutSeconds"), 0))
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+
+	rec, ok := cam.(camera.Recorder)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	list, err := rec.FindRecordings(ctx, channel, start, end)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"recordings": list})
+}
+
+// countingWriter tracks whether any bytes have reached the client yet, so the
+// playback handler knows if it can still change the HTTP status on error (once
+// a byte is sent, the 200 + headers are committed).
+type countingWriter struct {
+	w io.Writer
+	n int64
+}
+
+func (c *countingWriter) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	c.n += int64(n)
+	return n, err
+}
+
+// handlePlayback handles GET /api/playback?id=&channel=&start=&end=&download= —
+// stream one channel's [start,end] recording to the client as fragmented MP4,
+// remuxed from Dahua RTSP playback with nothing buffered on the box (see
+// dahua.StreamPlayback). download=1 forces a file download; otherwise it plays
+// inline (HTML5 <video>). Dahua-only.
+func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	q := r.URL.Query()
+	start, err := parsePlaybackTime(q.Get("start"))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	end, err := parsePlaybackTime(q.Get("end"))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !end.After(start) {
+		writeErr(w, http.StatusBadRequest, "thời gian kết thúc phải sau thời gian bắt đầu")
+		return
+	}
+	channel := atoiDefault(q.Get("channel"), 0)
+
+	// Playback is pure RTSP+ffmpeg and deliberately does NOT open a DVRIP
+	// session: the recorded stream comes over port 554, and skipping the DVRIP
+	// login means a download isn't blocked when the camera's config port is
+	// busy (these field cameras are often also recorded by another system).
+	// So resolve the device straight from inventory instead of openDeviceCamera.
+	d, found := s.inv.Get(q.Get("id"))
+	if !found {
+		writeErr(w, http.StatusNotFound, "device not found")
+		return
+	}
+	if d.Vendor != config.VendorDahua {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	// A long range streams far faster than realtime but can still take a
+	// minute+; give it a generous floor so a multi-hour download isn't cut off.
+	timeoutSeconds := atoiDefault(q.Get("timeoutSeconds"), 0)
+	if timeoutSeconds < 1800 {
+		timeoutSeconds = 1800
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(timeoutSeconds)*time.Second)
+	defer cancel()
+
+	fname := fmt.Sprintf("playback_ch%d_%s.mp4", channel, start.Format("20060102_150405"))
+	w.Header().Set("Content-Type", "video/mp4")
+	if q.Get("download") != "" {
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fname))
+	}
+	cw := &countingWriter{w: w}
+	if err := dahua.StreamPlayback(ctx, cw, d.Host, d.Username, d.Password, channel, start, end); err != nil {
+		if cw.n == 0 {
+			// Nothing sent yet — the status line is still ours to set.
+			writeErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		// Bytes already streamed: can't change the status. Log and drop the
+		// connection so the client sees a truncated (failed) download.
+		log.Printf("playback %s ch%d: stream error after %d bytes: %v", q.Get("id"), channel, cw.n, err)
+	}
 }

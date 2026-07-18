@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
@@ -213,6 +214,19 @@ type AutoRebootConfig interface {
 	SetAutoReboot(ctx context.Context, ar dahua.AutoReboot) error
 }
 
+// Recorder is implemented by cameras that expose recorded footage: a timeline
+// listing of stored segments, and a streamed remux of an arbitrary time range.
+// Dahua-only (mediaFileFind + RTSP playback). callers type-assert.
+type Recorder interface {
+	// FindRecordings lists stored segments on a channel between start and end
+	// (device-local times).
+	FindRecordings(ctx context.Context, channel int, start, end time.Time) ([]dahua.Recording, error)
+	// StreamPlayback writes the [start,end] recording for a channel to w as a
+	// fragmented MP4, streamed with no on-box buffering (see
+	// dahua.StreamPlayback).
+	StreamPlayback(ctx context.Context, w io.Writer, channel int, start, end time.Time) error
+}
+
 // PTZControl is implemented by cameras that support live pan/tilt/zoom.
 // Only dahuaCamera implements it (Dahua HTTP CGI); callers type-assert.
 type PTZControl interface {
@@ -312,6 +326,16 @@ func (d *dahuaCamera) SetChannelName(ctx context.Context, channel int, name stri
 
 // Reboot restarts the device via DVRIP magicBox.reboot.
 func (d *dahuaCamera) Reboot(ctx context.Context) error { return d.client.Reboot() }
+
+// FindRecordings lists stored recording segments on a channel over a range.
+func (d *dahuaCamera) FindRecordings(ctx context.Context, channel int, start, end time.Time) ([]dahua.Recording, error) {
+	return d.client.FindRecordings(channel, start, end)
+}
+
+// StreamPlayback streams a channel's [start,end] recording to w as MP4.
+func (d *dahuaCamera) StreamPlayback(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return dahua.StreamPlayback(ctx, w, d.device.Host, d.device.Username, d.device.Password, channel, start, end)
+}
 
 // GetStorageInfo reads the device's SD-card / storage status.
 func (d *dahuaCamera) GetStorageInfo(ctx context.Context) ([]dahua.StorageDevice, error) {
