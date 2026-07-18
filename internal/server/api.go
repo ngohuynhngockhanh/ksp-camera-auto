@@ -1237,8 +1237,12 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "thời gian kết thúc phải sau thời gian bắt đầu")
 		return
 	}
-	if end.Sub(start) > 24*time.Hour {
-		writeErr(w, http.StatusBadRequest, "khoảng thời gian tối đa là 24 giờ")
+	maxHours := s.cfg.Defaults.MaxReviewHours
+	if maxHours <= 0 {
+		maxHours = 72
+	}
+	if end.Sub(start) > time.Duration(maxHours)*time.Hour {
+		writeErr(w, http.StatusBadRequest, fmt.Sprintf("khoảng thời gian tối đa là %d giờ", maxHours))
 		return
 	}
 	channel := atoiDefault(q.Get("channel"), 0)
@@ -1331,4 +1335,14 @@ func (s *Server) handlePlaybackToken(w http.ResponseWriter, r *http.Request) {
 	exp := strconv.FormatInt(time.Now().Add(6*time.Hour).Unix(), 10)
 	tok := s.playbackSig(q.Get("id"), atoiDefault(q.Get("channel"), 0), q.Get("start"), q.Get("end"), q.Get("fast"), q.Get("download"), exp)
 	writeJSON(w, http.StatusOK, map[string]string{"token": tok, "exp": exp})
+}
+
+// handleConfig exposes a small bootstrap payload the web UI needs (currently
+// just the review-window cap).
+func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	max := s.cfg.Defaults.MaxReviewHours
+	if max <= 0 {
+		max = 72
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"maxReviewHours": max})
 }

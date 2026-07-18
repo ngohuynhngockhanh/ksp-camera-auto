@@ -8,6 +8,10 @@
   let cam = null;           // {id, name, host, vendor}
   let inited = false;
   let winStart = null, winEnd = null; // current loaded window (Date)
+  let draggingPlayhead = false;       // true while the red marker is being dragged
+  let previewBase = null;             // absolute time (Date) of the loaded preview clip's start
+  let maxHours = 72;                  // review-window cap (from /api/config)
+  const PREVIEW_LEN = 120;            // seconds of video loaded per preview clip (scrub granularity)
 
   const $ = (id) => document.getElementById(id);
   const pad = (n) => String(n).padStart(2, '0');
@@ -37,6 +41,7 @@
   };
 
   async function init() {
+    try { const cfg = await api('/api/config'); if (cfg && cfg.maxReviewHours) maxHours = cfg.maxReviewHours; } catch (e) { /* keep default 72 */ }
     // Populate camera dropdown (Dahua only — playback is Dahua-only).
     const sel = $('rv-cam');
     try {
@@ -69,7 +74,7 @@
     items = new vis.DataSet([]);
     timeline = new vis.Timeline($('rv-timeline'), items, {
       stack: false, showCurrentTime: false, selectable: false,
-      zoomMin: 1000 * 10, zoomMax: 1000 * 60 * 60 * 24, height: 90,
+      zoomMin: 1000 * 10, zoomMax: 1000 * 60 * 60 * maxHours, height: 90,
       moveable: true, zoomable: true,
       margin: { item: 2 },
     });
@@ -79,13 +84,33 @@
     timeline.addCustomTime(new Date(now.getTime() - 50 * 60000), 'cutEnd');
     timeline.addCustomTime(now, 'playhead');
     timeline.setCustomTimeMarker('▶', 'playhead', false);
-    timeline.on('timechange', () => updateRange());
-    timeline.on('timechanged', () => updateRange());
-    // Click on the timeline background moves the playhead there.
-    timeline.on('click', (props) => { if (props.time) timeline.setCustomTime(props.time, 'playhead'); });
+    // While dragging the red marker, suppress the timeupdate auto-follow so it
+    // doesn't snap back; on release, load a short preview clip at the new spot.
+    timeline.on('timechange', (p) => { if (p.id === 'playhead') draggingPlayhead = true; clampMarkers(p.id); updateRange(); });
+    timeline.on('timechanged', (p) => {
+      clampMarkers(p.id); updateRange();
+      if (p.id === 'playhead') { draggingPlayhead = false; loadPreview(markerTime('playhead')); }
+    });
+    // Click on the timeline background = move the playhead there and preview.
+    timeline.on('click', (props) => {
+      if (!props.time || props.what === 'custom-time') return;
+      timeline.setCustomTime(props.time, 'playhead');
+      loadPreview(props.time);
+    });
   }
 
   function markerTime(id) { return timeline.getCustomTime(id); }
+
+  // clampMarkers keeps cutStart <= cutEnd: if the just-moved marker crossed the
+  // other, push the other along so the cut range never inverts.
+  function clampMarkers(moved) {
+    if (moved !== 'cutStart' && moved !== 'cutEnd') return;
+    const a = markerTime('cutStart'), b = markerTime('cutEnd');
+    if (a > b) {
+      if (moved === 'cutStart') timeline.setCustomTime(a, 'cutEnd');
+      else timeline.setCustomTime(b, 'cutStart');
+    }
+  }
 
   function updateRange() {
     let a = markerTime('cutStart'), b = markerTime('cutEnd');
@@ -93,6 +118,21 @@
     const secs = Math.round((b - a) / 1000);
     $('rv-range').textContent = `${fmtClock(a)} → ${fmtClock(b)} (${secs}s${secs > 3600 ? ' ~' + (secs / 3600).toFixed(1) + 'h' : ''})`;
     return { start: a, end: b };
+  }
+
+  // loadPreview streams a short clip [at, at+PREVIEW_LEN] into the player so the
+  // native seek bar / ±seconds work smoothly (a full multi-hour range can't be
+  // scrubbed). The red playhead marks this clip's start.
+  function loadPreview(at) {
+    if (!cam) return;
+    const start = at instanceof Date ? at : new Date(at);
+    const end = new Date(start.getTime() + PREVIEW_LEN * 1000);
+    const ch = parseInt($('rv-channel').value, 10) || 0;
+    const v = $('rv-video');
+    previewBase = start;
+    v.src = `/api/playback?id=${encodeURIComponent(cam.id)}&channel=${ch}&start=${encodeURIComponent(fmtParam(start))}&end=${encodeURIComponent(fmtParam(end))}`;
+    v.playbackRate = parseFloat($('rv-speed').value) || 1;
+    v.play().catch(() => {});
   }
 
   async function load(minutes) {
@@ -136,32 +176,21 @@
 
   function wireControls() {
     const v = $('rv-video');
-    $('rv-play').addEventListener('click', () => {
-      if (!cam) return;
-      const p = cutParams();
-      if (p.endDate <= p.startDate) { showToast('Chọn đoạn cắt hợp lệ.', 'err'); return; }
-      v.src = playbackURL(p); v.dataset.base = p.startDate.getTime();
-      v.play().catch(() => {});
-    });
+    // ▶ Phát previews from the red playhead's current position (native controls
+    // give play/pause + seek bar within the loaded short clip).
+    $('rv-play').addEventListener('click', () => loadPreview(markerTime('playhead')));
     document.querySelectorAll('#view-review [data-seek]').forEach(b =>
       b.addEventListener('click', () => { v.currentTime = Math.max(0, v.currentTime + parseFloat(b.dataset.seek)); }));
     $('rv-speed').addEventListener('change', () => { v.playbackRate = parseFloat($('rv-speed').value); });
-    // Playhead follows video during playback.
+    // The red playhead follows playback — but never while the user is dragging it.
     v.addEventListener('timeupdate', () => {
-      if (!v.dataset.base) return;
-      timeline.setCustomTime(new Date(parseInt(v.dataset.base, 10) + v.currentTime * 1000), 'playhead');
+      if (draggingPlayhead || !previewBase) return;
+      timeline.setCustomTime(new Date(previewBase.getTime() + v.currentTime * 1000), 'playhead');
     });
-    // Auto-next: on end, jump the cut to the next segment after current end.
+    // Auto-next: when a preview clip ends, continue with the next clip.
     v.addEventListener('ended', () => {
-      if (!$('rv-auto').checked) return;
-      const curEnd = markerTime('cutEnd').getTime();
-      let next = null;
-      items.forEach(it => { const s = new Date(it.start).getTime(); if (s >= curEnd - 1000 && (!next || s < next.start)) next = { start: s, end: new Date(it.end).getTime() }; });
-      if (next) {
-        timeline.setCustomTime(new Date(next.start), 'cutStart');
-        timeline.setCustomTime(new Date(next.end), 'cutEnd');
-        updateRange(); $('rv-play').click();
-      }
+      if (!$('rv-auto').checked || !previewBase) return;
+      loadPreview(new Date(previewBase.getTime() + PREVIEW_LEN * 1000));
     });
     $('rv-download').addEventListener('click', () => download(true));
     $('rv-download-mp4').addEventListener('click', () => download(false));

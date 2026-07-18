@@ -96,6 +96,7 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/reboot", api(s.handleReboot))
 	s.mux.Handle("/api/storage", api(s.handleStorage))
 	s.mux.Handle("/api/autoreboot", api(s.handleAutoReboot))
+	s.mux.Handle("/api/config", api(s.handleConfig))
 	s.mux.Handle("/api/recordings", api(s.handleRecordings))
 	s.mux.Handle("/api/playback-token", api(s.handlePlaybackToken))
 	// /api/playback accepts EITHER a session OR a valid signed token (so a phone

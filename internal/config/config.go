@@ -45,6 +45,9 @@ type Defaults struct {
 	TimeoutSeconds int `yaml:"timeout_seconds"`
 	// NewPassword is the default when bulk-changing a camera's password.
 	NewPassword string `yaml:"new_password"`
+	// MaxReviewHours caps the length of a recording range the "Xem lại" view can
+	// play/download (guards against absurdly long requests). Default 72.
+	MaxReviewHours int `yaml:"max_review_hours"`
 }
 
 // Config is the top-level configuration document.
@@ -72,6 +75,7 @@ func Default() Config {
 			Password:       "smarthome12345",
 			TimeoutSeconds: 30,
 			NewPassword:    "smarthome12345",
+			MaxReviewHours: 72,
 		},
 	}
 }
@@ -126,6 +130,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Defaults.TimeoutSeconds == 0 {
 		c.Defaults.TimeoutSeconds = d.Defaults.TimeoutSeconds
+	}
+	if c.Defaults.MaxReviewHours == 0 {
+		c.Defaults.MaxReviewHours = d.Defaults.MaxReviewHours
 	}
 	if c.Defaults.NewPassword == "" {
 		c.Defaults.NewPassword = d.Defaults.NewPassword
