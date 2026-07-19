@@ -400,6 +400,12 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
   max-width: 220px; margin: 12px 0;
 }
+.ptz-live { margin: 4px 0 10px; }
+.ptz-live-img {
+  display: block; width: 100%; max-width: 480px; margin-bottom: 8px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: #000; aspect-ratio: 4 / 3; object-fit: contain;
+}
 .ptz-btn {
   aspect-ratio: 1; border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--surface); color: var(--text); font-size: 1.3rem; cursor: pointer;

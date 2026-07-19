@@ -502,7 +502,16 @@
             </div>
 
             <div id="ce-panel-ptz" hidden>
-              <p class="card-sub">Giữ nút để xoay/zoom, thả ra để dừng. Chỉ dùng được với camera Dahua có cơ cấu PTZ và mở cổng HTTP (80).</p>
+              <p class="card-sub">Giữ nút để xoay/zoom, thả ra để dừng. Chạy qua cổng cấu hình DVRIP (không cần cổng HTTP 80). Bật <b>Xem trực tiếp</b> để canh chỉnh realtime.</p>
+              <div class="ptz-live">
+                <img id="ce-ptz-live" class="ptz-live-img" alt="Xem trực tiếp" hidden>
+                <div class="row">
+                  <button class="btn btn-primary" type="button" id="ce-ptz-live-start">▶ Xem trực tiếp (5 phút)</button>
+                  <button class="btn btn-secondary" type="button" id="ce-ptz-live-extend" hidden>+5 phút</button>
+                  <button class="btn btn-secondary" type="button" id="ce-ptz-live-stop" hidden>Dừng</button>
+                  <span class="muted" id="ce-ptz-live-status"></span>
+                </div>
+              </div>
               <div class="msg" id="ce-ptz-msg"></div>
               <div class="ptz-pad">
                 <button class="ptz-btn" data-ptz="LeftUp" aria-label="Trái trên">↖</button>

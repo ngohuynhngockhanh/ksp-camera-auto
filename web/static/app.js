@@ -1229,7 +1229,7 @@ async function sendPTZ(code, start) {
   } catch (e) {
     if (start) {
       const m = document.getElementById('ce-ptz-msg');
-      m.textContent = 'Lỗi PTZ: ' + e.message + ' (camera có mở cổng 80 và hỗ trợ PTZ không?)';
+      m.textContent = 'Lỗi PTZ: ' + e.message + ' (camera này có cơ cấu PTZ không?)';
       m.className = 'msg err';
     }
   }
@@ -1262,7 +1262,63 @@ document.getElementById('ce-panel-ptz').addEventListener('pointerup', ptzStop);
 document.getElementById('ce-panel-ptz').addEventListener('pointercancel', ptzStop);
 document.getElementById('ce-panel-ptz').addEventListener('pointerleave', ptzStop);
 // Belt-and-suspenders: if the dialog closes mid-press, stop the camera.
-document.getElementById('channel-edit-dialog').addEventListener('close', ptzStop);
+document.getElementById('channel-edit-dialog').addEventListener('close', () => { ptzStop(); stopLive(); });
+
+/* ---------- PTZ live view (MJPEG over the DVRIP snapshot, no ffmpeg) ---------- */
+// A multipart/x-mixed-replace <img> from /api/live. Capped at 5 min server-side;
+// "+5 phút" reconnects for a fresh session; leaving the page or 30s hidden stops
+// it (clearing the img src drops the connection, which ends the server stream).
+let liveTimer = null, liveDeadline = 0, liveHideTimer = null;
+function liveURL() {
+  return `/api/live?id=${encodeURIComponent(channelEditTile.camId)}&channel=${channelEditTile.channel}&fps=6&_r=${Date.now()}`;
+}
+function liveTick() {
+  const left = Math.max(0, Math.round((liveDeadline - Date.now()) / 1000));
+  if (left <= 0) { stopLive(); return; }
+  document.getElementById('ce-ptz-live-status').textContent =
+    `Đang phát • còn ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+}
+function startLive() {
+  if (!channelEditTile) return;
+  const img = document.getElementById('ce-ptz-live');
+  img.src = liveURL();
+  img.hidden = false;
+  document.getElementById('ce-ptz-live-start').hidden = true;
+  document.getElementById('ce-ptz-live-extend').hidden = false;
+  document.getElementById('ce-ptz-live-stop').hidden = false;
+  liveDeadline = Date.now() + 5 * 60 * 1000;
+  clearInterval(liveTimer);
+  liveTimer = setInterval(liveTick, 1000);
+  liveTick();
+}
+function extendLive() {
+  if (!liveTimer || !channelEditTile) return;
+  liveDeadline = Date.now() + 5 * 60 * 1000;
+  document.getElementById('ce-ptz-live').src = liveURL(); // reconnect for a fresh 5-min session
+  liveTick();
+}
+function stopLive() {
+  clearInterval(liveTimer); liveTimer = null;
+  clearTimeout(liveHideTimer); liveHideTimer = null;
+  const img = document.getElementById('ce-ptz-live');
+  if (img) { img.removeAttribute('src'); img.hidden = true; }
+  const s = document.getElementById('ce-ptz-live-start'); if (s) s.hidden = false;
+  const e = document.getElementById('ce-ptz-live-extend'); if (e) e.hidden = true;
+  const p = document.getElementById('ce-ptz-live-stop'); if (p) p.hidden = true;
+  const st = document.getElementById('ce-ptz-live-status'); if (st) st.textContent = '';
+}
+document.getElementById('ce-ptz-live-start').addEventListener('click', startLive);
+document.getElementById('ce-ptz-live-extend').addEventListener('click', extendLive);
+document.getElementById('ce-ptz-live-stop').addEventListener('click', stopLive);
+// Auto-stop after 30s hidden — don't hold a stream nobody is watching.
+document.addEventListener('visibilitychange', () => {
+  if (!liveTimer) return;
+  if (document.hidden) {
+    liveHideTimer = setTimeout(stopLive, 30000);
+  } else {
+    clearTimeout(liveHideTimer); liveHideTimer = null;
+  }
+});
 
 // switchCeTab shows the requested channel-edit-dialog panel ('name' or
 // 'picture') and lazily loads the Chỉnh màu tab's data the first time it's
@@ -1273,6 +1329,7 @@ function switchCeTab(tab) {
   document.getElementById('ce-panel-name').hidden = tab !== 'name';
   document.getElementById('ce-panel-picture').hidden = tab !== 'picture';
   document.getElementById('ce-panel-ptz').hidden = tab !== 'ptz';
+  if (tab !== 'ptz') stopLive(); // don't keep a live stream running off-tab
   if (tab === 'picture' && channelEditTile && !picturePayload) {
     loadPictureTab(channelEditTile);
   }

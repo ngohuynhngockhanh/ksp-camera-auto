@@ -1302,6 +1302,49 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleLive handles GET /api/live?id=&channel=&fps= — a low-latency live view
+// for realtime PTZ operation, streamed as multipart/x-mixed-replace MJPEG (an
+// <img> shows it natively, no ffmpeg/HEVC-in-browser problem). It grabs frames
+// over ONE DVRIP session (dahua.StreamMJPEG), writes nothing to the box's disk,
+// and is capped at 5 minutes; the client reconnects to extend. Leaving the page
+// drops the connection, which stops the stream (no lingering process). Dahua-only.
+func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	q := r.URL.Query()
+	d, found := s.inv.Get(q.Get("id"))
+	if !found {
+		writeErr(w, http.StatusNotFound, "device not found")
+		return
+	}
+	if d.Vendor != config.VendorDahua {
+		writeErr(w, http.StatusBadRequest, notDahuaErr)
+		return
+	}
+	channel := atoiDefault(q.Get("channel"), 0)
+	fps := atoiDefault(q.Get("fps"), 6)
+
+	// Cap a live session at 5 minutes so a forgotten tab can't hold a DVRIP
+	// connection + frame loop forever; the UI reconnects to extend.
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+
+	const boundary = "kspcamframe"
+	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+boundary)
+	w.Header().Set("Cache-Control", "no-store")
+	flusher, _ := w.(http.Flusher)
+	flush := func() {
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+	if err := dahua.StreamMJPEG(ctx, w, flush, d.Host, d.Username, d.Password, channel, fps, boundary); err != nil {
+		log.Printf("live %s ch%d: %v", q.Get("id"), channel, err)
+	}
+}
+
 // playbackSig is the HMAC that authorizes a specific tokenized playback link
 // (used by the QR download so a phone with no session cookie can fetch a
 // pre-authorized clip). It binds the token to the exact playback params + expiry.

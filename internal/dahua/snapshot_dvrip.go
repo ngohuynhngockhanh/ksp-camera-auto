@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"time"
 )
@@ -30,17 +31,25 @@ func GetSnapshotDVRIP(ctx context.Context, host, user, pass string, channel int,
 	defer c.Close()
 	go func() { <-ctx.Done(); c.Close() }()
 
-	if err := c.writeRaw(snapCommand(channel)); err != nil {
-		return nil, fmt.Errorf("dahua: snapshot dvrip %s: send: %w", host, err)
+	jpeg, err := c.snapOnce(channel)
+	if err != nil {
+		return nil, fmt.Errorf("dahua: snapshot dvrip %s: %w", host, err)
 	}
+	return jpeg, nil
+}
 
-	// The JPEG arrives as a run of 0xbc frames, ending with a zero-length one.
-	// Skip any other frame types the device interleaves.
+// snapOnce sends the 0x11 snapshot command and reassembles one JPEG from the
+// 0xbc data frames the device returns (terminated by a zero-length 0xbc frame).
+// It reuses the connection, so a caller can loop it for an MJPEG live stream.
+func (c *Client) snapOnce(channel int) ([]byte, error) {
+	if err := c.writeRaw(snapCommand(channel)); err != nil {
+		return nil, fmt.Errorf("send: %w", err)
+	}
 	var jpeg []byte
 	for {
 		hdr, payload, err := c.readFrame()
 		if err != nil {
-			return nil, fmt.Errorf("dahua: snapshot dvrip %s: read: %w (after %d bytes)", host, err, len(jpeg))
+			return nil, fmt.Errorf("read: %w (after %d bytes)", err, len(jpeg))
 		}
 		if hdr[0] != 0xbc {
 			continue
@@ -50,13 +59,75 @@ func GetSnapshotDVRIP(ctx context.Context, host, user, pass string, channel int,
 		}
 		jpeg = append(jpeg, payload...)
 		if len(jpeg) > 16<<20 {
-			return nil, fmt.Errorf("dahua: snapshot dvrip %s: oversized", host)
+			return nil, fmt.Errorf("oversized")
 		}
 	}
 	if len(jpeg) < 2 || jpeg[0] != 0xff || jpeg[1] != 0xd8 {
-		return nil, fmt.Errorf("dahua: snapshot dvrip %s: not a JPEG (%d bytes)", host, len(jpeg))
+		return nil, fmt.Errorf("not a JPEG (%d bytes)", len(jpeg))
 	}
 	return jpeg, nil
+}
+
+// liveSem caps concurrent MJPEG live streams across the process — each holds a
+// DVRIP connection open and grabs frames continuously, so bound it like the
+// ffmpeg/playback pools to protect a small box.
+var liveSem = make(chan struct{}, 3)
+
+// StreamMJPEG streams a channel's live view as multipart/x-mixed-replace MJPEG
+// (an <img> shows it natively — no ffmpeg, no HEVC/browser-codec problem). It
+// opens ONE DVRIP session and loops the 0x11 snapshot command at ~fps, writing
+// each JPEG as a multipart part. The caller sets the Content-Type header with
+// the returned boundary before the first byte. It ends when ctx is cancelled
+// (the handler's 5-minute cap) or when a write fails (the client navigated away
+// — so leaving the page auto-stops it), and writes nothing to the box's disk.
+func StreamMJPEG(ctx context.Context, w io.Writer, flush func(), host, user, pass string, channel, fps int, boundary string) error {
+	select {
+	case liveSem <- struct{}{}:
+		defer func() { <-liveSem }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	if fps < 1 {
+		fps = 1
+	}
+	if fps > 15 {
+		fps = 15
+	}
+	c, err := Dial(net.JoinHostPort(host, "37777"), user, pass, 10*time.Second)
+	if err != nil {
+		return fmt.Errorf("dahua: mjpeg %s: login: %w", host, err)
+	}
+	defer c.Close()
+	go func() { <-ctx.Done(); c.Close() }()
+
+	ticker := time.NewTicker(time.Second / time.Duration(fps))
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+		jpeg, err := c.snapOnce(channel)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return fmt.Errorf("dahua: mjpeg %s: %w", host, err)
+		}
+		if _, err := fmt.Fprintf(w, "--%s\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", boundary, len(jpeg)); err != nil {
+			return nil // client gone
+		}
+		if _, err := w.Write(jpeg); err != nil {
+			return nil
+		}
+		if _, err := w.Write([]byte("\r\n")); err != nil {
+			return nil
+		}
+		if flush != nil {
+			flush()
+		}
+	}
 }
 
 // snapCommand builds the 0x11 "snapshot" request exactly as captured from the

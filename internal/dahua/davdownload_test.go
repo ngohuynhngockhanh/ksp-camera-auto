@@ -212,6 +212,41 @@ func TestLivePTZControl(t *testing.T) {
 	t.Log("PTZ stop Up OK")
 }
 
+type mjpegCounter struct{ frames, bytes int }
+
+func (m *mjpegCounter) Write(p []byte) (int, error) {
+	if i := indexJPEG(p); i >= 0 {
+		m.frames++
+	}
+	m.bytes += len(p)
+	return len(p), nil
+}
+func indexJPEG(p []byte) int {
+	for i := 0; i+1 < len(p); i++ {
+		if p[i] == 0xff && p[i+1] == 0xd8 {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestLiveMJPEG(t *testing.T) {
+	addr, user, pass := liveTarget(t)
+	c, err := Dial(addr, user, pass, 10*time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	c.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	m := &mjpegCounter{}
+	err = StreamMJPEG(ctx, m, nil, bareHost(addr), user, pass, 0, 8, "frame")
+	t.Logf("StreamMJPEG err=%v frames=%d bytes=%d", err, m.frames, m.bytes)
+	if m.frames < 3 {
+		t.Fatalf("too few frames: %d", m.frames)
+	}
+}
+
 // davMagic is the 4-byte signature at the start of a genuine Dahua .dav
 // (DHAV container) file. The probe uses it to tell a real native recording
 // from an HTML/JSON error body.
