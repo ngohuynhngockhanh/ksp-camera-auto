@@ -1275,8 +1275,15 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 	// is retained but NOT used for downloads — on these camera firmwares that mode
 	// only emits keyframes (~1 fps), so the file looked choppy/frozen. fast=1 is
 	// accepted for backward compat but routed to the same full-frame stream.
+	// format=dav downloads the camera's native .dav (DHAV) over DVRIP, byte-exact
+	// with no remux; anything else is the default fragmented MP4 over RTSP. Both
+	// stream funcs share the same signature, so this is a drop-in swap.
 	stream := dahua.StreamPlayback
 	ext, ctype := "mp4", "video/mp4"
+	if q.Get("format") == "dav" {
+		stream = dahua.StreamDav
+		ext, ctype = "dav", "application/octet-stream"
+	}
 	fname := fmt.Sprintf("playback_ch%d_%s.%s", channel, start.Format("20060102_150405"), ext)
 	w.Header().Set("Content-Type", ctype)
 	if q.Get("download") != "" {

@@ -225,6 +225,10 @@ type Recorder interface {
 	// fragmented MP4, streamed with no on-box buffering (see
 	// dahua.StreamPlayback).
 	StreamPlayback(ctx context.Context, w io.Writer, channel int, start, end time.Time) error
+	// StreamDav writes the [start,end] recording for a channel to w as the
+	// camera's native .dav (DHAV) — byte-exact, no remux (see dahua.StreamDav).
+	// Requires the DVRIP config port (unlike StreamPlayback's RTSP).
+	StreamDav(ctx context.Context, w io.Writer, channel int, start, end time.Time) error
 }
 
 // PTZControl is implemented by cameras that support live pan/tilt/zoom.
@@ -337,6 +341,11 @@ func (d *dahuaCamera) StreamPlayback(ctx context.Context, w io.Writer, channel i
 	return dahua.StreamPlayback(ctx, w, d.device.Host, d.device.Username, d.device.Password, channel, start, end)
 }
 
+// StreamDav streams a channel's [start,end] recording to w as native .dav.
+func (d *dahuaCamera) StreamDav(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return dahua.StreamDav(ctx, w, d.device.Host, d.device.Username, d.device.Password, channel, start, end)
+}
+
 // GetStorageInfo reads the device's SD-card / storage status.
 func (d *dahuaCamera) GetStorageInfo(ctx context.Context) ([]dahua.StorageDevice, error) {
 	return d.client.GetStorageInfo()
@@ -418,17 +427,14 @@ func (d *dahuaCamera) ScanWiFi(ctx context.Context) ([]dahua.WiFiAP, error) {
 // Falls back to CGI when DVRIP can't express the move (focus/iris, which have
 // no continuous-move RPC here) or errors.
 func (d *dahuaCamera) PTZMove(ctx context.Context, channel int, code string, speed int, start bool) error {
-	err := d.client.PTZMoveContinuously(channel, code, speed, start)
+	err := d.client.PTZControl(channel, code, speed, start)
 	if err == nil {
 		return nil
 	}
-	// DVRIP couldn't do it (focus/iris, or an RPC error) — try CGI.
+	// DVRIP errored — try CGI as a last resort (dead on cams with no :80).
 	cgiErr := dahua.PTZMove(ctx, d.device.Host, d.device.Username, d.device.Password, channel, code, speed, start, d.timeout)
 	if cgiErr == nil {
 		return nil
-	}
-	if errors.Is(err, dahua.ErrPTZCodeNotContinuous) {
-		return cgiErr
 	}
 	return fmt.Errorf("dvrip: %v; cgi: %v", err, cgiErr)
 }
