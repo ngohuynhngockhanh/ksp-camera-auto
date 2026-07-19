@@ -366,7 +366,7 @@ function renderCameras() {
     <tr data-id="${escapeHtml(c.id)}">
       <td class="cell-check"><input type="checkbox" class="cam-cb" value="${escapeHtml(c.id)}" ${checked.has(c.id) ? 'checked' : ''} aria-label="Chọn camera"></td>
       <td data-label="Tên" class="cell-name">
-        <span class="cell-name-text">${escapeHtml(c.name || '(chưa đặt tên)')}</span>
+        <span class="cell-name-text">${escapeHtml(c.name || '(chưa đặt tên)')}</span>${c.channelName ? '<span class="muted"> · ' + escapeHtml(c.channelName) + '</span>' : ''}
         ${c.isNvr ? '<span class="badge">NVR</span>' : ''}
         ${(c.noStorage && c.nvrId) ? `<span class="badge ok" title="Xem lại/tải lấy từ đầu ghi, kênh ${c.nvrChannel || '?'}">⛁ đầu ghi</span>` : ''}
         <button class="btn-icon" data-action="rename-inline" data-id="${escapeHtml(c.id)}" title="Sửa nhanh tên trong kho" aria-label="Sửa tên">${ICONS.edit}</button>
@@ -468,6 +468,23 @@ async function loadCameras() {
       await loadCameras();
     } catch (e) { showToast('Lỗi lưu: ' + e.message, 'err'); }
     finally { ev.target.disabled = false; }
+  });
+})();
+
+// "Dò tên kênh (tất cả)" — probe every Dahua camera's channel/OSD title and save
+// it, so the review dropdown shows "Camera01 - <channel name>".
+(function () {
+  const btn = document.getElementById('probe-names-btn');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const msg = document.getElementById('probe-names-msg');
+    btn.disabled = true; msg.textContent = 'Đang dò tên kênh (có thể mất chút)...';
+    try {
+      const res = await api('/api/channel-names', { method: 'POST', body: JSON.stringify({ ids: [], timeoutSeconds: timeoutSec() }) });
+      msg.textContent = `Đã dò ${res.count} tên kênh.`;
+      await loadCameras();
+    } catch (e) { msg.textContent = 'Lỗi: ' + e.message; }
+    finally { btn.disabled = false; }
   });
 })();
 
