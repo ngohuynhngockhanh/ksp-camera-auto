@@ -3,6 +3,7 @@ package dahua
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -131,8 +132,12 @@ func TestLiveSnapDVRIP(t *testing.T) {
 	addr, user, pass := liveTarget(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	ch := 0
+	if v := os.Getenv("SNAP_CH"); v != "" {
+		fmt.Sscanf(v, "%d", &ch)
+	}
 	t0 := time.Now()
-	jpeg, err := GetSnapshotDVRIP(ctx, bareHost(addr), user, pass, 0, 10*time.Second)
+	jpeg, err := GetSnapshotDVRIP(ctx, bareHost(addr), user, pass, ch, 10*time.Second)
 	if err != nil {
 		t.Fatalf("GetSnapshotDVRIP: %v", err)
 	}
@@ -141,6 +146,70 @@ func TestLiveSnapDVRIP(t *testing.T) {
 	if jpeg[0] != 0xff || jpeg[1] != 0xd8 {
 		t.Fatalf("not JPEG: %x", jpeg[:4])
 	}
+}
+
+func TestLivePTZProbe(t *testing.T) {
+	addr, user, pass := liveTarget(t)
+	c, err := Dial(addr, user, pass, 15*time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+	// device model
+	for _, m := range []string{"magicBox.getDeviceType", "magicBox.getProductDefinition"} {
+		r, _ := c.Call(m, nil)
+		t.Logf("%s ok=%v params=%.160s", m, r.ok(), string(r.Params))
+	}
+	// PTZ config present?
+	r, _ := c.Call("configManager.getConfig", map[string]any{"name": "Ptz"})
+	t.Logf("getConfig Ptz ok=%v err=%q params=%.200s", r.ok(), r.errMessage(), string(r.Params))
+	// instance + caps + a move
+	inst, _ := c.Call("ptz.factory.instance", map[string]any{"channel": 0})
+	t.Logf("ptz.factory.instance ok=%v result=%.40s err=%q", inst.ok(), string(inst.Result), inst.errMessage())
+	var oid int64
+	_ = json.Unmarshal(inst.Result, &oid)
+	if oid == 0 {
+		return
+	}
+	lm, _ := c.CallObject("ptz.listMethod", oid, nil)
+	t.Logf("ptz.listMethod: %.400s", string(lm.Params)+string(lm.Result))
+	// Try move variants; log which succeeds.
+	variants := []struct {
+		method string
+		params any
+	}{
+		{"ptz.moveContinuously", map[string]any{"Direction": []int{0, 3, 0}}},
+		{"ptz.moveContinuously", map[string]any{"channel": 0, "Direction": []int{0, 3, 0}}},
+		{"ptz.start", map[string]any{"code": "Up", "arg1": 0, "arg2": 3, "arg3": 0}},
+		{"ptz.start", map[string]any{"channel": 0, "code": "Up", "arg1": 0, "arg2": 3, "arg3": 0}},
+		{"ptz.move", map[string]any{"Direction": []int{0, 3, 0}}},
+		{"ptz.moveDirectly", map[string]any{"Direction": []int{0, 3, 0}}},
+	}
+	for _, v := range variants {
+		r, _ := c.CallObject(v.method, oid, v.params)
+		t.Logf("%-22s %v -> ok=%v result=%.40s err=%q", v.method, v.params, r.ok(), string(r.Result), r.errMessage())
+		st, _ := c.CallObject("ptz.stop", oid, map[string]any{"code": "Up", "arg1": 0, "arg2": 0, "arg3": 0})
+		_ = st
+		time.Sleep(300 * time.Millisecond)
+	}
+}
+
+func TestLivePTZControl(t *testing.T) {
+	addr, user, pass := liveTarget(t)
+	c, err := Dial(addr, user, pass, 15*time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+	if err := c.PTZControl(0, "Up", 3, true); err != nil {
+		t.Fatalf("PTZControl start: %v", err)
+	}
+	t.Log("PTZ start Up OK")
+	time.Sleep(700 * time.Millisecond)
+	if err := c.PTZControl(0, "Up", 3, false); err != nil {
+		t.Fatalf("PTZControl stop: %v", err)
+	}
+	t.Log("PTZ stop Up OK")
 }
 
 // davMagic is the 4-byte signature at the start of a genuine Dahua .dav

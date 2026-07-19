@@ -11,60 +11,23 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/isapi"
 )
 
-// ErrPTZCodeNotContinuous is returned by PTZMoveContinuously for codes that
-// don't map to a pan/tilt/zoom Direction vector (Focus*/Iris*), so the caller
-// can fall back to the CGI path for those.
-var ErrPTZCodeNotContinuous = fmt.Errorf("dahua: PTZ code not a continuous pan/tilt/zoom move")
-
-// ptzDirection maps a PTZ code + speed to the [pan, tilt, zoom] Direction
-// vector ptz.moveContinuously takes: pan +right/-left, tilt +up/-down, zoom
-// +tele(in)/-wide(out). Returns ok=false for codes with no continuous-move
-// equivalent (focus/iris).
-func ptzDirection(code string, speed int) (pan, tilt, zoom int, ok bool) {
-	switch code {
-	case "Up":
-		return 0, speed, 0, true
-	case "Down":
-		return 0, -speed, 0, true
-	case "Left":
-		return -speed, 0, 0, true
-	case "Right":
-		return speed, 0, 0, true
-	case "LeftUp":
-		return -speed, speed, 0, true
-	case "RightUp":
-		return speed, speed, 0, true
-	case "LeftDown":
-		return -speed, -speed, 0, true
-	case "RightDown":
-		return speed, -speed, 0, true
-	case "ZoomTele":
-		return 0, 0, speed, true
-	case "ZoomWide":
-		return 0, 0, -speed, true
+// PTZControl drives PTZ over the existing DVRIP JSON-RPC session (no HTTP CGI,
+// so it works on firmware whose ptz.cgi:80 is unreachable/rejected). It creates
+// a PTZ control object (ptz.factory.instance) then issues ptz.start (or ptz.stop
+// when start=false) with the same {code, arg1, arg2, arg3} the CGI uses — so
+// every code works, including Focus*/Iris*. This is the method that actually
+// succeeds on these cameras: ptz.moveContinuously (Direction vector) returns
+// result=false on this protocol/firmware, whereas ptz.start returns true.
+// channel is 0-based; speed is clamped to [1,8] and passed as arg2.
+func (c *Client) PTZControl(channel int, code string, speed int, start bool) error {
+	if !ptzCodes[code] {
+		return fmt.Errorf("dahua: unknown PTZ code %q", code)
 	}
-	return 0, 0, 0, false
-}
-
-// PTZMoveContinuously drives pan/tilt/zoom over the existing DVRIP JSON-RPC
-// session (no HTTP CGI, so it works on firmware that rejects ptz.cgi with
-// "Bad Request"). It creates a PTZ control object (ptz.factory.instance) then
-// issues ptz.moveContinuously with a Direction vector; start=false sends a
-// zero vector to stop. channel is 0-based. speed is clamped to [1,8].
-// Returns ErrPTZCodeNotContinuous for focus/iris codes (use the CGI path).
-func (c *Client) PTZMoveContinuously(channel int, code string, speed int, start bool) error {
 	if speed < 1 {
 		speed = 1
 	}
 	if speed > 8 {
 		speed = 8
-	}
-	pan, tilt, zoom, ok := ptzDirection(code, speed)
-	if !ok {
-		return ErrPTZCodeNotContinuous
-	}
-	if !start {
-		pan, tilt, zoom = 0, 0, 0
 	}
 
 	inst, err := c.Call("ptz.factory.instance", map[string]any{"channel": channel})
@@ -79,14 +42,18 @@ func (c *Client) PTZMoveContinuously(channel int, code string, speed int, start 
 		return fmt.Errorf("dahua: ptz.factory.instance: unexpected result %.60s: %w", inst.Result, err)
 	}
 
-	resp, err := c.CallObject("ptz.moveContinuously", objID, map[string]any{
-		"Direction": []int{pan, tilt, zoom},
+	method := "ptz.start"
+	if !start {
+		method = "ptz.stop"
+	}
+	resp, err := c.CallObject(method, objID, map[string]any{
+		"channel": channel, "code": code, "arg1": 0, "arg2": speed, "arg3": 0,
 	})
 	if err != nil {
 		return err
 	}
 	if !resp.ok() {
-		return fmt.Errorf("dahua: ptz.moveContinuously failed: %s", respErr(resp))
+		return fmt.Errorf("dahua: %s failed: %s", method, respErr(resp))
 	}
 	return nil
 }

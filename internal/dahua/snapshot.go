@@ -54,21 +54,37 @@ const ffmpegSnapTimeout = 12 * time.Second
 func GetSnapshot(ctx context.Context, host, user, pass string, channel int, timeout time.Duration) ([]byte, error) {
 	// DVRIP first: a single round trip on the config protocol returns a ready
 	// JPEG with no ffmpeg/decode — the smooth, low-latency path. It needs the
-	// config port + a login, so fall back to RTSP (then CGI) when it's
-	// unavailable (port busy, or a multi-channel NVR where channel>0 is untested).
-	if data, dvripErr := GetSnapshotDVRIP(ctx, host, user, pass, channel, timeout); dvripErr == nil {
+	// config port + a login. Restricted to channel 0: the snapshot command's
+	// channel byte couldn't be verified on a multi-channel NVR (a single-channel
+	// IPC returns channel 0's frame regardless), so for channel>0 we take the
+	// RTSP path, which selects the channel correctly, rather than risk silently
+	// returning channel 0's image. Every single-channel IPC (channel 0) gets the
+	// fast DVRIP path — which is the whole gallery on these fleets.
+	if channel == 0 {
+		if data, dvripErr := GetSnapshotDVRIP(ctx, host, user, pass, channel, timeout); dvripErr == nil {
+			return data, nil
+		} else {
+			return snapshotFallback(ctx, host, user, pass, channel, timeout, dvripErr)
+		}
+	}
+	return snapshotFallback(ctx, host, user, pass, channel, timeout, nil)
+}
+
+// snapshotFallback tries RTSP (ffmpeg) then CGI, threading through any prior
+// DVRIP error for the combined message.
+func snapshotFallback(ctx context.Context, host, user, pass string, channel int, timeout time.Duration, dvripErr error) ([]byte, error) {
+	data, rtspErr := GetSnapshotRTSP(ctx, host, user, pass, channel, timeout)
+	if rtspErr == nil {
 		return data, nil
-	} else {
-		data, rtspErr := GetSnapshotRTSP(ctx, host, user, pass, channel, timeout)
-		if rtspErr == nil {
-			return data, nil
-		}
-		data, cgiErr := GetSnapshotCGI(ctx, host, user, pass, channel, timeout)
-		if cgiErr == nil {
-			return data, nil
-		}
+	}
+	data, cgiErr := GetSnapshotCGI(ctx, host, user, pass, channel, timeout)
+	if cgiErr == nil {
+		return data, nil
+	}
+	if dvripErr != nil {
 		return nil, fmt.Errorf("dahua: snapshot %s: dvrip: %v; rtsp: %v; cgi: %v", host, dvripErr, rtspErr, cgiErr)
 	}
+	return nil, fmt.Errorf("dahua: snapshot %s: rtsp: %v; cgi: %v", host, rtspErr, cgiErr)
 }
 
 // GetSnapshotRTSP grabs one JPEG frame from the camera's RTSP stream
