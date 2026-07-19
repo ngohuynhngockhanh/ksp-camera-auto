@@ -152,8 +152,12 @@ func paramValue(payload []byte, key string) string {
 }
 
 // davIdle is how long the data sub-channel may go silent before the download is
-// treated as complete (the device bursts the range then stops without closing).
-const davIdle = 5 * time.Second
+// treated as complete. At true end-of-range the device CLOSES the sub-channel
+// (clean EOF ends the read instantly — no idle wait), so this is only a fallback
+// for the rare "device stops sending but doesn't close" case. It must comfortably
+// exceed any mid-stream stall (e.g. the device opening the next .dav segment on a
+// multi-segment range), or a long download truncates at a segment boundary.
+const davIdle = 15 * time.Second
 
 // copyDavStream reads the data sub-channel's 32-byte-framed messages and writes
 // the DHAV payload of every 0xbb media frame to w, until the stream goes idle
