@@ -121,7 +121,8 @@ func (s *Server) routes() {
 // page otherwise. The login page itself is served publicly from /login.
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.authed(r) {
+		role := s.sessionRole(r)
+		if role == "" {
 			// Serve the login page for HTML navigations; 401 for API calls.
 			if wantsHTML(r) {
 				http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -130,8 +131,26 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		// A viewer may only reach the review/download API surface; the HTML app
+		// still loads (its JS then hides admin views).
+		if role == "viewer" && strings.HasPrefix(r.URL.Path, "/api/") && !viewerAllowed(r.URL.Path, r.Method) {
+			http.Error(w, "chỉ tài khoản xem lại — không có quyền này", http.StatusForbidden)
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// viewerAllowed is the read-only account's API allowlist (the "Xem lại" review
+// + download surface). Everything else behind requireAuth is admin-only.
+func viewerAllowed(path, method string) bool {
+	switch path {
+	case "/api/config", "/api/cameras", "/api/recordings", "/api/live", "/api/snapshot":
+		return method == http.MethodGet
+	case "/api/playback-token":
+		return true
+	}
+	return false
 }
 
 // limitBody caps the request body size to guard constrained boxes against
@@ -227,12 +246,15 @@ func wantsHTML(r *http.Request) bool {
 	return accept == "" || strings.Contains(accept, "text/html")
 }
 
-func (s *Server) authed(r *http.Request) bool {
+func (s *Server) authed(r *http.Request) bool { return s.sessionRole(r) != "" }
+
+// sessionRole returns the request's session role ("admin"/"viewer") or "".
+func (s *Server) sessionRole(r *http.Request) string {
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {
-		return false
+		return ""
 	}
-	return s.session.valid(c.Value)
+	return s.session.role(c.Value)
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -256,9 +278,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		user := r.PostFormValue("username")
 		pass := r.PostFormValue("password")
-		if s.checkCreds(user, pass) {
+		if role, ok := s.checkCreds(user, pass); ok {
 			s.limiter.reset(ip)
-			token := s.session.create()
+			token := s.session.create(role)
 			http.SetCookie(w, &http.Cookie{
 				Name:     sessionCookie,
 				Value:    token,
@@ -288,14 +310,31 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 // checkCreds validates the login. The username is compared in constant time;
 // the password is checked against a bcrypt hash when server.password_hash is
 // set, else against the plaintext server.password (constant time).
-func (s *Server) checkCreds(user, pass string) bool {
-	if subtle.ConstantTimeCompare([]byte(user), []byte(s.cfg.Server.Username)) != 1 {
-		return false
+func (s *Server) checkCreds(user, pass string) (role string, ok bool) {
+	// Admin: full access.
+	if subtle.ConstantTimeCompare([]byte(user), []byte(s.cfg.Server.Username)) == 1 {
+		if h := s.cfg.Server.PasswordHash; h != "" {
+			if bcrypt.CompareHashAndPassword([]byte(h), []byte(pass)) == nil {
+				return "admin", true
+			}
+		} else if subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.Server.Password)) == 1 {
+			return "admin", true
+		}
 	}
-	if h := s.cfg.Server.PasswordHash; h != "" {
-		return bcrypt.CompareHashAndPassword([]byte(h), []byte(pass)) == nil
+	// Viewer: review + download only. Defaults to viewer/inut12345 when unset so
+	// the read-only account works out of the box.
+	vu, vp := s.cfg.Server.ViewerUsername, s.cfg.Server.ViewerPassword
+	if vu == "" {
+		vu = "viewer"
 	}
-	return subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.Server.Password)) == 1
+	if vp == "" {
+		vp = "inut12345"
+	}
+	if subtle.ConstantTimeCompare([]byte(user), []byte(vu)) == 1 &&
+		subtle.ConstantTimeCompare([]byte(pass), []byte(vp)) == 1 {
+		return "viewer", true
+	}
+	return "", false
 }
 
 func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request, name string) {
@@ -313,41 +352,50 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request, name string
 
 // --- session store ---
 
+type sessEntry struct {
+	role string // "admin" or "viewer"
+	exp  time.Time
+}
+
 type sessionStore struct {
 	mu   sync.Mutex
 	ttl  time.Duration
-	toks map[string]time.Time
+	toks map[string]sessEntry
 }
 
 func newSessionStore(ttl time.Duration) *sessionStore {
-	return &sessionStore{ttl: ttl, toks: map[string]time.Time{}}
+	return &sessionStore{ttl: ttl, toks: map[string]sessEntry{}}
 }
 
-func (st *sessionStore) create() string {
+func (st *sessionStore) create(role string) string {
 	b := make([]byte, 32)
 	_, _ = rand.Read(b)
 	tok := hex.EncodeToString(b)
 	st.mu.Lock()
-	st.toks[tok] = time.Now().Add(st.ttl)
+	st.toks[tok] = sessEntry{role: role, exp: time.Now().Add(st.ttl)}
 	st.mu.Unlock()
 	return tok
 }
 
-func (st *sessionStore) valid(tok string) bool {
+func (st *sessionStore) valid(tok string) bool { return st.role(tok) != "" }
+
+// role returns the session's role ("admin"/"viewer"), or "" if the token is
+// missing/expired.
+func (st *sessionStore) role(tok string) string {
 	if tok == "" {
-		return false
+		return ""
 	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	exp, ok := st.toks[tok]
+	e, ok := st.toks[tok]
 	if !ok {
-		return false
+		return ""
 	}
-	if time.Now().After(exp) {
+	if time.Now().After(e.exp) {
 		delete(st.toks, tok)
-		return false
+		return ""
 	}
-	return true
+	return e.role
 }
 
 func (st *sessionStore) destroy(tok string) {

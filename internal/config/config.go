@@ -26,6 +26,10 @@ type Server struct {
 	// PasswordHash, if set, is a bcrypt hash checked instead of Password
 	// (generate with `kspcam --hash-password <pw>`).
 	PasswordHash string `yaml:"password_hash"`
+	// Viewer is a read-only login that may only use the "Xem lại" review view
+	// (list/play/download recordings). Defaults to viewer/inut12345 when unset.
+	ViewerUsername string `yaml:"viewer_username"`
+	ViewerPassword string `yaml:"viewer_password"`
 	// LoginMaxAttempts is how many consecutive failed logins from one IP
 	// trigger a lockout.
 	LoginMaxAttempts int `yaml:"login_max_attempts"`

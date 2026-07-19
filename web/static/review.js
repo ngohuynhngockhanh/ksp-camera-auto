@@ -25,9 +25,11 @@
   function fmtClock(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
 
   const QUICK = [
-    { m: 5, t: '5 phút' }, { m: 10, t: '10 phút' }, { m: 20, t: '20 phút' }, { m: 40, t: '40 phút' },
-    { m: 60, t: '1 giờ' }, { m: 120, t: '2 giờ' }, { m: 180, t: '3 giờ' }, { m: 240, t: '4 giờ' },
+    { m: 20, t: '20 phút' }, { m: 60, t: '1 giờ' }, { m: 180, t: '3 giờ' }, { m: 360, t: '6 giờ' },
+    { m: 720, t: '12 giờ' }, { m: 1440, t: '24 giờ' }, { m: 2880, t: '48 giờ' },
   ];
+  // datetime-local wants "YYYY-MM-DDTHH:MM"
+  function fmtLocal(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }
 
   // reviewOnShow is called by app.js setRoute() each time the view opens.
   window.reviewOnShow = function () {
@@ -47,9 +49,12 @@
     try {
       const cams = (await api('/api/cameras') || []).filter(c => c.vendor === 'dahua');
       if (!cams.length) { sel.innerHTML = '<option>Không có camera Dahua</option>'; return; }
-      sel.innerHTML = cams.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name || c.host)}</option>`).join('');
+      sel.innerHTML = cams.map(c => {
+        const label = (c.name || c.host) + (c.nvrName ? ' - ' + c.nvrName : '');
+        return `<option value="${escapeHtml(c.id)}">${escapeHtml(label)}</option>`;
+      }).join('');
       window._rvCams = cams;
-      sel.addEventListener('change', () => { cam = cams.find(c => c.id === sel.value); load(60); });
+      sel.addEventListener('change', () => { cam = cams.find(c => c.id === sel.value); load(60); refreshDays(); });
       cam = (window._rvPreselect && cams.find(c => c.id === window._rvPreselect)) || cams[0];
       window._rvPreselect = null;
       sel.value = cam.id;
@@ -58,11 +63,14 @@
     // Quick-time buttons.
     $('rv-quick').innerHTML = QUICK.map(q => `<button class="btn btn-sm btn-secondary" type="button" data-min="${q.m}">${q.t} trước</button>`).join('');
     $('rv-quick').querySelectorAll('[data-min]').forEach(b => b.addEventListener('click', () => load(parseInt(b.dataset.min, 10))));
-    $('rv-reload').addEventListener('click', () => load(currentWindowMinutes()));
+    $('rv-reload').addEventListener('click', () => { load(currentWindowMinutes()); refreshDays(); });
+    $('rv-load-range').addEventListener('click', loadFormRange);
+    $('rv-load-day').addEventListener('click', () => loadDay($('rv-date').value));
 
     buildTimeline();
     wireControls();
     load(60); // default: last hour
+    refreshDays();
   }
 
   function currentWindowMinutes() {
@@ -135,11 +143,54 @@
     v.play().catch(() => {});
   }
 
-  async function load(minutes) {
-    if (!cam) return;
+  function load(minutes) {
     const end = new Date();
-    const start = new Date(end.getTime() - minutes * 60000);
+    loadRange(new Date(end.getTime() - minutes * 60000), end);
+  }
+
+  // loadDay loads a whole calendar day (capped at "now"). dateStr = "YYYY-MM-DD".
+  function loadDay(dateStr) {
+    if (!dateStr) return;
+    const start = new Date(dateStr + 'T00:00:00');
+    let end = new Date(start.getTime() + 24 * 3600 * 1000);
+    if (end > new Date()) end = new Date();
+    loadRange(start, end);
+  }
+
+  // loadFormRange reads the two datetime-local inputs and loads that exact range.
+  function loadFormRange() {
+    const s = $('rv-from').value, e = $('rv-to').value;
+    if (!s || !e) { showToast('Chọn giờ bắt đầu và kết thúc.', 'err'); return; }
+    const start = new Date(s), end = new Date(e);
+    if (!(end > start)) { showToast('Kết thúc phải sau bắt đầu.', 'err'); return; }
+    if (end - start > maxHours * 3600 * 1000) { showToast(`Khoảng tối đa ${maxHours} giờ.`, 'err'); return; }
+    loadRange(start, end);
+  }
+
+  // refreshDays lists which calendar days have footage in the last maxHours as
+  // clickable chips (a quick "which days have recordings" picker).
+  async function refreshDays() {
+    if (!cam) return;
+    const el = $('rv-days'); if (!el) return;
+    const end = new Date();
+    const start = new Date(end.getTime() - maxHours * 3600 * 1000);
+    const ch = parseInt($('rv-channel').value, 10) || 0;
+    try {
+      const q = `id=${encodeURIComponent(cam.id)}&channel=${ch}&start=${encodeURIComponent(fmtParam(start))}&end=${encodeURIComponent(fmtParam(end))}&timeoutSeconds=${timeoutSec()}`;
+      const res = await api('/api/recordings?' + q);
+      const days = [...new Set(((res && res.recordings) || []).map(r => r.startTime.slice(0, 10)))].sort().reverse();
+      el.innerHTML = days.length
+        ? 'Ngày có bản ghi: ' + days.map(d => `<button class="btn btn-sm btn-secondary" type="button" data-day="${d}">${d.slice(8, 10)}/${d.slice(5, 7)}</button>`).join(' ')
+        : `<span class="muted">Không thấy bản ghi trong ${maxHours}h gần đây.</span>`;
+      el.querySelectorAll('[data-day]').forEach(b => b.addEventListener('click', () => loadDay(b.dataset.day)));
+    } catch (e) { el.innerHTML = ''; }
+  }
+
+  async function loadRange(start, end) {
+    if (!cam) return;
     winStart = start; winEnd = end;
+    // keep the form inputs in sync with what's shown
+    $('rv-from').value = fmtLocal(start); $('rv-to').value = fmtLocal(end);
     timeline.setWindow(start, end, { animation: false });
     // place cut markers inside the window, playhead at start
     timeline.setCustomTime(new Date(start.getTime() + (end - start) * 0.1), 'cutStart');

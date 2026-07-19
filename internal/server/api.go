@@ -55,6 +55,7 @@ type deviceView struct {
 	Password   string        `json:"password"`
 	NVRID      string        `json:"nvrId,omitempty"`
 	NVRChannel int           `json:"nvrChannel,omitempty"`
+	NVRName    string        `json:"nvrName,omitempty"`
 	NoStorage  bool          `json:"noStorage,omitempty"`
 	IsNVR      bool          `json:"isNvr,omitempty"`
 }
@@ -70,6 +71,7 @@ func toView(d config.Device) deviceView {
 		Password:   d.Password,
 		NVRID:      d.NVRID,
 		NVRChannel: d.NVRChannel,
+		NVRName:    d.NVRName,
 		NoStorage:  d.NoStorage,
 		IsNVR:      d.IsNVR,
 	}
@@ -180,7 +182,7 @@ func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
 		id = fmt.Sprintf("%s:%d", d.Host, d.Port)
 	}
 	if existing, ok := s.inv.Get(id); ok {
-		d.NVRID, d.NVRChannel, d.NoStorage, d.IsNVR = existing.NVRID, existing.NVRChannel, existing.NoStorage, existing.IsNVR
+		d.NVRID, d.NVRChannel, d.NVRName, d.NoStorage, d.IsNVR = existing.NVRID, existing.NVRChannel, existing.NVRName, existing.NoStorage, existing.IsNVR
 	}
 	if err := s.inv.Upsert(d); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
@@ -561,6 +563,7 @@ type nvrLinkReq struct {
 	Mappings []struct {
 		CameraID   string `json:"cameraId"`
 		NVRChannel int    `json:"nvrChannel"` // 1-based
+		NVRName    string `json:"nvrName"`
 		NoStorage  bool   `json:"noStorage"`
 	} `json:"mappings"`
 }
@@ -597,6 +600,7 @@ func (s *Server) handleNVRLink(w http.ResponseWriter, r *http.Request) {
 		}
 		cam.NVRID = nvr.ID
 		cam.NVRChannel = m.NVRChannel
+		cam.NVRName = m.NVRName
 		cam.NoStorage = m.NoStorage
 		if err := s.inv.Upsert(cam); err != nil {
 			writeErr(w, http.StatusInternalServerError, err.Error())
@@ -1656,5 +1660,5 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	if max <= 0 {
 		max = 72
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"maxReviewHours": max})
+	writeJSON(w, http.StatusOK, map[string]any{"maxReviewHours": max, "role": s.sessionRole(r)})
 }

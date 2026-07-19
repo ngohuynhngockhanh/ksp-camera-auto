@@ -247,7 +247,9 @@ function currentHash() {
 }
 
 function setRoute() {
-  const hash = currentHash();
+  let hash = currentHash();
+  // A viewer is locked to the review view — bounce any other route back.
+  if (appRole === 'viewer' && hash !== 'review') { location.hash = '#review'; return; }
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.dataset.view === hash));
   const item = NAV_ITEMS.find(n => n.hash === hash);
   document.getElementById('view-title').textContent = item ? item.label : '';
@@ -264,15 +266,22 @@ function goto(hash) { location.hash = '#' + hash; }
 
 /* ---------- nav rendering (sidebar / bottom-nav / drawer) ---------- */
 
+// appRole gates the UI: a "viewer" login only sees the "Xem lại" (review) view.
+let appRole = 'admin';
+function navItems() {
+  return appRole === 'viewer' ? NAV_ITEMS.filter(n => n.hash === 'review') : NAV_ITEMS;
+}
+
 function buildNav() {
+  const items = navItems();
   const sidebar = document.getElementById('sidebar-nav');
-  sidebar.innerHTML = NAV_ITEMS.map(n => `
+  sidebar.innerHTML = items.map(n => `
     <a class="nav-link" href="#${n.hash}" data-nav-hash="${n.hash}">
       ${n.icon}<span>${n.label}</span>
     </a>`).join('');
 
   const bottomnav = document.getElementById('bottomnav');
-  bottomnav.innerHTML = NAV_ITEMS.filter(n => n.bottom !== false).map(n => `
+  bottomnav.innerHTML = items.filter(n => n.bottom !== false).map(n => `
     <a class="bottomnav-item" href="#${n.hash}" data-nav-hash="${n.hash}">${n.icon}<span>${n.short || n.label}</span></a>
   `).join('') + `
     <button class="bottomnav-item" id="drawer-open-btn" type="button">${ICONS.dots}<span>Menu</span></button>
@@ -443,7 +452,7 @@ async function loadCameras() {
     const mappings = scanRows.map((r, i) => {
       const sel = document.querySelector(`.nvr-cam-sel[data-row="${i}"]`);
       const cb = document.querySelector(`.nvr-nostore[data-row="${i}"]`);
-      return { cameraId: sel ? sel.value : '', nvrChannel: r.nvrChannel, noStorage: cb ? cb.checked : false };
+      return { cameraId: sel ? sel.value : '', nvrChannel: r.nvrChannel, nvrName: r.nvrCamName || '', noStorage: cb ? cb.checked : false };
     }).filter(m => m.cameraId);
     if (!mappings.length) { showToast('Chưa gán camera nào.', 'err'); return; }
     ev.target.disabled = true;
@@ -2469,7 +2478,13 @@ document.getElementById('imp-btn').addEventListener('click', async () => {
 
 /* ---------- init ---------- */
 
-function init() {
+async function init() {
+  // Learn the session role first so the nav/views can be gated for a viewer.
+  try { const cfg = await api('/api/config'); if (cfg && cfg.role) appRole = cfg.role; } catch (e) { /* default admin */ }
+  if (appRole === 'viewer') {
+    document.body.classList.add('role-viewer');
+    if (currentHash() !== 'review') location.hash = '#review';
+  }
   buildNav();
 
   const themeBtn = document.getElementById('theme-toggle');
@@ -2488,7 +2503,7 @@ function init() {
   window.addEventListener('hashchange', setRoute);
   setRoute();
 
-  loadCameras();
+  if (appRole !== 'viewer') loadCameras();
 }
 
 init();
