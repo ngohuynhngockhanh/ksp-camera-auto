@@ -52,15 +52,23 @@ const ffmpegSnapTimeout = 12 * time.Second
 // docs/GOTCHAS.md) — whereas RTSP is the same stream path live viewing
 // already depends on, so if that works, snapshot works.
 func GetSnapshot(ctx context.Context, host, user, pass string, channel int, timeout time.Duration) ([]byte, error) {
-	data, rtspErr := GetSnapshotRTSP(ctx, host, user, pass, channel, timeout)
-	if rtspErr == nil {
+	// DVRIP first: a single round trip on the config protocol returns a ready
+	// JPEG with no ffmpeg/decode — the smooth, low-latency path. It needs the
+	// config port + a login, so fall back to RTSP (then CGI) when it's
+	// unavailable (port busy, or a multi-channel NVR where channel>0 is untested).
+	if data, dvripErr := GetSnapshotDVRIP(ctx, host, user, pass, channel, timeout); dvripErr == nil {
 		return data, nil
+	} else {
+		data, rtspErr := GetSnapshotRTSP(ctx, host, user, pass, channel, timeout)
+		if rtspErr == nil {
+			return data, nil
+		}
+		data, cgiErr := GetSnapshotCGI(ctx, host, user, pass, channel, timeout)
+		if cgiErr == nil {
+			return data, nil
+		}
+		return nil, fmt.Errorf("dahua: snapshot %s: dvrip: %v; rtsp: %v; cgi: %v", host, dvripErr, rtspErr, cgiErr)
 	}
-	data, cgiErr := GetSnapshotCGI(ctx, host, user, pass, channel, timeout)
-	if cgiErr == nil {
-		return data, nil
-	}
-	return nil, fmt.Errorf("dahua: snapshot %s: rtsp: %v; cgi: %v", host, rtspErr, cgiErr)
 }
 
 // GetSnapshotRTSP grabs one JPEG frame from the camera's RTSP stream

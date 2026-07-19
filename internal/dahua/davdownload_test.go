@@ -63,6 +63,86 @@ func TestLiveStreamDav(t *testing.T) {
 	}
 }
 
+// TestLiveSnapReplay replays the post-login bytes of a captured NetSDK
+// SnapPictureEx session over a fresh DVRIP login, to confirm which frames
+// trigger the JPEG snapshot (returned in 0xbc frames). SNAP_C2S = path to the
+// captured client->server dump.
+func TestLiveSnapReplay(t *testing.T) {
+	addr, user, pass := liveTarget(t)
+	capPath := os.Getenv("SNAP_C2S")
+	if capPath == "" {
+		t.Skip("set SNAP_C2S to the captured c2s dump")
+	}
+	raw, err := os.ReadFile(capPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := Dial(addr, user, pass, 15*time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+	t.Logf("logged in, session=%d", c.sessionID)
+
+	// Post-login region: skip the capture's own two \xa0 login frames (realm req
+	// 32B @0, login-hash frame 32B+71B @0x20 -> ends 0x87). SNAP_OFF/SNAP_END
+	// (hex) narrow the replayed byte range to isolate the snapshot command.
+	startOff, endOff := 0x87, len(raw)
+	if v := os.Getenv("SNAP_OFF"); v != "" {
+		fmt.Sscanf(v, "%x", &startOff)
+	}
+	if v := os.Getenv("SNAP_END"); v != "" {
+		fmt.Sscanf(v, "%x", &endOff)
+	}
+	post := raw[startOff:endOff]
+	t.Logf("replaying bytes [0x%x:0x%x] (%d bytes)", startOff, endOff, len(post))
+	if err := c.writeRaw(post); err != nil {
+		t.Fatalf("replay write: %v", err)
+	}
+	// Read frames until we collect a full JPEG (0xbc frames ending with len 0).
+	var jpeg []byte
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		hdr, payload, err := c.readFrame()
+		if err != nil {
+			t.Logf("read end: %v", err)
+			break
+		}
+		t.Logf("frame magic=0x%02x len=%d", hdr[0], len(payload))
+		if hdr[0] == 0xbc {
+			if len(payload) == 0 {
+				break
+			}
+			jpeg = append(jpeg, payload...)
+		}
+	}
+	if len(jpeg) == 0 {
+		t.Fatal("no JPEG received from replay")
+	}
+	out := "/tmp/snap_replay.jpg"
+	_ = os.WriteFile(out, jpeg, 0o644)
+	t.Logf("got %d JPEG bytes -> %s (magic %x)", len(jpeg), out, jpeg[:4])
+	if jpeg[0] != 0xff || jpeg[1] != 0xd8 {
+		t.Fatalf("not a JPEG: %x", jpeg[:4])
+	}
+}
+
+func TestLiveSnapDVRIP(t *testing.T) {
+	addr, user, pass := liveTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	t0 := time.Now()
+	jpeg, err := GetSnapshotDVRIP(ctx, bareHost(addr), user, pass, 0, 10*time.Second)
+	if err != nil {
+		t.Fatalf("GetSnapshotDVRIP: %v", err)
+	}
+	_ = os.WriteFile("/tmp/snap_dvrip.jpg", jpeg, 0o644)
+	t.Logf("got %d-byte JPEG in %v (magic %x) -> /tmp/snap_dvrip.jpg", len(jpeg), time.Since(t0), jpeg[:4])
+	if jpeg[0] != 0xff || jpeg[1] != 0xd8 {
+		t.Fatalf("not JPEG: %x", jpeg[:4])
+	}
+}
+
 // davMagic is the 4-byte signature at the start of a genuine Dahua .dav
 // (DHAV container) file. The probe uses it to tell a real native recording
 // from an HTML/JSON error body.
