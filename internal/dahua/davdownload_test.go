@@ -247,6 +247,45 @@ func TestLiveMJPEG(t *testing.T) {
 	}
 }
 
+func TestLiveWiFiProbe(t *testing.T) {
+	addr, user, pass := liveTarget(t)
+	c, err := Dial(addr, user, pass, 15*time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+	log := func(tag string, r rpcResp, e error) {
+		t.Logf("%-46s err=%v ok=%v rpcErr=%q params=%.220s", tag, e, r.ok(), r.errMessage(), string(r.Params))
+	}
+	// current impl
+	r, e := c.Call("netApp.scanWLanDevices", map[string]any{"Name": "wlan0"})
+	log("Call netApp.scanWLanDevices{Name:wlan0}", r, e)
+	// via instance
+	inst, _ := c.Call("netApp.factory.instance", nil)
+	t.Logf("netApp.factory.instance ok=%v result=%.20s", inst.ok(), string(inst.Result))
+	var oid int64
+	_ = json.Unmarshal(inst.Result, &oid)
+	if oid != 0 {
+		r, e = c.CallObject("netApp.scanWLanDevices", oid, map[string]any{"Name": "wlan0"})
+		log("obj netApp.scanWLanDevices{Name:wlan0}", r, e)
+		lm, _ := c.CallObject("netApp.listMethod", oid, nil)
+		t.Logf("netApp methods: %.400s", string(lm.Params))
+	}
+	// scan-then-get async pattern candidates
+	for _, m := range []struct {
+		method string
+		params any
+	}{
+		{"netApp.getWlanDevices", map[string]any{"Name": "wlan0"}},
+		{"netApp.refreshWlanDevices", map[string]any{"Name": "wlan0"}},
+		{"WlanManager.getScanResult", map[string]any{"Name": "wlan0"}},
+		{"configManager.getConfig", map[string]any{"name": "WLan"}},
+	} {
+		rr, ee := c.Call(m.method, m.params)
+		log("Call "+m.method, rr, ee)
+	}
+}
+
 // davMagic is the 4-byte signature at the start of a genuine Dahua .dav
 // (DHAV container) file. The probe uses it to tell a real native recording
 // from an HTML/JSON error body.
