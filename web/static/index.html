@@ -334,6 +334,15 @@
             <div class="rv-quick" id="rv-quick"></div>
             <button class="btn btn-secondary" type="button" id="rv-reload">Tải clip mới</button>
           </div>
+          <div class="review-toolbar rv-picker">
+            <label class="field-sm" style="margin:0">Từ <input type="datetime-local" id="rv-from"></label>
+            <label class="field-sm" style="margin:0">đến <input type="datetime-local" id="rv-to"></label>
+            <button class="btn btn-sm" type="button" id="rv-load-range">Xem khoảng này</button>
+            <span class="muted">·</span>
+            <label class="field-sm" style="margin:0">Ngày <input type="date" id="rv-date"></label>
+            <button class="btn btn-sm btn-secondary" type="button" id="rv-load-day">Xem cả ngày</button>
+            <span class="rv-days muted" id="rv-days"></span>
+          </div>
           <div class="review-stage">
             <div class="review-video-wrap">
               <video id="rv-video" controls playsinline preload="metadata" poster="/logo.png"></video>
