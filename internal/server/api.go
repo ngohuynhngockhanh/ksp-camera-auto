@@ -55,9 +55,10 @@ type deviceView struct {
 	Password   string        `json:"password"`
 	NVRID      string        `json:"nvrId,omitempty"`
 	NVRChannel int           `json:"nvrChannel,omitempty"`
-	NVRName    string        `json:"nvrName,omitempty"`
-	NoStorage  bool          `json:"noStorage,omitempty"`
-	IsNVR      bool          `json:"isNvr,omitempty"`
+	NVRName     string       `json:"nvrName,omitempty"`
+	ChannelName string       `json:"channelName,omitempty"`
+	NoStorage   bool         `json:"noStorage,omitempty"`
+	IsNVR       bool         `json:"isNvr,omitempty"`
 }
 
 func toView(d config.Device) deviceView {
@@ -71,9 +72,10 @@ func toView(d config.Device) deviceView {
 		Password:   d.Password,
 		NVRID:      d.NVRID,
 		NVRChannel: d.NVRChannel,
-		NVRName:    d.NVRName,
-		NoStorage:  d.NoStorage,
-		IsNVR:      d.IsNVR,
+		NVRName:     d.NVRName,
+		ChannelName: d.ChannelName,
+		NoStorage:   d.NoStorage,
+		IsNVR:       d.IsNVR,
 	}
 }
 
@@ -183,6 +185,7 @@ func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
 	}
 	if existing, ok := s.inv.Get(id); ok {
 		d.NVRID, d.NVRChannel, d.NVRName, d.NoStorage, d.IsNVR = existing.NVRID, existing.NVRChannel, existing.NVRName, existing.NoStorage, existing.IsNVR
+		d.ChannelName = existing.ChannelName
 	}
 	if err := s.inv.Upsert(d); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
@@ -609,6 +612,69 @@ func (s *Server) handleNVRLink(w http.ResponseWriter, r *http.Request) {
 		linked++
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "nvrId": nvr.ID, "linked": linked})
+}
+
+type channelNamesReq struct {
+	IDs            []string `json:"ids"` // empty = all Dahua cameras
+	TimeoutSeconds int      `json:"timeoutSeconds"`
+}
+
+// handleChannelNames probes each camera's on-device channel/OSD title (channel
+// 0) and stores it as Device.ChannelName, so the review dropdown can show
+// "Camera01 - <channel name>". Batch (ids empty = every Dahua camera), parallel.
+func (s *Server) handleChannelNames(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req channelNamesReq
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	var targets []config.Device
+	if len(req.IDs) > 0 {
+		for _, id := range req.IDs {
+			if d, ok := s.inv.Get(id); ok {
+				targets = append(targets, d)
+			}
+		}
+	} else {
+		for _, d := range s.inv.List() {
+			if d.Vendor == config.VendorDahua && !d.IsNVR {
+				targets = append(targets, d)
+			}
+		}
+	}
+	to := s.reqTimeout(req.TimeoutSeconds)
+	names := map[string]string{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 5)
+	for _, d := range targets {
+		wg.Add(1)
+		go func(d config.Device) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			ctx, cancel := context.WithTimeout(r.Context(), to)
+			defer cancel()
+			cam, err := camera.Open(ctx, d, to)
+			if err != nil {
+				return
+			}
+			defer cam.Close()
+			name, _, _, _, err := cam.ChannelInfo(ctx, 0)
+			if err != nil || strings.TrimSpace(name) == "" {
+				return
+			}
+			d.ChannelName = strings.TrimSpace(name)
+			if err := s.inv.Upsert(d); err == nil {
+				mu.Lock()
+				names[d.ID] = d.ChannelName
+				mu.Unlock()
+			}
+		}(d)
+	}
+	wg.Wait()
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "names": names, "count": len(names)})
 }
 
 // recordingSource returns the device + 0-based channel that a camera's

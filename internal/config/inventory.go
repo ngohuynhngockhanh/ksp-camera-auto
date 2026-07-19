@@ -23,7 +23,8 @@ type Device struct {
 	// when offline, its live/snapshot) from a linked NVR's channel instead.
 	NVRID      string `yaml:"nvrId,omitempty"`      // fallback NVR device ID (empty = none)
 	NVRChannel int    `yaml:"nvrChannel,omitempty"` // 1-based NVR channel this camera maps to
-	NVRName    string `yaml:"nvrName,omitempty"`    // the NVR channel's name (e.g. "Bàn 8"), for display
+	NVRName     string `yaml:"nvrName,omitempty"`     // the NVR channel's name (e.g. "Bàn 8"), for display
+	ChannelName string `yaml:"channelName,omitempty"` // the camera's own channel/OSD title (probed), for display
 	NoStorage  bool   `yaml:"noStorage,omitempty"`  // no usable local SD → recordings come from the NVR
 	IsNVR      bool   `yaml:"isNvr,omitempty"`       // this device is the NVR itself
 }

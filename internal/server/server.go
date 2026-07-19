@@ -87,6 +87,7 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/live", api(s.handleLive))
 	s.mux.Handle("/api/nvr/scan", api(s.handleNVRScan))
 	s.mux.Handle("/api/nvr/link", api(s.handleNVRLink))
+	s.mux.Handle("/api/channel-names", api(s.handleChannelNames))
 	s.mux.Handle("/api/channel-info", api(s.handleChannelInfo))
 	s.mux.Handle("/api/channel-name", api(s.handleChannelName))
 	s.mux.Handle("/api/osd", api(s.handleOSD))

@@ -50,7 +50,8 @@
       const cams = (await api('/api/cameras') || []).filter(c => c.vendor === 'dahua');
       if (!cams.length) { sel.innerHTML = '<option>Không có camera Dahua</option>'; return; }
       sel.innerHTML = cams.map(c => {
-        const label = (c.name || c.host) + (c.nvrName ? ' - ' + c.nvrName : '');
+        const chan = c.channelName || c.nvrName || '';
+        const label = (c.name || c.host) + (chan ? ' - ' + chan : '');
         return `<option value="${escapeHtml(c.id)}">${escapeHtml(label)}</option>`;
       }).join('');
       window._rvCams = cams;
