@@ -286,6 +286,56 @@ func TestLiveWiFiProbe(t *testing.T) {
 	}
 }
 
+func TestLiveNVRProbe(t *testing.T) {
+	addr, user, pass := liveTarget(t)
+	c, err := Dial(addr, user, pass, 15*time.Second)
+	if err != nil {
+		t.Fatalf("dial/login: %v", err)
+	}
+	defer c.Close()
+	t.Logf("logged in to NVR %s as %s", addr, user)
+
+	// RemoteDevice: the channel -> connected-camera map. Its table is an OBJECT,
+	// not an array, so dump raw params to learn the shape + IP field names.
+	for _, name := range []string{"RemoteDevice", "Dahua.Device.Network.RemoteDevice", "RemoteDeviceInfo", "Camera"} {
+		rr, e := c.Call("configManager.getConfig", map[string]any{"name": name})
+		if e != nil || !rr.ok() {
+			t.Logf("getConfig %s: ok=%v err=%q", name, rr.ok(), rr.errMessage())
+			continue
+		}
+		t.Logf("getConfig %s raw: %.700s", name, string(rr.Params))
+	}
+	// ChannelTitle names.
+	ct, err := c.getTable("ChannelTitle")
+	if err != nil {
+		t.Logf("getTable ChannelTitle: %v", err)
+	} else {
+		b, _ := json.Marshal(ct)
+		t.Logf("ChannelTitle (%d): %.400s", len(ct), string(b))
+	}
+	// Channel count via Encode table.
+	infos, err := c.ProbeAll()
+	if err != nil {
+		t.Logf("ProbeAll: %v", err)
+	} else {
+		chans := map[int]bool{}
+		for _, s := range infos {
+			chans[s.Channel] = true
+		}
+		t.Logf("ProbeAll: %d stream-infos across %d channels", len(infos), len(chans))
+	}
+	// Recordings on channel 0 in the last 2h.
+	recs, err := c.FindRecordings(0, time.Now().Add(-2*time.Hour), time.Now())
+	if err != nil {
+		t.Logf("FindRecordings ch0: %v", err)
+	} else {
+		t.Logf("FindRecordings ch0: %d segments", len(recs))
+		if len(recs) > 0 {
+			t.Logf("  first: %s..%s %q", recs[0].StartTime, recs[0].EndTime, recs[0].FilePath)
+		}
+	}
+}
+
 // davMagic is the 4-byte signature at the start of a genuine Dahua .dav
 // (DHAV container) file. The probe uses it to tell a real native recording
 // from an HTML/JSON error body.

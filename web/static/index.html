@@ -143,6 +143,13 @@
             </form>
           </div>
 
+          <div class="card" id="nvr-card">
+            <div class="card-title">Đầu ghi (NVR) — dự phòng khi camera không có bộ nhớ</div>
+            <p class="card-sub">Liên kết camera với đầu ghi: camera nào không có thẻ nhớ thì khi xem lại/tải sẽ tự lấy từ đầu ghi ở kênh tương ứng; camera offline thì xem trực tiếp cũng lấy từ đầu ghi. Chạy quét 1 lần để tự gán, có thể sửa tay.</p>
+            <div class="msg" id="nvr-card-msg"></div>
+            <button class="btn" type="button" id="nvr-open-btn">🗄 Quét &amp; liên kết đầu ghi</button>
+          </div>
+
           <div class="card" id="network-card" hidden>
             <div class="card-title">Mạng — <span id="net-device-name"></span></div>
             <p class="card-sub">Chỉ đọc/ghi được qua cổng cấu hình DVRIP đang dùng để kết nối camera này. Quét Wi-Fi cần cổng HTTP (80) của camera — có thể không tới được nếu chỉ NAT cổng DVRIP.</p>
@@ -428,6 +435,30 @@
     </div>
 
     <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
+
+    <dialog id="nvr-link-dialog" class="dialog-wide">
+      <div class="dialog-title">Liên kết đầu ghi (NVR)</div>
+      <div class="grid">
+        <div class="field"><label for="nvr-host">Host / IP đầu ghi</label><input id="nvr-host" placeholder="192.168.0.44"></div>
+        <div class="field"><label for="nvr-port">Cổng</label><input id="nvr-port" type="number" placeholder="37777"></div>
+        <div class="field"><label for="nvr-user">Tài khoản</label><input id="nvr-user" placeholder="admin"></div>
+        <div class="field"><label for="nvr-pass">Mật khẩu</label><input id="nvr-pass" type="password" placeholder="(giữ nếu đã lưu)"></div>
+      </div>
+      <div class="row">
+        <button class="btn" type="button" id="nvr-scan-btn">Quét đầu ghi</button>
+        <span class="muted" id="nvr-scan-msg"></span>
+      </div>
+      <div class="table-wrap section-gap">
+        <table class="reflow" id="nvr-table">
+          <thead><tr><th>Kênh</th><th>Cam ở đầu ghi</th><th>Gán camera</th><th>Không bộ nhớ → dùng NVR</th></tr></thead>
+          <tbody id="nvr-tbody"><tr><td colspan="4" class="empty-hint">Nhập đầu ghi rồi bấm "Quét đầu ghi".</td></tr></tbody>
+        </table>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary" type="button" id="nvr-close-btn">Đóng</button>
+        <button class="btn btn-primary" type="button" id="nvr-save-btn" disabled>Lưu liên kết</button>
+      </div>
+    </dialog>
 
     <dialog id="confirm-dialog">
       <div class="dialog-body">

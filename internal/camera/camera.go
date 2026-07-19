@@ -207,6 +207,13 @@ type StorageManager interface {
 	FormatStorage(ctx context.Context, name string) error
 }
 
+// RemoteDeviceLister is implemented by an NVR that can report the camera
+// connected to each of its channels (Dahua RemoteDevice config). Dahua-only;
+// callers type-assert. Used to auto-map cameras to NVR channels.
+type RemoteDeviceLister interface {
+	GetRemoteDevices(ctx context.Context) ([]dahua.RemoteChannel, error)
+}
+
 // AutoRebootConfig is implemented by cameras that expose a scheduled
 // auto-reboot (Dahua's AutoMaintain table). Dahua-only.
 type AutoRebootConfig interface {
@@ -354,6 +361,11 @@ func (d *dahuaCamera) GetStorageInfo(ctx context.Context) ([]dahua.StorageDevice
 // FormatStorage formats one storage device by name — ERASES ALL DATA.
 func (d *dahuaCamera) FormatStorage(ctx context.Context, name string) error {
 	return d.client.FormatStorage(name)
+}
+
+// GetRemoteDevices lists the camera connected to each NVR channel.
+func (d *dahuaCamera) GetRemoteDevices(ctx context.Context) ([]dahua.RemoteChannel, error) {
+	return d.client.GetRemoteDevices()
 }
 
 // GetAutoReboot reads the scheduled auto-reboot (AutoMaintain).

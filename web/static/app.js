@@ -353,6 +353,8 @@ function renderCameras() {
       <td class="cell-check"><input type="checkbox" class="cam-cb" value="${escapeHtml(c.id)}" ${checked.has(c.id) ? 'checked' : ''} aria-label="Chọn camera"></td>
       <td data-label="Tên" class="cell-name">
         <span class="cell-name-text">${escapeHtml(c.name || '(chưa đặt tên)')}</span>
+        ${c.isNvr ? '<span class="badge">NVR</span>' : ''}
+        ${(c.noStorage && c.nvrId) ? `<span class="badge ok" title="Xem lại/tải lấy từ đầu ghi, kênh ${c.nvrChannel || '?'}">⛁ đầu ghi</span>` : ''}
         <button class="btn-icon" data-action="rename-inline" data-id="${escapeHtml(c.id)}" title="Sửa nhanh tên trong kho" aria-label="Sửa tên">${ICONS.edit}</button>
       </td>
       <td data-label="Host">${escapeHtml(c.host)}</td>
@@ -383,6 +385,77 @@ async function loadCameras() {
       `<tr><td colspan="7"><span class="msg err">Lỗi tải danh sách: ${escapeHtml(e.message)}</span></td></tr>`;
   }
 }
+
+/* ---------- NVR link: cameras with no storage play back from the NVR ---------- */
+(function () {
+  const dlg = () => document.getElementById('nvr-link-dialog');
+  let scanRows = [];
+  function camOptions(selectedId) {
+    return ['<option value="">— không gán —</option>'].concat(
+      cameras.filter(c => !c.isNvr).map(c =>
+        `<option value="${escapeHtml(c.id)}"${c.id === selectedId ? ' selected' : ''}>${escapeHtml(c.name || c.id)} (${escapeHtml(c.host)})</option>`)
+    ).join('');
+  }
+  function renderRows() {
+    const tb = document.getElementById('nvr-tbody');
+    if (!scanRows.length) { tb.innerHTML = '<tr><td colspan="4" class="empty-hint">Không đọc được kênh nào.</td></tr>'; return; }
+    tb.innerHTML = scanRows.map((r, i) => `
+      <tr>
+        <td data-label="Kênh">${r.nvrChannel}</td>
+        <td data-label="Cam ở đầu ghi">${escapeHtml(r.nvrCamName || '')}<br><span class="muted">${escapeHtml(r.nvrCamIP || '')}</span></td>
+        <td data-label="Gán camera"><select data-row="${i}" class="nvr-cam-sel">${camOptions(r.suggestedCameraId)}</select></td>
+        <td data-label="Không bộ nhớ"><input type="checkbox" data-row="${i}" class="nvr-nostore"${r.noStorage ? ' checked' : ''}></td>
+      </tr>`).join('');
+  }
+  const nvrBody = () => ({
+    host: document.getElementById('nvr-host').value.trim(),
+    port: parseInt(document.getElementById('nvr-port').value, 10) || 0,
+    username: document.getElementById('nvr-user').value.trim(),
+    password: document.getElementById('nvr-pass').value,
+  });
+  document.getElementById('nvr-open-btn').addEventListener('click', () => {
+    const nvr = cameras.find(c => c.isNvr);
+    document.getElementById('nvr-host').value = nvr ? nvr.host : '';
+    document.getElementById('nvr-port').value = nvr ? nvr.port : 37777;
+    document.getElementById('nvr-user').value = nvr ? nvr.username : 'admin';
+    document.getElementById('nvr-pass').value = '';
+    scanRows = [];
+    document.getElementById('nvr-tbody').innerHTML = '<tr><td colspan="4" class="empty-hint">Nhập đầu ghi rồi bấm "Quét đầu ghi".</td></tr>';
+    document.getElementById('nvr-save-btn').disabled = true;
+    document.getElementById('nvr-scan-msg').textContent = '';
+    dlg().showModal();
+  });
+  document.getElementById('nvr-close-btn').addEventListener('click', () => dlg().close());
+  document.getElementById('nvr-scan-btn').addEventListener('click', async (ev) => {
+    if (!document.getElementById('nvr-host').value.trim()) { showToast('Nhập host đầu ghi.', 'err'); return; }
+    const msg = document.getElementById('nvr-scan-msg');
+    ev.target.disabled = true; msg.textContent = 'Đang quét (kiểm tra bộ nhớ từng cam, có thể mất chút)...';
+    try {
+      const res = await api('/api/nvr/scan', { method: 'POST', body: JSON.stringify(Object.assign(nvrBody(), { timeoutSeconds: timeoutSec() })) });
+      scanRows = res.rows || [];
+      renderRows();
+      document.getElementById('nvr-save-btn').disabled = !scanRows.length;
+      msg.textContent = `${scanRows.length} kênh. Kiểm tra & sửa gán rồi bấm Lưu.`;
+    } catch (e) { msg.textContent = 'Lỗi: ' + e.message; }
+    finally { ev.target.disabled = false; }
+  });
+  document.getElementById('nvr-save-btn').addEventListener('click', async (ev) => {
+    const mappings = scanRows.map((r, i) => {
+      const sel = document.querySelector(`.nvr-cam-sel[data-row="${i}"]`);
+      const cb = document.querySelector(`.nvr-nostore[data-row="${i}"]`);
+      return { cameraId: sel ? sel.value : '', nvrChannel: r.nvrChannel, noStorage: cb ? cb.checked : false };
+    }).filter(m => m.cameraId);
+    if (!mappings.length) { showToast('Chưa gán camera nào.', 'err'); return; }
+    ev.target.disabled = true;
+    try {
+      const res = await api('/api/nvr/link', { method: 'POST', body: JSON.stringify({ nvr: Object.assign(nvrBody(), { name: '' }), mappings }) });
+      showToast(`Đã liên kết ${res.linked} camera với đầu ghi.`, 'ok');
+      dlg().close();
+      await loadCameras();
+    } catch (e) { showToast('Lỗi lưu: ' + e.message, 'err'); }
+    finally { ev.target.disabled = false; }
+  });
+})();
 
 function selectedCameraIds() {
   return Array.from(document.querySelectorAll('.cam-cb:checked')).map(cb => cb.value);

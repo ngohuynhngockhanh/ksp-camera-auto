@@ -18,6 +18,13 @@ type Device struct {
 	Vendor   Vendor `yaml:"vendor"`
 	Username string `yaml:"username,omitempty"`
 	Password string `yaml:"password,omitempty"`
+
+	// NVR fallback: a camera with no local storage serves its recordings (and,
+	// when offline, its live/snapshot) from a linked NVR's channel instead.
+	NVRID      string `yaml:"nvrId,omitempty"`      // fallback NVR device ID (empty = none)
+	NVRChannel int    `yaml:"nvrChannel,omitempty"` // 1-based NVR channel this camera maps to
+	NoStorage  bool   `yaml:"noStorage,omitempty"`  // no usable local SD → recordings come from the NVR
+	IsNVR      bool   `yaml:"isNvr,omitempty"`       // this device is the NVR itself
 }
 
 // Addr returns host:port for dialling.
