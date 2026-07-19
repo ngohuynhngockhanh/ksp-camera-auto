@@ -26,16 +26,12 @@ func playbackRTSPURL(host, user, pass string, channel int, start, end time.Time)
 		User:   url.UserPassword(user, pass),
 		Host:   fmt.Sprintf("%s:554", host),
 		Path:   "/cam/playback",
-		RawQuery: url.Values{
-			"channel": {fmt.Sprintf("%d", channel+1)},
-			// subtype 0 = main stream. Required by some models (e.g. the wired
-			// cams on inut_205_43 return "Invalid data" for playback without it);
-			// harmless on models that ignore it.
-			"subtype":   {"0"},
-			"starttime": {start.Format(f)},
-			"endtime":   {end.Format(f)},
-		}.Encode(),
 	}
+	// Build the query in a FIXED order (channel, subtype, starttime, endtime).
+	// url.Values.Encode() sorts keys alphabetically, which puts endtime BEFORE
+	// starttime — IP cameras tolerate that, but Dahua NVRs are order-sensitive and
+	// return RTSP 404 for it. subtype 0 = main stream (required by some models).
+	u.RawQuery = fmt.Sprintf("channel=%d&subtype=0&starttime=%s&endtime=%s", channel+1, start.Format(f), end.Format(f))
 	return u.String()
 }
 
