@@ -120,9 +120,18 @@ func streamChunkFast(ctx context.Context, w io.Writer, host, user, pass string, 
 	cmd := exec.CommandContext(ctx, "ffmpeg",
 		"-nostdin",
 		"-rtsp_transport", "tcp",
+		// The Rate-Control:no burst makes ffmpeg mis-detect the stream as ~1fps,
+		// so +genpts then spaces frames 1s apart and the muxer collapses ~24 of
+		// every 25 frames. Force the real frame rate on the INPUT so timestamps
+		// are regenerated at the true cadence and every frame is kept.
+		"-r", "25",
 		"-i", proxyURL,
 		"-c", "copy",
-		"-fflags", "+genpts",
+		// The Rate-Control:no fast stream delivers frames in a burst with coarse/
+		// duplicate DTS; +igndts drops those broken input DTS and regenerates
+		// monotonic ones so the muxer keeps every frame (without it only ~1
+		// keyframe/sec survives). +genpts fills missing PTS.
+		"-fflags", "+genpts+igndts",
 		"-t", strconv.Itoa(dur),
 		// Continue timestamps from the previous chunk so the concatenated .ts is
 		// monotonic (no per-chunk PTS reset -> no VLC freeze at boundaries).

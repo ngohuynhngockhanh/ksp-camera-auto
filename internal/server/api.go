@@ -1270,15 +1270,13 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 
-	// fast=1 uses the RTSP "Rate-Control: no" download mode (~7x realtime) via
-	// the in-process RTSP proxy; its output is chunked MPEG-TS. Normal playback
-	// (~1x realtime) is fragmented MP4.
+	// Always use normal (paced) playback: it is fragmented MP4 with EVERY frame,
+	// playable everywhere. The RTSP "Rate-Control: no" fast path (StreamPlaybackFast)
+	// is retained but NOT used for downloads — on these camera firmwares that mode
+	// only emits keyframes (~1 fps), so the file looked choppy/frozen. fast=1 is
+	// accepted for backward compat but routed to the same full-frame stream.
 	stream := dahua.StreamPlayback
 	ext, ctype := "mp4", "video/mp4"
-	if q.Get("fast") != "" {
-		stream = dahua.StreamPlaybackFast
-		ext, ctype = "mp4", "video/mp4" // fast download is remuxed to fragmented MP4 (iPhone-friendly)
-	}
 	fname := fmt.Sprintf("playback_ch%d_%s.%s", channel, start.Format("20060102_150405"), ext)
 	w.Header().Set("Content-Type", ctype)
 	if q.Get("download") != "" {
