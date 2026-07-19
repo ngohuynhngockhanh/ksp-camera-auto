@@ -1268,48 +1268,62 @@ document.getElementById('channel-edit-dialog').addEventListener('close', () => {
 // A multipart/x-mixed-replace <img> from /api/live. Capped at 5 min server-side;
 // "+5 phút" reconnects for a fresh session; leaving the page or 30s hidden stops
 // it (clearing the img src drops the connection, which ends the server stream).
-let liveTimer = null, liveDeadline = 0, liveHideTimer = null;
+// The live view is shared by the PTZ and Chỉnh màu tabs; only one runs at a
+// time (switchCeTab stops it on any tab change). liveEls points at the active
+// tab's elements so start/stop/extend/tick target the right <img> + controls.
+let liveTimer = null, liveDeadline = 0, liveHideTimer = null, liveEls = null;
 function liveURL() {
   return `/api/live?id=${encodeURIComponent(channelEditTile.camId)}&channel=${channelEditTile.channel}&fps=6&_r=${Date.now()}`;
 }
 function liveTick() {
   const left = Math.max(0, Math.round((liveDeadline - Date.now()) / 1000));
   if (left <= 0) { stopLive(); return; }
-  document.getElementById('ce-ptz-live-status').textContent =
+  if (liveEls) liveEls.status.textContent =
     `Đang phát • còn ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
 }
-function startLive() {
+function startLive(els) {
   if (!channelEditTile) return;
-  const img = document.getElementById('ce-ptz-live');
-  img.src = liveURL();
-  img.hidden = false;
-  document.getElementById('ce-ptz-live-start').hidden = true;
-  document.getElementById('ce-ptz-live-extend').hidden = false;
-  document.getElementById('ce-ptz-live-stop').hidden = false;
+  stopLive(); // never run two at once
+  liveEls = els;
+  els.img.src = liveURL();
+  els.img.hidden = false;
+  els.start.hidden = true;
+  els.extend.hidden = false;
+  els.stop.hidden = false;
   liveDeadline = Date.now() + 5 * 60 * 1000;
-  clearInterval(liveTimer);
   liveTimer = setInterval(liveTick, 1000);
   liveTick();
 }
 function extendLive() {
-  if (!liveTimer || !channelEditTile) return;
+  if (!liveTimer || !liveEls || !channelEditTile) return;
   liveDeadline = Date.now() + 5 * 60 * 1000;
-  document.getElementById('ce-ptz-live').src = liveURL(); // reconnect for a fresh 5-min session
+  liveEls.img.src = liveURL(); // reconnect for a fresh 5-min session
   liveTick();
 }
 function stopLive() {
   clearInterval(liveTimer); liveTimer = null;
   clearTimeout(liveHideTimer); liveHideTimer = null;
-  const img = document.getElementById('ce-ptz-live');
-  if (img) { img.removeAttribute('src'); img.hidden = true; }
-  const s = document.getElementById('ce-ptz-live-start'); if (s) s.hidden = false;
-  const e = document.getElementById('ce-ptz-live-extend'); if (e) e.hidden = true;
-  const p = document.getElementById('ce-ptz-live-stop'); if (p) p.hidden = true;
-  const st = document.getElementById('ce-ptz-live-status'); if (st) st.textContent = '';
+  if (liveEls) {
+    liveEls.img.removeAttribute('src'); liveEls.img.hidden = true;
+    liveEls.start.hidden = false; liveEls.extend.hidden = true;
+    liveEls.stop.hidden = true; liveEls.status.textContent = '';
+    liveEls = null;
+  }
 }
-document.getElementById('ce-ptz-live-start').addEventListener('click', startLive);
-document.getElementById('ce-ptz-live-extend').addEventListener('click', extendLive);
-document.getElementById('ce-ptz-live-stop').addEventListener('click', stopLive);
+function wireLive(prefix) {
+  const els = {
+    img: document.getElementById(prefix + '-live'),
+    start: document.getElementById(prefix + '-live-start'),
+    extend: document.getElementById(prefix + '-live-extend'),
+    stop: document.getElementById(prefix + '-live-stop'),
+    status: document.getElementById(prefix + '-live-status'),
+  };
+  els.start.addEventListener('click', () => startLive(els));
+  els.extend.addEventListener('click', extendLive);
+  els.stop.addEventListener('click', stopLive);
+}
+wireLive('ce-ptz');
+wireLive('ce-pic');
 // Auto-stop after 30s hidden — don't hold a stream nobody is watching.
 document.addEventListener('visibilitychange', () => {
   if (!liveTimer) return;
@@ -1329,7 +1343,7 @@ function switchCeTab(tab) {
   document.getElementById('ce-panel-name').hidden = tab !== 'name';
   document.getElementById('ce-panel-picture').hidden = tab !== 'picture';
   document.getElementById('ce-panel-ptz').hidden = tab !== 'ptz';
-  if (tab !== 'ptz') stopLive(); // don't keep a live stream running off-tab
+  stopLive(); // the live view belongs to one tab; stop it when navigating tabs
   if (tab === 'picture' && channelEditTile && !picturePayload) {
     loadPictureTab(channelEditTile);
   }
