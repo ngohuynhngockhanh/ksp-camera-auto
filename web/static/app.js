@@ -259,7 +259,12 @@ function setRoute() {
   closeDrawer();
   if (hash === 'cameras') renderBulkSelection();
   if (hash === 'dashboard') renderDashboard();
-  if (hash === 'review' && window.reviewOnShow) window.reviewOnShow();
+  if (hash === 'review') {
+    // reviewOnShow may not exist yet if review.js is still loading (a viewer is
+    // forced here during init, before the later <script> runs) — retry on load.
+    if (window.reviewOnShow) window.reviewOnShow();
+    else window.addEventListener('load', () => { if (window.reviewOnShow) window.reviewOnShow(); }, { once: true });
+  }
 }
 
 function goto(hash) { location.hash = '#' + hash; }
