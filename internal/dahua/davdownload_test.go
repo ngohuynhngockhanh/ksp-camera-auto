@@ -46,7 +46,14 @@ func TestLiveStreamDav(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	dlTimeout := 120 * time.Second
+	if v := os.Getenv("KSPCAM_DAV_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			dlTimeout = d
+		}
+	}
+	t0 := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), dlTimeout)
 	defer cancel()
 	if err := StreamDav(ctx, f, host, user, pass, 0, start, end); err != nil {
 		t.Fatalf("StreamDav: %v", err)
@@ -55,7 +62,7 @@ func TestLiveStreamDav(t *testing.T) {
 	head := make([]byte, 4)
 	f.Seek(0, 0)
 	f.Read(head)
-	t.Logf("StreamDav wrote %s (%d bytes), magic=%q", out, fi.Size(), head)
+	t.Logf("StreamDav wrote %s (%d bytes = %.1f MB) in %v, magic=%q", out, fi.Size(), float64(fi.Size())/1e6, time.Since(t0), head)
 	if string(head) != "DHAV" {
 		t.Fatalf("not a DHAV file: magic=%x", head)
 	}

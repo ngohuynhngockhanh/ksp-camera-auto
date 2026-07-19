@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -16,16 +17,18 @@ import (
 // ffmpeg/remux. It speaks the Dahua "param protocol" (\xf4 frames) over DVRIP,
 // reverse-engineered from a NetSDK CLIENT_DownloadByTimeEx capture:
 //
-//  1. Dial + DVRIP login (a dedicated session — a download holds the socket).
-//  2. AddObject Dahua.Device.Network.ControlConnection.Passive -> a ConnectionID
-//     and the port for a data sub-channel.
-//  3. mediaFileFind locates the .dav segment file for `start`.
-//  4. Open a 2nd TCP to the advertised port and register it as the sub-channel
-//     (AckSubChannel with our SessionID + ConnectionID).
-//  5. PlayBack.download on the control conn -> the device streams the recording
-//     on the data sub-channel as 0xbb media frames wrapping DHAV; we strip the
-//     32-byte frame headers and write the DHAV bytes to w.
-//  6. PlayBack.Stop + DeleteObject to release the session.
+//  1. Dial + DVRIP login, mediaFileFind enumerates the .dav segments in the range.
+//  2. Split the range into byte-bounded CHUNKS and download each on its OWN login +
+//     passive sub-channel (see davChunk), concatenating the DHAV bytes to w.
+//
+// Why chunk: a single whole-range PlayBack.download is capped by the device at
+// ~350 MB / ~26 min — it streams that much then RESETS the sub-channel, so a long
+// range comes back ~87% short. A whole-range request DOES span multiple segments
+// (a request scoped to one segment's times yields only that segment), so we split
+// the range into chunks that each finish under the cap and stitch them. Chunk cuts
+// fall on segment boundaries — each .dav segment starts on an I-frame — so the
+// seams are clean. Each chunk gets a fresh login because the device drops the whole
+// control session (not just the sub-channel) when a download finishes.
 //
 // Nothing is written to the box's disk. Unlike StreamPlayback (RTSP, no DVRIP),
 // this REQUIRES the DVRIP config port, so it can fail on a camera whose config
@@ -38,32 +41,13 @@ func StreamDav(ctx context.Context, w io.Writer, host, user, pass string, channe
 		return fmt.Errorf("dahua: dav %s: %w (waiting for a slot)", host, ctx.Err())
 	}
 
-	c, err := Dial(net.JoinHostPort(host, "37777"), user, pass, 15*time.Second)
+	// Enumerate the .dav segments in the range on a short-lived login.
+	c0, err := Dial(net.JoinHostPort(host, "37777"), user, pass, 15*time.Second)
 	if err != nil {
 		return fmt.Errorf("dahua: dav %s: login: %w", host, err)
 	}
-	defer c.Close()
-
-	// 1. Allocate a passive control connection (data sub-channel).
-	addResp, err := c.callF4("TransactionID:1\r\nMethod:AddObject\r\n" +
-		"ParameterName:Dahua.Device.Network.ControlConnection.Passive\r\nConnectProtocol:0\r\n\r\n")
-	if err != nil {
-		return fmt.Errorf("dahua: dav %s: AddObject: %w", host, err)
-	}
-	connID := paramValue(addResp, "ConnectionID")
-	if connID == "" {
-		return fmt.Errorf("dahua: dav %s: no ConnectionID (resp: %.200s)", host, addResp)
-	}
-	dataPort := paramValue(addResp, "Port")
-	if dataPort == "" || dataPort == "0" {
-		dataPort = "37777"
-	}
-
-	// 2. Enumerate the .dav segments in the range. The device streams ONE segment
-	// per PlayBack.download request, so we must loop the segments (as the NetSDK
-	// does) — a single whole-range request only ever yields the first segment,
-	// which is what truncated long downloads.
-	recs, err := c.FindRecordings(channel, start, end)
+	recs, err := c0.FindRecordings(channel, start, end)
+	c0.Close()
 	if err != nil {
 		return fmt.Errorf("dahua: dav %s: find: %w", host, err)
 	}
@@ -71,21 +55,102 @@ func StreamDav(ctx context.Context, w io.Writer, host, user, pass string, channe
 		return fmt.Errorf("dahua: dav %s: no recording in range", host)
 	}
 
-	// 3. Open the data sub-channel (a 2nd TCP) and register it for our session.
+	ch := channel + 1 // this protocol is 1-based
+
+	// Walk the segments, grouping them into chunks whose combined size stays under
+	// the device's per-download cap, and download each chunk on its own session.
+	for i := 0; i < len(recs); {
+		// Grow the chunk until adding the next segment would exceed the cap (always
+		// take at least one segment, even if a single segment is itself over-cap).
+		j, size := i, int64(0)
+		for j < len(recs) && (j == i || size+recs[j].Length <= davChunkBytes) {
+			size += recs[j].Length
+			j++
+		}
+
+		// Clamp the first chunk's start and the last chunk's end to the requested
+		// window; interior cuts use the exact segment boundary times so consecutive
+		// chunks meet without overlap or gap.
+		startStr := davTimeStr(recs[i].StartTime)
+		if i == 0 || startStr == "" {
+			startStr = davTime(start)
+		}
+		endStr := davTimeStr(recs[j-1].EndTime)
+		if j == len(recs) || endStr == "" {
+			endStr = davTime(end)
+		}
+
+		if err := davChunk(ctx, w, host, user, pass, ch, startStr, endStr, recs[i].FilePath); err != nil {
+			return fmt.Errorf("dahua: dav %s: chunk segs %d-%d: %w", host, i, j-1, err)
+		}
+		i = j
+	}
+	return nil
+}
+
+// davChunkBytes caps how many bytes (by mediaFileFind's reported segment Length)
+// one PlayBack.download chunk may cover. The device resets a single download after
+// ~350 MB, so this stays well under that with margin for Length underreporting the
+// on-wire DHAV size.
+const davChunkBytes = 180 << 20
+
+// davChunk downloads one [startStr,endStr] sub-range on its own DVRIP login +
+// passive sub-channel and appends its DHAV bytes to w. fileDir is the on-device
+// path of the chunk's first segment (the device wants it to locate the starting
+// file). A fresh login per chunk is required — the device tears down the whole
+// control session when a download finishes, so a prior chunk's session is unusable.
+// It runs the full handshake: login -> AddObject Passive -> 2nd TCP + AckSubChannel
+// -> PlayBack.download -> read 0xbb media frames (keepalive-poked) until the device
+// finishes and closes, then PlayBack.Stop + DeleteObject to release it promptly.
+func davChunk(ctx context.Context, w io.Writer, host, user, pass string, ch int, startStr, endStr, fileDir string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	c, err := Dial(net.JoinHostPort(host, "37777"), user, pass, 15*time.Second)
+	if err != nil {
+		return fmt.Errorf("login: %w", err)
+	}
+	defer c.Close()
+
+	// Allocate a passive control connection (data sub-channel) for this chunk.
+	addResp, err := c.callF4("TransactionID:1\r\nMethod:AddObject\r\n" +
+		"ParameterName:Dahua.Device.Network.ControlConnection.Passive\r\nConnectProtocol:0\r\n\r\n")
+	if err != nil {
+		return fmt.Errorf("AddObject: %w", err)
+	}
+	connID := paramValue(addResp, "ConnectionID")
+	if connID == "" {
+		return fmt.Errorf("no ConnectionID (resp: %.200s)", addResp)
+	}
+	dataPort := paramValue(addResp, "Port")
+	if dataPort == "" || dataPort == "0" {
+		dataPort = "37777"
+	}
+
+	// Open the data sub-channel (a 2nd TCP) and register it for our session.
 	dataConn, err := net.DialTimeout("tcp", net.JoinHostPort(host, dataPort), 10*time.Second)
 	if err != nil {
-		return fmt.Errorf("dahua: dav %s: data dial: %w", host, err)
+		return fmt.Errorf("data dial: %w", err)
 	}
 	defer dataConn.Close()
-	go func() { <-ctx.Done(); dataConn.Close() }()
+	closed := make(chan struct{})
+	defer close(closed)
+	go func() {
+		select {
+		case <-ctx.Done():
+			dataConn.Close()
+		case <-closed:
+		}
+	}()
+
 	ack := fmt.Sprintf("TransactionID:0\r\nMethod:GetParameterNames\r\n"+
 		"ParameterName:Dahua.Device.Network.ControlConnection.AckSubChannel\r\n"+
 		"SessionID:%d\r\nConnectionID:%s\r\n\r\n", c.sessionID, connID)
 	if err := writeF4(dataConn, []byte(ack), c.timeout); err != nil {
-		return fmt.Errorf("dahua: dav %s: AckSubChannel: %w", host, err)
+		return fmt.Errorf("AckSubChannel: %w", err)
 	}
 
-	ch := channel + 1 // this protocol is 1-based
 	stop := func() {
 		_, _ = c.callF4(fmt.Sprintf("TransactionID:9\r\nMethod:GetParameterNames\r\n"+
 			"ParameterName:Dahua.Device.Network.PlayBack.Stop\r\nchannel:%d\r\nConnectionID:%s\r\n\r\n", ch, connID))
@@ -97,22 +162,21 @@ func StreamDav(ctx context.Context, w io.Writer, host, user, pass string, channe
 			"ParameterName:Dahua.Device.Network.ControlConnection.Passive\r\nConnectionID:%s\r\n\r\n", connID))
 	}()
 
-	// 4. Start the whole-range download.
+	// Start this chunk's download.
 	stop()
 	dl := fmt.Sprintf("TransactionID:3\r\nMethod:GetParameterNames\r\n"+
 		"ParameterName:Dahua.Device.Network.PlayBack.download\r\n"+
 		"channel:%d\r\nConnectionID:%s\r\n"+
 		"StartTime:%s\r\nEndTime:%s\r\n"+
 		"DriveNo:0\r\nClusterNo:0\r\nHint:0\r\nType:0\r\nIsTime:1\r\nOffLength:0\r\nUkey:\r\n"+
-		"FileDir:%s\r\n\r\n", ch, connID, davTime(start), davTime(end), recs[0].FilePath)
+		"FileDir:%s\r\n\r\n", ch, connID, startStr, endStr, fileDir)
 	if _, err := c.callF4(dl); err != nil {
-		return fmt.Errorf("dahua: dav %s: PlayBack.download: %w", host, err)
+		return fmt.Errorf("PlayBack.download: %w", err)
 	}
 
-	// 5. Keep the sub-channel alive: the device buffers a chunk of a long range
-	// then PAUSES, waiting for the client to poke it — the NetSDK sends periodic
-	// \xa1 keepalives on this connection, without which the stream stalls after a
-	// couple of segments and the download truncates. Send one every 2s.
+	// Keep the sub-channel alive: the device buffers a chunk then PAUSES, waiting
+	// for the client to poke it — the NetSDK sends periodic \xa1 keepalives, without
+	// which the stream stalls mid-chunk. Send one every 2s.
 	kaStop := make(chan struct{})
 	go func() {
 		t := time.NewTicker(2 * time.Second)
@@ -133,13 +197,25 @@ func StreamDav(ctx context.Context, w io.Writer, host, user, pass string, channe
 	}()
 	defer close(kaStop)
 
-	// 6. Read the sub-channel until the whole range is delivered and it goes idle.
+	// Read the sub-channel until the chunk is delivered and the device closes/idles.
 	return copyDavSegment(ctx, w, dataConn, 0)
 }
 
 // davTime formats a time as Dahua's "Y&M&D&H&M&S" with no zero-padding.
 func davTime(t time.Time) string {
 	return fmt.Sprintf("%d&%d&%d&%d&%d&%d", t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute(), t.Second())
+}
+
+// davTimeStr reformats a device-local timestamp ("2006-01-02 15:04:05", as
+// returned by mediaFileFind) into davTime's "Y&M&D&H&M&S". It parses in UTC so
+// only the wall-clock fields carry over — no timezone shift — matching how the
+// device names its own segment boundaries. Returns "" if the string is unparseable.
+func davTimeStr(devTime string) string {
+	t, err := time.Parse(deviceTimeLayout, devTime)
+	if err != nil {
+		return ""
+	}
+	return davTime(t)
 }
 
 // callF4 sends one \xf4 param-protocol frame on the control connection and
@@ -175,18 +251,17 @@ func paramValue(payload []byte, key string) string {
 	return ""
 }
 
-// davIdle bounds how long ONE segment's stream may go silent before it's treated
-// as finished. It only decides the end of a partial (clamped) first/last segment
-// — fully-included segments end deterministically on their byte count — so it can
-// be modest while still surviving a mid-segment stall under load.
+// davIdle bounds how long a chunk's stream may go silent before it's treated as
+// finished — a fallback for a device that goes quiet at end-of-range instead of
+// closing the socket. The normal terminator is the device closing the sub-channel
+// (EOF / connection reset), which ends the read immediately.
 const davIdle = 20 * time.Second
 
-// copyDavSegment reads one segment's DHAV off the sub-channel and writes it to w.
-// If expected > 0 (a fully-included segment, whose file Length is known) it reads
-// exactly that many DHAV bytes — a deterministic end that doesn't rely on idle,
-// so long multi-segment downloads stay complete. Otherwise (a partial segment) it
-// reads until the stream goes idle. Non-0xbb frames (the \xf4 AckSubChannel reply
-// before the first segment, keepalives) are consumed and skipped.
+// copyDavSegment reads a chunk's DHAV off the sub-channel and writes it to w until
+// the device finishes: it closes the sub-channel (EOF or connection reset — its
+// normal end-of-download signal) or goes idle past davIdle. Non-0xbb frames (the
+// \xf4 AckSubChannel reply before the data, keepalive echoes) are consumed and
+// skipped. The expected arg is unused (kept for the caller's clarity).
 func copyDavSegment(ctx context.Context, w io.Writer, conn net.Conn, expected int64) error {
 	hdr := make([]byte, headerLen)
 	var got int64
@@ -197,7 +272,7 @@ func copyDavSegment(ctx context.Context, w io.Writer, conn net.Conn, expected in
 		_ = conn.SetReadDeadline(time.Now().Add(davIdle))
 		if _, err := io.ReadFull(conn, hdr); err != nil {
 			if isIdleOrEOF(err) {
-				return nil // segment finished (idle / partial / stream ended)
+				return nil // chunk finished (device closed / reset / idle)
 			}
 			return fmt.Errorf("dahua: dav read header: %w (after %d bytes)", err, got)
 		}
@@ -210,6 +285,9 @@ func copyDavSegment(ctx context.Context, w io.Writer, conn net.Conn, expected in
 		}
 		payload := make([]byte, n)
 		if _, err := io.ReadFull(conn, payload); err != nil {
+			if isIdleOrEOF(err) {
+				return nil
+			}
 			return fmt.Errorf("dahua: dav read payload: %w", err)
 		}
 		if hdr[0] == 0xbb { // media frame -> DHAV bytes
@@ -218,12 +296,17 @@ func copyDavSegment(ctx context.Context, w io.Writer, conn net.Conn, expected in
 			}
 			got += int64(n)
 		}
-		_ = expected
 	}
 }
 
+// isIdleOrEOF reports whether err is a normal end-of-download signal: EOF, a read
+// timeout (the idle terminator), or the device resetting the connection (its usual
+// way of closing a finished download).
 func isIdleOrEOF(err error) bool {
 	if err == io.EOF || err == io.ErrUnexpectedEOF {
+		return true
+	}
+	if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, net.ErrClosed) {
 		return true
 	}
 	var ne net.Error
