@@ -473,6 +473,9 @@
             <div class="tab-strip" id="ce-tabs">
               <button type="button" class="tab-btn active" data-ce-tab="name">Tên &amp; OSD</button>
               <button type="button" class="tab-btn" id="ce-tab-btn-picture" data-ce-tab="picture" hidden>Chỉnh màu</button>
+              <button type="button" class="tab-btn" id="ce-tab-btn-video" data-ce-tab="video" hidden>Video</button>
+              <button type="button" class="tab-btn" id="ce-tab-btn-audio" data-ce-tab="audio" hidden>Âm thanh</button>
+              <button type="button" class="tab-btn" id="ce-tab-btn-network" data-ce-tab="network" hidden>Mạng</button>
               <button type="button" class="tab-btn" id="ce-tab-btn-ptz" data-ce-tab="ptz" hidden>PTZ</button>
             </div>
 
@@ -484,6 +487,15 @@
               </div>
               <div id="ce-osd-fields"></div>
               <p class="muted" id="ce-osd-hint"></p>
+              <div class="ptz-live section-gap">
+                <img id="ce-osd-live" class="ptz-live-img" alt="Xem trực tiếp" hidden>
+                <div class="row">
+                  <button class="btn btn-secondary" type="button" id="ce-osd-live-start">▶ Xem trực tiếp (5 phút)</button>
+                  <button class="btn btn-secondary" type="button" id="ce-osd-live-extend" hidden>+5 phút</button>
+                  <button class="btn btn-secondary" type="button" id="ce-osd-live-stop" hidden>Dừng</button>
+                  <span class="muted" id="ce-osd-live-status"></span>
+                </div>
+              </div>
             </div>
 
             <div id="ce-panel-picture" hidden>
@@ -508,6 +520,21 @@
               <p class="muted" id="ce-picture-full-hint" hidden>Đọc/ghi trực tiếp mọi thông số Dahua hỗ trợ cho kênh này (VideoColor + VideoInOptions, gồm cả profile Ban đêm/Ban ngày phụ). Trường bị camera báo không hỗ trợ sẽ bị khoá.</p>
 
               <button class="btn section-gap" type="button" id="ce-picture-save">Lưu chỉnh màu</button>
+            </div>
+
+            <div id="ce-panel-video" hidden>
+              <div class="msg" id="ce-vid-msg"></div>
+              <div id="ce-vid-body"></div>
+            </div>
+
+            <div id="ce-panel-audio" hidden>
+              <div class="msg" id="ce-aud-msg"></div>
+              <div id="ce-aud-body"></div>
+            </div>
+
+            <div id="ce-panel-network" hidden>
+              <div class="msg" id="ce-net-msg"></div>
+              <div id="ce-net-body"></div>
             </div>
 
             <div id="ce-panel-ptz" hidden>
