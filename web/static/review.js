@@ -30,6 +30,8 @@
   ];
   // datetime-local wants "YYYY-MM-DDTHH:MM"
   function fmtLocal(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+  function fmtLocalSec(d) { return `${fmtLocal(d)}:${pad(d.getSeconds())}`; }
+  let editingCut = false; // true while the user is typing in a cut time input
 
   // reviewOnShow is called by app.js setRoute() each time the view opens.
   window.reviewOnShow = function () {
@@ -126,7 +128,27 @@
     if (a > b) { const t = a; a = b; b = t; }
     const secs = Math.round((b - a) / 1000);
     $('rv-range').textContent = `${fmtClock(a)} → ${fmtClock(b)} (${secs}s${secs > 3600 ? ' ~' + (secs / 3600).toFixed(1) + 'h' : ''})`;
+    // Keep the cut time pickers in sync with the markers (unless the user is
+    // currently typing in them).
+    if (!editingCut) { $('rv-cut-from').value = fmtLocalSec(a); $('rv-cut-to').value = fmtLocalSec(b); }
     return { start: a, end: b };
+  }
+
+  // applyCutInputs moves the cut markers to the typed datetime-local values.
+  function applyCutInputs() {
+    const s = $('rv-cut-from').value, e = $('rv-cut-to').value;
+    if (!s || !e) return;
+    let a = new Date(s), b = new Date(e);
+    if (isNaN(a) || isNaN(b)) return;
+    if (a > b) { const t = a; a = b; b = t; }
+    timeline.setCustomTime(a, 'cutStart');
+    timeline.setCustomTime(b, 'cutEnd');
+    // Widen the timeline window if the typed cut falls outside it.
+    if (winStart && winEnd && (a < winStart || b > winEnd)) {
+      const pad = (b - a) * 0.2 || 60000;
+      timeline.setWindow(new Date(a.getTime() - pad), new Date(b.getTime() + pad), { animation: false });
+    }
+    updateRange();
   }
 
   // loadPreview streams a short clip [at, at+PREVIEW_LEN] into the player so the
@@ -243,6 +265,13 @@
     v.addEventListener('ended', () => {
       if (!$('rv-auto').checked || !previewBase) return;
       loadPreview(new Date(previewBase.getTime() + PREVIEW_LEN * 1000));
+    });
+    // Cut time pickers: type an exact start/end for the download range.
+    ['rv-cut-from', 'rv-cut-to'].forEach(id => {
+      const el = $(id);
+      el.addEventListener('focus', () => { editingCut = true; });
+      el.addEventListener('blur', () => { editingCut = false; });
+      el.addEventListener('change', () => { editingCut = false; applyCutInputs(); });
     });
     $('rv-download').addEventListener('click', () => download(''));
     $('rv-download-dav').addEventListener('click', () => download('&format=dav'));
