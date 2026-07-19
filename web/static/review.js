@@ -192,18 +192,19 @@
       if (!$('rv-auto').checked || !previewBase) return;
       loadPreview(new Date(previewBase.getTime() + PREVIEW_LEN * 1000));
     });
-    $('rv-download').addEventListener('click', () => download(true));
-    $('rv-download-mp4').addEventListener('click', () => download(false));
+    $('rv-download').addEventListener('click', () => download(''));
+    $('rv-download-dav').addEventListener('click', () => download('&format=dav'));
     $('rv-qr').addEventListener('click', showQR);
     $('rv-qr-close').addEventListener('click', () => { $('rv-qr-modal').hidden = true; });
   }
 
-  function download(fast) {
+  function download(extra) {
     if (!cam) return;
     const p = cutParams();
     if (p.endDate <= p.startDate) { showToast('Chọn đoạn cắt hợp lệ.', 'err'); return; }
-    window.location.href = playbackURL(p, (fast ? '&fast=1' : '') + '&download=1');
-    showToast('Đang tải… (đoạn dài có thể mất chút thời gian)', 'ok');
+    window.location.href = playbackURL(p, (extra || '') + '&download=1');
+    const isDav = (extra || '').includes('format=dav');
+    showToast(isDav ? 'Đang tải .dav gốc… (cần cổng cấu hình)' : 'Đang tải… (đoạn dài có thể mất chút thời gian)', 'ok');
   }
 
   async function showQR() {

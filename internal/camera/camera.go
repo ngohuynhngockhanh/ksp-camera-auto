@@ -225,6 +225,10 @@ type Recorder interface {
 	// fragmented MP4, streamed with no on-box buffering (see
 	// dahua.StreamPlayback).
 	StreamPlayback(ctx context.Context, w io.Writer, channel int, start, end time.Time) error
+	// StreamDav writes the [start,end] recording for a channel to w as the
+	// camera's native .dav (DHAV) — byte-exact, no remux (see dahua.StreamDav).
+	// Requires the DVRIP config port (unlike StreamPlayback's RTSP).
+	StreamDav(ctx context.Context, w io.Writer, channel int, start, end time.Time) error
 }
 
 // PTZControl is implemented by cameras that support live pan/tilt/zoom.
@@ -335,6 +339,11 @@ func (d *dahuaCamera) FindRecordings(ctx context.Context, channel int, start, en
 // StreamPlayback streams a channel's [start,end] recording to w as MP4.
 func (d *dahuaCamera) StreamPlayback(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
 	return dahua.StreamPlayback(ctx, w, d.device.Host, d.device.Username, d.device.Password, channel, start, end)
+}
+
+// StreamDav streams a channel's [start,end] recording to w as native .dav.
+func (d *dahuaCamera) StreamDav(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return dahua.StreamDav(ctx, w, d.device.Host, d.device.Username, d.device.Password, channel, start, end)
 }
 
 // GetStorageInfo reads the device's SD-card / storage status.
