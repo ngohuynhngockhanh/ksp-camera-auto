@@ -415,10 +415,30 @@ func (d *dahuaCamera) SetWiFiConfig(ctx context.Context, iface, ssid, password, 
 // for firmware that doesn't expose the RPC — mirroring the PTZ DVRIP-then-CGI
 // strategy.
 func (d *dahuaCamera) ScanWiFi(ctx context.Context) ([]dahua.WiFiAP, error) {
-	if aps, err := d.client.ScanWiFiRPC(""); err == nil {
+	// The DVRIP scan (netApp.scanWLanDevices) is the real path on these cams, but
+	// a Wi-Fi radio scan is flaky: it can fail transiently when a scan is already
+	// running, the radio is warming up, or several DVRIP sessions hit the camera
+	// back-to-back (opening the network tab fires network+wifi reads first). One
+	// retry after a short pause clears almost all of those.
+	aps, rpcErr := d.client.ScanWiFiRPC("")
+	if rpcErr != nil {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(1500 * time.Millisecond):
+		}
+		aps, rpcErr = d.client.ScanWiFiRPC("")
+	}
+	if rpcErr == nil {
 		return aps, nil
 	}
-	return dahua.ScanWiFi(ctx, d.device.Host, d.device.Username, d.device.Password, d.timeout)
+	// CGI (port 80) is unreachable on many of these firmwares, so don't let its
+	// bare "EOF" mask the real DVRIP error — surface both when everything fails.
+	cgiAps, cgiErr := dahua.ScanWiFi(ctx, d.device.Host, d.device.Username, d.device.Password, d.timeout)
+	if cgiErr == nil {
+		return cgiAps, nil
+	}
+	return nil, fmt.Errorf("dvrip: %v; cgi: %v", rpcErr, cgiErr)
 }
 
 // PTZMove issues one PTZ command, preferring the DVRIP JSON-RPC session (the
