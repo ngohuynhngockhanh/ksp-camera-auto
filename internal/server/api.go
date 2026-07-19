@@ -9,8 +9,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/bulk"
@@ -43,24 +46,32 @@ func (s *Server) reqTimeout(sec int) time.Duration {
 // passed login, the same trust boundary every other admin action here relies
 // on (ChangePassword, network/Wi-Fi config, etc.).
 type deviceView struct {
-	ID       string        `json:"id"`
-	Name     string        `json:"name"`
-	Host     string        `json:"host"`
-	Port     int           `json:"port"`
-	Vendor   config.Vendor `json:"vendor"`
-	Username string        `json:"username"`
-	Password string        `json:"password"`
+	ID         string        `json:"id"`
+	Name       string        `json:"name"`
+	Host       string        `json:"host"`
+	Port       int           `json:"port"`
+	Vendor     config.Vendor `json:"vendor"`
+	Username   string        `json:"username"`
+	Password   string        `json:"password"`
+	NVRID      string        `json:"nvrId,omitempty"`
+	NVRChannel int           `json:"nvrChannel,omitempty"`
+	NoStorage  bool          `json:"noStorage,omitempty"`
+	IsNVR      bool          `json:"isNvr,omitempty"`
 }
 
 func toView(d config.Device) deviceView {
 	return deviceView{
-		ID:       d.ID,
-		Name:     d.Name,
-		Host:     d.Host,
-		Port:     d.Port,
-		Vendor:   d.Vendor,
-		Username: d.Username,
-		Password: d.Password,
+		ID:         d.ID,
+		Name:       d.Name,
+		Host:       d.Host,
+		Port:       d.Port,
+		Vendor:     d.Vendor,
+		Username:   d.Username,
+		Password:   d.Password,
+		NVRID:      d.NVRID,
+		NVRChannel: d.NVRChannel,
+		NoStorage:  d.NoStorage,
+		IsNVR:      d.IsNVR,
 	}
 }
 
@@ -161,6 +172,15 @@ func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
 		Vendor:   req.Vendor,
 		Username: req.Username,
 		Password: req.Password,
+	}
+	// The NVR link fields aren't in this form — preserve them when editing an
+	// existing device so a name/password edit doesn't wipe the fallback mapping.
+	id := d.ID
+	if id == "" {
+		id = fmt.Sprintf("%s:%d", d.Host, d.Port)
+	}
+	if existing, ok := s.inv.Get(id); ok {
+		d.NVRID, d.NVRChannel, d.NoStorage, d.IsNVR = existing.NVRID, existing.NVRChannel, existing.NoStorage, existing.IsNVR
 	}
 	if err := s.inv.Upsert(d); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
@@ -394,6 +414,231 @@ func (s *Server) openDeviceCamera(w http.ResponseWriter, r *http.Request, id str
 	return cam, ctx, cancel, true
 }
 
+// nvrDeviceFrom builds an NVR config.Device from a scan/link request, defaulting
+// the port and carrying an existing stored password when the field is blank.
+func (s *Server) nvrDeviceFrom(host string, port int, user, pass, name string) config.Device {
+	if port == 0 {
+		port = s.cfg.Defaults.DahuaPort
+	}
+	if user == "" {
+		user = s.cfg.Defaults.Username
+	}
+	id := fmt.Sprintf("%s:%d", host, port)
+	if pass == "" {
+		if ex, ok := s.inv.Get(id); ok && ex.Password != "" {
+			pass = ex.Password
+		} else {
+			pass = s.cfg.Defaults.Password
+		}
+	}
+	return config.Device{ID: id, Name: name, Host: host, Port: port, Vendor: config.VendorDahua, Username: user, Password: pass, IsNVR: true}
+}
+
+type nvrScanReq struct {
+	Host           string `json:"host"`
+	Port           int    `json:"port"`
+	Username       string `json:"username"`
+	Password       string `json:"password"`
+	TimeoutSeconds int    `json:"timeoutSeconds"`
+}
+
+type nvrScanRow struct {
+	NVRChannel          int    `json:"nvrChannel"` // 1-based
+	NVRCamIP            string `json:"nvrCamIP"`
+	NVRCamName          string `json:"nvrCamName"`
+	Enable              bool   `json:"enable"`
+	SuggestedCameraID   string `json:"suggestedCameraId"`
+	SuggestedCameraName string `json:"suggestedCameraName"`
+	NoStorage           bool   `json:"noStorage"`
+}
+
+// handleNVRScan reads an NVR's channel→camera map (RemoteDevice) and, for each
+// channel, suggests the matching inventory camera (by IP, then name) and whether
+// that camera lacks usable local storage. It does NOT persist anything — the UI
+// shows the result as an editable table, then POSTs /api/nvr/link to save.
+func (s *Server) handleNVRScan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req nvrScanReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Host == "" {
+		writeErr(w, http.StatusBadRequest, "host is required")
+		return
+	}
+	nvr := s.nvrDeviceFrom(req.Host, req.Port, req.Username, req.Password, "")
+	to := s.reqTimeout(req.TimeoutSeconds)
+	ctx, cancel := context.WithTimeout(r.Context(), to)
+	defer cancel()
+	cam, err := camera.Open(ctx, nvr, to)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "mở đầu ghi lỗi: "+err.Error())
+		return
+	}
+	defer cam.Close()
+	rdl, ok := cam.(camera.RemoteDeviceLister)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "thiết bị này không đọc được danh sách kênh (không phải NVR Dahua?)")
+		return
+	}
+	remotes, err := rdl.GetRemoteDevices(ctx)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "đọc RemoteDevice lỗi: "+err.Error())
+		return
+	}
+
+	// Index inventory cameras by host (IP) and lower-cased name for matching.
+	byHost := map[string]config.Device{}
+	byName := map[string]config.Device{}
+	for _, d := range s.inv.List() {
+		if d.IsNVR {
+			continue
+		}
+		byHost[d.Host] = d
+		byName[strings.ToLower(strings.TrimSpace(d.Name))] = d
+	}
+
+	rows := make([]nvrScanRow, 0, len(remotes))
+	type match struct {
+		row int
+		dev config.Device
+	}
+	var toCheck []match
+	for _, rc := range remotes {
+		row := nvrScanRow{NVRChannel: rc.Channel + 1, NVRCamIP: rc.Address, NVRCamName: rc.Name, Enable: rc.Enable}
+		cand, ok := byHost[rc.Address]
+		if !ok {
+			cand, ok = byName[strings.ToLower(strings.TrimSpace(rc.Name))]
+		}
+		if ok {
+			row.SuggestedCameraID = cand.ID
+			row.SuggestedCameraName = cand.Name
+			toCheck = append(toCheck, match{row: len(rows), dev: cand})
+		}
+		rows = append(rows, row)
+	}
+
+	// Check each matched camera's storage in parallel (bounded). A camera that's
+	// unreachable stays NoStorage=false (unknown) — the operator can tick it.
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 5)
+	for _, m := range toCheck {
+		wg.Add(1)
+		go func(m match) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			cctx, ccancel := context.WithTimeout(r.Context(), 12*time.Second)
+			defer ccancel()
+			cc, err := camera.Open(cctx, m.dev, 12*time.Second)
+			if err != nil {
+				return
+			}
+			defer cc.Close()
+			sm, ok := cc.(camera.StorageManager)
+			if !ok {
+				return
+			}
+			devs, err := sm.GetStorageInfo(cctx)
+			if err == nil && !dahua.HasUsableStorage(devs) {
+				rows[m.row].NoStorage = true
+			}
+		}(m)
+	}
+	wg.Wait()
+
+	writeJSON(w, http.StatusOK, map[string]any{"nvr": toView(nvr), "rows": rows})
+}
+
+type nvrLinkReq struct {
+	NVR struct {
+		Host     string `json:"host"`
+		Port     int    `json:"port"`
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Name     string `json:"name"`
+	} `json:"nvr"`
+	Mappings []struct {
+		CameraID   string `json:"cameraId"`
+		NVRChannel int    `json:"nvrChannel"` // 1-based
+		NoStorage  bool   `json:"noStorage"`
+	} `json:"mappings"`
+}
+
+// handleNVRLink persists the NVR device and writes each camera's fallback
+// mapping (NVR id + channel + no-storage flag). Cameras not listed are left
+// untouched; a mapping with an empty cameraId is skipped.
+func (s *Server) handleNVRLink(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req nvrLinkReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.NVR.Host == "" {
+		writeErr(w, http.StatusBadRequest, "NVR host is required")
+		return
+	}
+	nvr := s.nvrDeviceFrom(req.NVR.Host, req.NVR.Port, req.NVR.Username, req.NVR.Password, req.NVR.Name)
+	if nvr.Name == "" {
+		nvr.Name = "Đầu ghi " + req.NVR.Host
+	}
+	if err := s.inv.Upsert(nvr); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	linked := 0
+	for _, m := range req.Mappings {
+		if m.CameraID == "" {
+			continue
+		}
+		cam, ok := s.inv.Get(m.CameraID)
+		if !ok {
+			continue
+		}
+		cam.NVRID = nvr.ID
+		cam.NVRChannel = m.NVRChannel
+		cam.NoStorage = m.NoStorage
+		if err := s.inv.Upsert(cam); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		linked++
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "nvrId": nvr.ID, "linked": linked})
+}
+
+// recordingSource returns the device + 0-based channel that a camera's
+// RECORDINGS (timeline, playback, .dav download) should be read from. A camera
+// with no local storage that is linked to an NVR reads from that NVR's channel;
+// otherwise it reads from itself at reqChannel.
+func (s *Server) recordingSource(cam config.Device, reqChannel int) (config.Device, int) {
+	if cam.NoStorage && cam.NVRID != "" {
+		if nvr, ok := s.inv.Get(cam.NVRID); ok {
+			return nvr, cam.NVRChannel - 1
+		}
+	}
+	return cam, reqChannel
+}
+
+// liveSource returns the device + 0-based channel that a camera's LIVE view /
+// snapshot should come from. The camera itself is primary; only when it's
+// unreachable on its DVRIP port and it's linked to an NVR do we fall back to the
+// NVR channel (so an offline camera still shows a picture).
+func (s *Server) liveSource(cam config.Device, reqChannel int) (config.Device, int) {
+	if cam.NVRID == "" {
+		return cam, reqChannel
+	}
+	conn, err := net.DialTimeout("tcp", cam.Addr(), 2*time.Second)
+	if err == nil {
+		conn.Close()
+		return cam, reqChannel
+	}
+	if nvr, ok := s.inv.Get(cam.NVRID); ok {
+		return nvr, cam.NVRChannel - 1
+	}
+	return cam, reqChannel
+}
+
 // handleSnapshot handles GET /api/snapshot?id=&channel=&stream=&timeoutSeconds=:
 // fetch a single JPEG frame. Deliberately GET-with-query-params (unlike the
 // rest of this API's POST-with-JSON-body convention) so a plain <img
@@ -424,15 +669,18 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	force := q.Get("nocache") != "" || q.Get("_r") != ""
 
 	fetch := func() ([]byte, error) {
+		// On a cache miss, if the camera is offline fall back to its NVR channel
+		// (liveSource only dials for NVR-linked cameras, so others are unaffected).
+		src, ch := s.liveSource(d, channel)
 		to := s.reqTimeout(timeoutSeconds)
 		ctx, cancel := context.WithTimeout(r.Context(), to)
 		defer cancel()
-		cam, err := camera.Open(ctx, d, to)
+		cam, err := camera.Open(ctx, src, to)
 		if err != nil {
 			return nil, err
 		}
 		defer cam.Close()
-		return cam.Snapshot(ctx, channel, stream)
+		return cam.Snapshot(ctx, ch, stream)
 	}
 
 	var (
@@ -1178,11 +1426,22 @@ func (s *Server) handleRecordings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	channel := atoiDefault(q.Get("channel"), 0)
-	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, q.Get("id"), atoiDefault(q.Get("timeoutSeconds"), 0))
-	if !ok {
+	d, found := s.inv.Get(q.Get("id"))
+	if !found {
+		writeErr(w, http.StatusNotFound, "device not found")
 		return
 	}
+	// A camera with no local storage reads its recordings from the linked NVR
+	// channel instead (transparent to the client).
+	src, ch := s.recordingSource(d, channel)
+	to := s.reqTimeout(atoiDefault(q.Get("timeoutSeconds"), 0))
+	ctx, cancel := context.WithTimeout(r.Context(), to)
 	defer cancel()
+	cam, err := camera.Open(ctx, src, to)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
 	defer cam.Close()
 
 	rec, ok := cam.(camera.Recorder)
@@ -1190,7 +1449,7 @@ func (s *Server) handleRecordings(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, notDahuaErr)
 		return
 	}
-	list, err := rec.FindRecordings(ctx, channel, start, end)
+	list, err := rec.FindRecordings(ctx, ch, start, end)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
@@ -1257,6 +1516,9 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "device not found")
 		return
 	}
+	// A camera with no local storage serves its recordings/downloads from the
+	// linked NVR channel instead.
+	d, channel = s.recordingSource(d, channel)
 	if d.Vendor != config.VendorDahua {
 		writeErr(w, http.StatusBadRequest, notDahuaErr)
 		return
@@ -1319,11 +1581,13 @@ func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "device not found")
 		return
 	}
+	channel := atoiDefault(q.Get("channel"), 0)
+	// If the camera is offline, fall the live view back to its NVR channel.
+	d, channel = s.liveSource(d, channel)
 	if d.Vendor != config.VendorDahua {
 		writeErr(w, http.StatusBadRequest, notDahuaErr)
 		return
 	}
-	channel := atoiDefault(q.Get("channel"), 0)
 	fps := atoiDefault(q.Get("fps"), 6)
 
 	// Cap a live session at 5 minutes so a forgotten tab can't hold a DVRIP

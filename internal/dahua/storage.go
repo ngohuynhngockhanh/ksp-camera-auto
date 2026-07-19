@@ -72,6 +72,21 @@ func (c *Client) GetStorageInfo() ([]StorageDevice, error) {
 	return out, nil
 }
 
+// HasUsableStorage reports whether any device has a usable read/write partition
+// (present, non-empty, not errored/needing-format) — i.e. the camera can record
+// locally. An empty slice (no card) or all-error/zero partitions → false, which
+// is the signal to fall recordings back to the NVR.
+func HasUsableStorage(devs []StorageDevice) bool {
+	for _, d := range devs {
+		for _, dt := range d.Details {
+			if dt.Type == "ReadWrite" && dt.TotalBytes > 0 && !dt.IsError && !dt.IsNeedFormat {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // FormatStorage formats one storage device by name (e.g. "/dev/mmc0", the Name
 // from GetStorageInfo). THIS ERASES ALL DATA on the device.
 //
