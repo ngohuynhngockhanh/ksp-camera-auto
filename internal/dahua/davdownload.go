@@ -59,8 +59,10 @@ func StreamDav(ctx context.Context, w io.Writer, host, user, pass string, channe
 		dataPort = "37777"
 	}
 
-	// 2. Locate the .dav segment containing `start`. The device streams the whole
-	// [start,end] range from this file handle when IsTime=1.
+	// 2. Enumerate the .dav segments in the range. The device streams ONE segment
+	// per PlayBack.download request, so we must loop the segments (as the NetSDK
+	// does) — a single whole-range request only ever yields the first segment,
+	// which is what truncated long downloads.
 	recs, err := c.FindRecordings(channel, start, end)
 	if err != nil {
 		return fmt.Errorf("dahua: dav %s: find: %w", host, err)
@@ -68,7 +70,6 @@ func StreamDav(ctx context.Context, w io.Writer, host, user, pass string, channe
 	if len(recs) == 0 {
 		return fmt.Errorf("dahua: dav %s: no recording in range", host)
 	}
-	fileDir := recs[0].FilePath
 
 	// 3. Open the data sub-channel (a 2nd TCP) and register it for our session.
 	dataConn, err := net.DialTimeout("tcp", net.JoinHostPort(host, dataPort), 10*time.Second)
@@ -84,33 +85,56 @@ func StreamDav(ctx context.Context, w io.Writer, host, user, pass string, channe
 		return fmt.Errorf("dahua: dav %s: AckSubChannel: %w", host, err)
 	}
 
-	// 4. Reset then start the time-based download onto the sub-channel.
 	ch := channel + 1 // this protocol is 1-based
-	_, _ = c.callF4(fmt.Sprintf("TransactionID:2\r\nMethod:GetParameterNames\r\n"+
-		"ParameterName:Dahua.Device.Network.PlayBack.Stop\r\nchannel:%d\r\nConnectionID:%s\r\n\r\n", ch, connID))
+	stop := func() {
+		_, _ = c.callF4(fmt.Sprintf("TransactionID:9\r\nMethod:GetParameterNames\r\n"+
+			"ParameterName:Dahua.Device.Network.PlayBack.Stop\r\nchannel:%d\r\nConnectionID:%s\r\n\r\n", ch, connID))
+	}
+	// Always release the sub-channel so the camera frees the session promptly.
+	defer func() {
+		stop()
+		_, _ = c.callF4(fmt.Sprintf("TransactionID:10\r\nMethod:DeleteObject\r\n"+
+			"ParameterName:Dahua.Device.Network.ControlConnection.Passive\r\nConnectionID:%s\r\n\r\n", connID))
+	}()
+
+	// 4. Start the whole-range download.
+	stop()
 	dl := fmt.Sprintf("TransactionID:3\r\nMethod:GetParameterNames\r\n"+
 		"ParameterName:Dahua.Device.Network.PlayBack.download\r\n"+
 		"channel:%d\r\nConnectionID:%s\r\n"+
 		"StartTime:%s\r\nEndTime:%s\r\n"+
 		"DriveNo:0\r\nClusterNo:0\r\nHint:0\r\nType:0\r\nIsTime:1\r\nOffLength:0\r\nUkey:\r\n"+
-		"FileDir:%s\r\n\r\n", ch, connID, davTime(start), davTime(end), fileDir)
+		"FileDir:%s\r\n\r\n", ch, connID, davTime(start), davTime(end), recs[0].FilePath)
 	if _, err := c.callF4(dl); err != nil {
 		return fmt.Errorf("dahua: dav %s: PlayBack.download: %w", host, err)
 	}
 
-	// Always try to stop cleanly so the camera frees the session promptly.
-	defer func() {
-		_, _ = c.callF4(fmt.Sprintf("TransactionID:9\r\nMethod:GetParameterNames\r\n"+
-			"ParameterName:Dahua.Device.Network.PlayBack.Stop\r\nchannel:%d\r\nConnectionID:%s\r\n\r\n", ch, connID))
-		_, _ = c.callF4(fmt.Sprintf("TransactionID:10\r\nMethod:DeleteObject\r\n"+
-			"ParameterName:Dahua.Device.Network.ControlConnection.Passive\r\nConnectionID:%s\r\n\r\n", connID))
+	// 5. Keep the sub-channel alive: the device buffers a chunk of a long range
+	// then PAUSES, waiting for the client to poke it — the NetSDK sends periodic
+	// \xa1 keepalives on this connection, without which the stream stalls after a
+	// couple of segments and the download truncates. Send one every 2s.
+	kaStop := make(chan struct{})
+	go func() {
+		t := time.NewTicker(2 * time.Second)
+		defer t.Stop()
+		ka := make([]byte, headerLen)
+		ka[0] = 0xa1
+		for {
+			select {
+			case <-kaStop:
+				return
+			case <-t.C:
+				_ = dataConn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				if _, err := dataConn.Write(ka); err != nil {
+					return
+				}
+			}
+		}
 	}()
+	defer close(kaStop)
 
-	// 5. Read the sub-channel: skip the \xf4 ack response, then copy every 0xbb
-	// media frame's DHAV payload to w. The device delivers the whole range in a
-	// fast burst then goes silent (it does not close), so an idle read-deadline
-	// marks end-of-download.
-	return copyDavStream(ctx, w, dataConn)
+	// 6. Read the sub-channel until the whole range is delivered and it goes idle.
+	return copyDavSegment(ctx, w, dataConn, 0)
 }
 
 // davTime formats a time as Dahua's "Y&M&D&H&M&S" with no zero-padding.
@@ -151,30 +175,31 @@ func paramValue(payload []byte, key string) string {
 	return ""
 }
 
-// davIdle is how long the data sub-channel may go silent before the download is
-// treated as complete. At true end-of-range the device CLOSES the sub-channel
-// (clean EOF ends the read instantly — no idle wait), so this is only a fallback
-// for the rare "device stops sending but doesn't close" case. It must comfortably
-// exceed any mid-stream stall (e.g. the device opening the next .dav segment on a
-// multi-segment range), or a long download truncates at a segment boundary.
-const davIdle = 15 * time.Second
+// davIdle bounds how long ONE segment's stream may go silent before it's treated
+// as finished. It only decides the end of a partial (clamped) first/last segment
+// — fully-included segments end deterministically on their byte count — so it can
+// be modest while still surviving a mid-segment stall under load.
+const davIdle = 20 * time.Second
 
-// copyDavStream reads the data sub-channel's 32-byte-framed messages and writes
-// the DHAV payload of every 0xbb media frame to w, until the stream goes idle
-// (end of range) or the connection ends.
-func copyDavStream(ctx context.Context, w io.Writer, conn net.Conn) error {
+// copyDavSegment reads one segment's DHAV off the sub-channel and writes it to w.
+// If expected > 0 (a fully-included segment, whose file Length is known) it reads
+// exactly that many DHAV bytes — a deterministic end that doesn't rely on idle,
+// so long multi-segment downloads stay complete. Otherwise (a partial segment) it
+// reads until the stream goes idle. Non-0xbb frames (the \xf4 AckSubChannel reply
+// before the first segment, keepalives) are consumed and skipped.
+func copyDavSegment(ctx context.Context, w io.Writer, conn net.Conn, expected int64) error {
 	hdr := make([]byte, headerLen)
-	var wrote int64
+	var got int64
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		_ = conn.SetReadDeadline(time.Now().Add(davIdle))
 		if _, err := io.ReadFull(conn, hdr); err != nil {
-			if wrote > 0 && isIdleOrEOF(err) {
-				return nil // burst finished
+			if isIdleOrEOF(err) {
+				return nil // segment finished (idle / partial / stream ended)
 			}
-			return fmt.Errorf("dahua: dav read header: %w (after %d bytes)", err, wrote)
+			return fmt.Errorf("dahua: dav read header: %w (after %d bytes)", err, got)
 		}
 		n := binary.LittleEndian.Uint32(hdr[4:8])
 		if n == 0 {
@@ -191,9 +216,9 @@ func copyDavStream(ctx context.Context, w io.Writer, conn net.Conn) error {
 			if _, err := w.Write(payload); err != nil {
 				return err
 			}
-			wrote += int64(n)
+			got += int64(n)
 		}
-		// other magics (0xf4 ack response, keepalive) are consumed and skipped
+		_ = expected
 	}
 }
 
