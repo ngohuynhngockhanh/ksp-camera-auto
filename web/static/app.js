@@ -1324,6 +1324,7 @@ function wireLive(prefix) {
 }
 wireLive('ce-ptz');
 wireLive('ce-pic');
+wireLive('ce-osd');
 // Auto-stop after 30s hidden — don't hold a stream nobody is watching.
 document.addEventListener('visibilitychange', () => {
   if (!liveTimer) return;
@@ -1337,16 +1338,24 @@ document.addEventListener('visibilitychange', () => {
 // switchCeTab shows the requested channel-edit-dialog panel ('name' or
 // 'picture') and lazily loads the Chỉnh màu tab's data the first time it's
 // opened for the current tile (picturePayload stays null until then).
+// Lazy-load sentinels for the modal's data tabs (null until first opened for the
+// current tile; reset in openChannelEdit).
+let videoPayload = null, audioPayload = null, networkPayload = null;
+
 function switchCeTab(tab) {
   ceActiveTab = tab;
   document.querySelectorAll('#ce-tabs .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.ceTab === tab));
   document.getElementById('ce-panel-name').hidden = tab !== 'name';
   document.getElementById('ce-panel-picture').hidden = tab !== 'picture';
+  document.getElementById('ce-panel-video').hidden = tab !== 'video';
+  document.getElementById('ce-panel-audio').hidden = tab !== 'audio';
+  document.getElementById('ce-panel-network').hidden = tab !== 'network';
   document.getElementById('ce-panel-ptz').hidden = tab !== 'ptz';
   stopLive(); // the live view belongs to one tab; stop it when navigating tabs
-  if (tab === 'picture' && channelEditTile && !picturePayload) {
-    loadPictureTab(channelEditTile);
-  }
+  if (tab === 'picture' && channelEditTile && !picturePayload) loadPictureTab(channelEditTile);
+  if (tab === 'video' && channelEditTile && !videoPayload) loadVideoTab(channelEditTile);
+  if (tab === 'audio' && channelEditTile && !audioPayload) loadAudioTab(channelEditTile);
+  if (tab === 'network' && channelEditTile && !networkPayload) loadNetworkTab(channelEditTile);
 }
 
 document.getElementById('ce-tabs').addEventListener('click', (ev) => {
@@ -1387,9 +1396,201 @@ document.getElementById('ce-preview-reload').addEventListener('click', () => {
   if (channelEditTile) loadCePreview(channelEditTile, true);
 });
 
+/* ---------- Modal: Video tab (read via /api/probe, write via /api/apply) ---------- */
+const CE_STREAM_LABELS = { 0: 'Chính (main)', 1: 'Phụ 1 (sub)', 2: 'Phụ 2 (sub2)' };
+const CE_CODECS = ['H.265', 'H.264', 'H.264H', 'H.264B', 'MJPG'];
+
+async function loadVideoTab(tile) {
+  videoPayload = {}; // mark loaded
+  const body = document.getElementById('ce-vid-body'), msg = document.getElementById('ce-vid-msg');
+  body.innerHTML = '<span class="spinner"></span>'; msg.textContent = '';
+  try {
+    const infos = await api('/api/probe', { method: 'POST', body: JSON.stringify({ id: tile.camId, timeoutSeconds: timeoutSec() }) });
+    const mine = (infos || []).filter(s => s.channel === tile.channel + 1);
+    if (!mine.length) { body.innerHTML = '<p class="muted">Không đọc được thông số video cho kênh này.</p>'; return; }
+    body.innerHTML = mine.map(s => {
+      const st = s.stream;
+      return `<fieldset class="ce-vid-stream" data-stream="${st}">
+        <legend>${escapeHtml(CE_STREAM_LABELS[st] || ('Stream ' + st))} · <span class="muted">${s.fps || '?'} fps</span></legend>
+        <div class="row">
+          <div class="field field-sm"><label>Rộng</label><input type="number" class="cv-w"></div>
+          <div class="field field-sm"><label>Cao</label><input type="number" class="cv-h"></div>
+          <div class="field field-sm"><label>Codec</label><select class="cv-codec">${CE_CODECS.map(c => `<option>${c}</option>`).join('')}</select></div>
+        </div>
+        <div class="row">
+          <div class="field field-sm"><label>Bitrate (Kbps)</label><input type="number" class="cv-br"></div>
+          <div class="field field-sm"><label>Kiểu</label><select class="cv-brmode"><option value="">(giữ)</option><option>CBR</option><option>VBR</option></select></div>
+          <div class="field field-sm"><label>GOP (I-frame)</label><input type="number" class="cv-gop"></div>
+        </div>
+        <label class="checkbox-row"><input type="checkbox" class="cv-smart"> Smart Codec (H.26x+)</label>
+        <button class="btn btn-primary" type="button" data-save-stream="${st}">Lưu stream này</button>
+      </fieldset>`;
+    }).join('');
+    mine.forEach(s => {
+      const fs = body.querySelector(`.ce-vid-stream[data-stream="${s.stream}"]`);
+      fs.querySelector('.cv-w').value = s.width || '';
+      fs.querySelector('.cv-h').value = s.height || '';
+      fs.querySelector('.cv-codec').value = s.compression || 'H.265';
+      fs.querySelector('.cv-br').value = s.bitrateKbps || '';
+      fs.querySelector('.cv-brmode').value = s.bitrateMode || '';
+      fs.querySelector('.cv-gop').value = s.gop || '';
+      fs.querySelector('.cv-smart').checked = !!s.smartCodec;
+    });
+    body.querySelectorAll('[data-save-stream]').forEach(btn =>
+      btn.addEventListener('click', () => saveCeVideoStream(tile, parseInt(btn.dataset.saveStream, 10), btn)));
+  } catch (e) { body.innerHTML = ''; msg.textContent = 'Lỗi: ' + e.message; msg.className = 'msg err'; }
+}
+
+async function saveCeVideoStream(tile, stream, btn) {
+  const fs = document.getElementById('ce-vid-body').querySelector(`.ce-vid-stream[data-stream="${stream}"]`);
+  const msg = document.getElementById('ce-vid-msg');
+  const profile = {
+    setResolution: true, width: parseInt(fs.querySelector('.cv-w').value, 10) || 0, height: parseInt(fs.querySelector('.cv-h').value, 10) || 0,
+    setCodec: true, codec: fs.querySelector('.cv-codec').value, codecProfile: '',
+    setBitrate: true, bitrate: parseInt(fs.querySelector('.cv-br').value, 10) || 0, bitrateMode: fs.querySelector('.cv-brmode').value,
+    setGop: true, gop: parseInt(fs.querySelector('.cv-gop').value, 10) || 0,
+    setSmartCodec: true, smartCodec: fs.querySelector('.cv-smart').checked,
+    streams: [stream], channels: [tile.channel],
+  };
+  btn.disabled = true; msg.textContent = 'Đang lưu...'; msg.className = 'msg';
+  try {
+    const res = await streamApply([tile.camId], profile);
+    const r = res && res[0];
+    const bad = r && r.steps ? r.steps.filter(s => !s.ok) : [];
+    if (r && r.ok && !bad.length) { msg.textContent = 'Đã lưu stream ' + stream + '.'; msg.className = 'msg ok'; }
+    else { msg.textContent = 'Một số bước lỗi: ' + (bad.map(s => s.step + (s.err ? ' (' + s.err + ')' : '')).join('; ') || (r && r.err) || 'không rõ'); msg.className = 'msg err'; }
+  } catch (e) { msg.textContent = 'Lỗi: ' + e.message; msg.className = 'msg err'; }
+  finally { btn.disabled = false; }
+}
+
+/* ---------- Modal: Audio tab ---------- */
+async function loadAudioTab(tile) {
+  audioPayload = {};
+  const body = document.getElementById('ce-aud-body'), msg = document.getElementById('ce-aud-msg');
+  body.innerHTML = '<span class="spinner"></span>'; msg.textContent = '';
+  try {
+    const infos = await api('/api/probe', { method: 'POST', body: JSON.stringify({ id: tile.camId, timeoutSeconds: timeoutSec() }) });
+    const mine = (infos || []).filter(s => s.channel === tile.channel + 1);
+    if (!mine.length) { body.innerHTML = '<p class="muted">Không đọc được thông số âm thanh.</p>'; return; }
+    body.innerHTML = `<table class="mini-table"><thead><tr><th>Stream</th><th>Codec</th><th>Bật</th></tr></thead><tbody>${
+      mine.map(s => `<tr><td>${escapeHtml(CE_STREAM_LABELS[s.stream] || s.stream)}</td><td>${escapeHtml(s.audioCodec || '—')}</td><td>${s.audioEnable ? '✓' : '—'}</td></tr>`).join('')
+    }</tbody></table>
+    <p class="muted section-gap">Bật âm thanh AAC cho stream chính (chuẩn, iPhone/Android nghe được).</p>
+    <button class="btn btn-primary" type="button" id="ce-aud-aac">Bật audio AAC (stream chính)</button>`;
+    document.getElementById('ce-aud-aac').addEventListener('click', async (ev) => {
+      ev.target.disabled = true; msg.textContent = 'Đang bật...'; msg.className = 'msg';
+      try {
+        const res = await streamApply([tile.camId], { setAudioAAC: true, streams: [0], channels: [tile.channel] });
+        const r = res && res[0];
+        if (r && r.ok) { msg.textContent = 'Đã bật AAC.'; msg.className = 'msg ok'; audioPayload = null; loadAudioTab(tile); }
+        else { msg.textContent = 'Lỗi: ' + ((r && r.err) || 'không rõ'); msg.className = 'msg err'; }
+      } catch (e) { msg.textContent = 'Lỗi: ' + e.message; msg.className = 'msg err'; }
+      finally { ev.target.disabled = false; }
+    });
+  } catch (e) { body.innerHTML = ''; msg.textContent = 'Lỗi: ' + e.message; msg.className = 'msg err'; }
+}
+
+/* ---------- Modal: Network tab (static IP + Wi-Fi; reuses /api/network,/api/wifi) ---------- */
+async function loadNetworkTab(tile) {
+  networkPayload = {};
+  const body = document.getElementById('ce-net-body'), msg = document.getElementById('ce-net-msg');
+  body.innerHTML = '<span class="spinner"></span>'; msg.textContent = '';
+  const q = `id=${encodeURIComponent(tile.camId)}&timeoutSeconds=${timeoutSec()}`;
+  try {
+    const net = await api('/api/network?' + q);
+    let wifi = null;
+    try { wifi = await api('/api/wifi?' + q); } catch (e) { /* no radio */ }
+    renderCeNetwork(tile, net, wifi);
+  } catch (e) { body.innerHTML = ''; msg.textContent = 'Lỗi: ' + e.message; msg.className = 'msg err'; }
+}
+
+function renderCeNetwork(tile, net, wifi) {
+  const body = document.getElementById('ce-net-body'), msg = document.getElementById('ce-net-msg');
+  const ifaces = Object.keys(net.interfaces || {});
+  if (!ifaces.length) { body.innerHTML = '<p class="muted">Không đọc được cấu hình mạng.</p>'; return; }
+  const def = (net.defaultInterface && net.interfaces[net.defaultInterface]) ? net.defaultInterface : ifaces[0];
+  const wifiIfaces = wifi ? Object.keys(wifi) : [];
+  const wifiIface = wifiIfaces[0];
+  body.innerHTML = `
+    ${ifaces.length > 1 ? `<div class="field field-sm"><label>Giao diện</label><select id="ce-net-iface">${ifaces.map(i => `<option value="${escapeHtml(i)}"${i === def ? ' selected' : ''}>${escapeHtml(i)}</option>`).join('')}</select></div>` : `<input type="hidden" id="ce-net-iface" value="${escapeHtml(def)}">`}
+    <label class="checkbox-row"><input type="checkbox" id="ce-net-dhcp"> Tự động lấy IP (DHCP)</label>
+    <div id="ce-net-static">
+      <div class="field field-sm"><label>Địa chỉ IP</label><input id="ce-net-ip"></div>
+      <div class="field field-sm"><label>Subnet mask</label><input id="ce-net-mask"></div>
+      <div class="field field-sm"><label>Gateway</label><input id="ce-net-gw"></div>
+      <div class="row"><div class="field field-sm"><label>DNS 1</label><input id="ce-net-dns1"></div><div class="field field-sm"><label>DNS 2</label><input id="ce-net-dns2"></div></div>
+    </div>
+    <p class="muted" id="ce-net-info"></p>
+    <label class="checkbox-row"><input type="checkbox" id="ce-net-risk"> Tôi hiểu đổi IP có thể mất kết nối tới camera</label>
+    <button class="btn btn-primary" type="button" id="ce-net-save" disabled>Lưu cấu hình mạng</button>
+    ${wifiIface ? `<hr class="section-gap"><h4>Wi-Fi (${escapeHtml(wifiIface)})</h4>
+      <input type="hidden" id="ce-net-wifi-iface" value="${escapeHtml(wifiIface)}">
+      <div class="field field-sm"><label>SSID</label><input id="ce-net-wifi-ssid"></div>
+      <div class="field field-sm"><label>Mật khẩu</label><input id="ce-net-wifi-pass"></div>
+      <div class="row"><button class="btn btn-secondary" type="button" id="ce-net-wifi-scan">Quét mạng</button><button class="btn btn-primary" type="button" id="ce-net-wifi-save">Lưu Wi-Fi</button></div>
+      <div id="ce-net-wifi-list" class="chip-row"></div>` : ''}
+  `;
+  const fill = (iface) => {
+    const c = net.interfaces[iface] || {};
+    document.getElementById('ce-net-dhcp').checked = c.DhcpEnable === true || c.DhcpEnable === 'true';
+    document.getElementById('ce-net-ip').value = c.IPAddress || '';
+    document.getElementById('ce-net-mask').value = c.SubnetMask || '';
+    document.getElementById('ce-net-gw').value = c.DefaultGateway || '';
+    const dns = c.DnsServers || [];
+    document.getElementById('ce-net-dns1').value = dns[0] || '';
+    document.getElementById('ce-net-dns2').value = dns[1] || '';
+    document.getElementById('ce-net-info').textContent = `MAC ${c.PhysicalAddress || '?'} · MTU ${c.MTU || '?'}`;
+    toggleStatic();
+  };
+  const toggleStatic = () => { document.getElementById('ce-net-static').style.display = document.getElementById('ce-net-dhcp').checked ? 'none' : ''; };
+  document.getElementById('ce-net-dhcp').addEventListener('change', toggleStatic);
+  const ifaceSel = document.getElementById('ce-net-iface');
+  if (ifaceSel.tagName === 'SELECT') ifaceSel.addEventListener('change', () => fill(ifaceSel.value));
+  document.getElementById('ce-net-risk').addEventListener('change', (e) => { document.getElementById('ce-net-save').disabled = !e.target.checked; });
+  fill(def);
+  document.getElementById('ce-net-save').addEventListener('click', async () => {
+    const iface = ifaceSel.value;
+    const dhcp = document.getElementById('ce-net-dhcp').checked;
+    const ok = await showConfirm('Đổi cấu hình mạng?', dhcp ? 'Chuyển sang DHCP.' : `Đặt IP tĩnh ${document.getElementById('ce-net-ip').value}. Có thể mất kết nối nếu sai.`, { danger: true });
+    if (!ok) return;
+    msg.textContent = 'Đang lưu...'; msg.className = 'msg';
+    try {
+      const r = await api('/api/network', { method: 'POST', body: JSON.stringify({
+        id: tile.camId, interface: iface, dhcpEnable: dhcp,
+        ipAddress: document.getElementById('ce-net-ip').value.trim(), subnetMask: document.getElementById('ce-net-mask').value.trim(),
+        gateway: document.getElementById('ce-net-gw').value.trim(),
+        dns: [document.getElementById('ce-net-dns1').value.trim(), document.getElementById('ce-net-dns2').value.trim()].filter(Boolean),
+        timeoutSeconds: timeoutSec(),
+      }) });
+      msg.textContent = r.note || 'Đã lưu cấu hình mạng.'; msg.className = 'msg ok';
+    } catch (e) { msg.textContent = 'Lỗi: ' + e.message; msg.className = 'msg err'; }
+  });
+  if (wifiIface) {
+    document.getElementById('ce-net-wifi-scan').addEventListener('click', async (ev) => {
+      ev.target.disabled = true; msg.textContent = 'Đang quét...'; msg.className = 'msg';
+      try {
+        const r = await api('/api/wifi-scan', { method: 'POST', body: JSON.stringify({ id: tile.camId, timeoutSeconds: timeoutSec() }) });
+        const list = document.getElementById('ce-net-wifi-list');
+        list.innerHTML = (r.devices || []).map(d => `<button type="button" class="chip" data-ssid="${escapeHtml(d.ssid)}">${escapeHtml(d.ssid)} · ${d.linkQuality || 0}%</button>`).join('') || '<span class="muted">Không thấy mạng.</span>';
+        list.querySelectorAll('[data-ssid]').forEach(c => c.addEventListener('click', () => { document.getElementById('ce-net-wifi-ssid').value = c.dataset.ssid; }));
+        msg.textContent = '';
+      } catch (e) { msg.textContent = 'Lỗi quét: ' + e.message; msg.className = 'msg err'; }
+      finally { ev.target.disabled = false; }
+    });
+    document.getElementById('ce-net-wifi-save').addEventListener('click', async () => {
+      msg.textContent = 'Đang lưu Wi-Fi...'; msg.className = 'msg';
+      try {
+        await api('/api/wifi', { method: 'POST', body: JSON.stringify({ id: tile.camId, interface: wifiIface, ssid: document.getElementById('ce-net-wifi-ssid').value, password: document.getElementById('ce-net-wifi-pass').value, timeoutSeconds: timeoutSec() }) });
+        msg.textContent = 'Đã lưu Wi-Fi.'; msg.className = 'msg ok';
+      } catch (e) { msg.textContent = 'Lỗi: ' + e.message; msg.className = 'msg err'; }
+    });
+  }
+}
+
 async function openChannelEdit(tile) {
   channelEditTile = tile;
   picturePayload = null;
+  videoPayload = null; audioPayload = null; networkPayload = null;
   const dlg = document.getElementById('channel-edit-dialog');
   const msg = document.getElementById('ce-msg');
   const nameInput = document.getElementById('ce-name');
@@ -1404,9 +1605,17 @@ async function openChannelEdit(tile) {
   document.getElementById('ce-picture-msg').textContent = '';
   switchPictureMode('lite');
   const cam = cameras.find(x => x.id === tile.camId);
-  document.getElementById('ce-tab-btn-picture').hidden = !cam || cam.vendor !== 'dahua';
-  document.getElementById('ce-tab-btn-ptz').hidden = !cam || cam.vendor !== 'dahua';
+  const isDahua = !!cam && cam.vendor === 'dahua';
+  document.getElementById('ce-tab-btn-picture').hidden = !isDahua;
+  document.getElementById('ce-tab-btn-ptz').hidden = !isDahua;
+  document.getElementById('ce-tab-btn-video').hidden = !isDahua;
+  document.getElementById('ce-tab-btn-audio').hidden = !isDahua;
+  // Network works for both Dahua (DVRIP) and Hikvision (ISAPI).
+  document.getElementById('ce-tab-btn-network').hidden = !cam || (cam.vendor !== 'dahua' && cam.vendor !== 'hikvision');
   document.getElementById('ce-ptz-msg').textContent = '';
+  document.getElementById('ce-vid-body').innerHTML = '';
+  document.getElementById('ce-aud-body').innerHTML = '';
+  document.getElementById('ce-net-body').innerHTML = '';
   switchCeTab('name');
   loadCePreview(tile, false);
   msg.textContent = 'Đang tải...'; msg.className = 'msg';
