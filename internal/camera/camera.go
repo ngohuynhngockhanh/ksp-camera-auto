@@ -13,6 +13,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/dahua"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/hik"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/tiandy"
 )
 
 // Stream selects an encoded stream. Values match dahua.Stream: 0=main,
@@ -291,6 +292,11 @@ func Open(ctx context.Context, d config.Device, timeout time.Duration) (Camera, 
 			return nil, err
 		}
 		return &hikCamera{client: cl, device: d, timeout: timeout}, nil
+	case config.VendorTiandy:
+		// Tiandy is review-only over pure-Go transports (RTSP playback + ONVIF
+		// network read). Like hik.Dial, tiandy.New never touches the network, so
+		// Open always succeeds and errors surface from the first real call.
+		return &tiandyCamera{client: tiandy.New(d.Host, d.Username, d.Password, timeout), device: d, timeout: timeout}, nil
 	default:
 		return nil, fmt.Errorf("unknown vendor %q", d.Vendor)
 	}
@@ -1145,4 +1151,103 @@ func hikToStreamInfo(i hik.StreamInfo) StreamInfo {
 		BitrateMode: i.BitrateMode,
 		Name:        i.Name,
 	}
+}
+
+// tiandyCamera adapts *tiandy.Client to the Camera interface. Tiandy is
+// integrated as a review-only vendor over pure-Go transports (see the tiandy
+// package doc): it implements camera.Recorder (RTSP playback + a synthetic
+// recording index) and camera.NetworkSettings (ONVIF IP-config read). The
+// device-configuration methods of the core Camera interface (Apply, password,
+// OSD/channel-name) have no pure-Go route on Tiandy and return
+// tiandy.ErrUnsupported, so the UI shows "not supported" rather than failing
+// obscurely.
+//
+// Channel numbering: Profile.Channel is 0-based; tiandy converts to its native
+// 1-based RTSP channel at the transport boundary (tiandyChannel).
+type tiandyCamera struct {
+	client  *tiandy.Client
+	device  config.Device
+	timeout time.Duration
+}
+
+func (t *tiandyCamera) Close() error { return t.client.Close() }
+
+// Probe has no pure-Go encode-settings readback on Tiandy (that lives behind
+// the binary NetSDK), so it reports unsupported rather than guessing.
+func (t *tiandyCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
+	return nil, tiandy.ErrUnsupported
+}
+
+// Apply is unsupported: pushing encode/profile settings needs the NetSDK.
+func (t *tiandyCamera) Apply(ctx context.Context, profile Profile, emit func(StepResult)) []StepResult {
+	res := StepResult{Step: "tiandy", Detail: "cấu hình encode chưa hỗ trợ cho Tiandy", OK: false, Err: tiandy.ErrUnsupported.Error()}
+	if emit != nil {
+		emit(res)
+	}
+	return []StepResult{res}
+}
+
+func (t *tiandyCamera) ChangePassword(ctx context.Context, newUser, newPass string) error {
+	return tiandy.ErrUnsupported
+}
+
+// Snapshot grabs a JPEG frame off the Tiandy sub-stream over RTSP.
+func (t *tiandyCamera) Snapshot(ctx context.Context, channel, stream int) ([]byte, error) {
+	return t.client.Snapshot(ctx, channel, stream)
+}
+
+// ChannelInfo reports osdSupported=false (no error) so the UI cleanly shows
+// OSD/name editing as unavailable for Tiandy.
+func (t *tiandyCamera) ChannelInfo(ctx context.Context, channel int) (string, []string, []bool, bool, error) {
+	return "", nil, nil, false, nil
+}
+
+func (t *tiandyCamera) SetChannelName(ctx context.Context, channel int, name string) error {
+	return tiandy.ErrUnsupported
+}
+
+func (t *tiandyCamera) SetOSDLines(ctx context.Context, channel int, lines []string, enabled []bool) (int, error) {
+	return 0, tiandy.ErrUnsupported
+}
+
+// FindRecordings returns Tiandy's (synthetic) recording index for the window —
+// see tiandy.Client.FindRecordings for why it degrades.
+func (t *tiandyCamera) FindRecordings(ctx context.Context, channel int, start, end time.Time) ([]dahua.Recording, error) {
+	return t.client.FindRecordings(channel, start, end)
+}
+
+// StreamPlayback streams a channel's [start,end] recording to w as a fragmented
+// MP4, remuxed from Tiandy RTSP playback-by-time (HEVC retagged hvc1).
+func (t *tiandyCamera) StreamPlayback(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return t.client.StreamPlayback(ctx, w, channel, start, end)
+}
+
+// StreamDav is unsupported: Tiandy has no pure-Go native-container download
+// path (that would need the NetSDK). Callers fall back to StreamPlayback (MP4).
+func (t *tiandyCamera) StreamDav(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return tiandy.ErrUnsupported
+}
+
+// GetNetworkConfig reads the device's IP config over ONVIF (read-only). Returns
+// tiandy.ErrONVIFUnauthorized when the device rejects the creds for ONVIF.
+func (t *tiandyCamera) GetNetworkConfig(ctx context.Context) (dahua.NetworkConfig, error) {
+	return t.client.GetNetworkConfig(ctx)
+}
+
+// SetStaticIP / Wi-Fi methods satisfy NetworkSettings but are unsupported for
+// Tiandy (IP-config is view-only over ONVIF here).
+func (t *tiandyCamera) SetStaticIP(ctx context.Context, iface string, dhcpEnable bool, ip, mask, gateway string, dns []string) error {
+	return tiandy.ErrUnsupported
+}
+
+func (t *tiandyCamera) GetWiFiConfig(ctx context.Context) (map[string]map[string]any, error) {
+	return nil, tiandy.ErrUnsupported
+}
+
+func (t *tiandyCamera) SetWiFiConfig(ctx context.Context, iface, ssid, password, encryption string) error {
+	return tiandy.ErrUnsupported
+}
+
+func (t *tiandyCamera) ScanWiFi(ctx context.Context) ([]dahua.WiFiAP, error) {
+	return nil, tiandy.ErrUnsupported
 }

@@ -139,14 +139,17 @@ func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "host is required")
 		return
 	}
-	if req.Vendor != config.VendorDahua && req.Vendor != config.VendorHikvision {
-		writeErr(w, http.StatusBadRequest, "vendor must be dahua or hikvision")
+	if req.Vendor != config.VendorDahua && req.Vendor != config.VendorHikvision && req.Vendor != config.VendorTiandy {
+		writeErr(w, http.StatusBadRequest, "vendor must be dahua, hikvision or tiandy")
 		return
 	}
 	if req.Port == 0 {
-		if req.Vendor == config.VendorDahua {
+		switch req.Vendor {
+		case config.VendorDahua:
 			req.Port = s.cfg.Defaults.DahuaPort
-		} else {
+		case config.VendorTiandy:
+			req.Port = s.cfg.Defaults.TiandyPort
+		default:
 			req.Port = s.cfg.Defaults.HikvisionPort
 		}
 	}
@@ -1619,7 +1622,7 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 	// A camera with no local storage serves its recordings/downloads from the
 	// linked NVR channel instead.
 	d, channel = s.recordingSource(d, channel)
-	if d.Vendor != config.VendorDahua && d.Vendor != config.VendorHikvision {
+	if d.Vendor != config.VendorDahua && d.Vendor != config.VendorHikvision && d.Vendor != config.VendorTiandy {
 		writeErr(w, http.StatusBadRequest, notDahuaErr)
 		return
 	}
@@ -1675,11 +1678,12 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 			log.Printf("playback %s ch%d: stream error after %d bytes: %v", q.Get("id"), channel, cw.n, streamErr)
 		}
 		return
-	case config.VendorHikvision:
-		// Unlike Dahua, Hik playback/download DOES go through camera.Open
-		// (ISAPI over HTTP, the only transport this build has for Hikvision —
-		// there's no separate unauthenticated media port to bypass a busy
-		// config connection with).
+	case config.VendorHikvision, config.VendorTiandy:
+		// Hik and Tiandy playback/download both go through camera.Open and the
+		// camera.Recorder interface (Hik over ISAPI; Tiandy over RTSP-by-time,
+		// remuxed to MP4). Tiandy has no native-container path, so a format=dav
+		// request maps to StreamDav which returns a clean "unsupported" error —
+		// the review UI hides the native-download button for Tiandy anyway.
 		cam, err := camera.Open(ctx, d, time.Duration(timeoutSeconds)*time.Second)
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())

@@ -200,6 +200,8 @@ func vendorFromText(s string) string {
 		return "dahua"
 	case strings.Contains(lower, "kbvision"):
 		return "dahua"
+	case strings.Contains(lower, "tiandy"):
+		return "tiandy"
 	default:
 		return ""
 	}

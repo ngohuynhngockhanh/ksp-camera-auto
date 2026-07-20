@@ -569,7 +569,7 @@ document.getElementById('cam-tbody').addEventListener('click', async (ev) => {
     goto('cameras');
     document.getElementById('add-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
     document.getElementById('f-name').focus();
-    if (c.vendor === 'dahua' || c.vendor === 'hikvision') {
+    if (c.vendor === 'dahua' || c.vendor === 'hikvision' || c.vendor === 'tiandy') {
       openNetworkCard(c);
     } else {
       closeNetworkCard();
@@ -1720,8 +1720,9 @@ async function openChannelEdit(tile) {
   document.getElementById('ce-tab-btn-ptz').hidden = !isDahua;
   document.getElementById('ce-tab-btn-video').hidden = !isDahua;
   document.getElementById('ce-tab-btn-audio').hidden = !isDahua;
-  // Network works for both Dahua (DVRIP) and Hikvision (ISAPI).
-  document.getElementById('ce-tab-btn-network').hidden = !cam || (cam.vendor !== 'dahua' && cam.vendor !== 'hikvision');
+  // Network works for Dahua (DVRIP), Hikvision (ISAPI) and Tiandy (ONVIF,
+  // read-only IP view).
+  document.getElementById('ce-tab-btn-network').hidden = !cam || (cam.vendor !== 'dahua' && cam.vendor !== 'hikvision' && cam.vendor !== 'tiandy');
   document.getElementById('ce-ptz-msg').textContent = '';
   document.getElementById('ce-vid-body').innerHTML = '';
   document.getElementById('ce-aud-body').innerHTML = '';

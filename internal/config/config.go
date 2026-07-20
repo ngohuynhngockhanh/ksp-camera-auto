@@ -15,7 +15,8 @@ type Vendor string
 
 const (
 	VendorHikvision Vendor = "hikvision"
-	VendorDahua     Vendor = "dahua" // covers KBVision (Dahua OEM)
+	VendorDahua     Vendor = "dahua"  // covers KBVision (Dahua OEM)
+	VendorTiandy    Vendor = "tiandy" // Dahua-lineage RTSP; review-only over RTSP+ONVIF (pure-Go, no NetSDK)
 )
 
 // Server holds web UI listener + login settings.
@@ -40,10 +41,14 @@ type Server struct {
 
 // Defaults are applied to camera entries that omit a field.
 type Defaults struct {
-	HikvisionPort int    `yaml:"hikvision_port"`
-	DahuaPort     int    `yaml:"dahua_port"`
-	Username      string `yaml:"username"`
-	Password      string `yaml:"password"`
+	HikvisionPort int `yaml:"hikvision_port"`
+	DahuaPort     int `yaml:"dahua_port"`
+	// TiandyPort is the primary/control port stored for a Tiandy device. Tiandy
+	// playback rides RTSP (always :554) and IP-config rides ONVIF (:8082); this
+	// default (554) is what a bare Tiandy entry gets when a port is omitted.
+	TiandyPort int    `yaml:"tiandy_port"`
+	Username   string `yaml:"username"`
+	Password   string `yaml:"password"`
 	// TimeoutSeconds bounds one device operation; higher helps slow multi-channel
 	// NVRs. The web UI can override it per request.
 	TimeoutSeconds int `yaml:"timeout_seconds"`
@@ -75,6 +80,7 @@ func Default() Config {
 		Defaults: Defaults{
 			HikvisionPort:  8000,
 			DahuaPort:      37777,
+			TiandyPort:     554,
 			Username:       "admin",
 			Password:       "smarthome12345",
 			TimeoutSeconds: 30,
@@ -128,6 +134,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Defaults.DahuaPort == 0 {
 		c.Defaults.DahuaPort = d.Defaults.DahuaPort
+	}
+	if c.Defaults.TiandyPort == 0 {
+		c.Defaults.TiandyPort = d.Defaults.TiandyPort
 	}
 	if c.Defaults.Username == "" {
 		c.Defaults.Username = d.Defaults.Username

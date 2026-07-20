@@ -51,7 +51,7 @@
     // any vendor camera.Open()'s Camera implements camera.Recorder for).
     const sel = $('rv-cam');
     try {
-      const cams = (await api('/api/cameras') || []).filter(c => c.vendor === 'dahua' || c.vendor === 'hikvision');
+      const cams = (await api('/api/cameras') || []).filter(c => c.vendor === 'dahua' || c.vendor === 'hikvision' || c.vendor === 'tiandy');
       if (!cams.length) { sel.innerHTML = '<option>Không có camera hỗ trợ xem lại</option>'; return; }
       sel.innerHTML = cams.map(c => {
         const chan = c.channelName || c.nvrName || '';
@@ -319,6 +319,10 @@
   function updateDownloadLabel() {
     const btn = $('rv-download-dav');
     if (!btn || !cam) return;
+    // Tiandy has no pure-Go native-container download (StreamDav is unsupported),
+    // so hide the native button entirely — only the MP4 download applies.
+    if (cam.vendor === 'tiandy') { btn.hidden = true; return; }
+    btn.hidden = false;
     btn.textContent = cam.vendor === 'hikvision' ? 'Tải gốc IMKH (chỉ VLC, không phát trên ĐT/trình duyệt)' : 'Tải .dav (gốc)';
   }
 
