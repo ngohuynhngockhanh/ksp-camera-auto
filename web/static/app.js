@@ -23,10 +23,11 @@ const NAV_ITEMS = [
   { hash: 'dashboard', label: 'Tổng quan', short: 'Tổng quan', icon: ICONS.home, bottom: true },
   { hash: 'scan', label: 'Quét mạng', short: 'Quét', icon: ICONS.radar, bottom: true },
   { hash: 'cameras', label: 'Kho camera', short: 'Camera', icon: ICONS.camera, bottom: true },
-  { hash: 'review', label: 'Xem lại', short: 'Xem lại', icon: ICONS.radar, bottom: false },
-  { hash: 'import', label: 'Nhập Shinobi', short: 'Nhập', icon: ICONS.upload, bottom: true },
-  // bottom: false — mobile bottom nav stays at 4 items; help is reachable
-  // from the sidebar and the drawer.
+  { hash: 'review', label: 'Xem lại', short: 'Xem lại', icon: ICONS.radar, bottom: true },
+  // bottom: false — mobile bottom nav stays at 4 items + Menu so it doesn't
+  // get crowded; import (an occasional setup action, unlike the other four
+  // which are used every visit) is reachable from the sidebar and the drawer.
+  { hash: 'import', label: 'Nhập Shinobi', short: 'Nhập', icon: ICONS.upload, bottom: false },
   { hash: 'help', label: 'Trợ giúp', short: 'Trợ giúp', icon: ICONS.help, bottom: false },
 ];
 // Old bookmarks/links to the now-merged tabs still land on #cameras.
@@ -293,8 +294,11 @@ function buildNav() {
   `;
 
   const drawer = document.getElementById('drawer-nav');
-  drawer.innerHTML = `
-    <a class="drawer-item" href="#help" data-nav-hash="help">${ICONS.help}<span>Trợ giúp</span></a>
+  // Anything not in the bottom nav (bottom: false) still needs a way in on
+  // mobile — list it here so it isn't stranded.
+  drawer.innerHTML = items.filter(n => n.bottom === false).map(n => `
+    <a class="drawer-item" href="#${n.hash}" data-nav-hash="${n.hash}">${n.icon}<span>${n.label}</span></a>
+  `).join('') + `
     <button class="drawer-item" id="drawer-theme-btn" type="button">${ICONS.moon}<span>Đổi giao diện sáng/tối</span></button>
     <a class="drawer-item" href="/logout">${ICONS.logout}<span>Đăng xuất</span></a>
   `;
