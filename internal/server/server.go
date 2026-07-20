@@ -103,6 +103,7 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/config", api(s.handleConfig))
 	s.mux.Handle("/api/recordings", api(s.handleRecordings))
 	s.mux.Handle("/api/playback-token", api(s.handlePlaybackToken))
+	s.mux.Handle("/api/export-progress", api(s.handleExportProgress))
 	// /api/playback accepts EITHER a session OR a valid signed token (so a phone
 	// scanning the QR download link, with no session cookie, can still fetch it).
 	s.mux.Handle("/api/playback", limitBody(8<<20, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

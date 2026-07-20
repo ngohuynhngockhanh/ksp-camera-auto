@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -113,6 +114,9 @@ func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts)
 	}
 	defer os.RemoveAll(dir)
 
+	report := progressFrom(ctx)
+	report(0, len(chunks), "fetch")
+
 	chunkExt := "ts"
 	if opts.matroska {
 		chunkExt = "mkv"
@@ -120,6 +124,7 @@ func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts)
 	paths := make([]string, len(chunks))
 	errs := make([]error, len(chunks))
 	sem := make(chan struct{}, opts.maxParallel)
+	var fetched int32
 	var wg sync.WaitGroup
 	for i, c := range chunks {
 		paths[i] = filepath.Join(dir, fmt.Sprintf("c_%04d.%s", i, chunkExt))
@@ -134,6 +139,9 @@ func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts)
 				return
 			}
 			errs[i] = fetchChunk(ctx, c, paths[i], opts)
+			if errs[i] == nil {
+				report(int(atomic.AddInt32(&fetched, 1)), len(chunks), "fetch")
+			}
 		}(i, c)
 	}
 	wg.Wait()
@@ -142,6 +150,8 @@ func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts)
 			return fmt.Errorf("mediaexport: chunk %d (%s): %w", i, chunkStderr(paths[i]), e)
 		}
 	}
+
+	report(len(chunks), len(chunks), "concat")
 
 	// concat list (all chunks are the same codecs, so -c copy).
 	var b strings.Builder
@@ -181,6 +191,7 @@ func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts)
 		return fmt.Errorf("mediaexport: open result: %w", err)
 	}
 	defer f.Close()
+	report(len(chunks), len(chunks), "send")
 	// The whole file exists before the first byte goes out, so tell a writer
 	// that can forward it (the HTTP layer) the exact size — that's what makes
 	// the browser's download UI show a percentage and time-remaining.

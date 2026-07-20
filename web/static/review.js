@@ -428,40 +428,65 @@
       showToast('Tải nhanh tối đa 20 phút mỗi lần — kéo 2 vạch Đầu/Cuối lại gần nhau (tốt nhất 5 phút mỗi clip).', 'err');
       return;
     }
-    window.location.href = playbackURL(p, (extra || '') + '&download=1');
+    let url = playbackURL(p, (extra || '') + '&download=1');
     let msg = 'Đang tải… (đoạn dài có thể mất chút thời gian)';
     if (isFast) {
-      // ~10 parallel realtime sessions + concat overhead — a sane ETA so the
-      // user waits instead of re-clicking (each re-click restarts the build).
-      const eta = Math.max(15, Math.round(rangeSec / 10 + 20));
-      msg = `Đang chuẩn bị clip ${Math.round(rangeSec / 60)} phút — khoảng ${eta} giây nữa trình duyệt sẽ TỰ BẬT tải về. Đừng bấm lại nút (bấm lại sẽ làm lại từ đầu).`;
-      lockDownloadButtons(eta);
+      // MEGA-style: tag the request with a job id and poll the server for
+      // fetch/concat/send progress to animate an in-page bar.
+      const jobId = 'j' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      url += '&job=' + jobId;
+      trackExport(jobId);
+      msg = `Đang chuẩn bị clip ${Math.round(rangeSec / 60)} phút — theo dõi thanh tiến độ bên dưới. Trình duyệt sẽ TỰ BẬT tải khi clip sẵn sàng.`;
     } else if (isNative) {
       msg = rv === 'hikvision'
         ? 'Đang tải bản gốc IMKH (nhanh, chất lượng đầy đủ, không cắt chính xác theo giây)… Tệp này CHỈ mở được bằng VLC trên máy tính — KHÔNG phát được trên iPhone hay trong trình duyệt.'
         : 'Đang tải .dav gốc… (cần cổng cấu hình)';
     }
+    window.location.href = url;
     showToast(msg, 'ok');
   }
 
-  // lockDownloadButtons disables both download buttons for roughly the build
-  // time, counting down on the fast button's label — the single biggest cause
-  // of "không ra clip" was re-clicking mid-build, which aborts the pending
-  // navigation (and its build) and starts over.
-  function lockDownloadButtons(sec) {
+  // trackExport polls /api/export-progress and animates the in-page bar while
+  // a fast export builds — the biggest cause of "không ra clip" was users
+  // re-clicking mid-build because nothing visibly happened. Buttons stay
+  // locked until the export finishes, errors, or (Dahua: no job is ever
+  // registered — its export streams immediately) polling gives up.
+  let expTimer = null;
+  function trackExport(jobId) {
+    const wrap = $('rv-prog'), bar = $('rv-prog-bar'), txt = $('rv-prog-txt');
     const btns = [$('rv-download'), $('rv-download-dav')].filter(Boolean);
-    const fastBtn = $('rv-download');
-    const orig = fastBtn.textContent;
+    if (!wrap || !bar || !txt) return;
     btns.forEach(b => { b.disabled = true; });
-    let left = sec;
-    const tick = setInterval(() => {
-      left--;
-      if (left > 0) { fastBtn.textContent = `Đang chuẩn bị… ${left}s`; return; }
-      clearInterval(tick);
-      fastBtn.textContent = orig;
+    wrap.hidden = false;
+    bar.style.width = '2%';
+    txt.textContent = 'Đang kết nối đầu ghi…';
+    if (expTimer) clearInterval(expTimer);
+    let misses = 0;
+    const finish = (m, isErr) => {
+      clearInterval(expTimer); expTimer = null;
+      wrap.hidden = true;
       btns.forEach(b => { b.disabled = false; });
+      if (m) showToast(m, isErr ? 'err' : 'ok');
+    };
+    expTimer = setInterval(async () => {
+      let st;
+      try { st = await api('/api/export-progress?job=' + jobId); misses = 0; }
+      catch (e) { if (++misses >= 8) finish(null); return; }
+      if (st.phase === 'error') { finish('Lỗi tải: ' + (st.error || 'không rõ'), true); return; }
+      if (st.phase === 'done') {
+        bar.style.width = '100%';
+        txt.textContent = 'Xong!';
+        setTimeout(() => finish('Clip đã tải xong — kiểm tra mục tải xuống của trình duyệt.'), 1200);
+        return;
+      }
+      if (st.phase === 'concat') { bar.style.width = '92%'; txt.textContent = 'Đang ghép file…'; return; }
+      if (st.phase === 'send') { bar.style.width = '96%'; txt.textContent = 'Đang gửi về trình duyệt… (xem % ở mục tải xuống)'; return; }
+      if (st.total > 0) {
+        const pct = Math.round(st.done / st.total * 90);
+        bar.style.width = Math.max(2, pct) + '%';
+        txt.textContent = `Đang lấy dữ liệu từ đầu ghi… ${st.done}/${st.total} đoạn (${pct}%)`;
+      }
     }, 1000);
-    fastBtn.textContent = `Đang chuẩn bị… ${left}s`;
   }
 
   async function showQR() {

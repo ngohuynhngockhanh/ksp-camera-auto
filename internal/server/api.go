@@ -21,8 +21,62 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/dahua"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/importer"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mediaexport"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/tiandy"
 )
+
+// exportJob is the observable state of one chunked playback export, keyed by
+// the client-chosen job id (&job= on /api/playback). The review page polls
+// /api/export-progress with the same id to draw a MEGA-style in-page progress
+// bar — a plain navigation download gives the page no visibility otherwise.
+type exportJob struct {
+	Done, Total int
+	Phase       string // "start" | "fetch" | "concat" | "send" | "done" | "error"
+	Error       string
+	updated     time.Time
+}
+
+var (
+	exportJobsMu sync.Mutex
+	exportJobs   = map[string]*exportJob{}
+)
+
+// setExportJob updates (creating if needed) a job under the lock and prunes
+// stale entries so the map can't grow unboundedly.
+func setExportJob(id string, f func(*exportJob)) {
+	exportJobsMu.Lock()
+	defer exportJobsMu.Unlock()
+	j := exportJobs[id]
+	if j == nil {
+		j = &exportJob{Phase: "start"}
+		exportJobs[id] = j
+	}
+	f(j)
+	j.updated = time.Now()
+	for k, v := range exportJobs {
+		if time.Since(v.updated) > 10*time.Minute {
+			delete(exportJobs, k)
+		}
+	}
+}
+
+// handleExportProgress handles GET /api/export-progress?job= — the polling
+// side of the in-page download progress bar.
+func (s *Server) handleExportProgress(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("job")
+	exportJobsMu.Lock()
+	j, ok := exportJobs[id]
+	var cp exportJob
+	if ok {
+		cp = *j
+	}
+	exportJobsMu.Unlock()
+	if !ok {
+		writeErr(w, http.StatusNotFound, "job not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"done": cp.Done, "total": cp.Total, "phase": cp.Phase, "error": cp.Error})
+}
 
 // reqTimeout resolves a per-request device timeout: the request's
 // timeoutSeconds (clamped to 5..600s) if given, else the configured default.
@@ -1759,6 +1813,15 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fname))
 			}
 		}
+		// &job= opts into progress reporting: the chunked exporters publish
+		// fetch/concat/send phases the review page polls for its progress bar.
+		jobID := q.Get("job")
+		if jobID != "" {
+			setExportJob(jobID, func(j *exportJob) {})
+			ctx = mediaexport.WithProgress(ctx, func(done, total int, phase string) {
+				setExportJob(jobID, func(j *exportJob) { j.Done, j.Total, j.Phase = done, total, phase })
+			})
+		}
 		switch {
 		case native:
 			streamErr = rec.StreamNative(ctx, cw, channel, start, end)
@@ -1767,6 +1830,19 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 			streamErr = rec.StreamPlaybackFast(ctx, cw, channel, start, end)
 		default:
 			streamErr = rec.StreamPlayback(ctx, cw, channel, start, end)
+		}
+		if jobID != "" {
+			msg := ""
+			if streamErr != nil {
+				msg = streamErr.Error()
+			}
+			setExportJob(jobID, func(j *exportJob) {
+				if msg != "" {
+					j.Phase, j.Error = "error", msg
+				} else {
+					j.Phase = "done"
+				}
+			})
 		}
 		if streamErr != nil {
 			if cw.n == 0 {
