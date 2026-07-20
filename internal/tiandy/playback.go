@@ -118,16 +118,18 @@ func (c *Client) StreamPlayback(ctx context.Context, w io.Writer, channel int, s
 }
 
 // StreamPlaybackFast exports [start,end] as MP4 much faster than realtime by
-// fetching 1-minute chunks over parallel RTSP playback sessions (Tiandy paces a
-// single session at ~1x and exposes no byte-download API, but allows several
-// concurrent playback sessions per channel). Audio is transcoded to AAC per
-// chunk (Tiandy streams G.711 a-law). Same exact-cut, browser-playable MP4 as
-// StreamPlayback, ~5× faster for a 5-minute clip.
+// fetching 30-second chunks over parallel RTSP playback sessions (Tiandy paces
+// a single session at ~1x and exposes no byte-download API, but serves 10
+// concurrent playback sessions per channel without starving any of them —
+// verified live: 10 parallel fetches all completed at full rate). Audio is
+// transcoded to AAC per chunk (Tiandy streams G.711 a-law). Same exact-cut,
+// browser-playable MP4 as StreamPlayback, ~10× faster: a 5-minute clip
+// downloads in ~35s.
 func (c *Client) StreamPlaybackFast(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
 	ch := tiandyChannel(channel)
-	return mediaexport.FastMP4Range(ctx, w, start, end, 60, func(cs, ce time.Time) string {
+	return mediaexport.FastMP4Range(ctx, w, start, end, 30, func(cs, ce time.Time) string {
 		return playbackRTSPURL(c.host, c.user, c.pass, ch, cs, ce)
-	}, true, 5)
+	}, true, 10)
 }
 
 // StreamNative exports [start,end] as an MKV with BOTH streams copied
@@ -139,9 +141,9 @@ func (c *Client) StreamPlaybackFast(ctx context.Context, w io.Writer, channel in
 // chunks like StreamPlaybackFast. Plays in VLC/desktop players, not a browser.
 func (c *Client) StreamNative(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
 	ch := tiandyChannel(channel)
-	return mediaexport.FastNativeRange(ctx, w, start, end, 60, func(cs, ce time.Time) string {
+	return mediaexport.FastNativeRange(ctx, w, start, end, 30, func(cs, ce time.Time) string {
 		return playbackRTSPURL(c.host, c.user, c.pass, ch, cs, ce)
-	}, 5)
+	}, 10)
 }
 
 // liveRTSPURL builds Tiandy's Dahua-format live RTSP URL (sub stream), used for

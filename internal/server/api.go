@@ -1575,6 +1575,20 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// SetContentLength forwards the final file size to the HTTP response, so the
+// browser's download UI can show a real percentage and time-remaining. Only
+// the exports that build the whole file before sending (mediaexport's fast
+// MP4/MKV — see fastRemux) know their size up front and call this; it must
+// arrive before the first Write, after which headers are already flushed.
+func (c *countingWriter) SetContentLength(size int64) {
+	if c.n > 0 || size <= 0 {
+		return
+	}
+	if rw, ok := c.w.(http.ResponseWriter); ok {
+		rw.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	}
+}
+
 // handlePlayback handles GET /api/playback?id=&channel=&start=&end=&download= —
 // stream one channel's [start,end] recording to the client as fragmented MP4,
 // remuxed from the device's own RTSP playback with nothing buffered on the

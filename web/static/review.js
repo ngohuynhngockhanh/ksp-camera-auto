@@ -343,10 +343,12 @@
   // byte-exact .dav (DHAV), which VLC and most players on any OS open fine.
   // Hikvision's is its own proprietary IMKH container — NOT a real MP4, it
   // only opens in VLC/a desktop player, never on iPhone or in a browser.
-  // Tiandy has no byte-download API at all, so its "original" is an MKV with
-  // the recorded HEVC+G.711 bitstreams copied untouched (VLC/desktop players).
-  // The labels have to say all this plainly or people click expecting a
-  // normal video file.
+  // The labels have to say this plainly or people click expecting a normal
+  // video file. Tiandy gets NO native button by request: its "original" would
+  // be a stream-copied MKV (no byte-download API on that firmware), and the
+  // fast MP4 carries the identical video bitstream anyway — one download
+  // button is less confusing. (format=native still works server-side for
+  // Tiandy, for old links.)
   function updateDownloadLabel() {
     const btn = $('rv-download-dav');
     if (!btn || !cam) return;
@@ -354,7 +356,6 @@
     const labels = {
       dahua: 'Tải .dav (gốc)',
       hikvision: 'Tải gốc IMKH (chỉ VLC, không phát trên ĐT/trình duyệt)',
-      tiandy: 'Tải gốc MKV (VLC/máy tính, không phát trên ĐT)',
     };
     btn.hidden = !labels[rv];
     if (labels[rv]) btn.textContent = labels[rv];
@@ -422,9 +423,7 @@
       const rv = recordingVendor();
       msg = rv === 'hikvision'
         ? 'Đang tải bản gốc IMKH (nhanh, chất lượng đầy đủ, không cắt chính xác theo giây)… Tệp này CHỈ mở được bằng VLC trên máy tính — KHÔNG phát được trên iPhone hay trong trình duyệt.'
-        : rv === 'tiandy'
-          ? 'Đang tải bản gốc MKV (hình + tiếng giữ nguyên như đầu ghi, cắt đúng đoạn)… Mở bằng VLC hoặc trình phát trên máy tính — KHÔNG phát trong trình duyệt/iPhone.'
-          : 'Đang tải .dav gốc… (cần cổng cấu hình)';
+        : 'Đang tải .dav gốc… (cần cổng cấu hình)';
     }
     showToast(msg, 'ok');
   }

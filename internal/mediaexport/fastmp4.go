@@ -169,6 +169,14 @@ func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts)
 		return fmt.Errorf("mediaexport: open result: %w", err)
 	}
 	defer f.Close()
+	// The whole file exists before the first byte goes out, so tell a writer
+	// that can forward it (the HTTP layer) the exact size — that's what makes
+	// the browser's download UI show a percentage and time-remaining.
+	if s, ok := w.(interface{ SetContentLength(int64) }); ok {
+		if fi, err := f.Stat(); err == nil {
+			s.SetContentLength(fi.Size())
+		}
+	}
 	if _, err := io.Copy(w, f); err != nil {
 		return fmt.Errorf("mediaexport: stream result: %w", err)
 	}
