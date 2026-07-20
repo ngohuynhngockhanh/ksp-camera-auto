@@ -1716,9 +1716,10 @@ async function openChannelEdit(tile) {
   switchPictureMode('lite');
   const cam = cameras.find(x => x.id === tile.camId);
   const isDahua = !!cam && cam.vendor === 'dahua';
+  const canEncode = isDahua || (!!cam && cam.vendor === 'tiandy'); // Tiandy encode over CGI/ISAPI
   document.getElementById('ce-tab-btn-picture').hidden = !isDahua;
   document.getElementById('ce-tab-btn-ptz').hidden = !isDahua;
-  document.getElementById('ce-tab-btn-video').hidden = !isDahua;
+  document.getElementById('ce-tab-btn-video').hidden = !canEncode;
   document.getElementById('ce-tab-btn-audio').hidden = !isDahua;
   // Network works for Dahua (DVRIP), Hikvision (ISAPI) and Tiandy (ONVIF,
   // read-only IP view).

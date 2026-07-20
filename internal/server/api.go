@@ -21,6 +21,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/dahua"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/importer"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/tiandy"
 )
 
 // reqTimeout resolves a per-request device timeout: the request's
@@ -431,13 +432,16 @@ func (s *Server) openDeviceCamera(w http.ResponseWriter, r *http.Request, id str
 // never set the field (the frontend doesn't send it yet) keep behaving
 // byte-identically to before this method grew a vendor parameter.
 func (s *Server) nvrDeviceFrom(host string, port int, user, pass, name string, vendor config.Vendor) config.Device {
-	if vendor != config.VendorHikvision {
+	if vendor != config.VendorHikvision && vendor != config.VendorTiandy {
 		vendor = config.VendorDahua
 	}
 	if port == 0 {
-		if vendor == config.VendorHikvision {
+		switch vendor {
+		case config.VendorHikvision:
 			port = s.cfg.Defaults.HikvisionPort
-		} else {
+		case config.VendorTiandy:
+			port = s.cfg.Defaults.TiandyPort
+		default:
 			port = s.cfg.Defaults.DahuaPort
 		}
 	}
@@ -1743,7 +1747,7 @@ func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
 	channel := atoiDefault(q.Get("channel"), 0)
 	// If the camera is offline, fall the live view back to its NVR channel.
 	d, channel = s.liveSource(d, channel)
-	if d.Vendor != config.VendorDahua {
+	if d.Vendor != config.VendorDahua && d.Vendor != config.VendorTiandy {
 		writeErr(w, http.StatusBadRequest, notDahuaErr)
 		return
 	}
@@ -1763,8 +1767,14 @@ func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
-	if err := dahua.StreamMJPEG(ctx, w, flush, d.Host, d.Username, d.Password, channel, fps, boundary); err != nil {
-		log.Printf("live %s ch%d: %v", q.Get("id"), channel, err)
+	var liveErr error
+	if d.Vendor == config.VendorTiandy {
+		liveErr = tiandy.StreamMJPEG(ctx, w, flush, d.Host, d.Username, d.Password, channel, fps, boundary)
+	} else {
+		liveErr = dahua.StreamMJPEG(ctx, w, flush, d.Host, d.Username, d.Password, channel, fps, boundary)
+	}
+	if liveErr != nil {
+		log.Printf("live %s ch%d: %v", q.Get("id"), channel, liveErr)
 	}
 }
 

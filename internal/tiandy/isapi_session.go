@@ -58,28 +58,78 @@ type sessionTransport struct {
 
 const netIfacesPath = "/ISAPI/System/Network/interfaces"
 
-// streamChannelRe matches hik's encode path /ISAPI/Streaming/channels/{trackID}
-// (trackID = ch*100 + streamType). Tiandy serves the identical StreamingChannel
-// document at /CGI/Streaming/channels/{ch}/type/{streamType} instead.
-var streamChannelRe = regexp.MustCompile(`^/ISAPI/Streaming/channels/(\d+)$`)
+// Tiandy serves the SAME XML documents hik expects, but under /CGI paths (its
+// /ISAPI equivalents return statusCode 4 / notSupport). remapPath rewrites each
+// so hik's get/set logic reuses unchanged. All verified live on a TC-R3440.
+var (
+	// encode: hik id = ch0*100 + stream0 + 1 (ch0 streams -> 1,2,3; ch1 -> 101..).
+	streamChannelRe = regexp.MustCompile(`^/ISAPI/Streaming/channels/(\d+)$`)
+	// OSD overlay doc (VideoOverlay/TextOverlayList) — Tiandy wants /type/1.
+	overlaysRe = regexp.MustCompile(`^/ISAPI/System/Video/inputs/channels/(\d+)/overlays$`)
+	// InputProxy per-channel (logical channel name). Collection (no id) stays /ISAPI.
+	inputProxyChRe = regexp.MustCompile(`^/ISAPI/ContentMgmt/InputProxy/channels/(\d+)$`)
+)
 
-// remapPath rewrites the hik ISAPI paths whose Tiandy equivalent lives under
-// /CGI with a different shape but the SAME XML body, so hik's get/set logic
-// reuses unchanged. Currently: the per-stream encode document. hik builds the
-// stream id as ch0*100 + stream0 + 1 (ch0/stream0 both 0-based, so channel 0's
-// three streams are ids 1,2,3 and channel 1's are 101,102,103); Tiandy wants
-// /CGI/Streaming/channels/{ch1}/type/{type1} with 1-based channel and type
-// (type 1=main,2=sub,3=third) — verified live.
 func remapPath(path string) string {
 	if m := streamChannelRe.FindStringSubmatch(path); m != nil {
-		id, _ := strconv.Atoi(m[1])
-		if id >= 1 {
-			ch1 := (id-1)/100 + 1
-			typ1 := (id-1)%100 + 1
-			return fmt.Sprintf("/CGI/Streaming/channels/%d/type/%d", ch1, typ1)
+		if id, _ := strconv.Atoi(m[1]); id >= 1 {
+			return fmt.Sprintf("/CGI/Streaming/channels/%d/type/%d", (id-1)/100+1, (id-1)%100+1)
 		}
 	}
+	if m := overlaysRe.FindStringSubmatch(path); m != nil {
+		return "/CGI/System/Video/inputs/channels/" + m[1] + "/overlays/type/1"
+	}
+	if m := inputProxyChRe.FindStringSubmatch(path); m != nil {
+		return "/CGI/ContentMgmt/InputProxy/channels/" + m[1]
+	}
+	if path == "/ISAPI/ContentMgmt/Storage" {
+		return "/CGI/ContentMgmt/Storage/hdd/" // trailing slash required by Tiandy
+	}
 	return path
+}
+
+// optMaxAttrRe strips the schema-hint attributes Tiandy emits on GET
+// (opt="H.264,..." / max="16384"). It rejects its OWN document on PUT unless
+// these are removed (statusCode 254 / "Parameter Error") — verified live.
+var optMaxAttrRe = regexp.MustCompile(` (?:opt|max)="[^"]*"`)
+
+func stripOptMax(b []byte) []byte { return optMaxAttrRe.ReplaceAll(b, nil) }
+
+// renameElem rewrites <from>…</from> to <to>…</to> (open+close tags only), used
+// to bridge hik's <name> vs Tiandy's <channelName> for the InputProxy channel.
+func renameElem(b []byte, from, to string) []byte {
+	s := string(b)
+	s = strings.ReplaceAll(s, "<"+from+">", "<"+to+">")
+	s = strings.ReplaceAll(s, "</"+from+">", "</"+to+">")
+	return []byte(s)
+}
+
+// mergeStreamBody GETs the device's current full StreamingChannel doc and
+// overlays the encode fields hik changed (hik PUTs only the fields it models;
+// Tiandy needs the whole document), then strips opt/max attributes. Returns the
+// original body on any read failure.
+func (t *sessionTransport) mergeStreamBody(ctx context.Context, path string, changes []byte) []byte {
+	full, status, err := t.doOnce(ctx, http.MethodGet, path, nil)
+	if err != nil || status >= 300 || len(full) == 0 {
+		return stripOptMax(changes)
+	}
+	s := string(full)
+	for _, name := range encodeMergeFields {
+		if v := xmlField(changes, name); v != "" {
+			re := regexp.MustCompile(`(<` + name + `\b[^>]*>)[^<]*(</` + name + `>)`)
+			s = re.ReplaceAllString(s, `${1}`+v+`${2}`)
+		}
+	}
+	return stripOptMax([]byte(s))
+}
+
+// encodeMergeFields: unambiguous leaf elements an encode change touches, merged
+// by value into the device's current full doc. "enabled"/audio excluded
+// (ambiguous; encode edits don't change them).
+var encodeMergeFields = []string{
+	"videoCodecType", "videoResolutionWidth", "videoResolutionHeight",
+	"maxFrameRate", "videoQualityControlType", "GovLength",
+	"constantBitRate", "vbrUpperCap", "vbrAverageCap",
 }
 
 // Do implements isapi.Transport.
@@ -90,6 +140,20 @@ func (t *sessionTransport) Do(ctx context.Context, method, path string, body []b
 		return t.synthNetworkList(ctx)
 	}
 	path = remapPath(path)
+	// Request-body transforms: Tiandy rejects the schema-hint attributes and
+	// (for encode) a partial document, so fix up PUT bodies before sending.
+	if method == http.MethodPut {
+		switch {
+		case strings.HasPrefix(path, "/CGI/Streaming/channels/"):
+			body = t.mergeStreamBody(ctx, path, body)
+		case strings.Contains(path, "/overlays/type/"):
+			body = stripOptMax(body)
+		case strings.HasPrefix(path, "/CGI/ContentMgmt/InputProxy/channels/"):
+			// hik edits the channel name in a <name> element; Tiandy's InputProxy
+			// doc calls it <channelName>. Rename back before PUT.
+			body = renameElem(body, "name", "channelName")
+		}
+	}
 	data, status, err := t.doOnce(ctx, method, path, body)
 	if err != nil {
 		return nil, err
@@ -104,6 +168,19 @@ func (t *sessionTransport) Do(ctx context.Context, method, path string, body []b
 	}
 	if status >= 300 {
 		return data, fmt.Errorf("tiandy isapi: %s %s: HTTP %d: %s", method, path, status, truncate(data))
+	}
+	// Response transform: Tiandy's HDD list comes back as a bare <hddList>; hik's
+	// GetStorage parses a <storage><hddList> document, so wrap it.
+	if method == http.MethodGet && path == "/CGI/ContentMgmt/Storage/hdd/" {
+		if s := string(data); strings.Contains(s, "<hddList>") && !strings.Contains(s, "<storage>") {
+			i := strings.Index(s, "<hddList>")
+			data = []byte(`<?xml version="1.0" encoding="UTF-8"?><storage>` + s[i:] + `</storage>`)
+		}
+	}
+	// hik's GetChannelName reads a <name> element; Tiandy's InputProxy doc uses
+	// <channelName>. Rename on read so the channel name is found.
+	if method == http.MethodGet && strings.HasPrefix(path, "/CGI/ContentMgmt/InputProxy/channels/") {
+		data = renameElem(data, "channelName", "name")
 	}
 	return data, nil
 }

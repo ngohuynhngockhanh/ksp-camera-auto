@@ -1187,11 +1187,29 @@ func (t *tiandyCamera) Close() error {
 
 // --- Config plane: delegate to the ISAPI-backed hikCamera ---
 
-// Probe reads the default channel's three streams individually. Tiandy does
-// not serve the /ISAPI/Streaming/channels collection hik's ProbeAll relies on
-// (statusCode 4 / notSupport), so we can't delegate to cfg.Probe; instead read
-// main/sub/third per-stream (each remaps to /CGI/Streaming/channels/1/type/N).
+// Probe enumerates the NVR's channels so "Xem tất cả kênh" shows every camera.
+// Two reasons this can't delegate to hikCamera.Probe/ProbeAll: (a) Tiandy
+// doesn't serve the /ISAPI/Streaming/channels collection ProbeAll relies on
+// (statusCode 4); (b) isapi.GetStreamInfo would stamp a 0-based Channel, but the
+// whole UI (viewAllChannels dedupes by channel, labels "K{channel}") assumes the
+// 1-based convention ProbeAll produces — a 0-based value leaks as "-1"/"K0" and
+// breaks the per-channel edit calls. So we source the channel list from
+// GetRemoteDevices (one call) and stamp 1-based channels.
 func (t *tiandyCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
+	if rcs, err := t.cfg.GetRemoteDevices(ctx); err == nil && len(rcs) > 0 {
+		out := make([]StreamInfo, 0, len(rcs))
+		for _, rc := range rcs {
+			if rc.Address == "" { // empty NVR slot (no camera)
+				continue
+			}
+			out = append(out, StreamInfo{Channel: rc.Channel + 1, Name: rc.Name}) // rc.Channel is 0-based
+		}
+		if len(out) > 0 {
+			return out, nil
+		}
+	}
+	// Fallback (single camera, or NVR channel list unavailable): the default
+	// channel's three streams, stamped 1-based.
 	out := make([]StreamInfo, 0, 3)
 	var firstErr error
 	for st := 0; st < 3; st++ {
@@ -1202,7 +1220,9 @@ func (t *tiandyCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
 			}
 			continue
 		}
-		out = append(out, hikToStreamInfo(si))
+		s := hikToStreamInfo(si)
+		s.Channel = 1
+		out = append(out, s)
 	}
 	if len(out) == 0 {
 		return nil, firstErr
