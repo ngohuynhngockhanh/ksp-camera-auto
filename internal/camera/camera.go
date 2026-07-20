@@ -1187,7 +1187,28 @@ func (t *tiandyCamera) Close() error {
 
 // --- Config plane: delegate to the ISAPI-backed hikCamera ---
 
-func (t *tiandyCamera) Probe(ctx context.Context) ([]StreamInfo, error) { return t.cfg.Probe(ctx) }
+// Probe reads the default channel's three streams individually. Tiandy does
+// not serve the /ISAPI/Streaming/channels collection hik's ProbeAll relies on
+// (statusCode 4 / notSupport), so we can't delegate to cfg.Probe; instead read
+// main/sub/third per-stream (each remaps to /CGI/Streaming/channels/1/type/N).
+func (t *tiandyCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
+	out := make([]StreamInfo, 0, 3)
+	var firstErr error
+	for st := 0; st < 3; st++ {
+		si, err := t.cfg.client.GetStreamInfo(ctx, 0, st)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		out = append(out, hikToStreamInfo(si))
+	}
+	if len(out) == 0 {
+		return nil, firstErr
+	}
+	return out, nil
+}
 
 func (t *tiandyCamera) Apply(ctx context.Context, profile Profile, emit func(StepResult)) []StepResult {
 	return t.cfg.Apply(ctx, profile, emit)
