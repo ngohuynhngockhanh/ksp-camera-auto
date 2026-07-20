@@ -365,12 +365,13 @@
               <button class="btn btn-secondary" type="button" data-seek="-2">-2s</button>
               <button class="btn btn-secondary" type="button" data-seek="2">+2s</button>
               <button class="btn btn-secondary" type="button" data-seek="5">+5s</button>
-              <div class="field field-sm" style="max-width:6rem"><label for="rv-speed">Tốc độ</label>
-                <select id="rv-speed">
-                  <option value="0.05">0.05x</option><option value="0.1">0.1x</option><option value="0.25">0.25x</option>
-                  <option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="1.5">1.5x</option>
-                  <option value="2">2x</option><option value="4">4x</option><option value="8">8x</option>
-                </select>
+              <div class="rv-speeds" id="rv-speeds"><span class="muted" style="margin-right:.3rem">Tốc độ</span>
+                <button class="btn btn-sm btn-secondary" type="button" data-speed="0.1">0.1x</button>
+                <button class="btn btn-sm btn-secondary" type="button" data-speed="0.25">0.25x</button>
+                <button class="btn btn-sm btn-secondary" type="button" data-speed="0.5">0.5x</button>
+                <button class="btn btn-sm btn-secondary" type="button" data-speed="1">1x</button>
+                <button class="btn btn-sm btn-secondary" type="button" data-speed="2">2x</button>
+                <button class="btn btn-sm btn-secondary" type="button" data-speed="4">4x</button>
               </div>
               <label class="checkbox-row" style="margin:0"><input type="checkbox" id="rv-auto" checked> Tự phát đoạn kế</label>
             </div>
@@ -378,7 +379,7 @@
               <span class="muted">Đoạn đã chọn: <b id="rv-range">—</b></span>
               <label class="field-sm" style="margin:0">Cắt từ <input type="datetime-local" id="rv-cut-from" step="1"></label>
               <label class="field-sm" style="margin:0">đến <input type="datetime-local" id="rv-cut-to" step="1"></label>
-              <button class="btn btn-primary" type="button" id="rv-download">⬇ Tải MP4 (xem được mọi nơi)</button>
+              <button class="btn btn-primary" type="button" id="rv-download">⬇ Tải MP4 (nhanh)</button>
               <button class="btn btn-secondary" type="button" id="rv-download-dav">Tải .dav (gốc)</button>
               <button class="btn btn-secondary" type="button" id="rv-qr">QR tải về ĐT</button>
             </div>

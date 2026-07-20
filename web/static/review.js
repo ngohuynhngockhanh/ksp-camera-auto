@@ -33,6 +33,7 @@
   function fmtLocal(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }
   function fmtLocalSec(d) { return `${fmtLocal(d)}:${pad(d.getSeconds())}`; }
   let editingCut = false; // true while the user is typing in a cut time input
+  let curSpeed = 1;       // current playback speed (set by the speed buttons)
 
   // reviewOnShow is called by app.js setRoute() each time the view opens.
   window.reviewOnShow = function () {
@@ -41,7 +42,7 @@
     if (window._rvPreselect && window._rvCams) {
       const c = window._rvCams.find(c => c.id === window._rvPreselect);
       window._rvPreselect = null;
-      if (c && c.id !== (cam && cam.id)) { $('rv-cam').value = c.id; cam = c; updateDownloadLabel(); load(60); }
+      if (c && c.id !== (cam && cam.id)) { $('rv-cam').value = c.id; cam = c; updateDownloadLabel(); load(1440); }
     }
   };
 
@@ -59,7 +60,7 @@
         return `<option value="${escapeHtml(c.id)}">${escapeHtml(label)}</option>`;
       }).join('');
       window._rvCams = cams;
-      sel.addEventListener('change', () => { cam = cams.find(c => c.id === sel.value); updateDownloadLabel(); load(60); refreshDays(); });
+      sel.addEventListener('change', () => { cam = cams.find(c => c.id === sel.value); updateDownloadLabel(); load(1440); refreshDays(); });
       cam = (window._rvPreselect && cams.find(c => c.id === window._rvPreselect)) || cams[0];
       window._rvPreselect = null;
       sel.value = cam.id;
@@ -75,7 +76,7 @@
 
     buildTimeline();
     wireControls();
-    load(60); // default: last hour
+    load(1440); // default: last 24h (1 ngày)
     refreshDays();
   }
 
@@ -170,7 +171,7 @@
     const v = $('rv-video');
     previewBase = start;
     v.src = `/api/playback?id=${encodeURIComponent(cam.id)}&channel=${ch}&start=${encodeURIComponent(fmtParam(start))}&end=${encodeURIComponent(fmtParam(end))}`;
-    v.playbackRate = parseFloat($('rv-speed').value) || 1;
+    v.playbackRate = curSpeed;
     v.play().catch(() => {});
   }
 
@@ -227,7 +228,7 @@
     const v = $('rv-video');
     previewBase = seg.start;
     v.src = playbackURL({ id: cam.id, channel: ch, start: fmtParam(seg.start), end: fmtParam(seg.end) });
-    v.playbackRate = parseFloat($('rv-speed').value) || 1;
+    v.playbackRate = curSpeed;
     v.play().catch(() => {});
     timeline.setCustomTime(seg.start, 'playhead');
   }
@@ -338,9 +339,11 @@
   function updateDownloadLabel() {
     const btn = $('rv-download-dav');
     if (!btn || !cam) return;
-    // Tiandy has no pure-Go native-container download (StreamDav is unsupported),
-    // so hide the native button entirely — only the MP4 download applies.
-    if (cam.vendor === 'tiandy') { btn.hidden = true; return; }
+    // Hide the native/.dav button for Tiandy (no StreamDav) AND for any camera
+    // that plays back through a linked NVR (nvrId) — the native download isn't
+    // reliable via NVR fallback (e.g. a Tiandy NVR returns "unsupported"). Only
+    // the MP4 download applies there.
+    if (cam.vendor === 'tiandy' || cam.nvrId) { btn.hidden = true; return; }
     btn.hidden = false;
     btn.textContent = cam.vendor === 'hikvision' ? 'Tải gốc IMKH (chỉ VLC, không phát trên ĐT/trình duyệt)' : 'Tải .dav (gốc)';
   }
@@ -363,7 +366,13 @@
     $('rv-play').addEventListener('click', () => loadPreview(markerTime('playhead')));
     document.querySelectorAll('#view-review [data-seek]').forEach(b =>
       b.addEventListener('click', () => { v.currentTime = Math.max(0, v.currentTime + parseFloat(b.dataset.seek)); }));
-    $('rv-speed').addEventListener('change', () => { v.playbackRate = parseFloat($('rv-speed').value); });
+    const speeds = $('rv-speeds');
+    speeds.querySelectorAll('[data-speed]').forEach(b => b.addEventListener('click', () => {
+      curSpeed = parseFloat(b.dataset.speed) || 1;
+      v.playbackRate = curSpeed;
+      speeds.querySelectorAll('[data-speed]').forEach(x => x.classList.toggle('btn-primary', x === b));
+    }));
+    const one = speeds.querySelector('[data-speed="1"]'); if (one) one.classList.add('btn-primary');
     // The red playhead follows playback — but never while the user is dragging it.
     v.addEventListener('timeupdate', () => {
       if (draggingPlayhead || !previewBase) return;
