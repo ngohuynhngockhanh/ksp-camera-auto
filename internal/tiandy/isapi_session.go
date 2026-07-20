@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -57,6 +58,30 @@ type sessionTransport struct {
 
 const netIfacesPath = "/ISAPI/System/Network/interfaces"
 
+// streamChannelRe matches hik's encode path /ISAPI/Streaming/channels/{trackID}
+// (trackID = ch*100 + streamType). Tiandy serves the identical StreamingChannel
+// document at /CGI/Streaming/channels/{ch}/type/{streamType} instead.
+var streamChannelRe = regexp.MustCompile(`^/ISAPI/Streaming/channels/(\d+)$`)
+
+// remapPath rewrites the hik ISAPI paths whose Tiandy equivalent lives under
+// /CGI with a different shape but the SAME XML body, so hik's get/set logic
+// reuses unchanged. Currently: the per-stream encode document. hik builds the
+// stream id as ch0*100 + stream0 + 1 (ch0/stream0 both 0-based, so channel 0's
+// three streams are ids 1,2,3 and channel 1's are 101,102,103); Tiandy wants
+// /CGI/Streaming/channels/{ch1}/type/{type1} with 1-based channel and type
+// (type 1=main,2=sub,3=third) — verified live.
+func remapPath(path string) string {
+	if m := streamChannelRe.FindStringSubmatch(path); m != nil {
+		id, _ := strconv.Atoi(m[1])
+		if id >= 1 {
+			ch1 := (id-1)/100 + 1
+			typ1 := (id-1)%100 + 1
+			return fmt.Sprintf("/CGI/Streaming/channels/%d/type/%d", ch1, typ1)
+		}
+	}
+	return path
+}
+
 // Do implements isapi.Transport.
 func (t *sessionTransport) Do(ctx context.Context, method, path string, body []byte) ([]byte, error) {
 	// Tiandy doesn't serve the interface collection (returns notSupport); hik's
@@ -64,6 +89,7 @@ func (t *sessionTransport) Do(ctx context.Context, method, path string, body []b
 	if method == http.MethodGet && path == netIfacesPath {
 		return t.synthNetworkList(ctx)
 	}
+	path = remapPath(path)
 	data, status, err := t.doOnce(ctx, method, path, body)
 	if err != nil {
 		return nil, err
