@@ -435,7 +435,7 @@
       // fetch/concat/send progress to animate an in-page bar.
       const jobId = 'j' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
       url += '&job=' + jobId;
-      trackExport(jobId);
+      trackExport(jobId, rangeSec);
       msg = `Đang chuẩn bị clip ${Math.round(rangeSec / 60)} phút — theo dõi thanh tiến độ bên dưới. Trình duyệt sẽ TỰ BẬT tải khi clip sẵn sàng.`;
     } else if (isNative) {
       msg = rv === 'hikvision'
@@ -452,7 +452,7 @@
   // locked until the export finishes, errors, or (Dahua: no job is ever
   // registered — its export streams immediately) polling gives up.
   let expTimer = null;
-  function trackExport(jobId) {
+  function trackExport(jobId, rangeSec) {
     const wrap = $('rv-prog'), bar = $('rv-prog-bar'), txt = $('rv-prog-txt');
     const btns = [$('rv-download'), $('rv-download-dav')].filter(Boolean);
     if (!wrap || !bar || !txt) return;
@@ -462,6 +462,12 @@
     txt.textContent = 'Đang kết nối đầu ghi…';
     if (expTimer) clearInterval(expTimer);
     let misses = 0;
+    // Chunks fetch in parallel waves at ~realtime, so poll-based progress can
+    // sit at 0/N for ~30s then jump. Blend in a time-based estimate (expected
+    // build ≈ range/10 + overhead) so the bar creeps forward the whole time.
+    const t0 = Date.now();
+    const expectSec = Math.max(30, rangeSec / 10 + 25);
+    const estPct = () => Math.min(85, (Date.now() - t0) / 1000 / expectSec * 90);
     const finish = (m, isErr) => {
       clearInterval(expTimer); expTimer = null;
       wrap.hidden = true;
@@ -482,7 +488,7 @@
       if (st.phase === 'concat') { bar.style.width = '92%'; txt.textContent = 'Đang ghép file…'; return; }
       if (st.phase === 'send') { bar.style.width = '96%'; txt.textContent = 'Đang gửi về trình duyệt… (xem % ở mục tải xuống)'; return; }
       if (st.total > 0) {
-        const pct = Math.round(st.done / st.total * 90);
+        const pct = Math.round(Math.max(st.done / st.total * 90, estPct()));
         bar.style.width = Math.max(2, pct) + '%';
         txt.textContent = `Đang lấy dữ liệu từ đầu ghi… ${st.done}/${st.total} đoạn (${pct}%)`;
       }
