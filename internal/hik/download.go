@@ -28,9 +28,9 @@ import (
 // host/port address the device's ISAPI HTTP endpoint (port is the ISAPI
 // port, NOT the RTSP 554 StreamPlayback uses). channel is the native
 // (1-based) Hikvision channel number, matching FindRecordings/StreamPlayback.
-// start/end are device-local wall-clock times, converted to UTC via loc
-// (from Client.DeviceLocation, cached by the caller) for ISAPI's search.
-func StreamNative(ctx context.Context, w io.Writer, host string, port int, user, pass string, channel int, start, end time.Time, loc *time.Location) error {
+// start/end are device-local wall-clock times, passed to ISAPI search verbatim
+// (the device reads them as local; see isapi.hikTimeLayout) — no UTC conversion.
+func StreamNative(ctx context.Context, w io.Writer, host string, port int, user, pass string, channel int, start, end time.Time) error {
 	select {
 	case playbackSem <- struct{}{}:
 		defer func() { <-playbackSem }()
@@ -44,10 +44,8 @@ func StreamNative(ctx context.Context, w io.Writer, host string, port int, user,
 	// SearchTrack and connection setup, not the download itself.
 	cl := isapi.New(host, port, false, user, pass, 30*time.Second)
 
-	startUTC := inLocation(start, loc).UTC()
-	endUTC := inLocation(end, loc).UTC()
 	trackID := channel*100 + 1
-	segs, err := cl.SearchTrack(ctx, trackID, startUTC, endUTC, 40)
+	segs, err := cl.SearchTrack(ctx, trackID, start, end, 40)
 	if err != nil {
 		return fmt.Errorf("hik: native download %s: search: %w", host, err)
 	}

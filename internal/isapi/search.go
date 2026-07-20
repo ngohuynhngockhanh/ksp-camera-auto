@@ -13,16 +13,25 @@ import (
 	"time"
 )
 
-// hikTimeLayout is the UTC timestamp format ISAPI's content-search/download
-// interfaces accept and return: RFC3339 in UTC with a literal "Z" suffix
-// (e.g. "2026-07-19T00:00:00Z"), confirmed live against a DS-7632NXI-K2's
-// /ISAPI/ContentMgmt/search. Devices reject/mis-handle a numeric-offset
-// timestamp here, so callers must always convert to UTC first.
+// hikTimeLayout is the timestamp format ISAPI's content-search/download
+// interfaces accept and return: RFC3339 with a literal "Z" suffix
+// (e.g. "2026-07-19T00:00:00Z"), confirmed live against a DS-7632NXI-K2.
+//
+// CRITICAL: despite the "Z", this NVR treats the value as **device-LOCAL
+// wall-clock, ignoring the zone designator entirely** — proven live: a search
+// returned a still-recording segment ending "14:49:23Z" while the device's own
+// clock read 14:48 local (a recording cannot end in the future, so 14:49 must
+// be local, not UTC), and the same numeric range sent with "Z" vs a "+07:00"
+// offset returned identical results (the offset is ignored). So callers pass
+// the device-local wall-clock and read the results as device-local — NO UTC
+// conversion. A numeric offset other than a bare Z is mis-handled, so the "Z"
+// form is what we always send.
 const hikTimeLayout = "2006-01-02T15:04:05Z"
 
 // Segment is one recorded media segment returned by SearchTrack. Start/End
-// are in UTC (as the device reports them; convert with a DeviceLocation
-// offset to display device-local). Size is in bytes: read from the response's
+// carry the device-LOCAL wall-clock (see hikTimeLayout — the device's "Z" is
+// decorative), so format them directly for display; do NOT shift by any zone
+// offset. Size is in bytes: read from the response's
 // <size> element when present, else recovered from playbackURI's own "size"
 // query parameter (Hikvision embeds it there — confirmed live — so a
 // firmware that omits the XML element is still covered).
@@ -99,15 +108,17 @@ type cmMediaSegmentDescriptor struct {
 	PlaybackURI string `xml:"playbackURI"`
 }
 
-// SearchTrack lists recorded segments on one track over [startUTC,endUTC]
-// (both MUST already be UTC — see hikTimeLayout) via POST
+// SearchTrack lists recorded segments on one track over [start,end] via POST
 // /ISAPI/ContentMgmt/search, paging through searchResultPostion until every
-// numOfMatches segment has been collected. trackID is channel*100+1 for a
-// channel's main-stream recording track (verified live: 101 = channel 1).
-// max sets the device's own page size (<maxResults>); pass <=0 for a sane
-// default. The response can exceed the 1 MiB cap the config-call path (do)
-// enforces, so this bypasses it entirely via doUnbounded.
-func (c *Client) SearchTrack(ctx context.Context, trackID int, startUTC, endUTC time.Time, max int) ([]Segment, error) {
+// numOfMatches segment has been collected. start/end are device-LOCAL
+// wall-clock (see hikTimeLayout — the device ignores the zone designator and
+// interprets the value as local); their wall-clock fields are sent verbatim,
+// with no UTC conversion. trackID is channel*100+1 for a channel's main-stream
+// recording track (verified live: 101 = channel 1). max sets the device's own
+// page size (<maxResults>); pass <=0 for a sane default. The response can
+// exceed the 1 MiB cap the config-call path (do) enforces, so this bypasses it
+// entirely via doUnbounded.
+func (c *Client) SearchTrack(ctx context.Context, trackID int, start, end time.Time, max int) ([]Segment, error) {
 	if max <= 0 {
 		max = 40
 	}
@@ -119,8 +130,9 @@ func (c *Client) SearchTrack(ctx context.Context, trackID int, startUTC, endUTC 
 			SearchID:  searchID,
 			TrackList: cmTrackList{TrackID: trackID},
 			TimeSpanList: cmTimeSpanList{TimeSpan: cmTimeSpan{
-				StartTime: startUTC.UTC().Format(hikTimeLayout),
-				EndTime:   endUTC.UTC().Format(hikTimeLayout),
+				// Wall-clock sent verbatim (device-local; the "Z" is decorative).
+				StartTime: start.Format(hikTimeLayout),
+				EndTime:   end.Format(hikTimeLayout),
 			}},
 			ContentTypeList:     cmContentTypeList{ContentType: "video"},
 			MaxResults:          max,

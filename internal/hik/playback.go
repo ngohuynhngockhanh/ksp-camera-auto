@@ -36,11 +36,11 @@ func (t *tailWriter) Write(p []byte) (int, error) {
 // playbackRTSPURL builds Hikvision's RTSP playback-by-time URL for a channel.
 // channel is the native (1-based) Hikvision channel number; trackID =
 // channel*100+1 (same convention as SearchTrack — verified live: 101 =
-// channel 1 main stream). startUTC/endUTC MUST already be UTC (the device
-// rejects/mis-handles a numeric-offset timestamp here, same as SearchTrack),
-// formatted compact per Hikvision's playbackURI convention
-// ("20260719T020941Z", confirmed live in a real playbackURI).
-func playbackRTSPURL(host, user, pass string, channel int, startUTC, endUTC time.Time) string {
+// channel 1 main stream). start/end are device-LOCAL wall-clock times sent
+// verbatim (the device interprets the "Z"-suffixed value as local, same as
+// ISAPI search — see isapi.hikTimeLayout), formatted compact per Hikvision's
+// playbackURI convention ("20260719T020941Z", confirmed live).
+func playbackRTSPURL(host, user, pass string, channel int, start, end time.Time) string {
 	const f = "20060102T150405Z"
 	u := url.URL{
 		Scheme: "rtsp",
@@ -48,7 +48,7 @@ func playbackRTSPURL(host, user, pass string, channel int, startUTC, endUTC time
 		Host:   fmt.Sprintf("%s:554", host),
 		Path:   fmt.Sprintf("/Streaming/tracks/%d/", channel*100+1),
 	}
-	u.RawQuery = fmt.Sprintf("starttime=%s&endtime=%s", startUTC.UTC().Format(f), endUTC.UTC().Format(f))
+	u.RawQuery = fmt.Sprintf("starttime=%s&endtime=%s", start.Format(f), end.Format(f))
 	return u.String()
 }
 
@@ -60,15 +60,15 @@ func playbackRTSPURL(host, user, pass string, channel int, startUTC, endUTC time
 // download, which is segment-coarse — see download.go), so this is the
 // accurate, browser-playable path.
 //
-// start/end are device-local wall-clock times (the review UI's convention);
-// loc (from Client.DeviceLocation, cached by the caller) converts them to the
-// UTC the RTSP URL requires. port is accepted for signature parity with
-// StreamNative (which needs it to reach ISAPI over HTTP) but unused here —
-// Hikvision RTSP playback is always on the fixed port 554.
+// start/end are device-local wall-clock times (the review UI's convention),
+// sent to the NVR verbatim — no UTC conversion (the device reads its own
+// recordings in local time; see isapi.hikTimeLayout). port is accepted for
+// signature parity with StreamNative (which needs it to reach ISAPI over HTTP)
+// but unused here — Hikvision RTSP playback is always on the fixed port 554.
 //
 // Acquiring a concurrency slot can block; it respects ctx so a client that
 // disconnects while queued doesn't hold the request.
-func StreamPlayback(ctx context.Context, w io.Writer, host string, port int, user, pass string, channel int, start, end time.Time, loc *time.Location) error {
+func StreamPlayback(ctx context.Context, w io.Writer, host string, port int, user, pass string, channel int, start, end time.Time) error {
 	select {
 	case playbackSem <- struct{}{}:
 		defer func() { <-playbackSem }()
@@ -76,14 +76,19 @@ func StreamPlayback(ctx context.Context, w io.Writer, host string, port int, use
 		return fmt.Errorf("hik: playback %s: %w (waiting for a slot)", host, ctx.Err())
 	}
 
-	startUTC := inLocation(start, loc).UTC()
-	endUTC := inLocation(end, loc).UTC()
-	rtsp := playbackRTSPURL(host, user, pass, channel, startUTC, endUTC)
+	rtsp := playbackRTSPURL(host, user, pass, channel, start, end)
 	cmd := exec.CommandContext(ctx, "ffmpeg",
 		"-nostdin",
 		"-rtsp_transport", "tcp",
 		"-i", rtsp,
 		"-c", "copy",
+		// The NVR records HEVC/H.265 on every channel (main AND sub). ffmpeg's
+		// default fourcc for an HEVC track in MP4 is "hev1", but Safari/iOS
+		// only plays HEVC-in-MP4 when the track is tagged "hvc1" — hev1 is
+		// silently refused (Chrome/Firefox can't decode HEVC at all either
+		// way, tag notwithstanding). Retagging is free: it's still -c copy,
+		// no re-encode, just rewriting the sample entry fourcc.
+		"-tag:v", "hvc1",
 		"-fflags", "+genpts",
 		"-movflags", "frag_keyframe+empty_moov+default_base_moof",
 		"-f", "mp4",

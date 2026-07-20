@@ -309,18 +309,32 @@
   }
 
   // updateDownloadLabel relabels the "native/fast" download button per the
-  // selected camera's vendor: Dahua's is a byte-exact .dav (DHAV); Hikvision's
-  // is its own proprietary IMKH container (format=dav maps to hik.StreamNative
-  // server-side — see internal/server/api.go handlePlayback) — same query
-  // param, different on-device format, so the label needs to say which.
+  // selected camera's vendor: Dahua's is a byte-exact .dav (DHAV), which VLC
+  // and most players on any OS open fine. Hikvision's is its own proprietary
+  // IMKH container (format=dav maps to hik.StreamNative server-side — see
+  // internal/server/api.go handlePlayback) — same query param, different
+  // on-device format, but IMKH is NOT a real MP4: it only opens in VLC/a
+  // desktop player, never on iPhone or in a browser. The label has to say so
+  // plainly or people click it expecting a normal video file.
   function updateDownloadLabel() {
     const btn = $('rv-download-dav');
     if (!btn || !cam) return;
-    btn.textContent = cam.vendor === 'hikvision' ? 'Tải nhanh (IMKH)' : 'Tải .dav (gốc)';
+    btn.textContent = cam.vendor === 'hikvision' ? 'Tải gốc IMKH (chỉ VLC, không phát trên ĐT/trình duyệt)' : 'Tải .dav (gốc)';
   }
 
   function wireControls() {
     const v = $('rv-video');
+    // HEVC-unsupported hint: the NVR records H.265 on every channel, and
+    // Chrome/Firefox on desktop simply can't decode it (this box is too slow
+    // to transcode, so there's no fallback stream to offer). When the
+    // <video> fires a MEDIA_ERR_SRC_NOT_SUPPORTED, tell the user instead of
+    // leaving a silently broken player. Cleared on the next successful load.
+    v.addEventListener('error', () => {
+      if (v.error && v.error.code === 4) { const h = $('rv-hevc-hint'); if (h) h.hidden = false; }
+    });
+    ['loadeddata', 'playing'].forEach(ev => v.addEventListener(ev, () => {
+      const h = $('rv-hevc-hint'); if (h) h.hidden = true;
+    }));
     // ▶ Phát previews from the red playhead's current position (native controls
     // give play/pause + seek bar within the loaded short clip).
     $('rv-play').addEventListener('click', () => loadPreview(markerTime('playhead')));
@@ -360,7 +374,7 @@
     let msg = 'Đang tải… (đoạn dài có thể mất chút thời gian)';
     if (isDav) {
       msg = cam.vendor === 'hikvision'
-        ? 'Đang tải nhanh (định dạng IMKH gốc)… (không cắt chính xác theo giây, xem bằng VLC)'
+        ? 'Đang tải bản gốc IMKH (nhanh, chất lượng đầy đủ, không cắt chính xác theo giây)… Tệp này CHỈ mở được bằng VLC trên máy tính — KHÔNG phát được trên iPhone hay trong trình duyệt.'
         : 'Đang tải .dav gốc… (cần cổng cấu hình)';
     }
     showToast(msg, 'ok');

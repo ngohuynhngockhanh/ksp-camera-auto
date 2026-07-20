@@ -226,18 +226,23 @@ func TestSearchTrackNoMatches(t *testing.T) {
 	}
 }
 
-// TestSearchTrackXMLShapeAndUTCTimes checks the wire body: XML declaration,
-// UTC "Z" timestamps regardless of the input time's own zone.
-func TestSearchTrackXMLShapeAndUTCTimes(t *testing.T) {
+// TestSearchTrackXMLShapeAndTimes checks the wire body: XML declaration, and
+// the request's <startTime>/<endTime> carrying the SAME wall-clock digits as
+// the input time — no UTC conversion (the device treats the "Z" suffix as
+// decorative and reads the value as its own local clock; see hikTimeLayout).
+func TestSearchTrackXMLShapeAndTimes(t *testing.T) {
 	fake := newFakeSearchServer("admin", "duyanh68A")
 	fake.searchPages = []cmSearchResult{{ResponseStatus: "NO MATCHES"}}
 	srv := httptest.NewServer(fake.handler())
 	defer srv.Close()
 	c := newSearchTestClient(t, srv, "admin", "duyanh68A")
 
+	// Device-local wall-clock input (tagged with an arbitrary +07:00 zone, as
+	// a caller might hand in a zone-aware time.Time). The request body must
+	// carry these SAME wall-clock digits verbatim, not shifted to UTC.
 	loc := time.FixedZone("device", 7*3600)
-	start := time.Date(2026, 7, 19, 7, 0, 0, 0, loc) // 00:00 UTC
-	end := time.Date(2026, 7, 20, 6, 59, 59, 0, loc) // 2026-07-19T23:59:59Z
+	start := time.Date(2026, 7, 19, 0, 0, 0, 0, loc)
+	end := time.Date(2026, 7, 19, 23, 59, 59, 0, loc)
 	if _, err := c.SearchTrack(context.Background(), 101, start, end, 40); err != nil {
 		t.Fatalf("SearchTrack: %v", err)
 	}
@@ -246,10 +251,10 @@ func TestSearchTrackXMLShapeAndUTCTimes(t *testing.T) {
 	req := fake.searchReqs[0]
 	fake.mu.Unlock()
 	if req.TimeSpanList.TimeSpan.StartTime != "2026-07-19T00:00:00Z" {
-		t.Fatalf("startTime = %q, want UTC Z-suffixed", req.TimeSpanList.TimeSpan.StartTime)
+		t.Fatalf("startTime = %q, want verbatim wall-clock 2026-07-19T00:00:00Z (no offset applied)", req.TimeSpanList.TimeSpan.StartTime)
 	}
 	if req.TimeSpanList.TimeSpan.EndTime != "2026-07-19T23:59:59Z" {
-		t.Fatalf("endTime = %q, want UTC Z-suffixed", req.TimeSpanList.TimeSpan.EndTime)
+		t.Fatalf("endTime = %q, want verbatim wall-clock 2026-07-19T23:59:59Z (no offset applied)", req.TimeSpanList.TimeSpan.EndTime)
 	}
 
 	body, err := xml.Marshal(cmSearchDescription{
@@ -278,6 +283,48 @@ func TestSearchTrackXMLShapeAndUTCTimes(t *testing.T) {
 		if !strings.Contains(full, want) {
 			t.Errorf("marshaled CMSearchDescription missing %q: %s", want, full)
 		}
+	}
+}
+
+// TestSearchTrackNoOffsetAppliedRegardlessOfInputZone is the regression test
+// for the timezone-conversion bug: the SAME wall-clock start (10:00:00),
+// tagged with two different zones (UTC and +07:00), must produce the
+// IDENTICAL request <startTime> — proof no offset-driven shift happens on
+// the way out. Before the fix, SearchTrack called start.UTC() before
+// formatting, which would have shifted the +07:00 case to 03:00:00.
+func TestSearchTrackNoOffsetAppliedRegardlessOfInputZone(t *testing.T) {
+	fake := newFakeSearchServer("admin", "duyanh68A")
+	fake.searchPages = []cmSearchResult{
+		{ResponseStatus: "NO MATCHES"},
+		{ResponseStatus: "NO MATCHES"},
+	}
+	srv := httptest.NewServer(fake.handler())
+	defer srv.Close()
+	c := newSearchTestClient(t, srv, "admin", "duyanh68A")
+
+	utcStart := time.Date(2026, 7, 19, 10, 0, 0, 0, time.UTC)
+	plus7 := time.FixedZone("device", 7*3600)
+	plus7Start := time.Date(2026, 7, 19, 10, 0, 0, 0, plus7)
+
+	if _, err := c.SearchTrack(context.Background(), 101, utcStart, utcStart, 40); err != nil {
+		t.Fatalf("SearchTrack (UTC): %v", err)
+	}
+	if _, err := c.SearchTrack(context.Background(), 101, plus7Start, plus7Start, 40); err != nil {
+		t.Fatalf("SearchTrack (+07:00): %v", err)
+	}
+
+	fake.mu.Lock()
+	reqs := fake.searchReqs
+	fake.mu.Unlock()
+	if len(reqs) != 2 {
+		t.Fatalf("expected 2 search requests, got %d", len(reqs))
+	}
+	if reqs[0].TimeSpanList.TimeSpan.StartTime != "2026-07-19T10:00:00Z" {
+		t.Fatalf("UTC-tagged startTime = %q, want 2026-07-19T10:00:00Z", reqs[0].TimeSpanList.TimeSpan.StartTime)
+	}
+	if reqs[1].TimeSpanList.TimeSpan.StartTime != reqs[0].TimeSpanList.TimeSpan.StartTime {
+		t.Fatalf("startTime depends on the input's zone (UTC %q vs +07:00 %q) — must be identical wall-clock, no offset applied",
+			reqs[0].TimeSpanList.TimeSpan.StartTime, reqs[1].TimeSpanList.TimeSpan.StartTime)
 	}
 }
 

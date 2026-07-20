@@ -735,32 +735,9 @@ type hikCamera struct {
 	client  *hik.Client
 	device  config.Device
 	timeout time.Duration
-
-	// loc caches the device's own UTC offset (from hik.Client.DeviceLocation)
-	// across the several Recorder calls one request can make (FindRecordings,
-	// then StreamPlayback/StreamDav), so it's resolved at most once per
-	// hikCamera instance rather than once per call. hikCamera instances are
-	// created fresh per request by Open and never shared across goroutines,
-	// so no locking is needed here.
-	loc *time.Location
 }
 
 func (h *hikCamera) Close() error { return h.client.Close() }
-
-// location resolves and caches the device's own UTC offset, used to convert
-// the review UI's device-local recording times for ISAPI's UTC-only content
-// search/download (see hik.Client.DeviceLocation).
-func (h *hikCamera) location(ctx context.Context) (*time.Location, error) {
-	if h.loc != nil {
-		return h.loc, nil
-	}
-	loc, err := h.client.DeviceLocation(ctx)
-	if err != nil {
-		return nil, err
-	}
-	h.loc = loc
-	return loc, nil
-}
 
 func (h *hikCamera) ChangePassword(ctx context.Context, newUser, newPass string) error {
 	return h.client.SetPassword(ctx, newUser, newPass)
@@ -810,11 +787,7 @@ func (h *hikCamera) FindRecordings(ctx context.Context, channel int, start, end 
 // fragmented MP4, remuxed from Hikvision RTSP playback-by-time (see
 // hik.StreamPlayback) — accurate to the requested range, browser-playable.
 func (h *hikCamera) StreamPlayback(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
-	loc, err := h.location(ctx)
-	if err != nil {
-		return fmt.Errorf("hik playback %s: %w", h.device.Host, err)
-	}
-	return hik.StreamPlayback(ctx, w, h.device.Host, h.device.Port, h.device.Username, h.device.Password, isapiChannel(channel), start, end, loc)
+	return hik.StreamPlayback(ctx, w, h.device.Host, h.device.Port, h.device.Username, h.device.Password, isapiChannel(channel), start, end)
 }
 
 // StreamDav streams a channel's [start,end] recording to w as Hikvision's
@@ -822,11 +795,7 @@ func (h *hikCamera) StreamPlayback(ctx context.Context, w io.Writer, channel int
 // .dav; see hik.StreamNative). Segment-coarse, not range-exact, but no
 // ffmpeg/remux — the fast option when precise cut boundaries don't matter.
 func (h *hikCamera) StreamDav(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
-	loc, err := h.location(ctx)
-	if err != nil {
-		return fmt.Errorf("hik native download %s: %w", h.device.Host, err)
-	}
-	return hik.StreamNative(ctx, w, h.device.Host, h.device.Port, h.device.Username, h.device.Password, isapiChannel(channel), start, end, loc)
+	return hik.StreamNative(ctx, w, h.device.Host, h.device.Port, h.device.Username, h.device.Password, isapiChannel(channel), start, end)
 }
 
 // isapiChannel converts a vendor-neutral (0-based) Profile.Channel to

@@ -17,13 +17,14 @@ import (
 
 // fakeHikServer emulates just enough of an NVR to exercise FindRecordings
 // against a real HTTP+Digest round trip (no live device/credential gating):
-// GET /ISAPI/System/time and POST /ISAPI/ContentMgmt/search. Auth is checked
-// against isapi's own exported Challenge/BuildAuthorization — the same
-// credential math the real Client computes — so this doubles as an
-// end-to-end proof the request actually authenticates.
+// POST /ISAPI/ContentMgmt/search. Auth is checked against isapi's own
+// exported Challenge/BuildAuthorization — the same credential math the real
+// Client computes — so this doubles as an end-to-end proof the request
+// actually authenticates. No /ISAPI/System/time handler: FindRecordings no
+// longer does a DeviceLocation lookup (times are passed through verbatim,
+// device-local wall-clock in and out — see mediafind.go/isapi.hikTimeLayout).
 type fakeHikServer struct {
 	realm, nonce, user, pass string
-	localTime                string
 
 	mu         sync.Mutex
 	searchReqs []string
@@ -74,9 +75,6 @@ func (s *fakeHikServer) handler() http.HandlerFunc {
 			return
 		}
 		switch {
-		case r.URL.Path == "/ISAPI/System/time" && r.Method == http.MethodGet:
-			w.Header().Set("Content-Type", "application/xml")
-			fmt.Fprintf(w, `<Time><localTime>%s</localTime><timeZone>CST-7:00:00</timeZone></Time>`, s.localTime)
 		case r.URL.Path == "/ISAPI/ContentMgmt/search" && r.Method == http.MethodPost:
 			body, _ := io.ReadAll(r.Body)
 			s.mu.Lock()
@@ -110,22 +108,27 @@ func newFakeHikClient(t *testing.T, srv *httptest.Server, user, pass string) *Cl
 	return Dial(host, port, false, user, pass, 5*time.Second)
 }
 
-// TestFindRecordingsConvertsLocalToUTCAndBack exercises the full
-// device-local -> UTC (request) -> device-local (response) round trip
-// FindRecordings does via DeviceLocation, against a device whose <localTime>
-// reports UTC+7 (this project's live Hik NVR is UTC+7, per memory).
-func TestFindRecordingsConvertsLocalToUTCAndBack(t *testing.T) {
+// TestFindRecordingsPassesTimesVerbatim exercises FindRecordings end to end:
+// the device-local wall-clock input must reach the search request body
+// UNCHANGED, and the device-local wall-clock times in the response must
+// reach dahua.Recording.StartTime/EndTime UNCHANGED — no UTC/offset
+// conversion in either direction (this NVR treats ISAPI search's "Z"-suffixed
+// times as device-local regardless of the zone designator; see
+// isapi.hikTimeLayout). This is the regression test for the bug where an
+// earlier version converted local<->UTC via a DeviceLocation lookup, shifting
+// every listing and playback request by the device's whole UTC offset (7h
+// for this project's live UTC+7 NVR).
+func TestFindRecordingsPassesTimesVerbatim(t *testing.T) {
 	fake := newFakeHikServer("admin", "duyanh68A")
-	fake.localTime = "2026-07-19T12:00:00+07:00"
 	srv := httptest.NewServer(fake.handler())
 	defer srv.Close()
 	c := newFakeHikClient(t, srv, "admin", "duyanh68A")
 
-	// Zone-less "device-local wall clock" times, exactly as the web API's
+	// Device-local wall-clock times, exactly as the web API's
 	// parsePlaybackTime hands them (time.Parse with no zone -> UTC-tagged,
 	// but the HOUR/MINUTE/SECOND fields are what actually matter here).
-	start := time.Date(2026, 7, 19, 8, 0, 0, 0, time.UTC)
-	end := time.Date(2026, 7, 19, 9, 0, 0, 0, time.UTC)
+	start := time.Date(2026, 7, 19, 1, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 7, 19, 2, 0, 0, 0, time.UTC)
 
 	recs, err := c.FindRecordings(context.Background(), 1, start, end)
 	if err != nil {
@@ -138,12 +141,14 @@ func TestFindRecordingsConvertsLocalToUTCAndBack(t *testing.T) {
 	if r.Channel != 1 {
 		t.Fatalf("Channel = %d, want 1", r.Channel)
 	}
-	// The fake's segment is UTC 01:00-02:00 -> device-local (+07:00) 08:00-09:00.
-	if r.StartTime != "2026-07-19 08:00:00" {
-		t.Fatalf("StartTime = %q, want device-local 2026-07-19 08:00:00", r.StartTime)
+	// The fake's segment is "2026-07-19T01:00:00Z" - "2026-07-19T02:00:00Z"
+	// (device-local, decorative "Z" per hikTimeLayout) -> must come back as
+	// that SAME wall-clock, not shifted by any offset.
+	if r.StartTime != "2026-07-19 01:00:00" {
+		t.Fatalf("StartTime = %q, want verbatim device-local 2026-07-19 01:00:00 (no offset applied)", r.StartTime)
 	}
-	if r.EndTime != "2026-07-19 09:00:00" {
-		t.Fatalf("EndTime = %q, want device-local 2026-07-19 09:00:00", r.EndTime)
+	if r.EndTime != "2026-07-19 02:00:00" {
+		t.Fatalf("EndTime = %q, want verbatim device-local 2026-07-19 02:00:00 (no offset applied)", r.EndTime)
 	}
 	if r.Duration != 3600 {
 		t.Fatalf("Duration = %d, want 3600", r.Duration)
@@ -164,11 +169,12 @@ func TestFindRecordingsConvertsLocalToUTCAndBack(t *testing.T) {
 	if !strings.Contains(reqs[0], "<trackID>101</trackID>") {
 		t.Fatalf("search request missing trackID=101 (channel 1 * 100 + 1): %s", reqs[0])
 	}
-	// The device-local 08:00-09:00 input must be sent as UTC 01:00-02:00.
+	// The device-local 01:00-02:00 input must be sent VERBATIM, not shifted
+	// by any UTC offset.
 	if !strings.Contains(reqs[0], "<startTime>2026-07-19T01:00:00Z</startTime>") {
-		t.Fatalf("search request startTime not converted device-local -> UTC: %s", reqs[0])
+		t.Fatalf("search request startTime was not sent verbatim (no offset applied): %s", reqs[0])
 	}
 	if !strings.Contains(reqs[0], "<endTime>2026-07-19T02:00:00Z</endTime>") {
-		t.Fatalf("search request endTime not converted device-local -> UTC: %s", reqs[0])
+		t.Fatalf("search request endTime was not sent verbatim (no offset applied): %s", reqs[0])
 	}
 }
