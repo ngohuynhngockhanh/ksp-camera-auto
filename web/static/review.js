@@ -1,7 +1,8 @@
 /* Xem lại video — timeline review view.
  * Uses vis-timeline for the segment timeline + three draggable custom-time bars
  * (red playhead, green cut-start, yellow cut-end). Reuses global helpers from
- * app.js: api(), escapeHtml(), showToast(), timeoutSec(). Dahua-only. */
+ * app.js: api(), escapeHtml(), showToast(), timeoutSec(). Dahua + Hikvision
+ * (any vendor whose /api/recordings + /api/playback support recordings). */
 (function () {
   let timeline = null;      // vis.Timeline
   let items = null;         // vis.DataSet
@@ -40,27 +41,29 @@
     if (window._rvPreselect && window._rvCams) {
       const c = window._rvCams.find(c => c.id === window._rvPreselect);
       window._rvPreselect = null;
-      if (c && c.id !== (cam && cam.id)) { $('rv-cam').value = c.id; cam = c; load(60); }
+      if (c && c.id !== (cam && cam.id)) { $('rv-cam').value = c.id; cam = c; updateDownloadLabel(); load(60); }
     }
   };
 
   async function init() {
     try { const cfg = await api('/api/config'); if (cfg && cfg.maxReviewHours) maxHours = cfg.maxReviewHours; } catch (e) { /* keep default 72 */ }
-    // Populate camera dropdown (Dahua only — playback is Dahua-only).
+    // Populate camera dropdown (playback works for Dahua and Hikvision —
+    // any vendor camera.Open()'s Camera implements camera.Recorder for).
     const sel = $('rv-cam');
     try {
-      const cams = (await api('/api/cameras') || []).filter(c => c.vendor === 'dahua');
-      if (!cams.length) { sel.innerHTML = '<option>Không có camera Dahua</option>'; return; }
+      const cams = (await api('/api/cameras') || []).filter(c => c.vendor === 'dahua' || c.vendor === 'hikvision');
+      if (!cams.length) { sel.innerHTML = '<option>Không có camera hỗ trợ xem lại</option>'; return; }
       sel.innerHTML = cams.map(c => {
         const chan = c.channelName || c.nvrName || '';
         const label = (c.name || c.host) + (chan ? ' - ' + chan : '');
         return `<option value="${escapeHtml(c.id)}">${escapeHtml(label)}</option>`;
       }).join('');
       window._rvCams = cams;
-      sel.addEventListener('change', () => { cam = cams.find(c => c.id === sel.value); load(60); refreshDays(); });
+      sel.addEventListener('change', () => { cam = cams.find(c => c.id === sel.value); updateDownloadLabel(); load(60); refreshDays(); });
       cam = (window._rvPreselect && cams.find(c => c.id === window._rvPreselect)) || cams[0];
       window._rvPreselect = null;
       sel.value = cam.id;
+      updateDownloadLabel();
     } catch (e) { sel.innerHTML = '<option>Lỗi tải camera</option>'; return; }
 
     // Quick-time buttons.
@@ -248,6 +251,17 @@
     return u + (extra || '');
   }
 
+  // updateDownloadLabel relabels the "native/fast" download button per the
+  // selected camera's vendor: Dahua's is a byte-exact .dav (DHAV); Hikvision's
+  // is its own proprietary IMKH container (format=dav maps to hik.StreamNative
+  // server-side — see internal/server/api.go handlePlayback) — same query
+  // param, different on-device format, so the label needs to say which.
+  function updateDownloadLabel() {
+    const btn = $('rv-download-dav');
+    if (!btn || !cam) return;
+    btn.textContent = cam.vendor === 'hikvision' ? 'Tải nhanh (IMKH)' : 'Tải .dav (gốc)';
+  }
+
   function wireControls() {
     const v = $('rv-video');
     // ▶ Phát previews from the red playhead's current position (native controls
@@ -285,7 +299,13 @@
     if (p.endDate <= p.startDate) { showToast('Chọn đoạn cắt hợp lệ.', 'err'); return; }
     window.location.href = playbackURL(p, (extra || '') + '&download=1');
     const isDav = (extra || '').includes('format=dav');
-    showToast(isDav ? 'Đang tải .dav gốc… (cần cổng cấu hình)' : 'Đang tải… (đoạn dài có thể mất chút thời gian)', 'ok');
+    let msg = 'Đang tải… (đoạn dài có thể mất chút thời gian)';
+    if (isDav) {
+      msg = cam.vendor === 'hikvision'
+        ? 'Đang tải nhanh (định dạng IMKH gốc)… (không cắt chính xác theo giây, xem bằng VLC)'
+        : 'Đang tải .dav gốc… (cần cổng cấu hình)';
+    }
+    showToast(msg, 'ok');
   }
 
   async function showQR() {

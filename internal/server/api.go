@@ -46,32 +46,32 @@ func (s *Server) reqTimeout(sec int) time.Duration {
 // passed login, the same trust boundary every other admin action here relies
 // on (ChangePassword, network/Wi-Fi config, etc.).
 type deviceView struct {
-	ID         string        `json:"id"`
-	Name       string        `json:"name"`
-	Host       string        `json:"host"`
-	Port       int           `json:"port"`
-	Vendor     config.Vendor `json:"vendor"`
-	Username   string        `json:"username"`
-	Password   string        `json:"password"`
-	NVRID      string        `json:"nvrId,omitempty"`
-	NVRChannel int           `json:"nvrChannel,omitempty"`
-	NVRName     string       `json:"nvrName,omitempty"`
-	ChannelName string       `json:"channelName,omitempty"`
-	NoStorage   bool         `json:"noStorage,omitempty"`
-	IsNVR       bool         `json:"isNvr,omitempty"`
+	ID          string        `json:"id"`
+	Name        string        `json:"name"`
+	Host        string        `json:"host"`
+	Port        int           `json:"port"`
+	Vendor      config.Vendor `json:"vendor"`
+	Username    string        `json:"username"`
+	Password    string        `json:"password"`
+	NVRID       string        `json:"nvrId,omitempty"`
+	NVRChannel  int           `json:"nvrChannel,omitempty"`
+	NVRName     string        `json:"nvrName,omitempty"`
+	ChannelName string        `json:"channelName,omitempty"`
+	NoStorage   bool          `json:"noStorage,omitempty"`
+	IsNVR       bool          `json:"isNvr,omitempty"`
 }
 
 func toView(d config.Device) deviceView {
 	return deviceView{
-		ID:         d.ID,
-		Name:       d.Name,
-		Host:       d.Host,
-		Port:       d.Port,
-		Vendor:     d.Vendor,
-		Username:   d.Username,
-		Password:   d.Password,
-		NVRID:      d.NVRID,
-		NVRChannel: d.NVRChannel,
+		ID:          d.ID,
+		Name:        d.Name,
+		Host:        d.Host,
+		Port:        d.Port,
+		Vendor:      d.Vendor,
+		Username:    d.Username,
+		Password:    d.Password,
+		NVRID:       d.NVRID,
+		NVRChannel:  d.NVRChannel,
 		NVRName:     d.NVRName,
 		ChannelName: d.ChannelName,
 		NoStorage:   d.NoStorage,
@@ -1478,7 +1478,8 @@ func parsePlaybackTime(s string) (time.Time, error) {
 
 // handleRecordings handles GET /api/recordings?id=&channel=&start=&end= —
 // list stored recording segments (the playback timeline) for one channel over
-// a time range. Dahua-only.
+// a time range. Works for any vendor whose camera.Camera implements
+// camera.Recorder (currently Dahua and Hikvision).
 func (s *Server) handleRecordings(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -1543,9 +1544,12 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 
 // handlePlayback handles GET /api/playback?id=&channel=&start=&end=&download= —
 // stream one channel's [start,end] recording to the client as fragmented MP4,
-// remuxed from Dahua RTSP playback with nothing buffered on the box (see
-// dahua.StreamPlayback). download=1 forces a file download; otherwise it plays
-// inline (HTML5 <video>). Dahua-only.
+// remuxed from the device's own RTSP playback with nothing buffered on the
+// box (dahua.StreamPlayback / hik.StreamPlayback). download=1 forces a file
+// download; otherwise it plays inline (HTML5 <video>). format=dav switches to
+// each vendor's native, byte-exact container instead of the MP4 remux
+// (Dahua's DHAV .dav; Hikvision's IMKH — see the per-vendor branch below).
+// Dahua and Hikvision only.
 func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -1589,7 +1593,7 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 	// A camera with no local storage serves its recordings/downloads from the
 	// linked NVR channel instead.
 	d, channel = s.recordingSource(d, channel)
-	if d.Vendor != config.VendorDahua {
+	if d.Vendor != config.VendorDahua && d.Vendor != config.VendorHikvision {
 		writeErr(w, http.StatusBadRequest, notDahuaErr)
 		return
 	}
@@ -1602,35 +1606,90 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 
-	// Always use normal (paced) playback: it is fragmented MP4 with EVERY frame,
-	// playable everywhere. The RTSP "Rate-Control: no" fast path (StreamPlaybackFast)
-	// is retained but NOT used for downloads — on these camera firmwares that mode
-	// only emits keyframes (~1 fps), so the file looked choppy/frozen. fast=1 is
-	// accepted for backward compat but routed to the same full-frame stream.
-	// format=dav downloads the camera's native .dav (DHAV) over DVRIP, byte-exact
-	// with no remux; anything else is the default fragmented MP4 over RTSP. Both
-	// stream funcs share the same signature, so this is a drop-in swap.
-	stream := dahua.StreamPlayback
+	native := q.Get("format") == "dav"
 	ext, ctype := "mp4", "video/mp4"
-	if q.Get("format") == "dav" {
-		stream = dahua.StreamDav
-		ext, ctype = "dav", "application/octet-stream"
-	}
-	fname := fmt.Sprintf("playback_ch%d_%s.%s", channel, start.Format("20060102_150405"), ext)
-	w.Header().Set("Content-Type", ctype)
-	if q.Get("download") != "" {
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fname))
-	}
-	cw := &countingWriter{w: w}
-	if err := stream(ctx, cw, d.Host, d.Username, d.Password, channel, start, end); err != nil {
-		if cw.n == 0 {
-			// Nothing sent yet — the status line is still ours to set.
+	var streamErr error
+
+	switch d.Vendor {
+	case config.VendorDahua:
+		// Playback is pure RTSP+ffmpeg and deliberately does NOT open a DVRIP
+		// session: the recorded stream comes over port 554, and skipping the
+		// DVRIP login means a download isn't blocked when the camera's config
+		// port is busy (these field cameras are often also recorded by
+		// another system). So it streams straight off d, resolved from
+		// inventory above — no camera.Open here.
+		//
+		// Always use normal (paced) playback: it is fragmented MP4 with EVERY
+		// frame, playable everywhere. The RTSP "Rate-Control: no" fast path
+		// (StreamPlaybackFast) is retained but NOT used for downloads — on
+		// these camera firmwares that mode only emits keyframes (~1 fps), so
+		// the file looked choppy/frozen. fast=1 is accepted for backward
+		// compat but routed to the same full-frame stream.
+		// format=dav downloads the camera's native .dav (DHAV) over DVRIP,
+		// byte-exact with no remux; anything else is the default fragmented
+		// MP4 over RTSP. Both stream funcs share the same signature, so this
+		// is a drop-in swap.
+		stream := dahua.StreamPlayback
+		if native {
+			stream = dahua.StreamDav
+			ext, ctype = "dav", "application/octet-stream"
+		}
+		fname := fmt.Sprintf("playback_ch%d_%s.%s", channel, start.Format("20060102_150405"), ext)
+		w.Header().Set("Content-Type", ctype)
+		if q.Get("download") != "" {
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fname))
+		}
+		cw := &countingWriter{w: w}
+		streamErr = stream(ctx, cw, d.Host, d.Username, d.Password, channel, start, end)
+		if streamErr != nil {
+			if cw.n == 0 {
+				writeErr(w, http.StatusBadGateway, streamErr.Error())
+				return
+			}
+			log.Printf("playback %s ch%d: stream error after %d bytes: %v", q.Get("id"), channel, cw.n, streamErr)
+		}
+		return
+	case config.VendorHikvision:
+		// Unlike Dahua, Hik playback/download DOES go through camera.Open
+		// (ISAPI over HTTP, the only transport this build has for Hikvision —
+		// there's no separate unauthenticated media port to bypass a busy
+		// config connection with).
+		cam, err := camera.Open(ctx, d, time.Duration(timeoutSeconds)*time.Second)
+		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
 		}
-		// Bytes already streamed: can't change the status. Log and drop the
-		// connection so the client sees a truncated (failed) download.
-		log.Printf("playback %s ch%d: stream error after %d bytes: %v", q.Get("id"), channel, cw.n, err)
+		defer cam.Close()
+		rec, ok := cam.(camera.Recorder)
+		if !ok {
+			writeErr(w, http.StatusBadRequest, notDahuaErr)
+			return
+		}
+		// format=dav maps to Hik's own native container (magic "IMKH" — see
+		// hik.StreamNative): keep Hik's own ".mp4" file-naming convention
+		// (that's what the device itself calls it) but an octet-stream
+		// content-type since it's NOT a standard, browser-playable MP4.
+		if native {
+			ctype = "application/octet-stream"
+		}
+		fname := fmt.Sprintf("playback_ch%d_%s.%s", channel, start.Format("20060102_150405"), ext)
+		w.Header().Set("Content-Type", ctype)
+		if q.Get("download") != "" {
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fname))
+		}
+		cw := &countingWriter{w: w}
+		if native {
+			streamErr = rec.StreamDav(ctx, cw, channel, start, end)
+		} else {
+			streamErr = rec.StreamPlayback(ctx, cw, channel, start, end)
+		}
+		if streamErr != nil {
+			if cw.n == 0 {
+				writeErr(w, http.StatusBadGateway, streamErr.Error())
+				return
+			}
+			log.Printf("playback %s ch%d: stream error after %d bytes: %v", q.Get("id"), channel, cw.n, streamErr)
+		}
 	}
 }
 
