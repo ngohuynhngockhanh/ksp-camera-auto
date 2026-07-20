@@ -334,7 +334,8 @@
   // labels match what will really be downloaded).
   function recordingVendor() {
     if (!cam) return '';
-    if (cam.nvrId) { const n = cams.find(c => c.id === cam.nvrId); return n ? n.vendor : ''; }
+    // window._rvCams is the loaded camera list (init() scopes `cams` locally).
+    if (cam.nvrId) { const n = (window._rvCams || []).find(c => c.id === cam.nvrId); return n ? n.vendor : ''; }
     return cam.vendor;
   }
 
