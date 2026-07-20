@@ -40,6 +40,9 @@ func TestLiveStreamDav(t *testing.T) {
 		t.Fatalf("bad KSPCAM_DAV_END: %v", err)
 	}
 	out := "/tmp/streamdav_test.dav"
+	if v := os.Getenv("KSPCAM_DAV_OUT"); v != "" {
+		out = v // point at a disk-backed path for large ranges (/tmp is often tmpfs)
+	}
 	_ = os.Remove(out)
 	f, err := os.Create(out)
 	if err != nil {

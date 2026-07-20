@@ -238,10 +238,12 @@ type Recorder interface {
 	// fragmented MP4, streamed with no on-box buffering (see
 	// dahua.StreamPlayback).
 	StreamPlayback(ctx context.Context, w io.Writer, channel int, start, end time.Time) error
-	// StreamDav writes the [start,end] recording for a channel to w as the
-	// camera's native .dav (DHAV) — byte-exact, no remux (see dahua.StreamDav).
-	// Requires the DVRIP config port (unlike StreamPlayback's RTSP).
-	StreamDav(ctx context.Context, w io.Writer, channel int, start, end time.Time) error
+	// StreamNative writes the [start,end] recording for a channel to w in the
+	// vendor's most-original format: Dahua = byte-exact .dav (DHAV) over DVRIP,
+	// Hikvision = byte-exact IMKH over ISAPI download, Tiandy = MKV with both
+	// bitstreams stream-copied off RTSP (its firmware exposes no byte-download
+	// API at all). The serving layer picks the file extension per vendor.
+	StreamNative(ctx context.Context, w io.Writer, channel int, start, end time.Time) error
 	// StreamPlaybackFast writes the [start,end] recording to w as MP4, but much
 	// faster than StreamPlayback for NVRs that pace RTSP at ~1x (Hik/Tiandy):
 	// it fetches sub-range chunks over parallel RTSP sessions and concatenates
@@ -379,8 +381,8 @@ func (d *dahuaCamera) StreamPlaybackFast(ctx context.Context, w io.Writer, chann
 	return dahua.StreamPlayback(ctx, w, d.device.Host, d.device.Username, d.device.Password, channel, start, end)
 }
 
-// StreamDav streams a channel's [start,end] recording to w as native .dav.
-func (d *dahuaCamera) StreamDav(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+// StreamNative streams a channel's [start,end] recording to w as native .dav.
+func (d *dahuaCamera) StreamNative(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
 	return dahua.StreamDav(ctx, w, d.device.Host, d.device.Username, d.device.Password, channel, start, end)
 }
 
@@ -821,11 +823,11 @@ func (h *hikCamera) StreamPlaybackFast(ctx context.Context, w io.Writer, channel
 	return hik.StreamPlaybackFast(ctx, w, h.device.Host, h.device.Port, h.device.Username, h.device.Password, isapiChannel(channel), start, end)
 }
 
-// StreamDav streams a channel's [start,end] recording to w as Hikvision's
+// StreamNative streams a channel's [start,end] recording to w as Hikvision's
 // native proprietary container (magic "IMKH" — the Hik analog of Dahua's
 // .dav; see hik.StreamNative). Segment-coarse, not range-exact, but no
 // ffmpeg/remux — the fast option when precise cut boundaries don't matter.
-func (h *hikCamera) StreamDav(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+func (h *hikCamera) StreamNative(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
 	return hik.StreamNative(ctx, w, h.device.Host, h.device.Port, h.device.Username, h.device.Password, isapiChannel(channel), start, end)
 }
 
@@ -1328,8 +1330,10 @@ func (t *tiandyCamera) StreamPlaybackFast(ctx context.Context, w io.Writer, chan
 	return t.client.StreamPlaybackFast(ctx, w, channel, start, end)
 }
 
-// StreamDav is unsupported: Tiandy has no pure-Go native-container download
-// path. Callers fall back to StreamPlayback (MP4).
-func (t *tiandyCamera) StreamDav(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
-	return tiandy.ErrUnsupported
+// StreamNative exports the range as an MKV with the recorded bitstreams
+// copied untouched — Tiandy's firmware has no byte-download API (ISAPI
+// ContentMgmt/search+download both notSupport, probed live), so this is the
+// most-original file a pure-Go path can produce. See tiandy.Client.StreamNative.
+func (t *tiandyCamera) StreamNative(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return t.client.StreamNative(ctx, w, channel, start, end)
 }

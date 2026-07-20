@@ -129,6 +129,42 @@ func TestLiveStreamPlayback(t *testing.T) {
 	}
 }
 
+// TestLiveStreamNative exercises the parallel stream-copy MKV export against a
+// physical Tiandy NVR: a 90-second window (2 chunks) must come back as an EBML
+// (Matroska) file of plausible size. Codec/duration inspection is left to
+// ffprobe by the operator — this asserts the container and that both chunks
+// concatenated. Skipped unless KSPCAM_TIANDY_HOST is set.
+func TestLiveStreamNative(t *testing.T) {
+	host := os.Getenv("KSPCAM_TIANDY_HOST")
+	if host == "" {
+		t.Skip("set KSPCAM_TIANDY_HOST to run the live Tiandy native-export test")
+	}
+	c := New(host, envOr("KSPCAM_TIANDY_USER", "admin"), os.Getenv("KSPCAM_TIANDY_PASS"), 30*time.Second)
+
+	end := time.Now().Add(-2 * time.Minute)
+	start := end.Add(-90 * time.Second)
+	var buf bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+	if err := c.StreamNative(ctx, &buf, 0, start, end); err != nil {
+		t.Fatalf("StreamNative: %v", err)
+	}
+	if buf.Len() < 100*1024 {
+		t.Fatalf("native export too small: %d bytes", buf.Len())
+	}
+	// Matroska begins with the EBML magic 1A 45 DF A3.
+	if b := buf.Bytes(); len(b) < 4 || b[0] != 0x1A || b[1] != 0x45 || b[2] != 0xDF || b[3] != 0xA3 {
+		t.Errorf("output is not Matroska (no EBML magic); first bytes: % x", buf.Bytes()[:16])
+	}
+	if out := os.Getenv("KSPCAM_TIANDY_NATIVE_OUT"); out != "" {
+		if err := os.WriteFile(out, buf.Bytes(), 0o644); err != nil {
+			t.Logf("write %s: %v", out, err)
+		} else {
+			t.Logf("wrote %s (%d bytes)", out, buf.Len())
+		}
+	}
+}
+
 // TestLiveISAPINetwork verifies the ISAPI-over-session config chain against a
 // real Tiandy device: it logs in with the CGI digest and reads the network
 // interfaces (the synthesized-collection path). Skipped unless

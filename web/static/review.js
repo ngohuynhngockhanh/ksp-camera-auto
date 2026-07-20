@@ -328,24 +328,36 @@
     return u + (extra || '');
   }
 
-  // updateDownloadLabel relabels the "native/fast" download button per the
-  // selected camera's vendor: Dahua's is a byte-exact .dav (DHAV), which VLC
-  // and most players on any OS open fine. Hikvision's is its own proprietary
-  // IMKH container (format=dav maps to hik.StreamNative server-side — see
-  // internal/server/api.go handlePlayback) — same query param, different
-  // on-device format, but IMKH is NOT a real MP4: it only opens in VLC/a
-  // desktop player, never on iPhone or in a browser. The label has to say so
-  // plainly or people click it expecting a normal video file.
+  // recordingVendor is the vendor of whatever device actually SERVES this
+  // camera's recordings: the camera itself, or its linked fallback NVR (the
+  // server routes playback there via recordingSource — mirror that here so
+  // labels match what will really be downloaded).
+  function recordingVendor() {
+    if (!cam) return '';
+    if (cam.nvrId) { const n = cams.find(c => c.id === cam.nvrId); return n ? n.vendor : ''; }
+    return cam.vendor;
+  }
+
+  // updateDownloadLabel relabels the "native" download button per the
+  // recording source's vendor (format=native server-side): Dahua's is a
+  // byte-exact .dav (DHAV), which VLC and most players on any OS open fine.
+  // Hikvision's is its own proprietary IMKH container — NOT a real MP4, it
+  // only opens in VLC/a desktop player, never on iPhone or in a browser.
+  // Tiandy has no byte-download API at all, so its "original" is an MKV with
+  // the recorded HEVC+G.711 bitstreams copied untouched (VLC/desktop players).
+  // The labels have to say all this plainly or people click expecting a
+  // normal video file.
   function updateDownloadLabel() {
     const btn = $('rv-download-dav');
     if (!btn || !cam) return;
-    // Hide the native/.dav button for Tiandy (no StreamDav) AND for any camera
-    // that plays back through a linked NVR (nvrId) — the native download isn't
-    // reliable via NVR fallback (e.g. a Tiandy NVR returns "unsupported"). Only
-    // the MP4 download applies there.
-    if (cam.vendor === 'tiandy' || cam.nvrId) { btn.hidden = true; return; }
-    btn.hidden = false;
-    btn.textContent = cam.vendor === 'hikvision' ? 'Tải gốc IMKH (chỉ VLC, không phát trên ĐT/trình duyệt)' : 'Tải .dav (gốc)';
+    const rv = recordingVendor();
+    const labels = {
+      dahua: 'Tải .dav (gốc)',
+      hikvision: 'Tải gốc IMKH (chỉ VLC, không phát trên ĐT/trình duyệt)',
+      tiandy: 'Tải gốc MKV (VLC/máy tính, không phát trên ĐT)',
+    };
+    btn.hidden = !labels[rv];
+    if (labels[rv]) btn.textContent = labels[rv];
   }
 
   function wireControls() {
@@ -393,7 +405,7 @@
     // Fast MP4: parallel RTSP chunks — ~5× faster on Hik/Tiandy (Dahua aliases
     // to its already-fast playback), same exact-cut browser-playable MP4.
     $('rv-download').addEventListener('click', () => download('&format=fastmp4'));
-    $('rv-download-dav').addEventListener('click', () => download('&format=dav'));
+    $('rv-download-dav').addEventListener('click', () => download('&format=native'));
     $('rv-split5-btn').addEventListener('click', buildSplit5);
     $('rv-qr').addEventListener('click', showQR);
     $('rv-qr-close').addEventListener('click', () => { $('rv-qr-modal').hidden = true; });
@@ -404,12 +416,15 @@
     const p = cutParams();
     if (p.endDate <= p.startDate) { showToast('Chọn đoạn cắt hợp lệ.', 'err'); return; }
     window.location.href = playbackURL(p, (extra || '') + '&download=1');
-    const isDav = (extra || '').includes('format=dav');
+    const isNative = (extra || '').includes('format=native');
     let msg = 'Đang tải… (đoạn dài có thể mất chút thời gian)';
-    if (isDav) {
-      msg = cam.vendor === 'hikvision'
+    if (isNative) {
+      const rv = recordingVendor();
+      msg = rv === 'hikvision'
         ? 'Đang tải bản gốc IMKH (nhanh, chất lượng đầy đủ, không cắt chính xác theo giây)… Tệp này CHỈ mở được bằng VLC trên máy tính — KHÔNG phát được trên iPhone hay trong trình duyệt.'
-        : 'Đang tải .dav gốc… (cần cổng cấu hình)';
+        : rv === 'tiandy'
+          ? 'Đang tải bản gốc MKV (hình + tiếng giữ nguyên như đầu ghi, cắt đúng đoạn)… Mở bằng VLC hoặc trình phát trên máy tính — KHÔNG phát trong trình duyệt/iPhone.'
+          : 'Đang tải .dav gốc… (cần cổng cấu hình)';
     }
     showToast(msg, 'ok');
   }

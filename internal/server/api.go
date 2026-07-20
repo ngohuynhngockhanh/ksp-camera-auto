@@ -1579,10 +1579,10 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 // stream one channel's [start,end] recording to the client as fragmented MP4,
 // remuxed from the device's own RTSP playback with nothing buffered on the
 // box (dahua.StreamPlayback / hik.StreamPlayback). download=1 forces a file
-// download; otherwise it plays inline (HTML5 <video>). format=dav switches to
-// each vendor's native, byte-exact container instead of the MP4 remux
-// (Dahua's DHAV .dav; Hikvision's IMKH — see the per-vendor branch below).
-// Dahua and Hikvision only.
+// download; otherwise it plays inline (HTML5 <video>). format=native (legacy
+// alias: format=dav) switches to each vendor's most-original container instead
+// of the MP4 remux: Dahua's DHAV .dav, Hikvision's IMKH, Tiandy's
+// stream-copied MKV — see the per-vendor branch below.
 func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -1639,7 +1639,7 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 
-	native := q.Get("format") == "dav"
+	native := q.Get("format") == "native" || q.Get("format") == "dav"
 	ext, ctype := "mp4", "video/mp4"
 	var streamErr error
 
@@ -1685,9 +1685,7 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 	case config.VendorHikvision, config.VendorTiandy:
 		// Hik and Tiandy playback/download both go through camera.Open and the
 		// camera.Recorder interface (Hik over ISAPI; Tiandy over RTSP-by-time,
-		// remuxed to MP4). Tiandy has no native-container path, so a format=dav
-		// request maps to StreamDav which returns a clean "unsupported" error —
-		// the review UI hides the native-download button for Tiandy anyway.
+		// remuxed to MP4).
 		cam, err := camera.Open(ctx, d, time.Duration(timeoutSeconds)*time.Second)
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
@@ -1699,12 +1697,17 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, notDahuaErr)
 			return
 		}
-		// format=dav maps to Hik's own native container (magic "IMKH" — see
-		// hik.StreamNative): keep Hik's own ".mp4" file-naming convention
+		// format=native on Hik is its own proprietary container (magic "IMKH" —
+		// see hik.StreamNative): keep Hik's own ".mp4" file-naming convention
 		// (that's what the device itself calls it) but an octet-stream
-		// content-type since it's NOT a standard, browser-playable MP4.
+		// content-type since it's NOT a standard, browser-playable MP4. On
+		// Tiandy it's a stream-copied MKV (no byte-download API on that
+		// firmware — see tiandy.Client.StreamNative), so name it what it is.
 		if native {
 			ctype = "application/octet-stream"
+			if d.Vendor == config.VendorTiandy {
+				ext, ctype = "mkv", "video/x-matroska"
+			}
 		}
 		fname := fmt.Sprintf("playback_ch%d_%s.%s", channel, start.Format("20060102_150405"), ext)
 		w.Header().Set("Content-Type", ctype)
@@ -1714,7 +1717,7 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 		cw := &countingWriter{w: w}
 		switch {
 		case native:
-			streamErr = rec.StreamDav(ctx, cw, channel, start, end)
+			streamErr = rec.StreamNative(ctx, cw, channel, start, end)
 		case q.Get("format") == "fastmp4":
 			// Fast MP4: parallel RTSP chunks (Hik/Tiandy realtime → ~5× faster).
 			streamErr = rec.StreamPlaybackFast(ctx, cw, channel, start, end)

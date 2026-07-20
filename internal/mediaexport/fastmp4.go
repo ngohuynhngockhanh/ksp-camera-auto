@@ -26,6 +26,24 @@ import (
 // one's RTSP playback URL via urlFor, and exports them in parallel (see
 // FastMP4). This is the entry point vendor adapters call.
 func FastMP4Range(ctx context.Context, w io.Writer, start, end time.Time, chunkSec int, urlFor func(cs, ce time.Time) string, transcodeAudio bool, maxParallel int) error {
+	chunks := splitRange(start, end, chunkSec, urlFor)
+	return fastRemux(ctx, w, chunks, remuxOpts{transcodeAudio: transcodeAudio, maxParallel: maxParallel})
+}
+
+// FastNativeRange is FastMP4Range's original-bitstream sibling: same parallel
+// chunk fetch, but BOTH video and audio are stream-copied untouched into an
+// MKV. Matroska is the one mainstream container that carries G.711 a-law
+// (Tiandy's recorded audio) without transcoding, so the result is the closest
+// thing to the device's "original file" that a pure-Go/ffmpeg path can
+// produce: byte-exact HEVC + G.711 bitstreams, exact [start,end] cut, plays
+// in VLC and desktop players (not in a browser <video> tag).
+func FastNativeRange(ctx context.Context, w io.Writer, start, end time.Time, chunkSec int, urlFor func(cs, ce time.Time) string, maxParallel int) error {
+	chunks := splitRange(start, end, chunkSec, urlFor)
+	return fastRemux(ctx, w, chunks, remuxOpts{matroska: true, maxParallel: maxParallel})
+}
+
+// splitRange cuts [start,end] into chunkSec-long Chunks with URLs from urlFor.
+func splitRange(start, end time.Time, chunkSec int, urlFor func(cs, ce time.Time) string) []Chunk {
 	if chunkSec < 1 {
 		chunkSec = 60
 	}
@@ -38,7 +56,7 @@ func FastMP4Range(ctx context.Context, w io.Writer, start, end time.Time, chunkS
 		}
 		chunks = append(chunks, Chunk{URL: urlFor(t, ce), Seconds: int(ce.Sub(t).Seconds() + 0.5)})
 	}
-	return FastMP4(ctx, w, chunks, transcodeAudio, maxParallel)
+	return chunks
 }
 
 // Chunk is one sub-range of the export: an RTSP playback URL and how many
@@ -49,20 +67,33 @@ type Chunk struct {
 	Seconds int
 }
 
-// FastMP4 fetches chunks concurrently (bounded by maxParallel), remuxing each
-// RTSP playback to MPEG-TS, then concatenates them into one plain MP4 written to
-// w. transcodeAudio re-encodes audio to AAC per chunk (Tiandy streams G.711
-// a-law, which MP4 can't carry with -c copy); Hikvision passes it through.
+// remuxOpts selects the output flavor of fastRemux.
+type remuxOpts struct {
+	// transcodeAudio re-encodes audio to AAC per chunk (Tiandy streams G.711
+	// a-law, which MP4 can't carry with -c copy); Hikvision passes it through.
+	// Ignored in matroska mode, which always copies audio untouched.
+	transcodeAudio bool
+	// matroska emits an MKV with both streams copied (see FastNativeRange)
+	// instead of the browser-oriented MP4.
+	matroska    bool
+	maxParallel int
+}
+
+// fastRemux fetches chunks concurrently (bounded by opts.maxParallel),
+// remuxing each RTSP playback to an intermediate container, then concatenates
+// them into one file written to w: a plain MP4 (default) or an MKV
+// (opts.matroska). Intermediate chunks are MPEG-TS for MP4 output and MKV for
+// MKV output (TS can't carry G.711, which matroska mode must preserve).
 //
-// The MP4 is built to a temp file (a plain, faststart moov tolerates the
+// The result is built to a temp file (a plain, faststart moov tolerates the
 // per-chunk timestamp resets that a fragmented moov rejects) then copied to w,
 // so this is a download path, not a live stream.
-func FastMP4(ctx context.Context, w io.Writer, chunks []Chunk, transcodeAudio bool, maxParallel int) error {
+func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts) error {
 	if len(chunks) == 0 {
 		return fmt.Errorf("mediaexport: no chunks")
 	}
-	if maxParallel < 1 {
-		maxParallel = 1
+	if opts.maxParallel < 1 {
+		opts.maxParallel = 1
 	}
 	dir, err := os.MkdirTemp("", "fastmp4-")
 	if err != nil {
@@ -70,12 +101,16 @@ func FastMP4(ctx context.Context, w io.Writer, chunks []Chunk, transcodeAudio bo
 	}
 	defer os.RemoveAll(dir)
 
+	chunkExt := "ts"
+	if opts.matroska {
+		chunkExt = "mkv"
+	}
 	paths := make([]string, len(chunks))
 	errs := make([]error, len(chunks))
-	sem := make(chan struct{}, maxParallel)
+	sem := make(chan struct{}, opts.maxParallel)
 	var wg sync.WaitGroup
 	for i, c := range chunks {
-		paths[i] = filepath.Join(dir, fmt.Sprintf("c_%04d.ts", i))
+		paths[i] = filepath.Join(dir, fmt.Sprintf("c_%04d.%s", i, chunkExt))
 		wg.Add(1)
 		go func(i int, c Chunk) {
 			defer wg.Done()
@@ -86,7 +121,7 @@ func FastMP4(ctx context.Context, w io.Writer, chunks []Chunk, transcodeAudio bo
 				errs[i] = ctx.Err()
 				return
 			}
-			errs[i] = fetchChunkTS(ctx, c, paths[i], transcodeAudio)
+			errs[i] = fetchChunk(ctx, c, paths[i], opts)
 		}(i, c)
 	}
 	wg.Wait()
@@ -107,15 +142,22 @@ func FastMP4(ctx context.Context, w io.Writer, chunks []Chunk, transcodeAudio bo
 	}
 
 	outPath := filepath.Join(dir, "out.mp4")
-	cmd := exec.CommandContext(ctx, "ffmpeg",
+	outArgs := []string{
 		"-nostdin",
 		"-f", "concat", "-safe", "0", "-i", listPath,
 		"-c", "copy",
-		"-tag:v", "hvc1", // HEVC-in-MP4 for Safari/iOS; harmless for H.264
 		"-avoid_negative_ts", "make_zero",
-		"-movflags", "+faststart",
-		"-y", outPath,
-	)
+	}
+	if opts.matroska {
+		outPath = filepath.Join(dir, "out.mkv")
+		outArgs = append(outArgs, "-f", "matroska")
+	} else {
+		outArgs = append(outArgs,
+			"-tag:v", "hvc1", // HEVC-in-MP4 for Safari/iOS; harmless for H.264
+			"-movflags", "+faststart",
+		)
+	}
+	cmd := exec.CommandContext(ctx, "ffmpeg", append(outArgs, "-y", outPath)...)
 	var errBuf strings.Builder
 	cmd.Stderr = &errBuf
 	if err := cmd.Run(); err != nil {
@@ -133,21 +175,27 @@ func FastMP4(ctx context.Context, w io.Writer, chunks []Chunk, transcodeAudio bo
 	return nil
 }
 
-// fetchChunkTS pulls one RTSP playback chunk and remuxes it to MPEG-TS (the
-// only container that concatenates cleanly). Video is copied; audio is copied
-// or transcoded to AAC.
-func fetchChunkTS(ctx context.Context, c Chunk, outPath string, transcodeAudio bool) error {
+// fetchChunk pulls one RTSP playback chunk and remuxes it to the intermediate
+// container: MPEG-TS for MP4 output (the only container that concatenates
+// cleanly there), MKV for matroska output (preserves G.711 audio). Video is
+// always copied; audio is copied or transcoded to AAC per opts.
+func fetchChunk(ctx context.Context, c Chunk, outPath string, opts remuxOpts) error {
 	args := []string{"-nostdin", "-rtsp_transport", "tcp", "-i", c.URL}
 	if c.Seconds > 0 {
 		args = append(args, "-t", strconv.Itoa(c.Seconds))
 	}
 	args = append(args, "-c:v", "copy")
-	if transcodeAudio {
+	if opts.transcodeAudio && !opts.matroska {
 		args = append(args, "-c:a", "aac", "-b:a", "64k")
 	} else {
 		args = append(args, "-c:a", "copy")
 	}
-	args = append(args, "-f", "mpegts", "-y", outPath)
+	if opts.matroska {
+		args = append(args, "-f", "matroska")
+	} else {
+		args = append(args, "-f", "mpegts")
+	}
+	args = append(args, "-y", outPath)
 
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
 	var errBuf strings.Builder

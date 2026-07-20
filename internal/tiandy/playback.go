@@ -130,6 +130,20 @@ func (c *Client) StreamPlaybackFast(ctx context.Context, w io.Writer, channel in
 	}, true, 5)
 }
 
+// StreamNative exports [start,end] as an MKV with BOTH streams copied
+// untouched (HEVC + G.711 a-law as recorded) — the closest thing to Tiandy's
+// "original file" that exists pure-Go: this firmware supports neither ISAPI
+// ContentMgmt/search nor ContentMgmt/download (both probed live → notSupport;
+// port 3002 is the closed binary NetSDK), so byte-exact container download is
+// impossible and RTSP stream-copy is the source of truth. Fetches parallel
+// chunks like StreamPlaybackFast. Plays in VLC/desktop players, not a browser.
+func (c *Client) StreamNative(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	ch := tiandyChannel(channel)
+	return mediaexport.FastNativeRange(ctx, w, start, end, 60, func(cs, ce time.Time) string {
+		return playbackRTSPURL(c.host, c.user, c.pass, ch, cs, ce)
+	}, 5)
+}
+
 // liveRTSPURL builds Tiandy's Dahua-format live RTSP URL (sub stream), used for
 // snapshot frame-grabs. channel is native (1-based).
 func liveRTSPURL(host, user, pass string, channel, subtype int) string {
