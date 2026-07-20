@@ -174,6 +174,59 @@
     loadRange(new Date(end.getTime() - minutes * 60000), end);
   }
 
+  // ---- "Chia 5 phút": slice the currently loaded window [winStart, winEnd]
+  // into consecutive 5-minute segments for quick click-to-preview browsing.
+  // Purely client-side; each click just reuses playbackURL() like loadPreview
+  // does, with the segment's own [start,end] instead of the fixed 120s clip. ----
+  const SPLIT5_MIN = 5;
+  const SPLIT5_CAP = 288; // 288 * 5min = 24h — keep the rendered list sane
+  let split5Segments = [];
+
+  function fmtHM(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+
+  function buildSplit5() {
+    if (!cam || !winStart || !winEnd) { showToast('Chưa tải khoảng thời gian nào.', 'err'); return; }
+    const segMs = SPLIT5_MIN * 60000;
+    const count = Math.ceil((winEnd - winStart) / segMs);
+    if (count <= 0) { showToast('Khoảng thời gian không hợp lệ.', 'err'); return; }
+    if (count > SPLIT5_CAP) {
+      showToast(`Khoảng đang xem quá lớn để chia 5 phút (${count} đoạn). Hãy chọn khoảng tối đa ${SPLIT5_CAP * SPLIT5_MIN / 60} giờ.`, 'err');
+      return;
+    }
+    split5Segments = [];
+    for (let i = 0; i < count; i++) {
+      const s = new Date(winStart.getTime() + i * segMs);
+      const e = new Date(Math.min(s.getTime() + segMs, winEnd.getTime()));
+      split5Segments.push({ start: s, end: e });
+    }
+    const list = $('rv-split5-list');
+    list.hidden = false;
+    list.innerHTML = split5Segments.map((seg, i) =>
+      `<button class="btn btn-sm btn-secondary rv-split5-item" type="button" data-idx="${i}">${fmtHM(seg.start)}–${fmtHM(seg.end)}</button>`).join('');
+    list.querySelectorAll('.rv-split5-item').forEach(b =>
+      b.addEventListener('click', () => loadSplit5(parseInt(b.dataset.idx, 10))));
+    showToast(`Đã chia thành ${count} đoạn 5 phút.`, 'ok');
+  }
+
+  // loadSplit5 previews segment i in the existing <video> element, exactly
+  // like loadPreview() does for the rolling 120s clip, and moves the red
+  // playhead marker to the segment's start.
+  function loadSplit5(i) {
+    const seg = split5Segments[i];
+    if (!seg || !cam) return;
+    document.querySelectorAll('#rv-split5-list .rv-split5-item').forEach((b, idx) => {
+      b.classList.toggle('btn-primary', idx === i);
+      b.classList.toggle('btn-secondary', idx !== i);
+    });
+    const ch = parseInt($('rv-channel').value, 10) || 0;
+    const v = $('rv-video');
+    previewBase = seg.start;
+    v.src = playbackURL({ id: cam.id, channel: ch, start: fmtParam(seg.start), end: fmtParam(seg.end) });
+    v.playbackRate = parseFloat($('rv-speed').value) || 1;
+    v.play().catch(() => {});
+    timeline.setCustomTime(seg.start, 'playhead');
+  }
+
   // loadDay loads a whole calendar day (capped at "now"). dateStr = "YYYY-MM-DD".
   function loadDay(dateStr) {
     if (!dateStr) return;
@@ -215,6 +268,10 @@
   async function loadRange(start, end) {
     if (!cam) return;
     winStart = start; winEnd = end;
+    // Stale segments would point outside the newly loaded window — clear them.
+    split5Segments = [];
+    const split5List = $('rv-split5-list');
+    if (split5List) { split5List.hidden = true; split5List.innerHTML = ''; }
     // keep the form inputs in sync with what's shown
     $('rv-from').value = fmtLocal(start); $('rv-to').value = fmtLocal(end);
     timeline.setWindow(start, end, { animation: false });
@@ -289,6 +346,7 @@
     });
     $('rv-download').addEventListener('click', () => download(''));
     $('rv-download-dav').addEventListener('click', () => download('&format=dav'));
+    $('rv-split5-btn').addEventListener('click', buildSplit5);
     $('rv-qr').addEventListener('click', showQR);
     $('rv-qr-close').addEventListener('click', () => { $('rv-qr-modal').hidden = true; });
   }

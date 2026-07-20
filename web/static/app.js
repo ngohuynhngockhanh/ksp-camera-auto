@@ -426,6 +426,7 @@ async function loadCameras() {
     port: parseInt(document.getElementById('nvr-port').value, 10) || 0,
     username: document.getElementById('nvr-user').value.trim(),
     password: document.getElementById('nvr-pass').value,
+    vendor: document.getElementById('nvr-vendor').value,
   });
   document.getElementById('nvr-open-btn').addEventListener('click', () => {
     const nvr = cameras.find(c => c.isNvr);
@@ -433,6 +434,7 @@ async function loadCameras() {
     document.getElementById('nvr-port').value = nvr ? nvr.port : 37777;
     document.getElementById('nvr-user').value = nvr ? nvr.username : 'admin';
     document.getElementById('nvr-pass').value = '';
+    document.getElementById('nvr-vendor').value = (nvr && (nvr.vendor === 'dahua' || nvr.vendor === 'hikvision')) ? nvr.vendor : 'hikvision';
     scanRows = [];
     document.getElementById('nvr-tbody').innerHTML = '<tr><td colspan="4" class="empty-hint">Nhập đầu ghi rồi bấm "Quét đầu ghi".</td></tr>';
     document.getElementById('nvr-save-btn').disabled = true;

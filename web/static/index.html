@@ -346,7 +346,10 @@
             <label class="field-sm" style="margin:0">Ngày <input type="date" id="rv-date"></label>
             <button class="btn btn-sm btn-secondary" type="button" id="rv-load-day">Xem cả ngày</button>
             <span class="rv-days muted" id="rv-days"></span>
+            <span class="muted">·</span>
+            <button class="btn btn-sm btn-secondary" type="button" id="rv-split5-btn">Chia 5 phút</button>
           </div>
+          <div class="rv-quick" id="rv-split5-list" hidden></div>
           <div class="review-stage">
             <div class="review-video-wrap">
               <video id="rv-video" controls playsinline preload="metadata" poster="/logo.png"></video>
@@ -458,6 +461,12 @@
         <div class="field"><label for="nvr-port">Cổng</label><input id="nvr-port" type="number" placeholder="37777"></div>
         <div class="field"><label for="nvr-user">Tài khoản</label><input id="nvr-user" placeholder="admin"></div>
         <div class="field"><label for="nvr-pass">Mật khẩu</label><input id="nvr-pass" type="password" placeholder="(giữ nếu đã lưu)"></div>
+        <div class="field"><label for="nvr-vendor">Hãng đầu ghi</label>
+          <select id="nvr-vendor">
+            <option value="hikvision" selected>Hikvision</option>
+            <option value="dahua">Dahua</option>
+          </select>
+        </div>
       </div>
       <div class="row">
         <button class="btn" type="button" id="nvr-scan-btn">Quét đầu ghi</button>
