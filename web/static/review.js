@@ -294,9 +294,14 @@
     // keep the form inputs in sync with what's shown
     $('rv-from').value = fmtLocal(start); $('rv-to').value = fmtLocal(end);
     timeline.setWindow(start, end, { animation: false });
-    // place cut markers inside the window, playhead at start
-    timeline.setCustomTime(new Date(start.getTime() + (end - start) * 0.1), 'cutStart');
-    timeline.setCustomTime(new Date(start.getTime() + (end - start) * 0.2), 'cutEnd');
+    // Place cut markers inside the window, playhead at start. The default cut
+    // span is capped at 5 minutes: it used to be 10% of the window, which
+    // with the 1-day default window meant a 2.4-hour default clip — over the
+    // fast-download limit, so a straight "open → click download" failed.
+    const cutLen = Math.min(5 * 60000, (end - start) * 0.1);
+    const cutFrom = new Date(start.getTime() + (end - start) * 0.1);
+    timeline.setCustomTime(cutFrom, 'cutStart');
+    timeline.setCustomTime(new Date(cutFrom.getTime() + cutLen), 'cutEnd');
     timeline.setCustomTime(start, 'playhead');
     updateRange();
     const ch = parseInt($('rv-channel').value, 10) || 0;
