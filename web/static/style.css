@@ -581,15 +581,28 @@ dialog.dialog-lightbox[open] { max-width: min(1100px, 96vw); }
 #rv-timeline .vis-time-axis .vis-grid.vis-minor { border-color:var(--border); }
 #rv-timeline .vis-time-axis .vis-grid.vis-major { border-color:var(--border); }
 #rv-timeline .vis-item.rv-rec { background-color:var(--accent); border-color:var(--accent-strong); color:var(--on-accent); }
-#rv-timeline .vis-item.rv-ev { background-color:var(--warning); border-color:var(--warning); color:#1a1a1a; }
+#rv-timeline .vis-item.rv-ev { background-color:#8e44ad; border-color:#7d3c98; color:#fff; }
 #rv-timeline .vis-item.vis-range { border-radius:3px; }
 
 /* draggable cut/playhead markers (vis custom times) */
-#rv-timeline .vis-custom-time { width:4px; cursor:ew-resize; }
+#rv-timeline .vis-custom-time { width:4px; cursor:ew-resize; z-index:30; }
+/* Invisible ±11px grab zone so the thin bar is easy to hit (mouse + touch). */
+#rv-timeline .vis-custom-time::before { content:''; position:absolute; left:-11px; right:-11px; top:0; bottom:0; cursor:ew-resize; }
 #rv-timeline .vis-custom-time.cutStart { background-color:#2ecc71; }
 #rv-timeline .vis-custom-time.cutEnd { background-color:#f1c40f; }
 #rv-timeline .vis-custom-time.playhead { background-color:#e74c3c; }
-#rv-timeline .vis-custom-time > .vis-custom-time-marker { background:rgba(0,0,0,.75); color:#fff; border-radius:4px; font-size:12px; padding:2px 5px; }
+/* Labelled knob = big grab target; colour-matched border so which bar is which is obvious. */
+#rv-timeline .vis-custom-time > .vis-custom-time-marker { top:2px; background:rgba(20,20,20,.9); color:#fff; border-radius:6px; font-size:12px; font-weight:600; padding:3px 7px; white-space:nowrap; cursor:ew-resize; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+#rv-timeline .vis-custom-time.cutStart > .vis-custom-time-marker { border:2px solid #2ecc71; }
+#rv-timeline .vis-custom-time.cutEnd > .vis-custom-time-marker { border:2px solid #f1c40f; }
+#rv-timeline .vis-custom-time.playhead > .vis-custom-time-marker { border:2px solid #e74c3c; }
+/* Shaded selected-clip region between the green/yellow markers. */
+#rv-timeline .vis-item.rv-selection { background-color:rgba(46,204,113,.16); border-left:2px solid #2ecc71; border-right:2px solid #f1c40f; }
+/* Loading overlay: instant feedback while /api/recordings is in flight. */
+#rv-timeline.rv-loading { position:relative; }
+#rv-timeline.rv-loading::after { content:''; position:absolute; inset:0; background:rgba(0,0,0,.12); z-index:40; }
+#rv-timeline.rv-loading::before { content:''; position:absolute; left:50%; top:50%; width:22px; height:22px; margin:-11px 0 0 -11px; border:3px solid rgba(255,255,255,.35); border-top-color:#fff; border-radius:50%; animation:rv-spin .7s linear infinite; z-index:41; }
+@keyframes rv-spin { to { transform:rotate(360deg); } }
 
 /* QR modal */
 .rv-qr-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); align-items:center; justify-content:center; z-index:2000; }

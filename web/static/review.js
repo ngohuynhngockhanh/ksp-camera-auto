@@ -88,16 +88,19 @@
     items = new vis.DataSet([]);
     timeline = new vis.Timeline($('rv-timeline'), items, {
       stack: false, showCurrentTime: false, selectable: false,
-      zoomMin: 1000 * 10, zoomMax: 1000 * 60 * 60 * maxHours, height: 90,
+      zoomMin: 1000 * 10, zoomMax: 1000 * 60 * 60 * maxHours, height: 132,
       moveable: true, zoomable: true,
       margin: { item: 2 },
     });
     // Draggable markers: cut-start (green), cut-end (yellow), playhead (red).
+    // Each carries a labelled knob (a much bigger grab target than the 4px bar).
     const now = new Date();
     timeline.addCustomTime(new Date(now.getTime() - 55 * 60000), 'cutStart');
     timeline.addCustomTime(new Date(now.getTime() - 50 * 60000), 'cutEnd');
     timeline.addCustomTime(now, 'playhead');
-    timeline.setCustomTimeMarker('▶', 'playhead', false);
+    timeline.setCustomTimeMarker('▶ Đang xem', 'playhead', false);
+    timeline.setCustomTimeMarker('◧ Đầu', 'cutStart', false);
+    timeline.setCustomTimeMarker('Cuối ◨', 'cutEnd', false);
     // While dragging the red marker, suppress the timeupdate auto-follow so it
     // doesn't snap back; on release, load a short preview clip at the new spot.
     timeline.on('timechange', (p) => { if (p.id === 'playhead') draggingPlayhead = true; clampMarkers(p.id); updateRange(); });
@@ -134,6 +137,8 @@
     // Keep the cut time pickers in sync with the markers (unless the user is
     // currently typing in them).
     if (!editingCut) { $('rv-cut-from').value = fmtLocalSec(a); $('rv-cut-to').value = fmtLocalSec(b); }
+    // Shade the selected clip region so it's obvious what will be downloaded.
+    if (items) items.update({ id: 'sel', start: a, end: b, type: 'background', className: 'rv-selection' });
     return { start: a, end: b };
   }
 
@@ -265,6 +270,19 @@
     } catch (e) { el.innerHTML = ''; }
   }
 
+  const recCache = new Map(); // key -> recordings[]; instant re-render on re-click
+  function renderRecs(recs) {
+    items.clear();
+    items.add(recs.map((r, i) => ({
+      id: i, start: parseDev(r.startTime), end: parseDev(r.endTime),
+      type: 'range', className: (r.events && r.events.length) ? 'rv-ev' : 'rv-rec',
+      title: `${r.startTime} → ${r.endTime} (${r.duration}s)${(r.events && r.events.length) ? ' · ' + r.events.join(',') : ''}`,
+    })));
+    updateRange(); // re-adds the 'sel' shaded region cleared by items.clear()
+    $('rv-msg').textContent = recs.length ? `${recs.length} đoạn ghi.` : 'Không có bản ghi trong khoảng này.';
+    $('rv-msg').className = recs.length ? 'msg ok' : 'msg';
+  }
+
   async function loadRange(start, end) {
     if (!cam) return;
     winStart = start; winEnd = end;
@@ -280,21 +298,22 @@
     timeline.setCustomTime(new Date(start.getTime() + (end - start) * 0.2), 'cutEnd');
     timeline.setCustomTime(start, 'playhead');
     updateRange();
-    $('rv-msg').textContent = 'Đang tải danh sách bản ghi…'; $('rv-msg').className = 'msg';
+    const ch = parseInt($('rv-channel').value, 10) || 0;
+    const key = `${cam.id}|${ch}|${fmtParam(start)}|${fmtParam(end)}`;
+    // Cache-first: re-clicking the same day/window paints instantly, then we
+    // silently refresh in the background so growing "recent" windows stay current.
+    if (recCache.has(key)) renderRecs(recCache.get(key));
+    else { items.clear(); updateRange(); $('rv-msg').textContent = 'Đang tải danh sách bản ghi…'; $('rv-msg').className = 'msg'; }
+    $('rv-timeline').classList.toggle('rv-loading', !recCache.has(key));
     try {
-      const ch = parseInt($('rv-channel').value, 10) || 0;
-      const q = `id=${encodeURIComponent(cam.id)}&channel=${ch}&start=${encodeURIComponent(fmtParam(start))}&end=${encodeURIComponent(fmtParam(end))}&timeoutSeconds=${timeoutSec()}`;
+      const q = `id=${encodeURIComponent(cam.id)}&channel=${ch}&start=${encodeURIComponent(fmtParam(start))}&end=${encodeURIComponent(fmtParam(end))}&timeoutSeconds=15`;
       const res = await api('/api/recordings?' + q);
       const recs = (res && res.recordings) || [];
-      items.clear();
-      items.add(recs.map((r, i) => ({
-        id: i, start: parseDev(r.startTime), end: parseDev(r.endTime),
-        type: 'range', className: (r.events && r.events.length) ? 'rv-ev' : 'rv-rec',
-        title: `${r.startTime} → ${r.endTime} (${r.duration}s)${(r.events && r.events.length) ? ' · ' + r.events.join(',') : ''}`,
-      })));
-      $('rv-msg').textContent = recs.length ? `${recs.length} đoạn ghi.` : 'Không có bản ghi trong khoảng này.';
-      $('rv-msg').className = recs.length ? 'msg ok' : 'msg';
-    } catch (e) { $('rv-msg').textContent = 'Lỗi: ' + e.message; $('rv-msg').className = 'msg err'; }
+      recCache.set(key, recs);
+      if (winStart === start && winEnd === end) renderRecs(recs); // still the current window
+    } catch (e) {
+      if (!recCache.has(key)) { $('rv-msg').textContent = 'Lỗi: ' + e.message; $('rv-msg').className = 'msg err'; }
+    } finally { $('rv-timeline').classList.remove('rv-loading'); }
   }
 
   function cutParams() {
