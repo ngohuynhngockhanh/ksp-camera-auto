@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/url"
 	"os/exec"
+
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mediaexport"
 	"time"
 )
 
@@ -113,6 +115,19 @@ func (c *Client) StreamPlayback(ctx context.Context, w io.Writer, channel int, s
 		return fmt.Errorf("tiandy: ffmpeg playback %s: %w: %s", c.host, err, tail(stderr.buf, 300))
 	}
 	return nil
+}
+
+// StreamPlaybackFast exports [start,end] as MP4 much faster than realtime by
+// fetching 1-minute chunks over parallel RTSP playback sessions (Tiandy paces a
+// single session at ~1x and exposes no byte-download API, but allows several
+// concurrent playback sessions per channel). Audio is transcoded to AAC per
+// chunk (Tiandy streams G.711 a-law). Same exact-cut, browser-playable MP4 as
+// StreamPlayback, ~5× faster for a 5-minute clip.
+func (c *Client) StreamPlaybackFast(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	ch := tiandyChannel(channel)
+	return mediaexport.FastMP4Range(ctx, w, start, end, 60, func(cs, ce time.Time) string {
+		return playbackRTSPURL(c.host, c.user, c.pass, ch, cs, ce)
+	}, true, 5)
 }
 
 // liveRTSPURL builds Tiandy's Dahua-format live RTSP URL (sub stream), used for

@@ -7,7 +7,20 @@ import (
 	"net/url"
 	"os/exec"
 	"time"
+
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mediaexport"
 )
+
+// StreamPlaybackFast exports [start,end] as MP4 faster than realtime by fetching
+// 1-minute chunks over parallel RTSP playback sessions (Hik paces one session at
+// ~1x and its fast ISAPI download returns non-MP4 "IMKH"; but it allows several
+// concurrent playback sessions). Same exact-cut, browser-playable MP4 as
+// StreamPlayback. port is unused (RTSP is always 554), kept for signature parity.
+func StreamPlaybackFast(ctx context.Context, w io.Writer, host string, port int, user, pass string, channel int, start, end time.Time) error {
+	return mediaexport.FastMP4Range(ctx, w, start, end, 60, func(cs, ce time.Time) string {
+		return playbackRTSPURL(host, user, pass, channel, cs, ce)
+	}, false, 5)
+}
 
 // playbackSem bounds simultaneous Hikvision playback remux processes across
 // the whole tool, mirroring dahua.playbackSem — a SEPARATE pool from Dahua's,

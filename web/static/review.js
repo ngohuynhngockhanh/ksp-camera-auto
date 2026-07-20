@@ -362,7 +362,9 @@
       el.addEventListener('blur', () => { editingCut = false; });
       el.addEventListener('change', () => { editingCut = false; applyCutInputs(); });
     });
-    $('rv-download').addEventListener('click', () => download(''));
+    // Fast MP4: parallel RTSP chunks — ~5× faster on Hik/Tiandy (Dahua aliases
+    // to its already-fast playback), same exact-cut browser-playable MP4.
+    $('rv-download').addEventListener('click', () => download('&format=fastmp4'));
     $('rv-download-dav').addEventListener('click', () => download('&format=dav'));
     $('rv-split5-btn').addEventListener('click', buildSplit5);
     $('rv-qr').addEventListener('click', showQR);

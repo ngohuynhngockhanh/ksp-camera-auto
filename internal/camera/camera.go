@@ -242,6 +242,12 @@ type Recorder interface {
 	// camera's native .dav (DHAV) — byte-exact, no remux (see dahua.StreamDav).
 	// Requires the DVRIP config port (unlike StreamPlayback's RTSP).
 	StreamDav(ctx context.Context, w io.Writer, channel int, start, end time.Time) error
+	// StreamPlaybackFast writes the [start,end] recording to w as MP4, but much
+	// faster than StreamPlayback for NVRs that pace RTSP at ~1x (Hik/Tiandy):
+	// it fetches sub-range chunks over parallel RTSP sessions and concatenates
+	// them (see internal/mediaexport). Dahua, whose RTSP playback is already
+	// faster-than-realtime, just aliases StreamPlayback.
+	StreamPlaybackFast(ctx context.Context, w io.Writer, channel int, start, end time.Time) error
 }
 
 // PTZControl is implemented by cameras that support live pan/tilt/zoom.
@@ -364,6 +370,12 @@ func (d *dahuaCamera) FindRecordings(ctx context.Context, channel int, start, en
 
 // StreamPlayback streams a channel's [start,end] recording to w as MP4.
 func (d *dahuaCamera) StreamPlayback(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return dahua.StreamPlayback(ctx, w, d.device.Host, d.device.Username, d.device.Password, channel, start, end)
+}
+
+// StreamPlaybackFast: Dahua RTSP playback is already faster-than-realtime
+// (~400x), so the fast path is just the normal one.
+func (d *dahuaCamera) StreamPlaybackFast(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
 	return dahua.StreamPlayback(ctx, w, d.device.Host, d.device.Username, d.device.Password, channel, start, end)
 }
 
@@ -802,6 +814,11 @@ func (h *hikCamera) FindRecordings(ctx context.Context, channel int, start, end 
 // hik.StreamPlayback) — accurate to the requested range, browser-playable.
 func (h *hikCamera) StreamPlayback(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
 	return hik.StreamPlayback(ctx, w, h.device.Host, h.device.Port, h.device.Username, h.device.Password, isapiChannel(channel), start, end)
+}
+
+// StreamPlaybackFast exports the range as MP4 via parallel RTSP chunks (~5×).
+func (h *hikCamera) StreamPlaybackFast(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return hik.StreamPlaybackFast(ctx, w, h.device.Host, h.device.Port, h.device.Username, h.device.Password, isapiChannel(channel), start, end)
 }
 
 // StreamDav streams a channel's [start,end] recording to w as Hikvision's
@@ -1304,6 +1321,11 @@ func (t *tiandyCamera) FindRecordings(ctx context.Context, channel int, start, e
 // MP4, remuxed from Tiandy RTSP playback-by-time (HEVC retagged hvc1 + AAC).
 func (t *tiandyCamera) StreamPlayback(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
 	return t.client.StreamPlayback(ctx, w, channel, start, end)
+}
+
+// StreamPlaybackFast exports the range as MP4 via parallel RTSP chunks (~5×).
+func (t *tiandyCamera) StreamPlaybackFast(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return t.client.StreamPlaybackFast(ctx, w, channel, start, end)
 }
 
 // StreamDav is unsupported: Tiandy has no pure-Go native-container download

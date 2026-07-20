@@ -1712,9 +1712,13 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fname))
 		}
 		cw := &countingWriter{w: w}
-		if native {
+		switch {
+		case native:
 			streamErr = rec.StreamDav(ctx, cw, channel, start, end)
-		} else {
+		case q.Get("format") == "fastmp4":
+			// Fast MP4: parallel RTSP chunks (Hik/Tiandy realtime → ~5× faster).
+			streamErr = rec.StreamPlaybackFast(ctx, cw, channel, start, end)
+		default:
 			streamErr = rec.StreamPlayback(ctx, cw, channel, start, end)
 		}
 		if streamErr != nil {
