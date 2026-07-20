@@ -1567,9 +1567,17 @@ func (s *Server) handleRecordings(w http.ResponseWriter, r *http.Request) {
 type countingWriter struct {
 	w io.Writer
 	n int64
+	// beforeFirst, if set, runs once right before the first byte is written —
+	// the last moment HTTP headers can still be set. Lets the playback handler
+	// keep the response error-able (plain JSON) until a stream actually
+	// produces output.
+	beforeFirst func()
 }
 
 func (c *countingWriter) Write(p []byte) (int, error) {
+	if c.n == 0 && len(p) > 0 && c.beforeFirst != nil {
+		c.beforeFirst()
+	}
 	n, err := c.w.Write(p)
 	c.n += int64(n)
 	return n, err
@@ -1717,23 +1725,45 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 		// content-type since it's NOT a standard, browser-playable MP4. On
 		// Tiandy it's a stream-copied MKV (no byte-download API on that
 		// firmware — see tiandy.Client.StreamNative), so name it what it is.
+		fast := q.Get("format") == "fastmp4"
 		if native {
 			ctype = "application/octet-stream"
 			if d.Vendor == config.VendorTiandy {
 				ext, ctype = "mkv", "video/x-matroska"
 			}
 		}
-		fname := fmt.Sprintf("playback_ch%d_%s.%s", channel, start.Format("20060102_150405"), ext)
-		w.Header().Set("Content-Type", ctype)
-		if q.Get("download") != "" {
-			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fname))
+		// The chunked exporters (fast MP4, and Tiandy's native MKV) build the
+		// whole file in the box's /tmp before sending — which is a ~1 GB tmpfs
+		// on the deploy boxes, holding chunks AND the concat result at peak.
+		// Cap those exports at 20 minutes (~760 MB peak for 2560×1440 HEVC) so
+		// a long range fails with a clear message instead of dying mid-build
+		// with an opaque one.
+		if fast || (native && d.Vendor == config.VendorTiandy) {
+			if end.Sub(start) > 20*time.Minute {
+				writeErr(w, http.StatusBadRequest, "tải nhanh tối đa 20 phút mỗi lần — hãy cắt đoạn ngắn hơn (tốt nhất 5 phút mỗi clip)")
+				return
+			}
 		}
+		fname := fmt.Sprintf("playback_ch%d_%s.%s", channel, start.Format("20060102_150405"), ext)
+		// Headers go out lazily, on the first body byte (beforeFirst): the
+		// chunked exporters spend up to a minute building the file first, and
+		// if that build FAILS the response must still be able to become a
+		// plain JSON error the browser shows — headers already sent as
+		// video/mp4 + attachment would instead turn the error into a broken
+		// 1 KB "download" (or nothing at all, which reads as "nút tải không
+		// ra clip").
 		cw := &countingWriter{w: w}
+		cw.beforeFirst = func() {
+			w.Header().Set("Content-Type", ctype)
+			if q.Get("download") != "" {
+				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fname))
+			}
+		}
 		switch {
 		case native:
 			streamErr = rec.StreamNative(ctx, cw, channel, start, end)
-		case q.Get("format") == "fastmp4":
-			// Fast MP4: parallel RTSP chunks (Hik/Tiandy realtime → ~5× faster).
+		case fast:
+			// Fast MP4: parallel RTSP chunks (Hik/Tiandy realtime → ~10× faster).
 			streamErr = rec.StreamPlaybackFast(ctx, cw, channel, start, end)
 		default:
 			streamErr = rec.StreamPlayback(ctx, cw, channel, start, end)

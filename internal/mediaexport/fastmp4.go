@@ -88,9 +88,21 @@ type remuxOpts struct {
 // The result is built to a temp file (a plain, faststart moov tolerates the
 // per-chunk timestamp resets that a fragmented moov rejects) then copied to w,
 // so this is a download path, not a live stream.
+// buildSem serializes whole-file builds process-wide: one build already runs
+// up to 10 ffmpeg processes and holds hundreds of MB of /tmp (a ~1 GB tmpfs on
+// the deploy boxes), so concurrent builds — typically a user re-clicking the
+// download button — would OOM the box instead of just taking turns.
+var buildSem = make(chan struct{}, 1)
+
 func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts) error {
 	if len(chunks) == 0 {
 		return fmt.Errorf("mediaexport: no chunks")
+	}
+	select {
+	case buildSem <- struct{}{}:
+		defer func() { <-buildSem }()
+	case <-ctx.Done():
+		return fmt.Errorf("mediaexport: %w (waiting for an export slot)", ctx.Err())
 	}
 	if opts.maxParallel < 1 {
 		opts.maxParallel = 1

@@ -417,16 +417,51 @@
     if (!cam) return;
     const p = cutParams();
     if (p.endDate <= p.startDate) { showToast('Chọn đoạn cắt hợp lệ.', 'err'); return; }
-    window.location.href = playbackURL(p, (extra || '') + '&download=1');
+    const rangeSec = (p.endDate - p.startDate) / 1000;
     const isNative = (extra || '').includes('format=native');
+    const isFast = (extra || '').includes('format=fastmp4');
+    const rv = recordingVendor();
+    // The chunked exports (fast MP4; Tiandy native) build the whole clip on
+    // the box's small tmpfs first — the server rejects >20 min, so say it
+    // here before firing a doomed request.
+    if ((isFast || (isNative && rv === 'tiandy')) && rangeSec > 20 * 60) {
+      showToast('Tải nhanh tối đa 20 phút mỗi lần — kéo 2 vạch Đầu/Cuối lại gần nhau (tốt nhất 5 phút mỗi clip).', 'err');
+      return;
+    }
+    window.location.href = playbackURL(p, (extra || '') + '&download=1');
     let msg = 'Đang tải… (đoạn dài có thể mất chút thời gian)';
-    if (isNative) {
-      const rv = recordingVendor();
+    if (isFast) {
+      // ~10 parallel realtime sessions + concat overhead — a sane ETA so the
+      // user waits instead of re-clicking (each re-click restarts the build).
+      const eta = Math.max(15, Math.round(rangeSec / 10 + 20));
+      msg = `Đang chuẩn bị clip ${Math.round(rangeSec / 60)} phút — khoảng ${eta} giây nữa trình duyệt sẽ TỰ BẬT tải về. Đừng bấm lại nút (bấm lại sẽ làm lại từ đầu).`;
+      lockDownloadButtons(eta);
+    } else if (isNative) {
       msg = rv === 'hikvision'
         ? 'Đang tải bản gốc IMKH (nhanh, chất lượng đầy đủ, không cắt chính xác theo giây)… Tệp này CHỈ mở được bằng VLC trên máy tính — KHÔNG phát được trên iPhone hay trong trình duyệt.'
         : 'Đang tải .dav gốc… (cần cổng cấu hình)';
     }
     showToast(msg, 'ok');
+  }
+
+  // lockDownloadButtons disables both download buttons for roughly the build
+  // time, counting down on the fast button's label — the single biggest cause
+  // of "không ra clip" was re-clicking mid-build, which aborts the pending
+  // navigation (and its build) and starts over.
+  function lockDownloadButtons(sec) {
+    const btns = [$('rv-download'), $('rv-download-dav')].filter(Boolean);
+    const fastBtn = $('rv-download');
+    const orig = fastBtn.textContent;
+    btns.forEach(b => { b.disabled = true; });
+    let left = sec;
+    const tick = setInterval(() => {
+      left--;
+      if (left > 0) { fastBtn.textContent = `Đang chuẩn bị… ${left}s`; return; }
+      clearInterval(tick);
+      fastBtn.textContent = orig;
+      btns.forEach(b => { b.disabled = false; });
+    }, 1000);
+    fastBtn.textContent = `Đang chuẩn bị… ${left}s`;
   }
 
   async function showQR() {
