@@ -420,10 +420,23 @@ func (s *Server) openDeviceCamera(w http.ResponseWriter, r *http.Request, id str
 }
 
 // nvrDeviceFrom builds an NVR config.Device from a scan/link request, defaulting
-// the port and carrying an existing stored password when the field is blank.
-func (s *Server) nvrDeviceFrom(host string, port int, user, pass, name string) config.Device {
+// the port (per-vendor: Dahua's DVRIP port or Hik's ISAPI port) and carrying an
+// existing stored password when the field is blank. vendor is whatever the
+// request specified (see nvrScanReq.Vendor/nvrLinkReq.NVR.Vendor); an empty or
+// unrecognized value falls back to VendorDahua, which is the ONLY vendor this
+// endpoint supported before Hik NVR scanning existed — so old requests that
+// never set the field (the frontend doesn't send it yet) keep behaving
+// byte-identically to before this method grew a vendor parameter.
+func (s *Server) nvrDeviceFrom(host string, port int, user, pass, name string, vendor config.Vendor) config.Device {
+	if vendor != config.VendorHikvision {
+		vendor = config.VendorDahua
+	}
 	if port == 0 {
-		port = s.cfg.Defaults.DahuaPort
+		if vendor == config.VendorHikvision {
+			port = s.cfg.Defaults.HikvisionPort
+		} else {
+			port = s.cfg.Defaults.DahuaPort
+		}
 	}
 	if user == "" {
 		user = s.cfg.Defaults.Username
@@ -436,7 +449,7 @@ func (s *Server) nvrDeviceFrom(host string, port int, user, pass, name string) c
 			pass = s.cfg.Defaults.Password
 		}
 	}
-	return config.Device{ID: id, Name: name, Host: host, Port: port, Vendor: config.VendorDahua, Username: user, Password: pass, IsNVR: true}
+	return config.Device{ID: id, Name: name, Host: host, Port: port, Vendor: vendor, Username: user, Password: pass, IsNVR: true}
 }
 
 type nvrScanReq struct {
@@ -445,6 +458,11 @@ type nvrScanReq struct {
 	Username       string `json:"username"`
 	Password       string `json:"password"`
 	TimeoutSeconds int    `json:"timeoutSeconds"`
+	// Vendor is optional and additive: omitted/empty defaults to
+	// VendorDahua (nvrDeviceFrom's fallback), so existing callers that never
+	// send it keep scanning a Dahua NVR exactly as before. Set to
+	// "hikvision" to scan a Hik NVR's InputProxy channels instead.
+	Vendor config.Vendor `json:"vendor,omitempty"`
 }
 
 type nvrScanRow struct {
@@ -471,10 +489,15 @@ func (s *Server) handleNVRScan(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "host is required")
 		return
 	}
-	nvr := s.nvrDeviceFrom(req.Host, req.Port, req.Username, req.Password, "")
+	nvr := s.nvrDeviceFrom(req.Host, req.Port, req.Username, req.Password, "", req.Vendor)
 	to := s.reqTimeout(req.TimeoutSeconds)
 	ctx, cancel := context.WithTimeout(r.Context(), to)
 	defer cancel()
+	// camera.Open dispatches on nvr.Vendor (Dahua DVRIP vs Hik ISAPI); the
+	// rest of this function only ever touches the result through the
+	// camera.Camera/RemoteDeviceLister/StorageManager interfaces below, so it
+	// works unchanged for either vendor once the concrete type implements them
+	// (hikCamera does, since Milestone 2).
 	cam, err := camera.Open(ctx, nvr, to)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, "mở đầu ghi lỗi: "+err.Error())
@@ -483,7 +506,7 @@ func (s *Server) handleNVRScan(w http.ResponseWriter, r *http.Request) {
 	defer cam.Close()
 	rdl, ok := cam.(camera.RemoteDeviceLister)
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "thiết bị này không đọc được danh sách kênh (không phải NVR Dahua?)")
+		writeErr(w, http.StatusBadRequest, "thiết bị này không đọc được danh sách kênh (không phải NVR?)")
 		return
 	}
 	remotes, err := rdl.GetRemoteDevices(ctx)
@@ -562,6 +585,9 @@ type nvrLinkReq struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
 		Name     string `json:"name"`
+		// Vendor is optional and additive — see nvrScanReq.Vendor. Omitted/
+		// empty defaults to VendorDahua, matching /api/nvr/scan.
+		Vendor config.Vendor `json:"vendor,omitempty"`
 	} `json:"nvr"`
 	Mappings []struct {
 		CameraID   string `json:"cameraId"`
@@ -584,7 +610,7 @@ func (s *Server) handleNVRLink(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "NVR host is required")
 		return
 	}
-	nvr := s.nvrDeviceFrom(req.NVR.Host, req.NVR.Port, req.NVR.Username, req.NVR.Password, req.NVR.Name)
+	nvr := s.nvrDeviceFrom(req.NVR.Host, req.NVR.Port, req.NVR.Username, req.NVR.Password, req.NVR.Name, req.NVR.Vendor)
 	if nvr.Name == "" {
 		nvr.Name = "Đầu ghi " + req.NVR.Host
 	}

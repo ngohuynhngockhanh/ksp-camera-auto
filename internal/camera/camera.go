@@ -200,16 +200,21 @@ type Rebooter interface {
 }
 
 // StorageManager is implemented by cameras that expose on-device storage
-// (SD card) info and formatting. Dahua-only. Formatting erases all recordings,
-// so the UI must require explicit confirmation before calling Format.
+// (SD card / NVR HDD bay) info and formatting. Both dahuaCamera (DVRIP
+// storage.getDeviceAllInfo) and hikCamera (ISAPI /ContentMgmt/Storage)
+// implement it; callers type-assert. Formatting erases all recordings, so
+// the UI must require explicit confirmation before calling Format — note
+// hikCamera.FormatStorage always returns an error (unimplemented for Hik,
+// see its doc comment), so only the read side works there today.
 type StorageManager interface {
 	GetStorageInfo(ctx context.Context) ([]dahua.StorageDevice, error)
 	FormatStorage(ctx context.Context, name string) error
 }
 
 // RemoteDeviceLister is implemented by an NVR that can report the camera
-// connected to each of its channels (Dahua RemoteDevice config). Dahua-only;
-// callers type-assert. Used to auto-map cameras to NVR channels.
+// connected to each of its channels (Dahua RemoteDevice config / Hik ISAPI
+// InputProxy channels). Both dahuaCamera and hikCamera implement it; callers
+// type-assert. Used to auto-map cameras to NVR channels.
 type RemoteDeviceLister interface {
 	GetRemoteDevices(ctx context.Context) ([]dahua.RemoteChannel, error)
 }
@@ -827,6 +832,39 @@ func (h *hikCamera) StreamDav(ctx context.Context, w io.Writer, channel int, sta
 // isapiChannel converts a vendor-neutral (0-based) Profile.Channel to
 // Hikvision's native (1-based) channel number.
 func isapiChannel(profileChannel int) int { return profileChannel + 1 }
+
+// GetStorageInfo reads the NVR's HDD bays via ISAPI
+// (/ISAPI/ContentMgmt/Storage), mapped onto the shared dahua.StorageDevice
+// shape (see hik.Client.GetStorageInfo) — so the NVR scan flow's
+// dahua.HasUsableStorage check and the web UI's storage view work unchanged
+// for a Hikvision NVR.
+func (h *hikCamera) GetStorageInfo(ctx context.Context) ([]dahua.StorageDevice, error) {
+	return h.client.GetStorageInfo(ctx)
+}
+
+// errHikFormatUnsupported is returned by FormatStorage: Hikvision's ISAPI
+// storage-format operation (its exact resource/body, and the destructive
+// blast radius of getting it wrong) was not part of this milestone's live
+// verification, so this deliberately refuses rather than guessing at a
+// data-erasing call. hikCamera still satisfies camera.StorageManager (the
+// read side, GetStorageInfo, is fully implemented); only the "format"
+// button is unavailable for Hik devices in the UI.
+var errHikFormatUnsupported = errors.New("hik: storage format not supported over ISAPI")
+
+// FormatStorage is intentionally unimplemented for Hikvision — see
+// errHikFormatUnsupported.
+func (h *hikCamera) FormatStorage(ctx context.Context, name string) error {
+	return errHikFormatUnsupported
+}
+
+// GetRemoteDevices lists the camera connected to each NVR channel via ISAPI
+// (/ISAPI/ContentMgmt/InputProxy/channels), mapped onto the shared
+// dahua.RemoteChannel shape (see hik.Client.GetRemoteDevices) — so the NVR
+// scan flow (channel -> inventory camera matching) works unchanged for a
+// Hikvision NVR.
+func (h *hikCamera) GetRemoteDevices(ctx context.Context) ([]dahua.RemoteChannel, error) {
+	return h.client.GetRemoteDevices(ctx)
+}
 
 // errHikWiFiUnsupported is returned by hikCamera's Wi-Fi methods: this
 // milestone implements static-IP config for Hikvision (LAN and Wi-Fi
