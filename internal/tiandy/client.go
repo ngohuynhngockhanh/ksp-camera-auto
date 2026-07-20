@@ -1,57 +1,45 @@
-// Package tiandy is a pure-Go transport for Tiandy NVRs/cameras (e.g. the
-// TC-R3440), for the review ("Xem lại") + IP-config surface. It is deliberately
-// NOT a full control client like internal/dahua or internal/hik: the vendor's
-// only documented route for recording search and device config is a binary C
-// NetSDK on port 3000/3001, which would break this project's CGO_ENABLED=0
-// static ARM deploy. So this package uses only what a Tiandy device serves over
-// standard, pure-Go-reachable protocols:
+// Package tiandy is a pure-Go client for Tiandy NVRs/cameras (e.g. the
+// TC-R3440), covering both the review ("Xem lại") surface and full device
+// configuration, over only standard, pure-Go-reachable protocols (no cgo C
+// NetSDK, so the CGO_ENABLED=0 static ARM deploy is preserved):
 //
-//   - RTSP (:554) — Tiandy is Dahua-lineage here: live cam/realmonitor and,
-//     crucially, playback-by-time cam/playback?...starttime/endtime WORK with
-//     the ordinary web-admin credentials (verified live on a TC-R3440). This is
-//     the whole video path for playback; codec is HEVC, so the MP4 remux retags
-//     hev1->hvc1 exactly like internal/hik.
-//   - ONVIF (:8082) — device/media services (no Profile G, so no recording
-//     index) and GetNetworkInterfaces for IP-config view. Note authenticated
-//     ONVIF needs an ONVIF *user*, which on many NVRs is a separate account
-//     from web-admin; GetNetworkConfig surfaces a clear hint when the creds
-//     aren't accepted (see ErrONVIFUnauthorized).
+//   - RTSP (:554) — Tiandy is Dahua-lineage here: live cam/realmonitor and
+//     playback-by-time cam/playback?...starttime/endtime work with the web
+//     credentials (verified on a TC-R3440). This is the video/playback path;
+//     codec is HEVC + G.711, so the MP4 remux retags hev1->hvc1 and transcodes
+//     audio to AAC (see playback.go). Recording search has no pure-Go index, so
+//     FindRecordings degrades to a synthetic window (see mediafind.go).
+//   - ISAPI over :8081 (see isapi_session.go) — Tiandy serves a
+//     Hikvision-compatible /ISAPI surface, but authenticates with its own CGI
+//     session scheme (iterated SHA-256 -> HttpSession header) instead of HTTP
+//     Digest. NewISAPIClient wraps that auth as an isapi.Transport, so the whole
+//     internal/isapi + internal/hik config stack (network/IP, encode, password,
+//     OSD, storage, remote devices, reboot) is reused verbatim.
 //
-// Because there is no accessible recording index, FindRecordings degrades to a
-// synthetic window (see mediafind.go) — the client-side 5-minute quick-view and
-// timeline still work, which is sufficient on a continuously-recording NVR.
-//
-// All results map onto the shared internal/dahua types (Recording,
-// NetworkConfig) so the camera adapter and web UI need no vendor-specific
-// branch, exactly the seam internal/hik follows.
+// Playback/index results map onto the shared internal/dahua types, and config
+// runs through internal/hik — so the camera adapter and web UI need no
+// Tiandy-specific branch beyond dispatch.
 package tiandy
 
-import (
-	"errors"
-	"time"
-)
+import "time"
 
-// Fixed Tiandy ports. Device.Port (the configured "primary" port) is not used
-// for media/config here — RTSP and ONVIF live on their own well-known ports.
-const (
-	rtspPort  = 554
-	onvifPort = 8082
-)
+// rtspPort is the fixed media port. Device.Port is not used for media/config —
+// RTSP is always :554 and config/ISAPI is always :8081 (see configPort).
+const rtspPort = 554
 
-// ErrUnsupported is returned by control operations Tiandy does not expose over
-// the pure-Go transports (config apply, password change, OSD, native download).
-var ErrUnsupported = errors.New("tiandy: thao tác này chưa hỗ trợ (chỉ xem lại + xem cấu hình mạng qua RTSP/ONVIF)")
+// ErrUnsupported is returned by the few operations Tiandy exposes over neither
+// transport (native .dav download; Wi-Fi provisioning on wired NVRs).
+var ErrUnsupported = errorString("tiandy: thao tác này chưa hỗ trợ")
 
-// ErrONVIFUnauthorized is returned by GetNetworkConfig when the device rejects
-// the web-admin credentials for ONVIF — typically because ONVIF has a separate
-// user list. The message tells the operator the one device-side step needed.
-var ErrONVIFUnauthorized = errors.New("tiandy: ONVIF từ chối tài khoản này — hãy bật ONVIF và tạo user ONVIF trùng tài khoản trên đầu ghi để xem cấu hình IP")
+type errorString string
 
-// Client holds connection parameters for one Tiandy device. There is no
-// persistent session: RTSP and ONVIF calls each authenticate per-request, so
-// the zero cost of "opening" a client means camera.Open always succeeds and any
-// connectivity/credential error surfaces from the first real call (same
-// property as hik.Dial).
+func (e errorString) Error() string { return string(e) }
+
+// Client holds connection parameters for one Tiandy device's RTSP (media)
+// plane. tiandy.New never touches the network, so camera.Open always succeeds
+// and any connectivity/credential error surfaces from the first real call
+// (same property as hik.Dial). The config plane is a separate isapi.Client
+// built by NewISAPIClient.
 type Client struct {
 	host    string
 	user    string
