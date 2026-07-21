@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"time"
 )
 
@@ -20,11 +21,11 @@ import (
 // config protocol, decoded by the device, delivered as a ready JPEG) versus
 // spawning ffmpeg to decode an RTSP keyframe. It needs the DVRIP port + a login,
 // so callers keep the RTSP/CGI routes as fallbacks (see GetSnapshot).
-func GetSnapshotDVRIP(ctx context.Context, host, user, pass string, channel int, timeout time.Duration) ([]byte, error) {
+func GetSnapshotDVRIP(ctx context.Context, host string, port int, user, pass string, channel int, timeout time.Duration) ([]byte, error) {
 	if timeout <= 0 {
 		timeout = 8 * time.Second
 	}
-	c, err := Dial(net.JoinHostPort(host, "37777"), user, pass, timeout)
+	c, err := Dial(net.JoinHostPort(host, dvripPort(port)), user, pass, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("dahua: snapshot dvrip %s: login: %w", host, err)
 	}
@@ -80,7 +81,7 @@ var liveSem = make(chan struct{}, 3)
 // the returned boundary before the first byte. It ends when ctx is cancelled
 // (the handler's 5-minute cap) or when a write fails (the client navigated away
 // — so leaving the page auto-stops it), and writes nothing to the box's disk.
-func StreamMJPEG(ctx context.Context, w io.Writer, flush func(), host, user, pass string, channel, fps int, boundary string) error {
+func StreamMJPEG(ctx context.Context, w io.Writer, flush func(), host string, port int, user, pass string, channel, fps int, boundary string) error {
 	select {
 	case liveSem <- struct{}{}:
 		defer func() { <-liveSem }()
@@ -93,7 +94,7 @@ func StreamMJPEG(ctx context.Context, w io.Writer, flush func(), host, user, pas
 	if fps > 15 {
 		fps = 15
 	}
-	c, err := Dial(net.JoinHostPort(host, "37777"), user, pass, 10*time.Second)
+	c, err := Dial(net.JoinHostPort(host, dvripPort(port)), user, pass, 10*time.Second)
 	if err != nil {
 		return fmt.Errorf("dahua: mjpeg %s: login: %w", host, err)
 	}
@@ -128,6 +129,15 @@ func StreamMJPEG(ctx context.Context, w io.Writer, flush func(), host, user, pas
 			flush()
 		}
 	}
+}
+
+// dvripPort renders a configured DVRIP port for dialling, defaulting to the
+// stock 37777 when the caller has no port on hand (0 or negative).
+func dvripPort(port int) string {
+	if port <= 0 {
+		port = 37777
+	}
+	return strconv.Itoa(port)
 }
 
 // snapCommand builds the 0x11 "snapshot" request exactly as captured from the

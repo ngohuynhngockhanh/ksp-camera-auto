@@ -382,7 +382,12 @@ func (s *Server) handlePassword(w http.ResponseWriter, r *http.Request) {
 			emit(bulk.Event{Type: "device_done", DeviceID: id, Name: d.Name, OK: false, Err: err.Error()})
 			continue
 		}
-		// Update the stored credential so we can still connect.
+		// Update the stored credential so we can still connect. Re-read the
+		// entry first: Open() may have just hard-set a fallback DVRIP port
+		// (OnDahuaPortFallback) and the local d predates that.
+		if cur, ok := s.inv.Get(id); ok {
+			d = cur
+		}
 		d.Username, d.Password = req.NewUsername, req.NewPassword
 		_ = s.inv.Upsert(d)
 		emit(bulk.Event{Type: "step", DeviceID: id, Name: d.Name, Step: "đổi mật khẩu", Detail: "OK — đã cập nhật kho", OK: true})
@@ -1740,7 +1745,12 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 		// is a drop-in swap.
 		stream := dahua.StreamPlayback
 		if native {
-			stream = dahua.StreamDav
+			// StreamDav additionally needs the DVRIP config port (which may be
+			// the KBVision 8888 instead of 37777); adapt it to the shared
+			// RTSP-shaped signature by capturing d.Port.
+			stream = func(ctx context.Context, w io.Writer, host, user, pass string, channel int, start, end time.Time) error {
+				return dahua.StreamDav(ctx, w, host, d.Port, user, pass, channel, start, end)
+			}
 			ext, ctype = "dav", "application/octet-stream"
 		}
 		fname := fmt.Sprintf("playback_ch%d_%s.%s", channel, start.Format("20060102_150405"), ext)
@@ -1898,7 +1908,7 @@ func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
 	if d.Vendor == config.VendorTiandy {
 		liveErr = tiandy.StreamMJPEG(ctx, w, flush, d.Host, d.Username, d.Password, channel, fps, boundary)
 	} else {
-		liveErr = dahua.StreamMJPEG(ctx, w, flush, d.Host, d.Username, d.Password, channel, fps, boundary)
+		liveErr = dahua.StreamMJPEG(ctx, w, flush, d.Host, d.Port, d.Username, d.Password, channel, fps, boundary)
 	}
 	if liveErr != nil {
 		log.Printf("live %s ch%d: %v", q.Get("id"), channel, liveErr)

@@ -30,6 +30,18 @@ const (
 // use instead of the 37777 default. See Open()'s VendorDahua case.
 const kbvisionFallbackPort = 8888
 
+// dahuaDefaultPort is the stock DVRIP config port. A device configured on it
+// may really live on kbvisionFallbackPort (the importer assigns the default
+// blindly), so Open retries 8888 on any failure of a default-port attempt.
+const dahuaDefaultPort = 37777
+
+// OnDahuaPortFallback, when set, is called after a Dahua device could only be
+// reached on the KBVision fallback port (8888) instead of its configured port.
+// The server wires this to hard-set the working port in the saved inventory so
+// every later connection (snapshot, playback, .dav download) goes straight to
+// the right port.
+var OnDahuaPortFallback func(deviceID string, port int)
+
 // Profile describes which encode settings to apply to a set of streams. A
 // field is only applied when its "Set*" flag is true, so a Profile can carry
 // a partial change (e.g. resolution only, leaving audio untouched).
@@ -278,16 +290,24 @@ func Open(ctx context.Context, d config.Device, timeout time.Duration) (Camera, 
 	switch d.Vendor {
 	case config.VendorDahua:
 		cl, err := dahua.Dial(d.Addr(), d.Username, d.Password, timeout)
-		if err != nil && errors.Is(err, dahua.ErrDialUnreachable) && d.Port != kbvisionFallbackPort {
+		if err != nil && d.Port != kbvisionFallbackPort &&
+			(d.Port == dahuaDefaultPort || errors.Is(err, dahua.ErrDialUnreachable)) {
 			// KBVision (a Dahua OEM) sometimes serves DVRIP on 8888 instead of
-			// the 37777 default. Only retry when the configured port genuinely
-			// couldn't be reached at the TCP level (ErrDialUnreachable) so a
-			// real login/credential failure on 37777 is never masked by a
-			// second, confusing attempt. This fallback is per-connection only:
-			// it never rewrites d.Port in the saved inventory.
+			// the 37777 default. When the configured port is the stock default
+			// (assigned blindly by the importer) retry 8888 on ANY failure —
+			// 37777 can be open-but-dead (another service, a hung stack) and
+			// still not be the config port. For a deliberately customized port
+			// (e.g. a NAT forward) only retry when it was unreachable at the
+			// TCP level, so a real login/credential failure there isn't masked
+			// by a second, confusing attempt. On success the working port is
+			// hard-set into the inventory via OnDahuaPortFallback.
 			fallbackAddr := fmt.Sprintf("%s:%d", d.Host, kbvisionFallbackPort)
 			if cl2, err2 := dahua.Dial(fallbackAddr, d.Username, d.Password, timeout); err2 == nil {
 				cl, err = cl2, nil
+				d.Port = kbvisionFallbackPort // this session's helpers dial the working port too
+				if OnDahuaPortFallback != nil {
+					OnDahuaPortFallback(d.ID, kbvisionFallbackPort)
+				}
 			}
 		}
 		if err != nil {
@@ -338,7 +358,7 @@ func (d *dahuaCamera) ChangePassword(ctx context.Context, newUser, newPass strin
 // connection from the DVRIP session, see dahua.GetSnapshot); stream is
 // ignored (snapshot.cgi has no sub-stream selector).
 func (d *dahuaCamera) Snapshot(ctx context.Context, channel, stream int) ([]byte, error) {
-	return dahua.GetSnapshot(ctx, d.device.Host, d.device.Username, d.device.Password, channel, d.timeout)
+	return dahua.GetSnapshot(ctx, d.device.Host, d.device.Port, d.device.Username, d.device.Password, channel, d.timeout)
 }
 
 // ChannelInfo reads back the channel's own name and OSD lines + enable state.
@@ -383,7 +403,7 @@ func (d *dahuaCamera) StreamPlaybackFast(ctx context.Context, w io.Writer, chann
 
 // StreamNative streams a channel's [start,end] recording to w as native .dav.
 func (d *dahuaCamera) StreamNative(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
-	return dahua.StreamDav(ctx, w, d.device.Host, d.device.Username, d.device.Password, channel, start, end)
+	return dahua.StreamDav(ctx, w, d.device.Host, d.device.Port, d.device.Username, d.device.Password, channel, start, end)
 }
 
 // GetStorageInfo reads the device's SD-card / storage status.

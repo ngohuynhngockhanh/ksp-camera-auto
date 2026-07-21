@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/camera"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/web"
 )
@@ -54,6 +55,20 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 	}
 	if _, err := rand.Read(s.dlKey); err != nil {
 		return nil, fmt.Errorf("gen download key: %w", err)
+	}
+	// A Dahua/KBVision device configured on 37777 that only answers on 8888:
+	// hard-set the discovered port so every later dial (snapshot, playback,
+	// .dav download) goes straight there instead of re-failing 37777 first.
+	camera.OnDahuaPortFallback = func(id string, port int) {
+		d, ok := inv.Get(id)
+		if !ok || d.Port == port {
+			return
+		}
+		log.Printf("dahua %s (%s): config port %d unreachable, answers on %d — saving", id, d.Host, d.Port, port)
+		d.Port = port
+		if err := inv.Upsert(d); err != nil {
+			log.Printf("dahua %s: save fallback port: %v", id, err)
+		}
 	}
 	s.routes()
 	return s, nil
