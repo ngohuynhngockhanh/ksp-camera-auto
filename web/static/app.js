@@ -358,15 +358,44 @@ function renderCameraSkeleton() {
   `).join('');
 }
 
+let camSort = { key: 'name', dir: 1 };
+const camCollator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' });
+
+function camSortVal(c, key) {
+  switch (key) {
+    case 'name': return `${c.name || ''} ${c.channelName || ''}`.trim();
+    case 'host': return c.host || '';
+    case 'port': return c.port || 0;
+    case 'vendor': return c.vendor || '';
+    case 'username': return c.username || '';
+    case 'password': return c.password || '';
+    case 'stream': return (fmtStreamInfo(probeCache[c.id]) || '').replace(/<[^>]*>/g, '');
+    default: return '';
+  }
+}
+
+function sortedCameras() {
+  const { key, dir } = camSort;
+  return cameras.slice().sort((a, b) => {
+    const va = camSortVal(a, key), vb = camSortVal(b, key);
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+    return camCollator.compare(String(va), String(vb)) * dir;
+  });
+}
+
 function renderCameras() {
   const tbody = document.getElementById('cam-tbody');
+  document.querySelectorAll('#cam-table th.sortable').forEach(th => {
+    th.classList.toggle('sort-asc', th.dataset.sort === camSort.key && camSort.dir === 1);
+    th.classList.toggle('sort-desc', th.dataset.sort === camSort.key && camSort.dir === -1);
+  });
   if (!cameras.length) {
     tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Chưa có camera nào. Thêm ở form phía trên.</td></tr>';
     renderDashboard();
     return;
   }
   const checked = new Set(Array.from(document.querySelectorAll('.cam-cb:checked')).map(cb => cb.value));
-  tbody.innerHTML = cameras.map(c => `
+  tbody.innerHTML = sortedCameras().map(c => `
     <tr data-id="${escapeHtml(c.id)}">
       <td class="cell-check"><input type="checkbox" class="cam-cb" value="${escapeHtml(c.id)}" ${checked.has(c.id) ? 'checked' : ''} aria-label="Chọn camera"></td>
       <td data-label="Tên" class="cell-name">
@@ -1043,6 +1072,15 @@ function startInlineRename(cell, id) {
   });
   input.addEventListener('blur', () => finish(true));
 }
+
+document.querySelector('#cam-table thead').addEventListener('click', (ev) => {
+  const th = ev.target.closest('th.sortable');
+  if (!th) return;
+  const key = th.dataset.sort;
+  if (camSort.key === key) camSort.dir = -camSort.dir;
+  else camSort = { key, dir: 1 };
+  renderCameras();
+});
 
 document.getElementById('select-all').addEventListener('change', (ev) => {
   document.querySelectorAll('.cam-cb').forEach(cb => cb.checked = ev.target.checked);

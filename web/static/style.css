@@ -271,6 +271,11 @@ textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace
 table { width: 100%; border-collapse: collapse; font-size: .85rem; }
 th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
 th { color: var(--muted); font-weight: 600; font-size: .74rem; text-transform: uppercase; letter-spacing: .03em; }
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable:hover { color: var(--text); }
+th.sortable::after { content: '↕'; opacity: .35; margin-left: 4px; }
+th.sortable.sort-asc::after { content: '↑'; opacity: 1; }
+th.sortable.sort-desc::after { content: '↓'; opacity: 1; }
 tbody tr:hover { background: var(--surface-2); }
 tr:last-child td { border-bottom: none; }
 td.actions-cell { white-space: nowrap; }
