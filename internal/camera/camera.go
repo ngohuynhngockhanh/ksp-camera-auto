@@ -613,14 +613,25 @@ func osdSlotText(lines []string, camName string) string {
 	return strings.Join(sub, "|")
 }
 
-// applyOSD installs the overlay text into CustomTitle slot 0 (enabled) and
-// resets every remaining slot to factory-empty/disabled, then reads back slot
-// 0 to verify the device actually took the text.
+// applyOSD installs the overlay text into CustomTitle slots 0 AND 1 with
+// IDENTICAL text, then reads back to verify. The mirroring is load-bearing:
+// slots 0/1 are the same logical overlay on the main and sub stream, and
+// this firmware (KBVision H5AE, verified live 2026-07-21) silently discards
+// the entire VideoWidget write when their texts differ — result=true, no
+// change. Slots 2-3 are cleared and disabled.
 func (d *dahuaCamera) applyOSD(ch int, lines []string) StepResult {
 	step := StepResult{Step: fmt.Sprintf("OSD K%d", ch+1)}
-	text := osdSlotText(lines, d.device.Name)
-	slots := []string{text, osdEmptyText, osdEmptyText, osdEmptyText}
-	enabled := []bool{text != osdEmptyText, false, false, false}
+	// {name} prefers the probed channel/OSD title (e.g. "Ban 14") over the
+	// imported inventory label (e.g. "Camera13") — the on-screen text should
+	// match what staff call the table, not Shinobi's monitor id.
+	camName := d.device.ChannelName
+	if camName == "" {
+		camName = d.device.Name
+	}
+	text := osdSlotText(lines, camName)
+	on := text != osdEmptyText
+	slots := []string{text, text, "", ""}
+	enabled := []bool{on, on, false, false}
 	if _, err := d.client.SetOSDLines(ch, slots, enabled); err != nil {
 		step.Err = err.Error()
 		return step
@@ -630,7 +641,7 @@ func (d *dahuaCamera) applyOSD(ch int, lines []string) StepResult {
 		step.Err = fmt.Sprintf("đã ghi nhưng đọc lại lỗi: %v", err)
 		return step
 	}
-	if len(got) == 0 || got[0] != text {
+	if len(got) < 2 || got[0] != text || got[1] != text {
 		readBack := ""
 		if len(got) > 0 {
 			readBack = got[0]
