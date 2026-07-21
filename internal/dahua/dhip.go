@@ -39,6 +39,8 @@ type Client struct {
 	user      string // remembered for operations needing the current credential
 	pass      string
 	realm     string // login realm ("Login to XXXX"), for the modifyPassword hash
+
+	ptzCapable *bool // lazy per-session PTZ hardware probe; see PTZControl
 }
 
 // rpcResp is the generic JSON-RPC response envelope. Error is left raw because

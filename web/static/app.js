@@ -1103,6 +1103,7 @@ wireToggle('p-res-enable', 'p-res-fields');
 wireToggle('p-smart-enable', 'p-smart-fields');
 wireToggle('p-gop-enable', 'p-gop-fields');
 wireToggle('p-bitrate-enable', 'p-bitrate-fields');
+wireToggle('p-osd-enable', 'p-osd-fields');
 
 const codecEnable = document.getElementById('p-codec-enable');
 const resEnable = document.getElementById('p-res-enable');
@@ -2173,6 +2174,11 @@ function buildProfile() {
     bitrate: parseInt(document.getElementById('p-bitrate-value').value, 10) || 0,
     bitrateMode: document.getElementById('p-bitrate-mode').value,
     setAudioAAC: document.getElementById('p-audio-enable').checked,
+    setOsd: document.getElementById('p-osd-enable').checked,
+    osdLines: [
+      document.getElementById('p-osd-line1').value.trim(),
+      document.getElementById('p-osd-line2').value.trim(),
+    ],
     streams: streams.length ? streams : [0],
     channels: parseChannels(document.getElementById('p-channel').value),
   };
@@ -2242,7 +2248,7 @@ document.getElementById('apply-btn').addEventListener('click', async () => {
     return;
   }
   const profile = buildProfile();
-  if (!profile.setCodec && !profile.setResolution && !profile.setSmartCodec && !profile.setAudioAAC && !profile.setGop && !profile.setBitrate) {
+  if (!profile.setCodec && !profile.setResolution && !profile.setSmartCodec && !profile.setAudioAAC && !profile.setGop && !profile.setBitrate && !profile.setOsd) {
     msg.textContent = 'Chọn ít nhất một thiết lập để thay đổi.';
     msg.className = 'msg err';
     return;

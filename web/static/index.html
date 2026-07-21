@@ -283,6 +283,21 @@
               </div>
             </div>
 
+            <div class="setting-card">
+              <div class="checkbox-row"><input type="checkbox" id="p-osd-enable"><label for="p-osd-enable">Cài OSD (chữ hiện trên hình — Dahua/KBVision)</label></div>
+              <div class="setting-body" id="p-osd-fields" hidden>
+                <div class="field field-sm">
+                  <label for="p-osd-line1">Dòng 1</label>
+                  <input id="p-osd-line1" type="text" placeholder="vd: Kien Seu Billiards">
+                </div>
+                <div class="field field-sm">
+                  <label for="p-osd-line2">Dòng 2</label>
+                  <input id="p-osd-line2" type="text" placeholder="vd: {name} — tự thay bằng tên cam">
+                </div>
+                <p class="muted">Gõ <code>{name}</code> để tự điền tên camera trong kho (vd "Ban 14") cho từng cam. Cam hiển thị tối đa 4 dòng — 2 dòng để trống sẽ được xoá; các ô OSD khác trên cam cũng được reset về mặc định.</p>
+              </div>
+            </div>
+
             <div class="checkbox-row"><input type="checkbox" id="p-audio-enable"><label for="p-audio-enable">Bật âm thanh AAC</label></div>
 
             <div class="field field-sm section-gap">

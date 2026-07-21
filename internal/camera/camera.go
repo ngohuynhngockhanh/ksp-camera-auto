@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
@@ -58,6 +59,16 @@ type Profile struct {
 	SmartCodec    bool `json:"smartCodec"`
 
 	SetAudioAAC bool `json:"setAudioAAC"`
+
+	// OSD installs the free-text on-screen overlay (Dahua/KBVision CustomTitle
+	// slot 0). These devices render ONE CustomTitle text whose on-screen lines
+	// are separated by '|' and always carry 4 sub-fields — the factory-empty
+	// value is "|||". OSDLines are the visible lines (padded/truncated to 4);
+	// "{name}" in a line expands per camera to its inventory name. Applying
+	// also resets the remaining CustomTitle slots to factory-empty/disabled so
+	// the install result is deterministic across a mixed fleet.
+	SetOSD   bool     `json:"setOsd"`
+	OSDLines []string `json:"osdLines"`
 
 	SetGOP bool `json:"setGop"`
 	GOP    int  `json:"gop"` // I-frame interval, frames
@@ -578,9 +589,58 @@ func (d *dahuaCamera) Apply(ctx context.Context, profile Profile, emit func(Step
 			st.Step = fmt.Sprintf("smart codec K%d", ch+1)
 			add(st)
 		}
+
+		if profile.SetOSD {
+			add(d.applyOSD(ch, profile.OSDLines))
+		}
 	}
 
 	return steps
+}
+
+// osdEmptyText is the factory-empty CustomTitle text on these devices: 4
+// blank sub-fields joined by '|'.
+const osdEmptyText = "|||"
+
+// osdSlotText joins the visible OSD lines into one CustomTitle text,
+// expanding "{name}" to the camera's inventory name and normalizing to the
+// device's fixed 4-sub-field format ("a|b||").
+func osdSlotText(lines []string, camName string) string {
+	sub := make([]string, 4)
+	for i := 0; i < len(lines) && i < 4; i++ {
+		sub[i] = strings.ReplaceAll(lines[i], "{name}", camName)
+	}
+	return strings.Join(sub, "|")
+}
+
+// applyOSD installs the overlay text into CustomTitle slot 0 (enabled) and
+// resets every remaining slot to factory-empty/disabled, then reads back slot
+// 0 to verify the device actually took the text.
+func (d *dahuaCamera) applyOSD(ch int, lines []string) StepResult {
+	step := StepResult{Step: fmt.Sprintf("OSD K%d", ch+1)}
+	text := osdSlotText(lines, d.device.Name)
+	slots := []string{text, osdEmptyText, osdEmptyText, osdEmptyText}
+	enabled := []bool{text != osdEmptyText, false, false, false}
+	if _, err := d.client.SetOSDLines(ch, slots, enabled); err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	got, _, err := d.client.GetOSDLines(ch)
+	if err != nil {
+		step.Err = fmt.Sprintf("đã ghi nhưng đọc lại lỗi: %v", err)
+		return step
+	}
+	if len(got) == 0 || got[0] != text {
+		readBack := ""
+		if len(got) > 0 {
+			readBack = got[0]
+		}
+		step.Detail = fmt.Sprintf("OSD không đổi được (đọc lại: %q)", readBack)
+		return step
+	}
+	step.OK = true
+	step.Detail = fmt.Sprintf("OSD %q OK", text)
+	return step
 }
 
 func (d *dahuaCamera) applyCodec(ch int, s dahua.Stream, streamName string, compression, codecProfile string) StepResult {
