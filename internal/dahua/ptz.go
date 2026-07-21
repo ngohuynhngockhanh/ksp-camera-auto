@@ -30,20 +30,10 @@ func (c *Client) PTZControl(channel int, code string, speed int, start bool) err
 		speed = 8
 	}
 
-	// Fixed IPCs (no motor) still answer ptz.factory.instance + ptz.start
-	// with result=true, so the UI pad "works" while nothing moves (seen live
-	// on inut_204_110's H5AE fleet). Real PTZ hardware carries a "Ptz" config
-	// table (protocol/address settings); fixed cams reject that name. Probe
-	// it once per session and fail loudly instead of pretending to move.
-	if c.ptzCapable == nil {
-		_, err := c.getTable("Ptz")
-		capable := err == nil
-		c.ptzCapable = &capable
-	}
-	if !*c.ptzCapable {
-		return fmt.Errorf("dahua: camera này không có PTZ (cam cố định, không có mô-tơ quay)")
-	}
-
+	// NOTE: do NOT gate this on the "Ptz" config table — inut_204_110's H5AE
+	// cams have working motors yet reject getConfig("Ptz"), so that heuristic
+	// blocked real PTZ (including the STOP of an already-moving camera, which
+	// is how a cam ends up spinning into its limit). Send the command as-is.
 	inst, err := c.Call("ptz.factory.instance", map[string]any{"channel": channel})
 	if err != nil {
 		return err
