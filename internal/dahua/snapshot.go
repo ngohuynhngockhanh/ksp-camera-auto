@@ -51,7 +51,7 @@ const ffmpegSnapTimeout = 12 * time.Second
 // bare "Bad Request" on modern firmware even with correct credentials (see
 // docs/GOTCHAS.md) — whereas RTSP is the same stream path live viewing
 // already depends on, so if that works, snapshot works.
-func GetSnapshot(ctx context.Context, host, user, pass string, channel int, timeout time.Duration) ([]byte, error) {
+func GetSnapshot(ctx context.Context, host string, port int, user, pass string, channel int, timeout time.Duration) ([]byte, error) {
 	// DVRIP first: a single round trip on the config protocol returns a ready
 	// JPEG with no ffmpeg/decode — the smooth, low-latency path. It needs the
 	// config port + a login. Restricted to channel 0: the snapshot command's
@@ -61,7 +61,7 @@ func GetSnapshot(ctx context.Context, host, user, pass string, channel int, time
 	// returning channel 0's image. Every single-channel IPC (channel 0) gets the
 	// fast DVRIP path — which is the whole gallery on these fleets.
 	if channel == 0 {
-		if data, dvripErr := GetSnapshotDVRIP(ctx, host, user, pass, channel, timeout); dvripErr == nil {
+		if data, dvripErr := GetSnapshotDVRIP(ctx, host, port, user, pass, channel, timeout); dvripErr == nil {
 			return data, nil
 		} else {
 			return snapshotFallback(ctx, host, user, pass, channel, timeout, dvripErr)

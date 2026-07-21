@@ -40,6 +40,9 @@ func TestLiveStreamDav(t *testing.T) {
 		t.Fatalf("bad KSPCAM_DAV_END: %v", err)
 	}
 	out := "/tmp/streamdav_test.dav"
+	if v := os.Getenv("KSPCAM_DAV_OUT"); v != "" {
+		out = v // point at a disk-backed path for large ranges (/tmp is often tmpfs)
+	}
 	_ = os.Remove(out)
 	f, err := os.Create(out)
 	if err != nil {
@@ -55,7 +58,7 @@ func TestLiveStreamDav(t *testing.T) {
 	t0 := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), dlTimeout)
 	defer cancel()
-	if err := StreamDav(ctx, f, host, user, pass, 0, start, end); err != nil {
+	if err := StreamDav(ctx, f, host, 0, user, pass, 0, start, end); err != nil {
 		t.Fatalf("StreamDav: %v", err)
 	}
 	fi, _ := f.Stat()
@@ -144,7 +147,7 @@ func TestLiveSnapDVRIP(t *testing.T) {
 		fmt.Sscanf(v, "%d", &ch)
 	}
 	t0 := time.Now()
-	jpeg, err := GetSnapshotDVRIP(ctx, bareHost(addr), user, pass, ch, 10*time.Second)
+	jpeg, err := GetSnapshotDVRIP(ctx, bareHost(addr), 0, user, pass, ch, 10*time.Second)
 	if err != nil {
 		t.Fatalf("GetSnapshotDVRIP: %v", err)
 	}
@@ -247,7 +250,7 @@ func TestLiveMJPEG(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	m := &mjpegCounter{}
-	err = StreamMJPEG(ctx, m, nil, bareHost(addr), user, pass, 0, 8, "frame")
+	err = StreamMJPEG(ctx, m, nil, bareHost(addr), 0, user, pass, 0, 8, "frame")
 	t.Logf("StreamMJPEG err=%v frames=%d bytes=%d", err, m.frames, m.bytes)
 	if m.frames < 3 {
 		t.Fatalf("too few frames: %d", m.frames)

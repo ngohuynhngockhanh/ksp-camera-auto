@@ -1,7 +1,8 @@
 /* Xem lại video — timeline review view.
  * Uses vis-timeline for the segment timeline + three draggable custom-time bars
  * (red playhead, green cut-start, yellow cut-end). Reuses global helpers from
- * app.js: api(), escapeHtml(), showToast(), timeoutSec(). Dahua-only. */
+ * app.js: api(), escapeHtml(), showToast(), timeoutSec(). Dahua + Hikvision
+ * (any vendor whose /api/recordings + /api/playback support recordings). */
 (function () {
   let timeline = null;      // vis.Timeline
   let items = null;         // vis.DataSet
@@ -32,6 +33,7 @@
   function fmtLocal(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }
   function fmtLocalSec(d) { return `${fmtLocal(d)}:${pad(d.getSeconds())}`; }
   let editingCut = false; // true while the user is typing in a cut time input
+  let curSpeed = 1;       // current playback speed (set by the speed buttons)
 
   // reviewOnShow is called by app.js setRoute() each time the view opens.
   window.reviewOnShow = function () {
@@ -40,27 +42,29 @@
     if (window._rvPreselect && window._rvCams) {
       const c = window._rvCams.find(c => c.id === window._rvPreselect);
       window._rvPreselect = null;
-      if (c && c.id !== (cam && cam.id)) { $('rv-cam').value = c.id; cam = c; load(60); }
+      if (c && c.id !== (cam && cam.id)) { $('rv-cam').value = c.id; cam = c; updateDownloadLabel(); load(1440); }
     }
   };
 
   async function init() {
     try { const cfg = await api('/api/config'); if (cfg && cfg.maxReviewHours) maxHours = cfg.maxReviewHours; } catch (e) { /* keep default 72 */ }
-    // Populate camera dropdown (Dahua only — playback is Dahua-only).
+    // Populate camera dropdown (playback works for Dahua and Hikvision —
+    // any vendor camera.Open()'s Camera implements camera.Recorder for).
     const sel = $('rv-cam');
     try {
-      const cams = (await api('/api/cameras') || []).filter(c => c.vendor === 'dahua');
-      if (!cams.length) { sel.innerHTML = '<option>Không có camera Dahua</option>'; return; }
+      const cams = (await api('/api/cameras') || []).filter(c => c.vendor === 'dahua' || c.vendor === 'hikvision' || c.vendor === 'tiandy');
+      if (!cams.length) { sel.innerHTML = '<option>Không có camera hỗ trợ xem lại</option>'; return; }
       sel.innerHTML = cams.map(c => {
         const chan = c.channelName || c.nvrName || '';
         const label = (c.name || c.host) + (chan ? ' - ' + chan : '');
         return `<option value="${escapeHtml(c.id)}">${escapeHtml(label)}</option>`;
       }).join('');
       window._rvCams = cams;
-      sel.addEventListener('change', () => { cam = cams.find(c => c.id === sel.value); load(60); refreshDays(); });
+      sel.addEventListener('change', () => { cam = cams.find(c => c.id === sel.value); updateDownloadLabel(); load(1440); refreshDays(); });
       cam = (window._rvPreselect && cams.find(c => c.id === window._rvPreselect)) || cams[0];
       window._rvPreselect = null;
       sel.value = cam.id;
+      updateDownloadLabel();
     } catch (e) { sel.innerHTML = '<option>Lỗi tải camera</option>'; return; }
 
     // Quick-time buttons.
@@ -72,7 +76,7 @@
 
     buildTimeline();
     wireControls();
-    load(60); // default: last hour
+    load(1440); // default: last 24h (1 ngày)
     refreshDays();
   }
 
@@ -85,16 +89,19 @@
     items = new vis.DataSet([]);
     timeline = new vis.Timeline($('rv-timeline'), items, {
       stack: false, showCurrentTime: false, selectable: false,
-      zoomMin: 1000 * 10, zoomMax: 1000 * 60 * 60 * maxHours, height: 90,
+      zoomMin: 1000 * 10, zoomMax: 1000 * 60 * 60 * maxHours, height: 132,
       moveable: true, zoomable: true,
       margin: { item: 2 },
     });
     // Draggable markers: cut-start (green), cut-end (yellow), playhead (red).
+    // Each carries a labelled knob (a much bigger grab target than the 4px bar).
     const now = new Date();
     timeline.addCustomTime(new Date(now.getTime() - 55 * 60000), 'cutStart');
     timeline.addCustomTime(new Date(now.getTime() - 50 * 60000), 'cutEnd');
     timeline.addCustomTime(now, 'playhead');
-    timeline.setCustomTimeMarker('▶', 'playhead', false);
+    timeline.setCustomTimeMarker('▶ Đang xem', 'playhead', false);
+    timeline.setCustomTimeMarker('◧ Đầu', 'cutStart', false);
+    timeline.setCustomTimeMarker('Cuối ◨', 'cutEnd', false);
     // While dragging the red marker, suppress the timeupdate auto-follow so it
     // doesn't snap back; on release, load a short preview clip at the new spot.
     timeline.on('timechange', (p) => { if (p.id === 'playhead') draggingPlayhead = true; clampMarkers(p.id); updateRange(); });
@@ -131,6 +138,8 @@
     // Keep the cut time pickers in sync with the markers (unless the user is
     // currently typing in them).
     if (!editingCut) { $('rv-cut-from').value = fmtLocalSec(a); $('rv-cut-to').value = fmtLocalSec(b); }
+    // Shade the selected clip region so it's obvious what will be downloaded.
+    if (items) items.update({ id: 'sel', start: a, end: b, type: 'background', className: 'rv-selection' });
     return { start: a, end: b };
   }
 
@@ -162,13 +171,66 @@
     const v = $('rv-video');
     previewBase = start;
     v.src = `/api/playback?id=${encodeURIComponent(cam.id)}&channel=${ch}&start=${encodeURIComponent(fmtParam(start))}&end=${encodeURIComponent(fmtParam(end))}`;
-    v.playbackRate = parseFloat($('rv-speed').value) || 1;
+    v.playbackRate = curSpeed;
     v.play().catch(() => {});
   }
 
   function load(minutes) {
     const end = new Date();
     loadRange(new Date(end.getTime() - minutes * 60000), end);
+  }
+
+  // ---- "Chia 5 phút": slice the currently loaded window [winStart, winEnd]
+  // into consecutive 5-minute segments for quick click-to-preview browsing.
+  // Purely client-side; each click just reuses playbackURL() like loadPreview
+  // does, with the segment's own [start,end] instead of the fixed 120s clip. ----
+  const SPLIT5_MIN = 5;
+  const SPLIT5_CAP = 288; // 288 * 5min = 24h — keep the rendered list sane
+  let split5Segments = [];
+
+  function fmtHM(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+
+  function buildSplit5() {
+    if (!cam || !winStart || !winEnd) { showToast('Chưa tải khoảng thời gian nào.', 'err'); return; }
+    const segMs = SPLIT5_MIN * 60000;
+    const count = Math.ceil((winEnd - winStart) / segMs);
+    if (count <= 0) { showToast('Khoảng thời gian không hợp lệ.', 'err'); return; }
+    if (count > SPLIT5_CAP) {
+      showToast(`Khoảng đang xem quá lớn để chia 5 phút (${count} đoạn). Hãy chọn khoảng tối đa ${SPLIT5_CAP * SPLIT5_MIN / 60} giờ.`, 'err');
+      return;
+    }
+    split5Segments = [];
+    for (let i = 0; i < count; i++) {
+      const s = new Date(winStart.getTime() + i * segMs);
+      const e = new Date(Math.min(s.getTime() + segMs, winEnd.getTime()));
+      split5Segments.push({ start: s, end: e });
+    }
+    const list = $('rv-split5-list');
+    list.hidden = false;
+    list.innerHTML = split5Segments.map((seg, i) =>
+      `<button class="btn btn-sm btn-secondary rv-split5-item" type="button" data-idx="${i}">${fmtHM(seg.start)}–${fmtHM(seg.end)}</button>`).join('');
+    list.querySelectorAll('.rv-split5-item').forEach(b =>
+      b.addEventListener('click', () => loadSplit5(parseInt(b.dataset.idx, 10))));
+    showToast(`Đã chia thành ${count} đoạn 5 phút.`, 'ok');
+  }
+
+  // loadSplit5 previews segment i in the existing <video> element, exactly
+  // like loadPreview() does for the rolling 120s clip, and moves the red
+  // playhead marker to the segment's start.
+  function loadSplit5(i) {
+    const seg = split5Segments[i];
+    if (!seg || !cam) return;
+    document.querySelectorAll('#rv-split5-list .rv-split5-item').forEach((b, idx) => {
+      b.classList.toggle('btn-primary', idx === i);
+      b.classList.toggle('btn-secondary', idx !== i);
+    });
+    const ch = parseInt($('rv-channel').value, 10) || 0;
+    const v = $('rv-video');
+    previewBase = seg.start;
+    v.src = playbackURL({ id: cam.id, channel: ch, start: fmtParam(seg.start), end: fmtParam(seg.end) });
+    v.playbackRate = curSpeed;
+    v.play().catch(() => {});
+    timeline.setCustomTime(seg.start, 'playhead');
   }
 
   // loadDay loads a whole calendar day (capped at "now"). dateStr = "YYYY-MM-DD".
@@ -209,32 +271,55 @@
     } catch (e) { el.innerHTML = ''; }
   }
 
+  const recCache = new Map(); // key -> recordings[]; instant re-render on re-click
+  function renderRecs(recs) {
+    items.clear();
+    items.add(recs.map((r, i) => ({
+      id: i, start: parseDev(r.startTime), end: parseDev(r.endTime),
+      type: 'range', className: (r.events && r.events.length) ? 'rv-ev' : 'rv-rec',
+      title: `${r.startTime} → ${r.endTime} (${r.duration}s)${(r.events && r.events.length) ? ' · ' + r.events.join(',') : ''}`,
+    })));
+    updateRange(); // re-adds the 'sel' shaded region cleared by items.clear()
+    $('rv-msg').textContent = recs.length ? `${recs.length} đoạn ghi.` : 'Không có bản ghi trong khoảng này.';
+    $('rv-msg').className = recs.length ? 'msg ok' : 'msg';
+  }
+
   async function loadRange(start, end) {
     if (!cam) return;
     winStart = start; winEnd = end;
+    // Stale segments would point outside the newly loaded window — clear them.
+    split5Segments = [];
+    const split5List = $('rv-split5-list');
+    if (split5List) { split5List.hidden = true; split5List.innerHTML = ''; }
     // keep the form inputs in sync with what's shown
     $('rv-from').value = fmtLocal(start); $('rv-to').value = fmtLocal(end);
     timeline.setWindow(start, end, { animation: false });
-    // place cut markers inside the window, playhead at start
-    timeline.setCustomTime(new Date(start.getTime() + (end - start) * 0.1), 'cutStart');
-    timeline.setCustomTime(new Date(start.getTime() + (end - start) * 0.2), 'cutEnd');
+    // Place cut markers inside the window, playhead at start. The default cut
+    // span is capped at 5 minutes: it used to be 10% of the window, which
+    // with the 1-day default window meant a 2.4-hour default clip — over the
+    // fast-download limit, so a straight "open → click download" failed.
+    const cutLen = Math.min(5 * 60000, (end - start) * 0.1);
+    const cutFrom = new Date(start.getTime() + (end - start) * 0.1);
+    timeline.setCustomTime(cutFrom, 'cutStart');
+    timeline.setCustomTime(new Date(cutFrom.getTime() + cutLen), 'cutEnd');
     timeline.setCustomTime(start, 'playhead');
     updateRange();
-    $('rv-msg').textContent = 'Đang tải danh sách bản ghi…'; $('rv-msg').className = 'msg';
+    const ch = parseInt($('rv-channel').value, 10) || 0;
+    const key = `${cam.id}|${ch}|${fmtParam(start)}|${fmtParam(end)}`;
+    // Cache-first: re-clicking the same day/window paints instantly, then we
+    // silently refresh in the background so growing "recent" windows stay current.
+    if (recCache.has(key)) renderRecs(recCache.get(key));
+    else { items.clear(); updateRange(); $('rv-msg').textContent = 'Đang tải danh sách bản ghi…'; $('rv-msg').className = 'msg'; }
+    $('rv-timeline').classList.toggle('rv-loading', !recCache.has(key));
     try {
-      const ch = parseInt($('rv-channel').value, 10) || 0;
-      const q = `id=${encodeURIComponent(cam.id)}&channel=${ch}&start=${encodeURIComponent(fmtParam(start))}&end=${encodeURIComponent(fmtParam(end))}&timeoutSeconds=${timeoutSec()}`;
+      const q = `id=${encodeURIComponent(cam.id)}&channel=${ch}&start=${encodeURIComponent(fmtParam(start))}&end=${encodeURIComponent(fmtParam(end))}&timeoutSeconds=15`;
       const res = await api('/api/recordings?' + q);
       const recs = (res && res.recordings) || [];
-      items.clear();
-      items.add(recs.map((r, i) => ({
-        id: i, start: parseDev(r.startTime), end: parseDev(r.endTime),
-        type: 'range', className: (r.events && r.events.length) ? 'rv-ev' : 'rv-rec',
-        title: `${r.startTime} → ${r.endTime} (${r.duration}s)${(r.events && r.events.length) ? ' · ' + r.events.join(',') : ''}`,
-      })));
-      $('rv-msg').textContent = recs.length ? `${recs.length} đoạn ghi.` : 'Không có bản ghi trong khoảng này.';
-      $('rv-msg').className = recs.length ? 'msg ok' : 'msg';
-    } catch (e) { $('rv-msg').textContent = 'Lỗi: ' + e.message; $('rv-msg').className = 'msg err'; }
+      recCache.set(key, recs);
+      if (winStart === start && winEnd === end) renderRecs(recs); // still the current window
+    } catch (e) {
+      if (!recCache.has(key)) { $('rv-msg').textContent = 'Lỗi: ' + e.message; $('rv-msg').className = 'msg err'; }
+    } finally { $('rv-timeline').classList.remove('rv-loading'); }
   }
 
   function cutParams() {
@@ -248,14 +333,65 @@
     return u + (extra || '');
   }
 
+  // recordingVendor is the vendor of whatever device actually SERVES this
+  // camera's recordings: the camera itself, or its linked fallback NVR (the
+  // server routes playback there via recordingSource — mirror that here so
+  // labels match what will really be downloaded).
+  function recordingVendor() {
+    if (!cam) return '';
+    // window._rvCams is the loaded camera list (init() scopes `cams` locally).
+    if (cam.nvrId) { const n = (window._rvCams || []).find(c => c.id === cam.nvrId); return n ? n.vendor : ''; }
+    return cam.vendor;
+  }
+
+  // updateDownloadLabel relabels the "native" download button per the
+  // recording source's vendor (format=native server-side): Dahua's is a
+  // byte-exact .dav (DHAV), which VLC and most players on any OS open fine.
+  // Hikvision's is its own proprietary IMKH container — NOT a real MP4, it
+  // only opens in VLC/a desktop player, never on iPhone or in a browser.
+  // The labels have to say this plainly or people click expecting a normal
+  // video file. Tiandy gets NO native button by request: its "original" would
+  // be a stream-copied MKV (no byte-download API on that firmware), and the
+  // fast MP4 carries the identical video bitstream anyway — one download
+  // button is less confusing. (format=native still works server-side for
+  // Tiandy, for old links.)
+  function updateDownloadLabel() {
+    const btn = $('rv-download-dav');
+    if (!btn || !cam) return;
+    const rv = recordingVendor();
+    const labels = {
+      dahua: 'Tải .dav (gốc)',
+      hikvision: 'Tải gốc IMKH (chỉ VLC, không phát trên ĐT/trình duyệt)',
+    };
+    btn.hidden = !labels[rv];
+    if (labels[rv]) btn.textContent = labels[rv];
+  }
+
   function wireControls() {
     const v = $('rv-video');
+    // HEVC-unsupported hint: the NVR records H.265 on every channel, and
+    // Chrome/Firefox on desktop simply can't decode it (this box is too slow
+    // to transcode, so there's no fallback stream to offer). When the
+    // <video> fires a MEDIA_ERR_SRC_NOT_SUPPORTED, tell the user instead of
+    // leaving a silently broken player. Cleared on the next successful load.
+    v.addEventListener('error', () => {
+      if (v.error && v.error.code === 4) { const h = $('rv-hevc-hint'); if (h) h.hidden = false; }
+    });
+    ['loadeddata', 'playing'].forEach(ev => v.addEventListener(ev, () => {
+      const h = $('rv-hevc-hint'); if (h) h.hidden = true;
+    }));
     // ▶ Phát previews from the red playhead's current position (native controls
     // give play/pause + seek bar within the loaded short clip).
     $('rv-play').addEventListener('click', () => loadPreview(markerTime('playhead')));
     document.querySelectorAll('#view-review [data-seek]').forEach(b =>
       b.addEventListener('click', () => { v.currentTime = Math.max(0, v.currentTime + parseFloat(b.dataset.seek)); }));
-    $('rv-speed').addEventListener('change', () => { v.playbackRate = parseFloat($('rv-speed').value); });
+    const speeds = $('rv-speeds');
+    speeds.querySelectorAll('[data-speed]').forEach(b => b.addEventListener('click', () => {
+      curSpeed = parseFloat(b.dataset.speed) || 1;
+      v.playbackRate = curSpeed;
+      speeds.querySelectorAll('[data-speed]').forEach(x => x.classList.toggle('btn-primary', x === b));
+    }));
+    const one = speeds.querySelector('[data-speed="1"]'); if (one) one.classList.add('btn-primary');
     // The red playhead follows playback — but never while the user is dragging it.
     v.addEventListener('timeupdate', () => {
       if (draggingPlayhead || !previewBase) return;
@@ -273,8 +409,11 @@
       el.addEventListener('blur', () => { editingCut = false; });
       el.addEventListener('change', () => { editingCut = false; applyCutInputs(); });
     });
-    $('rv-download').addEventListener('click', () => download(''));
-    $('rv-download-dav').addEventListener('click', () => download('&format=dav'));
+    // Fast MP4: parallel RTSP chunks — ~5× faster on Hik/Tiandy (Dahua aliases
+    // to its already-fast playback), same exact-cut browser-playable MP4.
+    $('rv-download').addEventListener('click', () => download('&format=fastmp4'));
+    $('rv-download-dav').addEventListener('click', () => download('&format=native'));
+    $('rv-split5-btn').addEventListener('click', buildSplit5);
     $('rv-qr').addEventListener('click', showQR);
     $('rv-qr-close').addEventListener('click', () => { $('rv-qr-modal').hidden = true; });
   }
@@ -283,9 +422,82 @@
     if (!cam) return;
     const p = cutParams();
     if (p.endDate <= p.startDate) { showToast('Chọn đoạn cắt hợp lệ.', 'err'); return; }
-    window.location.href = playbackURL(p, (extra || '') + '&download=1');
-    const isDav = (extra || '').includes('format=dav');
-    showToast(isDav ? 'Đang tải .dav gốc… (cần cổng cấu hình)' : 'Đang tải… (đoạn dài có thể mất chút thời gian)', 'ok');
+    const rangeSec = (p.endDate - p.startDate) / 1000;
+    const isNative = (extra || '').includes('format=native');
+    const isFast = (extra || '').includes('format=fastmp4');
+    const rv = recordingVendor();
+    // The chunked exports (fast MP4; Tiandy native) build the whole clip on
+    // the box's small tmpfs first — the server rejects >20 min, so say it
+    // here before firing a doomed request.
+    if ((isFast || (isNative && rv === 'tiandy')) && rangeSec > 20 * 60) {
+      showToast('Tải nhanh tối đa 20 phút mỗi lần — kéo 2 vạch Đầu/Cuối lại gần nhau (tốt nhất 5 phút mỗi clip).', 'err');
+      return;
+    }
+    let url = playbackURL(p, (extra || '') + '&download=1');
+    let msg = 'Đang tải… (đoạn dài có thể mất chút thời gian)';
+    if (isFast) {
+      // MEGA-style: tag the request with a job id and poll the server for
+      // fetch/concat/send progress to animate an in-page bar.
+      const jobId = 'j' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      url += '&job=' + jobId;
+      trackExport(jobId, rangeSec);
+      msg = `Đang chuẩn bị clip ${Math.round(rangeSec / 60)} phút — theo dõi thanh tiến độ bên dưới. Trình duyệt sẽ TỰ BẬT tải khi clip sẵn sàng.`;
+    } else if (isNative) {
+      msg = rv === 'hikvision'
+        ? 'Đang tải bản gốc IMKH (nhanh, chất lượng đầy đủ, không cắt chính xác theo giây)… Tệp này CHỈ mở được bằng VLC trên máy tính — KHÔNG phát được trên iPhone hay trong trình duyệt.'
+        : 'Đang tải .dav gốc… (cần cổng cấu hình)';
+    }
+    window.location.href = url;
+    showToast(msg, 'ok');
+  }
+
+  // trackExport polls /api/export-progress and animates the in-page bar while
+  // a fast export builds — the biggest cause of "không ra clip" was users
+  // re-clicking mid-build because nothing visibly happened. Buttons stay
+  // locked until the export finishes, errors, or (Dahua: no job is ever
+  // registered — its export streams immediately) polling gives up.
+  let expTimer = null;
+  function trackExport(jobId, rangeSec) {
+    const wrap = $('rv-prog'), bar = $('rv-prog-bar'), txt = $('rv-prog-txt');
+    const btns = [$('rv-download'), $('rv-download-dav')].filter(Boolean);
+    if (!wrap || !bar || !txt) return;
+    btns.forEach(b => { b.disabled = true; });
+    wrap.hidden = false;
+    bar.style.width = '2%';
+    txt.textContent = 'Đang kết nối đầu ghi…';
+    if (expTimer) clearInterval(expTimer);
+    let misses = 0;
+    // Chunks fetch in parallel waves at ~realtime, so poll-based progress can
+    // sit at 0/N for ~30s then jump. Blend in a time-based estimate (expected
+    // build ≈ range/10 + overhead) so the bar creeps forward the whole time.
+    const t0 = Date.now();
+    const expectSec = Math.max(30, rangeSec / 10 + 25);
+    const estPct = () => Math.min(85, (Date.now() - t0) / 1000 / expectSec * 90);
+    const finish = (m, isErr) => {
+      clearInterval(expTimer); expTimer = null;
+      wrap.hidden = true;
+      btns.forEach(b => { b.disabled = false; });
+      if (m) showToast(m, isErr ? 'err' : 'ok');
+    };
+    expTimer = setInterval(async () => {
+      let st;
+      try { st = await api('/api/export-progress?job=' + jobId); misses = 0; }
+      catch (e) { if (++misses >= 8) finish(null); return; }
+      if (st.phase === 'error') { finish('Lỗi tải: ' + (st.error || 'không rõ'), true); return; }
+      if (st.phase === 'done') {
+        bar.style.width = '100%';
+        txt.textContent = 'Xong!';
+        setTimeout(() => finish('Clip đã tải xong — kiểm tra mục tải xuống của trình duyệt.'), 1200);
+        return;
+      }
+      if (st.phase === 'concat') { bar.style.width = '92%'; txt.textContent = 'Đang ghép file…'; return; }
+      if (st.phase === 'send') { bar.style.width = '96%'; txt.textContent = 'Đang gửi về trình duyệt… (xem % ở mục tải xuống)'; return; }
+      if (st.total > 0) {
+        const pct = Math.round(Math.max(st.done / st.total * 90, estPct()));
+        bar.style.width = Math.max(2, pct) + '%';
+        txt.textContent = `Đang lấy dữ liệu từ đầu ghi… ${st.done}/${st.total} đoạn (${pct}%)`;
+      }
+    }, 1000);
   }
 
   async function showQR() {

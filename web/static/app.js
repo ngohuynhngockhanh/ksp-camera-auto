@@ -23,10 +23,11 @@ const NAV_ITEMS = [
   { hash: 'dashboard', label: 'Tổng quan', short: 'Tổng quan', icon: ICONS.home, bottom: true },
   { hash: 'scan', label: 'Quét mạng', short: 'Quét', icon: ICONS.radar, bottom: true },
   { hash: 'cameras', label: 'Kho camera', short: 'Camera', icon: ICONS.camera, bottom: true },
-  { hash: 'review', label: 'Xem lại', short: 'Xem lại', icon: ICONS.radar, bottom: false },
-  { hash: 'import', label: 'Nhập Shinobi', short: 'Nhập', icon: ICONS.upload, bottom: true },
-  // bottom: false — mobile bottom nav stays at 4 items; help is reachable
-  // from the sidebar and the drawer.
+  { hash: 'review', label: 'Xem lại', short: 'Xem lại', icon: ICONS.radar, bottom: true },
+  // bottom: false — mobile bottom nav stays at 4 items + Menu so it doesn't
+  // get crowded; import (an occasional setup action, unlike the other four
+  // which are used every visit) is reachable from the sidebar and the drawer.
+  { hash: 'import', label: 'Nhập Shinobi', short: 'Nhập', icon: ICONS.upload, bottom: false },
   { hash: 'help', label: 'Trợ giúp', short: 'Trợ giúp', icon: ICONS.help, bottom: false },
 ];
 // Old bookmarks/links to the now-merged tabs still land on #cameras.
@@ -293,8 +294,11 @@ function buildNav() {
   `;
 
   const drawer = document.getElementById('drawer-nav');
-  drawer.innerHTML = `
-    <a class="drawer-item" href="#help" data-nav-hash="help">${ICONS.help}<span>Trợ giúp</span></a>
+  // Anything not in the bottom nav (bottom: false) still needs a way in on
+  // mobile — list it here so it isn't stranded.
+  drawer.innerHTML = items.filter(n => n.bottom === false).map(n => `
+    <a class="drawer-item" href="#${n.hash}" data-nav-hash="${n.hash}">${n.icon}<span>${n.label}</span></a>
+  `).join('') + `
     <button class="drawer-item" id="drawer-theme-btn" type="button">${ICONS.moon}<span>Đổi giao diện sáng/tối</span></button>
     <a class="drawer-item" href="/logout">${ICONS.logout}<span>Đăng xuất</span></a>
   `;
@@ -354,15 +358,44 @@ function renderCameraSkeleton() {
   `).join('');
 }
 
+let camSort = { key: 'name', dir: 1 };
+const camCollator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' });
+
+function camSortVal(c, key) {
+  switch (key) {
+    case 'name': return `${c.name || ''} ${c.channelName || ''}`.trim();
+    case 'host': return c.host || '';
+    case 'port': return c.port || 0;
+    case 'vendor': return c.vendor || '';
+    case 'username': return c.username || '';
+    case 'password': return c.password || '';
+    case 'stream': return (fmtStreamInfo(probeCache[c.id]) || '').replace(/<[^>]*>/g, '');
+    default: return '';
+  }
+}
+
+function sortedCameras() {
+  const { key, dir } = camSort;
+  return cameras.slice().sort((a, b) => {
+    const va = camSortVal(a, key), vb = camSortVal(b, key);
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+    return camCollator.compare(String(va), String(vb)) * dir;
+  });
+}
+
 function renderCameras() {
   const tbody = document.getElementById('cam-tbody');
+  document.querySelectorAll('#cam-table th.sortable').forEach(th => {
+    th.classList.toggle('sort-asc', th.dataset.sort === camSort.key && camSort.dir === 1);
+    th.classList.toggle('sort-desc', th.dataset.sort === camSort.key && camSort.dir === -1);
+  });
   if (!cameras.length) {
     tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Chưa có camera nào. Thêm ở form phía trên.</td></tr>';
     renderDashboard();
     return;
   }
   const checked = new Set(Array.from(document.querySelectorAll('.cam-cb:checked')).map(cb => cb.value));
-  tbody.innerHTML = cameras.map(c => `
+  tbody.innerHTML = sortedCameras().map(c => `
     <tr data-id="${escapeHtml(c.id)}">
       <td class="cell-check"><input type="checkbox" class="cam-cb" value="${escapeHtml(c.id)}" ${checked.has(c.id) ? 'checked' : ''} aria-label="Chọn camera"></td>
       <td data-label="Tên" class="cell-name">
@@ -426,6 +459,7 @@ async function loadCameras() {
     port: parseInt(document.getElementById('nvr-port').value, 10) || 0,
     username: document.getElementById('nvr-user').value.trim(),
     password: document.getElementById('nvr-pass').value,
+    vendor: document.getElementById('nvr-vendor').value,
   });
   document.getElementById('nvr-open-btn').addEventListener('click', () => {
     const nvr = cameras.find(c => c.isNvr);
@@ -433,6 +467,7 @@ async function loadCameras() {
     document.getElementById('nvr-port').value = nvr ? nvr.port : 37777;
     document.getElementById('nvr-user').value = nvr ? nvr.username : 'admin';
     document.getElementById('nvr-pass').value = '';
+    document.getElementById('nvr-vendor').value = (nvr && (nvr.vendor === 'dahua' || nvr.vendor === 'hikvision')) ? nvr.vendor : 'hikvision';
     scanRows = [];
     document.getElementById('nvr-tbody').innerHTML = '<tr><td colspan="4" class="empty-hint">Nhập đầu ghi rồi bấm "Quét đầu ghi".</td></tr>';
     document.getElementById('nvr-save-btn').disabled = true;
@@ -563,7 +598,7 @@ document.getElementById('cam-tbody').addEventListener('click', async (ev) => {
     goto('cameras');
     document.getElementById('add-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
     document.getElementById('f-name').focus();
-    if (c.vendor === 'dahua' || c.vendor === 'hikvision') {
+    if (c.vendor === 'dahua' || c.vendor === 'hikvision' || c.vendor === 'tiandy') {
       openNetworkCard(c);
     } else {
       closeNetworkCard();
@@ -1037,6 +1072,15 @@ function startInlineRename(cell, id) {
   });
   input.addEventListener('blur', () => finish(true));
 }
+
+document.querySelector('#cam-table thead').addEventListener('click', (ev) => {
+  const th = ev.target.closest('th.sortable');
+  if (!th) return;
+  const key = th.dataset.sort;
+  if (camSort.key === key) camSort.dir = -camSort.dir;
+  else camSort = { key, dir: 1 };
+  renderCameras();
+});
 
 document.getElementById('select-all').addEventListener('change', (ev) => {
   document.querySelectorAll('.cam-cb').forEach(cb => cb.checked = ev.target.checked);
@@ -1710,12 +1754,14 @@ async function openChannelEdit(tile) {
   switchPictureMode('lite');
   const cam = cameras.find(x => x.id === tile.camId);
   const isDahua = !!cam && cam.vendor === 'dahua';
+  const canEncode = isDahua || (!!cam && cam.vendor === 'tiandy'); // Tiandy encode over CGI/ISAPI
   document.getElementById('ce-tab-btn-picture').hidden = !isDahua;
   document.getElementById('ce-tab-btn-ptz').hidden = !isDahua;
-  document.getElementById('ce-tab-btn-video').hidden = !isDahua;
+  document.getElementById('ce-tab-btn-video').hidden = !canEncode;
   document.getElementById('ce-tab-btn-audio').hidden = !isDahua;
-  // Network works for both Dahua (DVRIP) and Hikvision (ISAPI).
-  document.getElementById('ce-tab-btn-network').hidden = !cam || (cam.vendor !== 'dahua' && cam.vendor !== 'hikvision');
+  // Network works for Dahua (DVRIP), Hikvision (ISAPI) and Tiandy (ONVIF,
+  // read-only IP view).
+  document.getElementById('ce-tab-btn-network').hidden = !cam || (cam.vendor !== 'dahua' && cam.vendor !== 'hikvision' && cam.vendor !== 'tiandy');
   document.getElementById('ce-ptz-msg').textContent = '';
   document.getElementById('ce-vid-body').innerHTML = '';
   document.getElementById('ce-aud-body').innerHTML = '';

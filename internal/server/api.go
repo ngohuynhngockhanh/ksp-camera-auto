@@ -21,7 +21,62 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/dahua"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/importer"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mediaexport"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/tiandy"
 )
+
+// exportJob is the observable state of one chunked playback export, keyed by
+// the client-chosen job id (&job= on /api/playback). The review page polls
+// /api/export-progress with the same id to draw a MEGA-style in-page progress
+// bar — a plain navigation download gives the page no visibility otherwise.
+type exportJob struct {
+	Done, Total int
+	Phase       string // "start" | "fetch" | "concat" | "send" | "done" | "error"
+	Error       string
+	updated     time.Time
+}
+
+var (
+	exportJobsMu sync.Mutex
+	exportJobs   = map[string]*exportJob{}
+)
+
+// setExportJob updates (creating if needed) a job under the lock and prunes
+// stale entries so the map can't grow unboundedly.
+func setExportJob(id string, f func(*exportJob)) {
+	exportJobsMu.Lock()
+	defer exportJobsMu.Unlock()
+	j := exportJobs[id]
+	if j == nil {
+		j = &exportJob{Phase: "start"}
+		exportJobs[id] = j
+	}
+	f(j)
+	j.updated = time.Now()
+	for k, v := range exportJobs {
+		if time.Since(v.updated) > 10*time.Minute {
+			delete(exportJobs, k)
+		}
+	}
+}
+
+// handleExportProgress handles GET /api/export-progress?job= — the polling
+// side of the in-page download progress bar.
+func (s *Server) handleExportProgress(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("job")
+	exportJobsMu.Lock()
+	j, ok := exportJobs[id]
+	var cp exportJob
+	if ok {
+		cp = *j
+	}
+	exportJobsMu.Unlock()
+	if !ok {
+		writeErr(w, http.StatusNotFound, "job not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"done": cp.Done, "total": cp.Total, "phase": cp.Phase, "error": cp.Error})
+}
 
 // reqTimeout resolves a per-request device timeout: the request's
 // timeoutSeconds (clamped to 5..600s) if given, else the configured default.
@@ -46,32 +101,32 @@ func (s *Server) reqTimeout(sec int) time.Duration {
 // passed login, the same trust boundary every other admin action here relies
 // on (ChangePassword, network/Wi-Fi config, etc.).
 type deviceView struct {
-	ID         string        `json:"id"`
-	Name       string        `json:"name"`
-	Host       string        `json:"host"`
-	Port       int           `json:"port"`
-	Vendor     config.Vendor `json:"vendor"`
-	Username   string        `json:"username"`
-	Password   string        `json:"password"`
-	NVRID      string        `json:"nvrId,omitempty"`
-	NVRChannel int           `json:"nvrChannel,omitempty"`
-	NVRName     string       `json:"nvrName,omitempty"`
-	ChannelName string       `json:"channelName,omitempty"`
-	NoStorage   bool         `json:"noStorage,omitempty"`
-	IsNVR       bool         `json:"isNvr,omitempty"`
+	ID          string        `json:"id"`
+	Name        string        `json:"name"`
+	Host        string        `json:"host"`
+	Port        int           `json:"port"`
+	Vendor      config.Vendor `json:"vendor"`
+	Username    string        `json:"username"`
+	Password    string        `json:"password"`
+	NVRID       string        `json:"nvrId,omitempty"`
+	NVRChannel  int           `json:"nvrChannel,omitempty"`
+	NVRName     string        `json:"nvrName,omitempty"`
+	ChannelName string        `json:"channelName,omitempty"`
+	NoStorage   bool          `json:"noStorage,omitempty"`
+	IsNVR       bool          `json:"isNvr,omitempty"`
 }
 
 func toView(d config.Device) deviceView {
 	return deviceView{
-		ID:         d.ID,
-		Name:       d.Name,
-		Host:       d.Host,
-		Port:       d.Port,
-		Vendor:     d.Vendor,
-		Username:   d.Username,
-		Password:   d.Password,
-		NVRID:      d.NVRID,
-		NVRChannel: d.NVRChannel,
+		ID:          d.ID,
+		Name:        d.Name,
+		Host:        d.Host,
+		Port:        d.Port,
+		Vendor:      d.Vendor,
+		Username:    d.Username,
+		Password:    d.Password,
+		NVRID:       d.NVRID,
+		NVRChannel:  d.NVRChannel,
 		NVRName:     d.NVRName,
 		ChannelName: d.ChannelName,
 		NoStorage:   d.NoStorage,
@@ -139,14 +194,17 @@ func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "host is required")
 		return
 	}
-	if req.Vendor != config.VendorDahua && req.Vendor != config.VendorHikvision {
-		writeErr(w, http.StatusBadRequest, "vendor must be dahua or hikvision")
+	if req.Vendor != config.VendorDahua && req.Vendor != config.VendorHikvision && req.Vendor != config.VendorTiandy {
+		writeErr(w, http.StatusBadRequest, "vendor must be dahua, hikvision or tiandy")
 		return
 	}
 	if req.Port == 0 {
-		if req.Vendor == config.VendorDahua {
+		switch req.Vendor {
+		case config.VendorDahua:
 			req.Port = s.cfg.Defaults.DahuaPort
-		} else {
+		case config.VendorTiandy:
+			req.Port = s.cfg.Defaults.TiandyPort
+		default:
 			req.Port = s.cfg.Defaults.HikvisionPort
 		}
 	}
@@ -324,7 +382,12 @@ func (s *Server) handlePassword(w http.ResponseWriter, r *http.Request) {
 			emit(bulk.Event{Type: "device_done", DeviceID: id, Name: d.Name, OK: false, Err: err.Error()})
 			continue
 		}
-		// Update the stored credential so we can still connect.
+		// Update the stored credential so we can still connect. Re-read the
+		// entry first: Open() may have just hard-set a fallback DVRIP port
+		// (OnDahuaPortFallback) and the local d predates that.
+		if cur, ok := s.inv.Get(id); ok {
+			d = cur
+		}
 		d.Username, d.Password = req.NewUsername, req.NewPassword
 		_ = s.inv.Upsert(d)
 		emit(bulk.Event{Type: "step", DeviceID: id, Name: d.Name, Step: "đổi mật khẩu", Detail: "OK — đã cập nhật kho", OK: true})
@@ -420,10 +483,26 @@ func (s *Server) openDeviceCamera(w http.ResponseWriter, r *http.Request, id str
 }
 
 // nvrDeviceFrom builds an NVR config.Device from a scan/link request, defaulting
-// the port and carrying an existing stored password when the field is blank.
-func (s *Server) nvrDeviceFrom(host string, port int, user, pass, name string) config.Device {
+// the port (per-vendor: Dahua's DVRIP port or Hik's ISAPI port) and carrying an
+// existing stored password when the field is blank. vendor is whatever the
+// request specified (see nvrScanReq.Vendor/nvrLinkReq.NVR.Vendor); an empty or
+// unrecognized value falls back to VendorDahua, which is the ONLY vendor this
+// endpoint supported before Hik NVR scanning existed — so old requests that
+// never set the field (the frontend doesn't send it yet) keep behaving
+// byte-identically to before this method grew a vendor parameter.
+func (s *Server) nvrDeviceFrom(host string, port int, user, pass, name string, vendor config.Vendor) config.Device {
+	if vendor != config.VendorHikvision && vendor != config.VendorTiandy {
+		vendor = config.VendorDahua
+	}
 	if port == 0 {
-		port = s.cfg.Defaults.DahuaPort
+		switch vendor {
+		case config.VendorHikvision:
+			port = s.cfg.Defaults.HikvisionPort
+		case config.VendorTiandy:
+			port = s.cfg.Defaults.TiandyPort
+		default:
+			port = s.cfg.Defaults.DahuaPort
+		}
 	}
 	if user == "" {
 		user = s.cfg.Defaults.Username
@@ -436,7 +515,7 @@ func (s *Server) nvrDeviceFrom(host string, port int, user, pass, name string) c
 			pass = s.cfg.Defaults.Password
 		}
 	}
-	return config.Device{ID: id, Name: name, Host: host, Port: port, Vendor: config.VendorDahua, Username: user, Password: pass, IsNVR: true}
+	return config.Device{ID: id, Name: name, Host: host, Port: port, Vendor: vendor, Username: user, Password: pass, IsNVR: true}
 }
 
 type nvrScanReq struct {
@@ -445,6 +524,11 @@ type nvrScanReq struct {
 	Username       string `json:"username"`
 	Password       string `json:"password"`
 	TimeoutSeconds int    `json:"timeoutSeconds"`
+	// Vendor is optional and additive: omitted/empty defaults to
+	// VendorDahua (nvrDeviceFrom's fallback), so existing callers that never
+	// send it keep scanning a Dahua NVR exactly as before. Set to
+	// "hikvision" to scan a Hik NVR's InputProxy channels instead.
+	Vendor config.Vendor `json:"vendor,omitempty"`
 }
 
 type nvrScanRow struct {
@@ -471,10 +555,15 @@ func (s *Server) handleNVRScan(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "host is required")
 		return
 	}
-	nvr := s.nvrDeviceFrom(req.Host, req.Port, req.Username, req.Password, "")
+	nvr := s.nvrDeviceFrom(req.Host, req.Port, req.Username, req.Password, "", req.Vendor)
 	to := s.reqTimeout(req.TimeoutSeconds)
 	ctx, cancel := context.WithTimeout(r.Context(), to)
 	defer cancel()
+	// camera.Open dispatches on nvr.Vendor (Dahua DVRIP vs Hik ISAPI); the
+	// rest of this function only ever touches the result through the
+	// camera.Camera/RemoteDeviceLister/StorageManager interfaces below, so it
+	// works unchanged for either vendor once the concrete type implements them
+	// (hikCamera does, since Milestone 2).
 	cam, err := camera.Open(ctx, nvr, to)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, "mở đầu ghi lỗi: "+err.Error())
@@ -483,7 +572,7 @@ func (s *Server) handleNVRScan(w http.ResponseWriter, r *http.Request) {
 	defer cam.Close()
 	rdl, ok := cam.(camera.RemoteDeviceLister)
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "thiết bị này không đọc được danh sách kênh (không phải NVR Dahua?)")
+		writeErr(w, http.StatusBadRequest, "thiết bị này không đọc được danh sách kênh (không phải NVR?)")
 		return
 	}
 	remotes, err := rdl.GetRemoteDevices(ctx)
@@ -562,6 +651,9 @@ type nvrLinkReq struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
 		Name     string `json:"name"`
+		// Vendor is optional and additive — see nvrScanReq.Vendor. Omitted/
+		// empty defaults to VendorDahua, matching /api/nvr/scan.
+		Vendor config.Vendor `json:"vendor,omitempty"`
 	} `json:"nvr"`
 	Mappings []struct {
 		CameraID   string `json:"cameraId"`
@@ -584,7 +676,7 @@ func (s *Server) handleNVRLink(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "NVR host is required")
 		return
 	}
-	nvr := s.nvrDeviceFrom(req.NVR.Host, req.NVR.Port, req.NVR.Username, req.NVR.Password, req.NVR.Name)
+	nvr := s.nvrDeviceFrom(req.NVR.Host, req.NVR.Port, req.NVR.Username, req.NVR.Password, req.NVR.Name, req.NVR.Vendor)
 	if nvr.Name == "" {
 		nvr.Name = "Đầu ghi " + req.NVR.Host
 	}
@@ -1478,7 +1570,8 @@ func parsePlaybackTime(s string) (time.Time, error) {
 
 // handleRecordings handles GET /api/recordings?id=&channel=&start=&end= —
 // list stored recording segments (the playback timeline) for one channel over
-// a time range. Dahua-only.
+// a time range. Works for any vendor whose camera.Camera implements
+// camera.Recorder (currently Dahua and Hikvision).
 func (s *Server) handleRecordings(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -1533,19 +1626,44 @@ func (s *Server) handleRecordings(w http.ResponseWriter, r *http.Request) {
 type countingWriter struct {
 	w io.Writer
 	n int64
+	// beforeFirst, if set, runs once right before the first byte is written —
+	// the last moment HTTP headers can still be set. Lets the playback handler
+	// keep the response error-able (plain JSON) until a stream actually
+	// produces output.
+	beforeFirst func()
 }
 
 func (c *countingWriter) Write(p []byte) (int, error) {
+	if c.n == 0 && len(p) > 0 && c.beforeFirst != nil {
+		c.beforeFirst()
+	}
 	n, err := c.w.Write(p)
 	c.n += int64(n)
 	return n, err
 }
 
+// SetContentLength forwards the final file size to the HTTP response, so the
+// browser's download UI can show a real percentage and time-remaining. Only
+// the exports that build the whole file before sending (mediaexport's fast
+// MP4/MKV — see fastRemux) know their size up front and call this; it must
+// arrive before the first Write, after which headers are already flushed.
+func (c *countingWriter) SetContentLength(size int64) {
+	if c.n > 0 || size <= 0 {
+		return
+	}
+	if rw, ok := c.w.(http.ResponseWriter); ok {
+		rw.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	}
+}
+
 // handlePlayback handles GET /api/playback?id=&channel=&start=&end=&download= —
 // stream one channel's [start,end] recording to the client as fragmented MP4,
-// remuxed from Dahua RTSP playback with nothing buffered on the box (see
-// dahua.StreamPlayback). download=1 forces a file download; otherwise it plays
-// inline (HTML5 <video>). Dahua-only.
+// remuxed from the device's own RTSP playback with nothing buffered on the
+// box (dahua.StreamPlayback / hik.StreamPlayback). download=1 forces a file
+// download; otherwise it plays inline (HTML5 <video>). format=native (legacy
+// alias: format=dav) switches to each vendor's most-original container instead
+// of the MP4 remux: Dahua's DHAV .dav, Hikvision's IMKH, Tiandy's
+// stream-copied MKV — see the per-vendor branch below.
 func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -1589,7 +1707,7 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 	// A camera with no local storage serves its recordings/downloads from the
 	// linked NVR channel instead.
 	d, channel = s.recordingSource(d, channel)
-	if d.Vendor != config.VendorDahua {
+	if d.Vendor != config.VendorDahua && d.Vendor != config.VendorHikvision && d.Vendor != config.VendorTiandy {
 		writeErr(w, http.StatusBadRequest, notDahuaErr)
 		return
 	}
@@ -1602,35 +1720,147 @@ func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 
-	// Always use normal (paced) playback: it is fragmented MP4 with EVERY frame,
-	// playable everywhere. The RTSP "Rate-Control: no" fast path (StreamPlaybackFast)
-	// is retained but NOT used for downloads — on these camera firmwares that mode
-	// only emits keyframes (~1 fps), so the file looked choppy/frozen. fast=1 is
-	// accepted for backward compat but routed to the same full-frame stream.
-	// format=dav downloads the camera's native .dav (DHAV) over DVRIP, byte-exact
-	// with no remux; anything else is the default fragmented MP4 over RTSP. Both
-	// stream funcs share the same signature, so this is a drop-in swap.
-	stream := dahua.StreamPlayback
+	native := q.Get("format") == "native" || q.Get("format") == "dav"
 	ext, ctype := "mp4", "video/mp4"
-	if q.Get("format") == "dav" {
-		stream = dahua.StreamDav
-		ext, ctype = "dav", "application/octet-stream"
-	}
-	fname := fmt.Sprintf("playback_ch%d_%s.%s", channel, start.Format("20060102_150405"), ext)
-	w.Header().Set("Content-Type", ctype)
-	if q.Get("download") != "" {
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fname))
-	}
-	cw := &countingWriter{w: w}
-	if err := stream(ctx, cw, d.Host, d.Username, d.Password, channel, start, end); err != nil {
-		if cw.n == 0 {
-			// Nothing sent yet — the status line is still ours to set.
+	var streamErr error
+
+	switch d.Vendor {
+	case config.VendorDahua:
+		// Playback is pure RTSP+ffmpeg and deliberately does NOT open a DVRIP
+		// session: the recorded stream comes over port 554, and skipping the
+		// DVRIP login means a download isn't blocked when the camera's config
+		// port is busy (these field cameras are often also recorded by
+		// another system). So it streams straight off d, resolved from
+		// inventory above — no camera.Open here.
+		//
+		// Always use normal (paced) playback: it is fragmented MP4 with EVERY
+		// frame, playable everywhere. The RTSP "Rate-Control: no" fast path
+		// (StreamPlaybackFast) is retained but NOT used for downloads — on
+		// these camera firmwares that mode only emits keyframes (~1 fps), so
+		// the file looked choppy/frozen. fast=1 is accepted for backward
+		// compat but routed to the same full-frame stream.
+		// format=dav downloads the camera's native .dav (DHAV) over DVRIP,
+		// byte-exact with no remux; anything else is the default fragmented
+		// MP4 over RTSP. Both stream funcs share the same signature, so this
+		// is a drop-in swap.
+		stream := dahua.StreamPlayback
+		if native {
+			// StreamDav additionally needs the DVRIP config port (which may be
+			// the KBVision 8888 instead of 37777); adapt it to the shared
+			// RTSP-shaped signature by capturing d.Port.
+			stream = func(ctx context.Context, w io.Writer, host, user, pass string, channel int, start, end time.Time) error {
+				return dahua.StreamDav(ctx, w, host, d.Port, user, pass, channel, start, end)
+			}
+			ext, ctype = "dav", "application/octet-stream"
+		}
+		fname := fmt.Sprintf("playback_ch%d_%s.%s", channel, start.Format("20060102_150405"), ext)
+		w.Header().Set("Content-Type", ctype)
+		if q.Get("download") != "" {
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fname))
+		}
+		cw := &countingWriter{w: w}
+		streamErr = stream(ctx, cw, d.Host, d.Username, d.Password, channel, start, end)
+		if streamErr != nil {
+			if cw.n == 0 {
+				writeErr(w, http.StatusBadGateway, streamErr.Error())
+				return
+			}
+			log.Printf("playback %s ch%d: stream error after %d bytes: %v", q.Get("id"), channel, cw.n, streamErr)
+		}
+		return
+	case config.VendorHikvision, config.VendorTiandy:
+		// Hik and Tiandy playback/download both go through camera.Open and the
+		// camera.Recorder interface (Hik over ISAPI; Tiandy over RTSP-by-time,
+		// remuxed to MP4).
+		cam, err := camera.Open(ctx, d, time.Duration(timeoutSeconds)*time.Second)
+		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
 		}
-		// Bytes already streamed: can't change the status. Log and drop the
-		// connection so the client sees a truncated (failed) download.
-		log.Printf("playback %s ch%d: stream error after %d bytes: %v", q.Get("id"), channel, cw.n, err)
+		defer cam.Close()
+		rec, ok := cam.(camera.Recorder)
+		if !ok {
+			writeErr(w, http.StatusBadRequest, notDahuaErr)
+			return
+		}
+		// format=native on Hik is its own proprietary container (magic "IMKH" —
+		// see hik.StreamNative): keep Hik's own ".mp4" file-naming convention
+		// (that's what the device itself calls it) but an octet-stream
+		// content-type since it's NOT a standard, browser-playable MP4. On
+		// Tiandy it's a stream-copied MKV (no byte-download API on that
+		// firmware — see tiandy.Client.StreamNative), so name it what it is.
+		fast := q.Get("format") == "fastmp4"
+		if native {
+			ctype = "application/octet-stream"
+			if d.Vendor == config.VendorTiandy {
+				ext, ctype = "mkv", "video/x-matroska"
+			}
+		}
+		// The chunked exporters (fast MP4, and Tiandy's native MKV) build the
+		// whole file in the box's /tmp before sending — which is a ~1 GB tmpfs
+		// on the deploy boxes, holding chunks AND the concat result at peak.
+		// Cap those exports at 20 minutes (~760 MB peak for 2560×1440 HEVC) so
+		// a long range fails with a clear message instead of dying mid-build
+		// with an opaque one.
+		if fast || (native && d.Vendor == config.VendorTiandy) {
+			if end.Sub(start) > 20*time.Minute {
+				writeErr(w, http.StatusBadRequest, "tải nhanh tối đa 20 phút mỗi lần — hãy cắt đoạn ngắn hơn (tốt nhất 5 phút mỗi clip)")
+				return
+			}
+		}
+		fname := fmt.Sprintf("playback_ch%d_%s.%s", channel, start.Format("20060102_150405"), ext)
+		// Headers go out lazily, on the first body byte (beforeFirst): the
+		// chunked exporters spend up to a minute building the file first, and
+		// if that build FAILS the response must still be able to become a
+		// plain JSON error the browser shows — headers already sent as
+		// video/mp4 + attachment would instead turn the error into a broken
+		// 1 KB "download" (or nothing at all, which reads as "nút tải không
+		// ra clip").
+		cw := &countingWriter{w: w}
+		cw.beforeFirst = func() {
+			w.Header().Set("Content-Type", ctype)
+			if q.Get("download") != "" {
+				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fname))
+			}
+		}
+		// &job= opts into progress reporting: the chunked exporters publish
+		// fetch/concat/send phases the review page polls for its progress bar.
+		jobID := q.Get("job")
+		if jobID != "" {
+			setExportJob(jobID, func(j *exportJob) {})
+			ctx = mediaexport.WithProgress(ctx, func(done, total int, phase string) {
+				setExportJob(jobID, func(j *exportJob) { j.Done, j.Total, j.Phase = done, total, phase })
+			})
+		}
+		switch {
+		case native:
+			streamErr = rec.StreamNative(ctx, cw, channel, start, end)
+		case fast:
+			// Fast MP4: parallel RTSP chunks (Hik/Tiandy realtime → ~10× faster).
+			streamErr = rec.StreamPlaybackFast(ctx, cw, channel, start, end)
+		default:
+			streamErr = rec.StreamPlayback(ctx, cw, channel, start, end)
+		}
+		if jobID != "" {
+			msg := ""
+			if streamErr != nil {
+				msg = streamErr.Error()
+			}
+			setExportJob(jobID, func(j *exportJob) {
+				if msg != "" {
+					j.Phase, j.Error = "error", msg
+				} else {
+					j.Phase = "done"
+				}
+			})
+		}
+		if streamErr != nil {
+			if cw.n == 0 {
+				writeErr(w, http.StatusBadGateway, streamErr.Error())
+				return
+			}
+			log.Printf("playback %s ch%d: stream error after %d bytes: %v", q.Get("id"), channel, cw.n, streamErr)
+		}
 	}
 }
 
@@ -1654,7 +1884,7 @@ func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
 	channel := atoiDefault(q.Get("channel"), 0)
 	// If the camera is offline, fall the live view back to its NVR channel.
 	d, channel = s.liveSource(d, channel)
-	if d.Vendor != config.VendorDahua {
+	if d.Vendor != config.VendorDahua && d.Vendor != config.VendorTiandy {
 		writeErr(w, http.StatusBadRequest, notDahuaErr)
 		return
 	}
@@ -1674,8 +1904,14 @@ func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
-	if err := dahua.StreamMJPEG(ctx, w, flush, d.Host, d.Username, d.Password, channel, fps, boundary); err != nil {
-		log.Printf("live %s ch%d: %v", q.Get("id"), channel, err)
+	var liveErr error
+	if d.Vendor == config.VendorTiandy {
+		liveErr = tiandy.StreamMJPEG(ctx, w, flush, d.Host, d.Username, d.Password, channel, fps, boundary)
+	} else {
+		liveErr = dahua.StreamMJPEG(ctx, w, flush, d.Host, d.Port, d.Username, d.Password, channel, fps, boundary)
+	}
+	if liveErr != nil {
+		log.Printf("live %s ch%d: %v", q.Get("id"), channel, liveErr)
 	}
 }
 

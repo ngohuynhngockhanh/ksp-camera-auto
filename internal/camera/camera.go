@@ -13,6 +13,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/dahua"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/hik"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/tiandy"
 )
 
 // Stream selects an encoded stream. Values match dahua.Stream: 0=main,
@@ -28,6 +29,18 @@ const (
 // kbvisionFallbackPort is the DVRIP port some KBVision (Dahua OEM) devices
 // use instead of the 37777 default. See Open()'s VendorDahua case.
 const kbvisionFallbackPort = 8888
+
+// dahuaDefaultPort is the stock DVRIP config port. A device configured on it
+// may really live on kbvisionFallbackPort (the importer assigns the default
+// blindly), so Open retries 8888 on any failure of a default-port attempt.
+const dahuaDefaultPort = 37777
+
+// OnDahuaPortFallback, when set, is called after a Dahua device could only be
+// reached on the KBVision fallback port (8888) instead of its configured port.
+// The server wires this to hard-set the working port in the saved inventory so
+// every later connection (snapshot, playback, .dav download) goes straight to
+// the right port.
+var OnDahuaPortFallback func(deviceID string, port int)
 
 // Profile describes which encode settings to apply to a set of streams. A
 // field is only applied when its "Set*" flag is true, so a Profile can carry
@@ -200,16 +213,21 @@ type Rebooter interface {
 }
 
 // StorageManager is implemented by cameras that expose on-device storage
-// (SD card) info and formatting. Dahua-only. Formatting erases all recordings,
-// so the UI must require explicit confirmation before calling Format.
+// (SD card / NVR HDD bay) info and formatting. Both dahuaCamera (DVRIP
+// storage.getDeviceAllInfo) and hikCamera (ISAPI /ContentMgmt/Storage)
+// implement it; callers type-assert. Formatting erases all recordings, so
+// the UI must require explicit confirmation before calling Format — note
+// hikCamera.FormatStorage always returns an error (unimplemented for Hik,
+// see its doc comment), so only the read side works there today.
 type StorageManager interface {
 	GetStorageInfo(ctx context.Context) ([]dahua.StorageDevice, error)
 	FormatStorage(ctx context.Context, name string) error
 }
 
 // RemoteDeviceLister is implemented by an NVR that can report the camera
-// connected to each of its channels (Dahua RemoteDevice config). Dahua-only;
-// callers type-assert. Used to auto-map cameras to NVR channels.
+// connected to each of its channels (Dahua RemoteDevice config / Hik ISAPI
+// InputProxy channels). Both dahuaCamera and hikCamera implement it; callers
+// type-assert. Used to auto-map cameras to NVR channels.
 type RemoteDeviceLister interface {
 	GetRemoteDevices(ctx context.Context) ([]dahua.RemoteChannel, error)
 }
@@ -232,10 +250,18 @@ type Recorder interface {
 	// fragmented MP4, streamed with no on-box buffering (see
 	// dahua.StreamPlayback).
 	StreamPlayback(ctx context.Context, w io.Writer, channel int, start, end time.Time) error
-	// StreamDav writes the [start,end] recording for a channel to w as the
-	// camera's native .dav (DHAV) — byte-exact, no remux (see dahua.StreamDav).
-	// Requires the DVRIP config port (unlike StreamPlayback's RTSP).
-	StreamDav(ctx context.Context, w io.Writer, channel int, start, end time.Time) error
+	// StreamNative writes the [start,end] recording for a channel to w in the
+	// vendor's most-original format: Dahua = byte-exact .dav (DHAV) over DVRIP,
+	// Hikvision = byte-exact IMKH over ISAPI download, Tiandy = MKV with both
+	// bitstreams stream-copied off RTSP (its firmware exposes no byte-download
+	// API at all). The serving layer picks the file extension per vendor.
+	StreamNative(ctx context.Context, w io.Writer, channel int, start, end time.Time) error
+	// StreamPlaybackFast writes the [start,end] recording to w as MP4, but much
+	// faster than StreamPlayback for NVRs that pace RTSP at ~1x (Hik/Tiandy):
+	// it fetches sub-range chunks over parallel RTSP sessions and concatenates
+	// them (see internal/mediaexport). Dahua, whose RTSP playback is already
+	// faster-than-realtime, just aliases StreamPlayback.
+	StreamPlaybackFast(ctx context.Context, w io.Writer, channel int, start, end time.Time) error
 }
 
 // PTZControl is implemented by cameras that support live pan/tilt/zoom.
@@ -264,16 +290,24 @@ func Open(ctx context.Context, d config.Device, timeout time.Duration) (Camera, 
 	switch d.Vendor {
 	case config.VendorDahua:
 		cl, err := dahua.Dial(d.Addr(), d.Username, d.Password, timeout)
-		if err != nil && errors.Is(err, dahua.ErrDialUnreachable) && d.Port != kbvisionFallbackPort {
+		if err != nil && d.Port != kbvisionFallbackPort &&
+			(d.Port == dahuaDefaultPort || errors.Is(err, dahua.ErrDialUnreachable)) {
 			// KBVision (a Dahua OEM) sometimes serves DVRIP on 8888 instead of
-			// the 37777 default. Only retry when the configured port genuinely
-			// couldn't be reached at the TCP level (ErrDialUnreachable) so a
-			// real login/credential failure on 37777 is never masked by a
-			// second, confusing attempt. This fallback is per-connection only:
-			// it never rewrites d.Port in the saved inventory.
+			// the 37777 default. When the configured port is the stock default
+			// (assigned blindly by the importer) retry 8888 on ANY failure —
+			// 37777 can be open-but-dead (another service, a hung stack) and
+			// still not be the config port. For a deliberately customized port
+			// (e.g. a NAT forward) only retry when it was unreachable at the
+			// TCP level, so a real login/credential failure there isn't masked
+			// by a second, confusing attempt. On success the working port is
+			// hard-set into the inventory via OnDahuaPortFallback.
 			fallbackAddr := fmt.Sprintf("%s:%d", d.Host, kbvisionFallbackPort)
 			if cl2, err2 := dahua.Dial(fallbackAddr, d.Username, d.Password, timeout); err2 == nil {
 				cl, err = cl2, nil
+				d.Port = kbvisionFallbackPort // this session's helpers dial the working port too
+				if OnDahuaPortFallback != nil {
+					OnDahuaPortFallback(d.ID, kbvisionFallbackPort)
+				}
 			}
 		}
 		if err != nil {
@@ -285,7 +319,20 @@ func Open(ctx context.Context, d config.Device, timeout time.Duration) (Camera, 
 		if err != nil {
 			return nil, err
 		}
-		return &hikCamera{client: cl}, nil
+		return &hikCamera{client: cl, device: d, timeout: timeout}, nil
+	case config.VendorTiandy:
+		// Tiandy has two planes: RTSP media (playback/snapshot, tiandy.Client)
+		// and config over its Hikvision-compatible ISAPI with CGI session auth
+		// (tiandy.NewISAPIClient), which we drive through a hikCamera so the
+		// whole internal/hik config surface is reused. Neither constructor
+		// touches the network, so Open always succeeds (errors surface on first
+		// real call), matching hik.Dial.
+		return &tiandyCamera{
+			client:  tiandy.New(d.Host, d.Username, d.Password, timeout),
+			cfg:     &hikCamera{client: hik.NewWithClient(tiandy.NewISAPIClient(d.Host, d.Username, d.Password, timeout), nil), device: d, timeout: timeout},
+			device:  d,
+			timeout: timeout,
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown vendor %q", d.Vendor)
 	}
@@ -311,7 +358,7 @@ func (d *dahuaCamera) ChangePassword(ctx context.Context, newUser, newPass strin
 // connection from the DVRIP session, see dahua.GetSnapshot); stream is
 // ignored (snapshot.cgi has no sub-stream selector).
 func (d *dahuaCamera) Snapshot(ctx context.Context, channel, stream int) ([]byte, error) {
-	return dahua.GetSnapshot(ctx, d.device.Host, d.device.Username, d.device.Password, channel, d.timeout)
+	return dahua.GetSnapshot(ctx, d.device.Host, d.device.Port, d.device.Username, d.device.Password, channel, d.timeout)
 }
 
 // ChannelInfo reads back the channel's own name and OSD lines + enable state.
@@ -348,9 +395,15 @@ func (d *dahuaCamera) StreamPlayback(ctx context.Context, w io.Writer, channel i
 	return dahua.StreamPlayback(ctx, w, d.device.Host, d.device.Username, d.device.Password, channel, start, end)
 }
 
-// StreamDav streams a channel's [start,end] recording to w as native .dav.
-func (d *dahuaCamera) StreamDav(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
-	return dahua.StreamDav(ctx, w, d.device.Host, d.device.Username, d.device.Password, channel, start, end)
+// StreamPlaybackFast: Dahua RTSP playback is already faster-than-realtime
+// (~400x), so the fast path is just the normal one.
+func (d *dahuaCamera) StreamPlaybackFast(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return dahua.StreamPlayback(ctx, w, d.device.Host, d.device.Username, d.device.Password, channel, start, end)
+}
+
+// StreamNative streams a channel's [start,end] recording to w as native .dav.
+func (d *dahuaCamera) StreamNative(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return dahua.StreamDav(ctx, w, d.device.Host, d.device.Port, d.device.Username, d.device.Password, channel, start, end)
 }
 
 // GetStorageInfo reads the device's SD-card / storage status.
@@ -727,7 +780,9 @@ func toStreamInfo(i dahua.StreamInfo) StreamInfo {
 // channel 1 main stream). isapiChannel converts between the two at the
 // boundary; every hik.Client / isapi call below uses the converted value.
 type hikCamera struct {
-	client *hik.Client
+	client  *hik.Client
+	device  config.Device
+	timeout time.Duration
 }
 
 func (h *hikCamera) Close() error { return h.client.Close() }
@@ -770,9 +825,68 @@ func (h *hikCamera) SetOSDLines(ctx context.Context, channel int, lines []string
 	return h.client.SetOverlayText(ctx, isapiChannel(channel), lines, enabled)
 }
 
+// FindRecordings lists stored recording segments on a channel over a range
+// via ISAPI content search (see hik.Client.FindRecordings).
+func (h *hikCamera) FindRecordings(ctx context.Context, channel int, start, end time.Time) ([]dahua.Recording, error) {
+	return h.client.FindRecordings(ctx, isapiChannel(channel), start, end)
+}
+
+// StreamPlayback streams a channel's [start,end] recording to w as a
+// fragmented MP4, remuxed from Hikvision RTSP playback-by-time (see
+// hik.StreamPlayback) — accurate to the requested range, browser-playable.
+func (h *hikCamera) StreamPlayback(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return hik.StreamPlayback(ctx, w, h.device.Host, h.device.Port, h.device.Username, h.device.Password, isapiChannel(channel), start, end)
+}
+
+// StreamPlaybackFast exports the range as MP4 via parallel RTSP chunks (~5×).
+func (h *hikCamera) StreamPlaybackFast(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return hik.StreamPlaybackFast(ctx, w, h.device.Host, h.device.Port, h.device.Username, h.device.Password, isapiChannel(channel), start, end)
+}
+
+// StreamNative streams a channel's [start,end] recording to w as Hikvision's
+// native proprietary container (magic "IMKH" — the Hik analog of Dahua's
+// .dav; see hik.StreamNative). Segment-coarse, not range-exact, but no
+// ffmpeg/remux — the fast option when precise cut boundaries don't matter.
+func (h *hikCamera) StreamNative(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return hik.StreamNative(ctx, w, h.device.Host, h.device.Port, h.device.Username, h.device.Password, isapiChannel(channel), start, end)
+}
+
 // isapiChannel converts a vendor-neutral (0-based) Profile.Channel to
 // Hikvision's native (1-based) channel number.
 func isapiChannel(profileChannel int) int { return profileChannel + 1 }
+
+// GetStorageInfo reads the NVR's HDD bays via ISAPI
+// (/ISAPI/ContentMgmt/Storage), mapped onto the shared dahua.StorageDevice
+// shape (see hik.Client.GetStorageInfo) — so the NVR scan flow's
+// dahua.HasUsableStorage check and the web UI's storage view work unchanged
+// for a Hikvision NVR.
+func (h *hikCamera) GetStorageInfo(ctx context.Context) ([]dahua.StorageDevice, error) {
+	return h.client.GetStorageInfo(ctx)
+}
+
+// errHikFormatUnsupported is returned by FormatStorage: Hikvision's ISAPI
+// storage-format operation (its exact resource/body, and the destructive
+// blast radius of getting it wrong) was not part of this milestone's live
+// verification, so this deliberately refuses rather than guessing at a
+// data-erasing call. hikCamera still satisfies camera.StorageManager (the
+// read side, GetStorageInfo, is fully implemented); only the "format"
+// button is unavailable for Hik devices in the UI.
+var errHikFormatUnsupported = errors.New("hik: storage format not supported over ISAPI")
+
+// FormatStorage is intentionally unimplemented for Hikvision — see
+// errHikFormatUnsupported.
+func (h *hikCamera) FormatStorage(ctx context.Context, name string) error {
+	return errHikFormatUnsupported
+}
+
+// GetRemoteDevices lists the camera connected to each NVR channel via ISAPI
+// (/ISAPI/ContentMgmt/InputProxy/channels), mapped onto the shared
+// dahua.RemoteChannel shape (see hik.Client.GetRemoteDevices) — so the NVR
+// scan flow (channel -> inventory camera matching) works unchanged for a
+// Hikvision NVR.
+func (h *hikCamera) GetRemoteDevices(ctx context.Context) ([]dahua.RemoteChannel, error) {
+	return h.client.GetRemoteDevices(ctx)
+}
 
 // errHikWiFiUnsupported is returned by hikCamera's Wi-Fi methods: this
 // milestone implements static-IP config for Hikvision (LAN and Wi-Fi
@@ -1084,4 +1198,162 @@ func hikToStreamInfo(i hik.StreamInfo) StreamInfo {
 		BitrateMode: i.BitrateMode,
 		Name:        i.Name,
 	}
+}
+
+// tiandyCamera adapts a Tiandy device to the Camera interface across two planes:
+// the RTSP media plane (playback/snapshot, tiandy.Client) and the config plane
+// (a hikCamera driving Tiandy's Hikvision-compatible ISAPI over CGI session
+// auth — see tiandy.NewISAPIClient). Config methods (Probe/Apply, password,
+// OSD/channel-name, network, storage, reboot, remote devices) delegate to cfg
+// and thus reuse internal/hik + internal/isapi verbatim; only the recorded-
+// video methods use RTSP, because Tiandy playback is Dahua-format RTSP, not the
+// Hik RTSP the ISAPI Recorder would produce.
+//
+// Channel numbering: Profile.Channel is 0-based; the RTSP path converts to
+// Tiandy's native 1-based channel (tiandyChannel), and the ISAPI path uses
+// hik's own isapiChannel (also +1), so the two agree.
+type tiandyCamera struct {
+	client  *tiandy.Client // RTSP media plane (playback, snapshot)
+	cfg     *hikCamera     // config plane over Tiandy's session-authed ISAPI
+	device  config.Device
+	timeout time.Duration
+}
+
+func (t *tiandyCamera) Close() error {
+	_ = t.cfg.Close()
+	return t.client.Close()
+}
+
+// --- Config plane: delegate to the ISAPI-backed hikCamera ---
+
+// Probe enumerates the NVR's channels so "Xem tất cả kênh" shows every camera.
+// Two reasons this can't delegate to hikCamera.Probe/ProbeAll: (a) Tiandy
+// doesn't serve the /ISAPI/Streaming/channels collection ProbeAll relies on
+// (statusCode 4); (b) isapi.GetStreamInfo would stamp a 0-based Channel, but the
+// whole UI (viewAllChannels dedupes by channel, labels "K{channel}") assumes the
+// 1-based convention ProbeAll produces — a 0-based value leaks as "-1"/"K0" and
+// breaks the per-channel edit calls. So we source the channel list from
+// GetRemoteDevices (one call) and stamp 1-based channels.
+func (t *tiandyCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
+	if rcs, err := t.cfg.GetRemoteDevices(ctx); err == nil && len(rcs) > 0 {
+		out := make([]StreamInfo, 0, len(rcs))
+		for _, rc := range rcs {
+			if rc.Address == "" { // empty NVR slot (no camera)
+				continue
+			}
+			out = append(out, StreamInfo{Channel: rc.Channel + 1, Name: rc.Name}) // rc.Channel is 0-based
+		}
+		if len(out) > 0 {
+			return out, nil
+		}
+	}
+	// Fallback (single camera, or NVR channel list unavailable): the default
+	// channel's three streams, stamped 1-based.
+	out := make([]StreamInfo, 0, 3)
+	var firstErr error
+	for st := 0; st < 3; st++ {
+		si, err := t.cfg.client.GetStreamInfo(ctx, 0, st)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		s := hikToStreamInfo(si)
+		s.Channel = 1
+		out = append(out, s)
+	}
+	if len(out) == 0 {
+		return nil, firstErr
+	}
+	return out, nil
+}
+
+func (t *tiandyCamera) Apply(ctx context.Context, profile Profile, emit func(StepResult)) []StepResult {
+	return t.cfg.Apply(ctx, profile, emit)
+}
+
+func (t *tiandyCamera) ChangePassword(ctx context.Context, newUser, newPass string) error {
+	return t.cfg.ChangePassword(ctx, newUser, newPass)
+}
+
+func (t *tiandyCamera) ChannelInfo(ctx context.Context, channel int) (string, []string, []bool, bool, error) {
+	return t.cfg.ChannelInfo(ctx, channel)
+}
+
+func (t *tiandyCamera) SetChannelName(ctx context.Context, channel int, name string) error {
+	return t.cfg.SetChannelName(ctx, channel, name)
+}
+
+func (t *tiandyCamera) SetOSDLines(ctx context.Context, channel int, lines []string, enabled []bool) (int, error) {
+	return t.cfg.SetOSDLines(ctx, channel, lines, enabled)
+}
+
+// GetNetworkConfig / SetStaticIP read and write the NVR's IP config over ISAPI
+// (the network-interface collection quirk is handled in the session transport).
+func (t *tiandyCamera) GetNetworkConfig(ctx context.Context) (dahua.NetworkConfig, error) {
+	return t.cfg.GetNetworkConfig(ctx)
+}
+
+func (t *tiandyCamera) SetStaticIP(ctx context.Context, iface string, dhcpEnable bool, ip, mask, gateway string, dns []string) error {
+	return t.cfg.SetStaticIP(ctx, iface, dhcpEnable, ip, mask, gateway, dns)
+}
+
+func (t *tiandyCamera) GetWiFiConfig(ctx context.Context) (map[string]map[string]any, error) {
+	return t.cfg.GetWiFiConfig(ctx)
+}
+
+func (t *tiandyCamera) SetWiFiConfig(ctx context.Context, iface, ssid, password, encryption string) error {
+	return t.cfg.SetWiFiConfig(ctx, iface, ssid, password, encryption)
+}
+
+func (t *tiandyCamera) ScanWiFi(ctx context.Context) ([]dahua.WiFiAP, error) {
+	return t.cfg.ScanWiFi(ctx)
+}
+
+// Reboot, storage and NVR remote-device listing all ride the ISAPI config plane.
+func (t *tiandyCamera) Reboot(ctx context.Context) error { return t.cfg.Reboot(ctx) }
+
+func (t *tiandyCamera) GetStorageInfo(ctx context.Context) ([]dahua.StorageDevice, error) {
+	return t.cfg.GetStorageInfo(ctx)
+}
+
+func (t *tiandyCamera) FormatStorage(ctx context.Context, name string) error {
+	return t.cfg.FormatStorage(ctx, name)
+}
+
+func (t *tiandyCamera) GetRemoteDevices(ctx context.Context) ([]dahua.RemoteChannel, error) {
+	return t.cfg.GetRemoteDevices(ctx)
+}
+
+// --- Media plane: RTSP (Tiandy is Dahua-format here, not Hik) ---
+
+// Snapshot grabs a JPEG frame off the Tiandy sub-stream over RTSP.
+func (t *tiandyCamera) Snapshot(ctx context.Context, channel, stream int) ([]byte, error) {
+	return t.client.Snapshot(ctx, channel, stream)
+}
+
+// FindRecordings returns Tiandy's (synthetic) recording index for the window —
+// see tiandy.Client.FindRecordings for why it degrades.
+func (t *tiandyCamera) FindRecordings(ctx context.Context, channel int, start, end time.Time) ([]dahua.Recording, error) {
+	return t.client.FindRecordings(channel, start, end)
+}
+
+// StreamPlayback streams a channel's [start,end] recording to w as a fragmented
+// MP4, remuxed from Tiandy RTSP playback-by-time (HEVC retagged hvc1 + AAC).
+func (t *tiandyCamera) StreamPlayback(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return t.client.StreamPlayback(ctx, w, channel, start, end)
+}
+
+// StreamPlaybackFast exports the range as MP4 via parallel RTSP chunks (~5×).
+func (t *tiandyCamera) StreamPlaybackFast(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return t.client.StreamPlaybackFast(ctx, w, channel, start, end)
+}
+
+// StreamNative exports the range as an MKV with the recorded bitstreams
+// copied untouched — Tiandy's firmware has no byte-download API (ISAPI
+// ContentMgmt/search+download both notSupport, probed live), so this is the
+// most-original file a pure-Go path can produce. See tiandy.Client.StreamNative.
+func (t *tiandyCamera) StreamNative(ctx context.Context, w io.Writer, channel int, start, end time.Time) error {
+	return t.client.StreamNative(ctx, w, channel, start, end)
 }

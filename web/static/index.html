@@ -127,6 +127,7 @@
                   <select id="f-vendor" name="vendor">
                     <option value="dahua">Dahua / KBVision</option>
                     <option value="hikvision">Hikvision</option>
+                    <option value="tiandy">Tiandy (xem lại + xem IP)</option>
                   </select>
                 </div>
                 <div class="field">
@@ -171,7 +172,7 @@
                 <thead>
                   <tr>
                     <th><input type="checkbox" id="select-all" aria-label="Chọn tất cả"></th>
-                    <th>Tên</th><th>Host</th><th>Cổng</th><th>Hãng</th><th>Tài khoản</th><th>Mật khẩu</th><th>Thông tin luồng</th><th></th>
+                    <th class="sortable" data-sort="name">Tên</th><th class="sortable" data-sort="host">Host</th><th class="sortable" data-sort="port">Cổng</th><th class="sortable" data-sort="vendor">Hãng</th><th class="sortable" data-sort="username">Tài khoản</th><th class="sortable" data-sort="password">Mật khẩu</th><th class="sortable" data-sort="stream">Thông tin luồng</th><th></th>
                   </tr>
                 </thead>
                 <tbody id="cam-tbody"><tr><td colspan="7" class="empty-hint">Đang tải...</td></tr></tbody>
@@ -346,10 +347,14 @@
             <label class="field-sm" style="margin:0">Ngày <input type="date" id="rv-date"></label>
             <button class="btn btn-sm btn-secondary" type="button" id="rv-load-day">Xem cả ngày</button>
             <span class="rv-days muted" id="rv-days"></span>
+            <span class="muted">·</span>
+            <button class="btn btn-sm btn-secondary" type="button" id="rv-split5-btn">Chia 5 phút</button>
           </div>
+          <div class="rv-quick" id="rv-split5-list" hidden></div>
           <div class="review-stage">
             <div class="review-video-wrap">
               <video id="rv-video" controls playsinline preload="metadata" poster="/logo.png"></video>
+              <p id="rv-hevc-hint" class="muted" hidden>Trình duyệt này không phát được H.265/HEVC. Hãy mở trên iPhone/Safari, hoặc tải về và mở bằng VLC trên máy tính.</p>
             </div>
             <div id="rv-timeline"></div>
             <div class="review-markers-hint muted">Kéo <b style="color:#2ecc71">▮ xanh</b> và <b style="color:#f1c40f">▮ vàng</b> trên timeline để chọn đoạn cắt · <b style="color:#e74c3c">▮ đỏ</b> = vị trí phát</div>
@@ -360,12 +365,13 @@
               <button class="btn btn-secondary" type="button" data-seek="-2">-2s</button>
               <button class="btn btn-secondary" type="button" data-seek="2">+2s</button>
               <button class="btn btn-secondary" type="button" data-seek="5">+5s</button>
-              <div class="field field-sm" style="max-width:6rem"><label for="rv-speed">Tốc độ</label>
-                <select id="rv-speed">
-                  <option value="0.05">0.05x</option><option value="0.1">0.1x</option><option value="0.25">0.25x</option>
-                  <option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="1.5">1.5x</option>
-                  <option value="2">2x</option><option value="4">4x</option><option value="8">8x</option>
-                </select>
+              <div class="rv-speeds" id="rv-speeds"><span class="muted" style="margin-right:.3rem">Tốc độ</span>
+                <button class="btn btn-sm btn-secondary" type="button" data-speed="0.1">0.1x</button>
+                <button class="btn btn-sm btn-secondary" type="button" data-speed="0.25">0.25x</button>
+                <button class="btn btn-sm btn-secondary" type="button" data-speed="0.5">0.5x</button>
+                <button class="btn btn-sm btn-secondary" type="button" data-speed="1">1x</button>
+                <button class="btn btn-sm btn-secondary" type="button" data-speed="2">2x</button>
+                <button class="btn btn-sm btn-secondary" type="button" data-speed="4">4x</button>
               </div>
               <label class="checkbox-row" style="margin:0"><input type="checkbox" id="rv-auto" checked> Tự phát đoạn kế</label>
             </div>
@@ -373,9 +379,13 @@
               <span class="muted">Đoạn đã chọn: <b id="rv-range">—</b></span>
               <label class="field-sm" style="margin:0">Cắt từ <input type="datetime-local" id="rv-cut-from" step="1"></label>
               <label class="field-sm" style="margin:0">đến <input type="datetime-local" id="rv-cut-to" step="1"></label>
-              <button class="btn btn-primary" type="button" id="rv-download">⬇ Tải MP4 (xem được mọi nơi)</button>
-              <button class="btn btn-secondary" type="button" id="rv-download-dav">Tải .dav (gốc)</button>
+              <button class="btn btn-primary" type="button" id="rv-download">⬇ Tải MP4 (nhanh)</button>
+              <button class="btn btn-secondary" type="button" id="rv-download-dav">Tải gốc</button>
               <button class="btn btn-secondary" type="button" id="rv-qr">QR tải về ĐT</button>
+            </div>
+            <div class="rv-prog" id="rv-prog" hidden>
+              <div class="rv-prog-track"><div class="rv-prog-bar" id="rv-prog-bar"></div></div>
+              <span class="rv-prog-txt" id="rv-prog-txt"></span>
             </div>
             <div class="msg" id="rv-msg"></div>
           </div>
@@ -458,6 +468,13 @@
         <div class="field"><label for="nvr-port">Cổng</label><input id="nvr-port" type="number" placeholder="37777"></div>
         <div class="field"><label for="nvr-user">Tài khoản</label><input id="nvr-user" placeholder="admin"></div>
         <div class="field"><label for="nvr-pass">Mật khẩu</label><input id="nvr-pass" type="password" placeholder="(giữ nếu đã lưu)"></div>
+        <div class="field"><label for="nvr-vendor">Hãng đầu ghi</label>
+          <select id="nvr-vendor">
+            <option value="hikvision" selected>Hikvision</option>
+            <option value="dahua">Dahua</option>
+            <option value="tiandy">Tiandy</option>
+          </select>
+        </div>
       </div>
       <div class="row">
         <button class="btn" type="button" id="nvr-scan-btn">Quét đầu ghi</button>

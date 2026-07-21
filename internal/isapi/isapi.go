@@ -51,6 +51,9 @@ func New(host string, port int, https bool, user, pass string, timeout time.Dura
 	return &Client{rt: &httpTransport{
 		baseURL: fmt.Sprintf("%s://%s:%d", scheme, host, port),
 		http:    &http.Client{Transport: digest, Timeout: timeout},
+		user:    user,
+		pass:    pass,
+		base:    baseTransport,
 	}}
 }
 
@@ -143,9 +146,15 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte) ([]by
 }
 
 // httpTransport is the default Transport: ISAPI over HTTP(S) with Digest auth.
+// user/pass/base are kept alongside the (timeout-bound) http client so
+// SearchTrack/DownloadStream can build a fresh, timeout-UNBOUND client for
+// requests whose responses are too large or too slow for the config-call
+// path — see streamClient.
 type httpTransport struct {
-	baseURL string
-	http    *http.Client
+	baseURL    string
+	http       *http.Client
+	user, pass string
+	base       http.RoundTripper
 }
 
 // Do issues an HTTP request against path (which must start with "/ISAPI"),
@@ -153,22 +162,9 @@ type httpTransport struct {
 // Non-2xx HTTP statuses are still returned as data (some ISAPI errors carry a
 // useful ResponseStatus body alongside a 4xx) but also as an error.
 func (c *httpTransport) Do(ctx context.Context, method, path string, body []byte) ([]byte, error) {
-	url := c.baseURL + path
-	var reqBody io.Reader
-	if body != nil {
-		reqBody = bytes.NewReader(body)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
+	resp, err := c.request(ctx, c.http, method, path, body)
 	if err != nil {
-		return nil, fmt.Errorf("isapi: build request %s %s: %w", method, path, err)
-	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/xml")
-	}
-
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("isapi: %s %s: %w", method, path, err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
@@ -186,6 +182,50 @@ func (c *httpTransport) Do(ctx context.Context, method, path string, body []byte
 		return data, fmt.Errorf("isapi: %s %s: HTTP %d: %s", method, path, resp.StatusCode, truncate(data, 300))
 	}
 	return data, nil
+}
+
+// request builds and sends one HTTP request against path through the given
+// client, leaving the response for the caller to read/close — factored out of
+// Do so rawRequest (SearchTrack/DownloadStream's unbounded path) can share the
+// exact same request-building logic against a different client.
+func (c *httpTransport) request(ctx context.Context, client *http.Client, method, path string, body []byte) (*http.Response, error) {
+	url := c.baseURL + path
+	var reqBody io.Reader
+	if body != nil {
+		reqBody = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("isapi: build request %s %s: %w", method, path, err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/xml")
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("isapi: %s %s: %w", method, path, err)
+	}
+	return resp, nil
+}
+
+// streamClient returns a FRESH HTTP+Digest client with no read timeout, for
+// SearchTrack/DownloadStream: a dense recording search can return more than
+// the 1 MiB Do caps at, and a native-container download can be gigabytes and
+// take far longer than the per-request timeout config calls use (that timeout
+// is enforced by http.Client.Timeout, which — unlike a dial/header timeout —
+// also bounds the time spent reading the response body, so reusing c.http
+// would truncate a long download). A fresh DigestTransport costs one extra
+// 401 round trip instead of reusing New's cached challenge, an acceptable
+// rare-call price.
+func (c *httpTransport) streamClient() *http.Client {
+	return &http.Client{Transport: NewDigestTransport(c.user, c.pass, c.base)}
+}
+
+// rawRequest is like request but always goes over streamClient's unbound
+// client — the shared entry point for SearchTrack (doUnbounded) and
+// DownloadStream.
+func (c *httpTransport) rawRequest(ctx context.Context, method, path string, body []byte) (*http.Response, error) {
+	return c.request(ctx, c.streamClient(), method, path, body)
 }
 
 // channelID computes the compound ISAPI streaming-channel id from a native

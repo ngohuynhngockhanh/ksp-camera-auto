@@ -72,6 +72,20 @@ func main() {
 		}
 		n := 0
 		for _, d := range res.Devices {
+			// Preserve an already-linked camera's NVR-fallback fields so
+			// re-importing from Shinobi (every deploy) doesn't wipe the NVR
+			// channel link and leave the camera pointing at its own dead port.
+			if ex, ok := inv.Get(d.ID); ok {
+				if ex.NVRID != "" {
+					d.NVRID, d.NVRChannel, d.NVRName, d.NoStorage = ex.NVRID, ex.NVRChannel, ex.NVRName, ex.NoStorage
+				}
+				// Keep a runtime-discovered config port (e.g. a KBVision box
+				// answering DVRIP on 8888 instead of 37777) — the import only
+				// assigns the blind vendor default, which is what was wrong.
+				if d.Vendor == config.VendorDahua && d.Port == *importDahuaPort && ex.Port != d.Port {
+					d.Port = ex.Port
+				}
+			}
 			if err := inv.Upsert(d); err == nil {
 				n++
 			}

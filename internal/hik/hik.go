@@ -160,3 +160,10 @@ func (c *Client) GetOverlayText(ctx context.Context, ch int) (lines []string, en
 func (c *Client) SetOverlayText(ctx context.Context, ch int, lines []string, enabled []bool) (applied int, err error) {
 	return c.isapi.SetOverlayText(ctx, ch, lines, enabled)
 }
+
+// DeviceLocation resolves the device's own UTC offset (from ISAPI's
+// /ISAPI/System/time) — used to convert the review UI's device-local
+// start/end times for FindRecordings/StreamPlayback/StreamNative.
+func (c *Client) DeviceLocation(ctx context.Context) (*time.Location, error) {
+	return c.isapi.DeviceLocation(ctx)
+}

@@ -33,7 +33,7 @@ import (
 // Nothing is written to the box's disk. Unlike StreamPlayback (RTSP, no DVRIP),
 // this REQUIRES the DVRIP config port, so it can fail on a camera whose config
 // port is saturated by another recorder — callers keep MP4 as the default.
-func StreamDav(ctx context.Context, w io.Writer, host, user, pass string, channel int, start, end time.Time) error {
+func StreamDav(ctx context.Context, w io.Writer, host string, port int, user, pass string, channel int, start, end time.Time) error {
 	select {
 	case playbackSem <- struct{}{}:
 		defer func() { <-playbackSem }()
@@ -42,7 +42,7 @@ func StreamDav(ctx context.Context, w io.Writer, host, user, pass string, channe
 	}
 
 	// Enumerate the .dav segments in the range on a short-lived login.
-	c0, err := Dial(net.JoinHostPort(host, "37777"), user, pass, 15*time.Second)
+	c0, err := Dial(net.JoinHostPort(host, dvripPort(port)), user, pass, 15*time.Second)
 	if err != nil {
 		return fmt.Errorf("dahua: dav %s: login: %w", host, err)
 	}
@@ -80,7 +80,7 @@ func StreamDav(ctx context.Context, w io.Writer, host, user, pass string, channe
 			endStr = davTime(end)
 		}
 
-		if err := davChunk(ctx, w, host, user, pass, ch, startStr, endStr, recs[i].FilePath); err != nil {
+		if err := davChunk(ctx, w, host, port, user, pass, ch, startStr, endStr, recs[i].FilePath); err != nil {
 			return fmt.Errorf("dahua: dav %s: chunk segs %d-%d: %w", host, i, j-1, err)
 		}
 		i = j
@@ -102,12 +102,12 @@ const davChunkBytes = 180 << 20
 // It runs the full handshake: login -> AddObject Passive -> 2nd TCP + AckSubChannel
 // -> PlayBack.download -> read 0xbb media frames (keepalive-poked) until the device
 // finishes and closes, then PlayBack.Stop + DeleteObject to release it promptly.
-func davChunk(ctx context.Context, w io.Writer, host, user, pass string, ch int, startStr, endStr, fileDir string) error {
+func davChunk(ctx context.Context, w io.Writer, host string, port int, user, pass string, ch int, startStr, endStr, fileDir string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	c, err := Dial(net.JoinHostPort(host, "37777"), user, pass, 15*time.Second)
+	c, err := Dial(net.JoinHostPort(host, dvripPort(port)), user, pass, 15*time.Second)
 	if err != nil {
 		return fmt.Errorf("login: %w", err)
 	}
@@ -125,7 +125,7 @@ func davChunk(ctx context.Context, w io.Writer, host, user, pass string, ch int,
 	}
 	dataPort := paramValue(addResp, "Port")
 	if dataPort == "" || dataPort == "0" {
-		dataPort = "37777"
+		dataPort = dvripPort(port)
 	}
 
 	// Open the data sub-channel (a 2nd TCP) and register it for our session.
