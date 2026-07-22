@@ -3,6 +3,8 @@ package dahua
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 )
 
 // Stream selects which encoded stream to operate on.
@@ -133,6 +135,81 @@ func (c *Client) SetResolution(ch int, s Stream, w, h int) error {
 	video["Height"] = h
 	video["CustomResolutionName"] = fmt.Sprintf("%dx%d", w, h)
 	return c.setTable("Encode", table)
+}
+
+// SetFPS sets the stream frame rate through Encode.Video.FPS.
+func (c *Client) SetFPS(ch int, s Stream, fps int) error {
+	table, err := c.getTable("Encode")
+	if err != nil {
+		return err
+	}
+	fmtObj, err := formatOf(table, ch, s)
+	if err != nil {
+		return err
+	}
+	subMap(fmtObj, "Video")["FPS"] = fps
+	return c.setTable("Encode", table)
+}
+
+// GetMaxFPS reads the vendor capability table. Dahua firmware varies widely
+// in the exact nesting, so select the requested stream first and then accept
+// any FPS/frame-rate field containing numeric values.
+func (c *Client) GetMaxFPS(ch int, s Stream, width, height int, codec string) (int, error) {
+	table, err := c.getTable("EncodeCapability")
+	if err != nil {
+		return 0, err
+	}
+	fmtObj, err := formatOf(table, ch, s)
+	if err != nil {
+		return 0, err
+	}
+	max := maxFPSValue(fmtObj, false)
+	if max <= 0 {
+		return 0, fmt.Errorf("EncodeCapability has no FPS value for channel %d stream %d", ch, s)
+	}
+	return max, nil
+}
+
+func maxFPSValue(v any, fpsField bool) int {
+	max := 0
+	switch x := v.(type) {
+	case map[string]any:
+		for k, child := range x {
+			lk := strings.ToLower(k)
+			m := maxFPSValue(child, fpsField || strings.Contains(lk, "fps") || strings.Contains(lk, "framerate"))
+			if m > max {
+				max = m
+			}
+		}
+	case []any:
+		for _, child := range x {
+			if m := maxFPSValue(child, fpsField); m > max {
+				max = m
+			}
+		}
+	case float64:
+		if fpsField {
+			max = int(x)
+		}
+	case int:
+		if fpsField {
+			max = x
+		}
+	case json.Number:
+		if fpsField {
+			i, _ := x.Int64()
+			max = int(i)
+		}
+	case string:
+		if fpsField {
+			for _, part := range strings.FieldsFunc(x, func(r rune) bool { return r < '0' || r > '9' }) {
+				if n, err := strconv.Atoi(part); err == nil && n > max {
+					max = n
+				}
+			}
+		}
+	}
+	return max
 }
 
 // SetCodec sets the video codec/profile for a stream. compression is the Dahua

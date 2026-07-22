@@ -461,6 +461,50 @@ func (s *Server) handleProbe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, info)
 }
 
+// handleFPSCapability returns a safe per-stream FPS ceiling. Vendor
+// capability errors are swallowed by the camera adapter and reported as a
+// fallback source, so opening the editor never fails just because caps do.
+func (s *Server) handleFPSCapability(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req struct {
+		ID             string `json:"id"`
+		Channel        int    `json:"channel"`
+		Stream         int    `json:"stream"`
+		Width          int    `json:"width"`
+		Height         int    `json:"height"`
+		Codec          string `json:"codec"`
+		TimeoutSeconds int    `json:"timeoutSeconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	if req.ID == "" || req.Channel < 0 || req.Stream < 0 || req.Stream > 2 {
+		writeErr(w, http.StatusBadRequest, "id, channel and stream are required")
+		return
+	}
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, req.ID, req.TimeoutSeconds)
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+	fps, ok := cam.(camera.FPSSettings)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "camera này không hỗ trợ chỉnh FPS")
+		return
+	}
+	cap, err := fps.GetFPSCapability(ctx, req.Channel, req.Stream, req.Width, req.Height, req.Codec)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, cap)
+}
+
 // openDeviceCamera resolves id from the inventory and opens a Camera with
 // the request's (or default) timeout, writing a JSON error and returning
 // ok=false on any failure. Callers must Close() the returned camera when

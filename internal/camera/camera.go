@@ -73,6 +73,9 @@ type Profile struct {
 	SetGOP bool `json:"setGop"`
 	GOP    int  `json:"gop"` // I-frame interval, frames
 
+	SetFPS bool `json:"setFps"`
+	FPS    int  `json:"fps"`
+
 	SetBitrate  bool   `json:"setBitrate"`
 	Bitrate     int    `json:"bitrate"`     // Kbps
 	BitrateMode string `json:"bitrateMode"` // "" = keep current, "CBR", "VBR"
@@ -137,6 +140,22 @@ type StepResult struct {
 	Detail string `json:"detail"`
 	OK     bool   `json:"ok"`
 	Err    string `json:"err,omitempty"`
+}
+
+// FPSCapability is the safe frame-rate ceiling for one channel/stream.
+// Source is "capability" when read from the device and "fallback" when the
+// vendor capability endpoint was unavailable or inconsistent.
+type FPSCapability struct {
+	CurrentFPS int    `json:"currentFps"`
+	MaxFPS     int    `json:"maxFps"`
+	Source     string `json:"source"`
+}
+
+// FPSSettings is implemented by cameras whose encode stream FPS can be read,
+// bounded, and changed. Capability failures are intentionally converted into
+// a safe fallback rather than returned to the UI.
+type FPSSettings interface {
+	GetFPSCapability(ctx context.Context, channel, stream, width, height int, codec string) (FPSCapability, error)
 }
 
 // Camera is the vendor-agnostic control surface the orchestrator drives.
@@ -548,6 +567,26 @@ func (d *dahuaCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
 	return out, nil
 }
 
+func safeFPSCapability(current, advertised int, capErr error) FPSCapability {
+	if capErr == nil && advertised > 0 && advertised >= current {
+		return FPSCapability{CurrentFPS: current, MaxFPS: advertised, Source: "capability"}
+	}
+	fallback := current
+	if fallback < 20 {
+		fallback = 20
+	}
+	return FPSCapability{CurrentFPS: current, MaxFPS: fallback, Source: "fallback"}
+}
+
+func (d *dahuaCamera) GetFPSCapability(ctx context.Context, channel, stream, width, height int, codec string) (FPSCapability, error) {
+	info, err := d.client.GetStreamInfo(channel, dahua.Stream(stream))
+	if err != nil {
+		return FPSCapability{}, err
+	}
+	max, capErr := d.client.GetMaxFPS(channel, dahua.Stream(stream), width, height, codec)
+	return safeFPSCapability(info.FPS, max, capErr), nil
+}
+
 // Apply pushes profile's settings to the device, one StepResult per action,
 // calling emit as each step completes so the caller can stream progress live
 // (emit may be nil). It never returns early on a per-step failure: every
@@ -572,6 +611,9 @@ func (d *dahuaCamera) Apply(ctx context.Context, profile Profile, emit func(Step
 			}
 			if profile.SetResolution {
 				add(d.applyResolution(ch, ds, streamName, profile.Width, profile.Height))
+			}
+			if profile.SetFPS {
+				add(d.applyFPS(ch, ds, streamName, profile.FPS))
 			}
 			if profile.SetGOP {
 				add(d.applyGOP(ch, ds, streamName, profile.GOP))
@@ -698,6 +740,49 @@ func (d *dahuaCamera) applyResolution(ch int, s dahua.Stream, streamName string,
 		return step
 	}
 	step.Detail = fmt.Sprintf("độ phân giải %dx%d OK", w, h)
+	return step
+}
+
+func (d *dahuaCamera) applyFPS(ch int, s dahua.Stream, streamName string, requested int) StepResult {
+	step := StepResult{Step: fmt.Sprintf("FPS %s", streamName), Detail: fmt.Sprintf("%d fps", requested)}
+	before, err := d.client.GetStreamInfo(ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	max, capErr := d.client.GetMaxFPS(ch, s, before.Width, before.Height, before.Compression)
+	cap := safeFPSCapability(before.FPS, max, capErr)
+	target := requested
+	if target > cap.MaxFPS {
+		target = cap.MaxFPS
+	}
+	if target <= 0 {
+		step.Err = "FPS phải lớn hơn 0"
+		return step
+	}
+	if before.FPS == target {
+		step.OK = true
+		step.Detail = fmt.Sprintf("FPS đã đúng %d (max %d, %s)", target, cap.MaxFPS, cap.Source)
+		return step
+	}
+	if err := d.client.SetFPS(ch, s, target); err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	after, err := d.client.GetStreamInfo(ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	if after.FPS == target {
+		step.OK = true
+		step.Detail = fmt.Sprintf("FPS %d OK (max %d, %s)", target, cap.MaxFPS, cap.Source)
+	} else if after.FPS != before.FPS {
+		step.OK = true
+		step.Detail = fmt.Sprintf("yêu cầu %d, thiết bị nhận %d fps", target, after.FPS)
+	} else {
+		step.Detail = fmt.Sprintf("FPS không đổi được (đọc lại: %d)", after.FPS)
+	}
 	return step
 }
 
@@ -1035,6 +1120,16 @@ func (h *hikCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
 	return out, nil
 }
 
+func (h *hikCamera) GetFPSCapability(ctx context.Context, channel, stream, width, height int, codec string) (FPSCapability, error) {
+	ch := isapiChannel(channel)
+	info, err := h.client.GetStreamInfo(ctx, ch, stream)
+	if err != nil {
+		return FPSCapability{}, err
+	}
+	max, capErr := h.client.GetMaxFPS(ctx, ch, stream, width, height, hikCodec(codec))
+	return safeFPSCapability(info.FPS, max, capErr), nil
+}
+
 // Apply pushes profile's settings to the device, one StepResult per action,
 // calling emit as each step completes (emit may be nil). It never returns
 // early on a per-step failure: every requested action is attempted so the
@@ -1065,6 +1160,9 @@ func (h *hikCamera) Apply(ctx context.Context, profile Profile, emit func(StepRe
 			}
 			if profile.SetResolution {
 				add(h.applyResolution(ctx, ch, s, streamName, profile.Width, profile.Height))
+			}
+			if profile.SetFPS {
+				add(h.applyFPS(ctx, ch, s, streamName, profile.FPS))
 			}
 			if profile.SetSmartCodec {
 				add(h.applySmartCodec(ctx, ch, s, streamName, profile.SmartCodec))
@@ -1142,6 +1240,49 @@ func (h *hikCamera) applyResolution(ctx context.Context, ch, s int, streamName s
 		return step
 	}
 	step.Detail = fmt.Sprintf("độ phân giải %dx%d OK", w, h2)
+	return step
+}
+
+func (h *hikCamera) applyFPS(ctx context.Context, ch, s int, streamName string, requested int) StepResult {
+	step := StepResult{Step: fmt.Sprintf("FPS %s", streamName), Detail: fmt.Sprintf("%d fps", requested)}
+	before, err := h.client.GetStreamInfo(ctx, ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	max, capErr := h.client.GetMaxFPS(ctx, ch, s, before.Width, before.Height, before.Codec)
+	cap := safeFPSCapability(before.FPS, max, capErr)
+	target := requested
+	if target > cap.MaxFPS {
+		target = cap.MaxFPS
+	}
+	if target <= 0 {
+		step.Err = "FPS phải lớn hơn 0"
+		return step
+	}
+	if before.FPS == target {
+		step.OK = true
+		step.Detail = fmt.Sprintf("FPS đã đúng %d (max %d, %s)", target, cap.MaxFPS, cap.Source)
+		return step
+	}
+	if err := h.client.SetFPS(ctx, ch, s, target); err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	after, err := h.client.GetStreamInfo(ctx, ch, s)
+	if err != nil {
+		step.Err = err.Error()
+		return step
+	}
+	if after.FPS == target {
+		step.OK = true
+		step.Detail = fmt.Sprintf("FPS %d OK (max %d, %s)", target, cap.MaxFPS, cap.Source)
+	} else if after.FPS != before.FPS {
+		step.OK = true
+		step.Detail = fmt.Sprintf("yêu cầu %d, thiết bị nhận %d fps", target, after.FPS)
+	} else {
+		step.Detail = fmt.Sprintf("FPS không đổi được (đọc lại: %d)", after.FPS)
+	}
 	return step
 }
 
@@ -1288,6 +1429,10 @@ type tiandyCamera struct {
 	cfg     *hikCamera     // config plane over Tiandy's session-authed ISAPI
 	device  config.Device
 	timeout time.Duration
+}
+
+func (t *tiandyCamera) GetFPSCapability(ctx context.Context, channel, stream, width, height int, codec string) (FPSCapability, error) {
+	return t.cfg.GetFPSCapability(ctx, channel, stream, width, height, codec)
 }
 
 func (t *tiandyCamera) Close() error {

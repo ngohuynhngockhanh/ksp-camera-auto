@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -564,6 +565,44 @@ func (c *Client) SetResolution(ctx context.Context, ch, stream, w, h, fps int) e
 		edits["maxFrameRate"] = strconv.Itoa(fps * 100)
 	}
 	return c.mutateStreamChannel(ctx, channelID(ch, stream), edits)
+}
+
+// SetFPS updates only maxFrameRate. ISAPI stores frame rate as fps*100.
+func (c *Client) SetFPS(ctx context.Context, ch, stream, fps int) error {
+	return c.mutateStreamChannel(ctx, channelID(ch, stream), map[string]string{
+		"maxFrameRate": strconv.Itoa(fps * 100),
+	})
+}
+
+var maxFrameRateTagRE = regexp.MustCompile(`(?is)<maxFrameRate\b([^>]*)>([^<]*)</maxFrameRate>`)
+var numericRE = regexp.MustCompile(`[0-9]+`)
+
+// GetMaxFPS reads the stream capability document and extracts the largest
+// maxFrameRate advertised in text, opt, or max attributes. Values are fps*100.
+func (c *Client) GetMaxFPS(ctx context.Context, ch, stream, width, height int, codec string) (int, error) {
+	id := channelID(ch, stream)
+	raw, err := c.do(ctx, http.MethodGet, fmt.Sprintf("/ISAPI/Streaming/channels/%d/capabilities", id), nil)
+	if err != nil {
+		return 0, err
+	}
+	match := maxFrameRateTagRE.FindSubmatch(raw)
+	if len(match) == 0 {
+		return 0, fmt.Errorf("isapi: capabilities has no maxFrameRate")
+	}
+	max := 0
+	for _, n := range numericRE.FindAllString(string(match[1])+" "+string(match[2]), -1) {
+		v, _ := strconv.Atoi(n)
+		if v > max {
+			max = v
+		}
+	}
+	if max <= 0 {
+		return 0, fmt.Errorf("isapi: capabilities maxFrameRate is empty")
+	}
+	if max > 100 {
+		max /= 100
+	}
+	return max, nil
 }
 
 // SetCodec sets the video codec (CodecH264/CodecH265/CodecMJPEG, or any raw

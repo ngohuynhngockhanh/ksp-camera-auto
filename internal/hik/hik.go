@@ -84,6 +84,14 @@ func (c *Client) SetResolution(ctx context.Context, ch, stream, w, h, fps int) e
 	return c.isapi.SetResolution(ctx, ch, stream, w, h, fps)
 }
 
+func (c *Client) SetFPS(ctx context.Context, ch, stream, fps int) error {
+	return c.isapi.SetFPS(ctx, ch, stream, fps)
+}
+
+func (c *Client) GetMaxFPS(ctx context.Context, ch, stream, width, height int, codec string) (int, error) {
+	return c.isapi.GetMaxFPS(ctx, ch, stream, width, height, codec)
+}
+
 // SetCodec sets the video codec (isapi.CodecH264/CodecH265/CodecMJPEG) for a
 // channel/stream.
 func (c *Client) SetCodec(ctx context.Context, ch, stream int, codec string) error {

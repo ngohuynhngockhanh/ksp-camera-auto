@@ -1548,6 +1548,29 @@ document.getElementById('ce-preview-reload').addEventListener('click', () => {
 /* ---------- Modal: Video tab (read via /api/probe, write via /api/apply) ---------- */
 const CE_STREAM_LABELS = { 0: 'Chính (main)', 1: 'Phụ 1 (sub)', 2: 'Phụ 2 (sub2)' };
 const CE_CODECS = ['H.265', 'H.264', 'H.264H', 'H.264B', 'MJPG'];
+let fpsCapTimer = null;
+
+async function refreshCeFPSCapability(tile, fs, stream) {
+  const input = fs.querySelector('.cv-fps'), hint = fs.querySelector('.cv-fps-hint');
+  const body = {
+    id: tile.camId, channel: tile.channel, stream,
+    width: parseInt(fs.querySelector('.cv-w').value, 10) || 0,
+    height: parseInt(fs.querySelector('.cv-h').value, 10) || 0,
+    codec: fs.querySelector('.cv-codec').value,
+    timeoutSeconds: timeoutSec(),
+  };
+  try {
+    const cap = await api('/api/fps-capability', { method: 'POST', body: JSON.stringify(body) });
+    const max = parseInt(cap.maxFps, 10) || Math.max(parseInt(input.value, 10) || 0, 20);
+    input.max = max;
+    if ((parseInt(input.value, 10) || 0) > max) input.value = max;
+    hint.textContent = `Tối đa ${max} FPS` + (cap.source === 'fallback' ? ' (fallback)' : '');
+  } catch (_) {
+    const fallback = Math.max(parseInt(input.value, 10) || 0, 20);
+    input.max = fallback;
+    hint.textContent = `Tối đa ${fallback} FPS (fallback)`;
+  }
+}
 
 async function loadVideoTab(tile) {
   videoPayload = {}; // mark loaded
@@ -1560,11 +1583,12 @@ async function loadVideoTab(tile) {
     body.innerHTML = mine.map(s => {
       const st = s.stream;
       return `<fieldset class="ce-vid-stream" data-stream="${st}">
-        <legend>${escapeHtml(CE_STREAM_LABELS[st] || ('Stream ' + st))} · <span class="muted">${s.fps || '?'} fps</span></legend>
+        <legend>${escapeHtml(CE_STREAM_LABELS[st] || ('Stream ' + st))}</legend>
         <div class="row">
           <div class="field field-sm"><label>Rộng</label><input type="number" class="cv-w"></div>
           <div class="field field-sm"><label>Cao</label><input type="number" class="cv-h"></div>
           <div class="field field-sm"><label>Codec</label><select class="cv-codec">${CE_CODECS.map(c => `<option>${c}</option>`).join('')}</select></div>
+          <div class="field field-sm"><label>FPS</label><input type="number" class="cv-fps" min="1" step="1"><span class="muted cv-fps-hint"></span></div>
         </div>
         <div class="row">
           <div class="field field-sm"><label>Bitrate (Kbps)</label><input type="number" class="cv-br"></div>
@@ -1580,10 +1604,16 @@ async function loadVideoTab(tile) {
       fs.querySelector('.cv-w').value = s.width || '';
       fs.querySelector('.cv-h').value = s.height || '';
       fs.querySelector('.cv-codec').value = s.compression || 'H.265';
+      fs.querySelector('.cv-fps').value = s.fps || 20;
       fs.querySelector('.cv-br').value = s.bitrateKbps || '';
       fs.querySelector('.cv-brmode').value = s.bitrateMode || '';
       fs.querySelector('.cv-gop').value = s.gop || '';
       fs.querySelector('.cv-smart').checked = !!s.smartCodec;
+      refreshCeFPSCapability(tile, fs, s.stream);
+      fs.querySelectorAll('.cv-w,.cv-h,.cv-codec').forEach(el => el.addEventListener('change', () => {
+        clearTimeout(fpsCapTimer);
+        fpsCapTimer = setTimeout(() => refreshCeFPSCapability(tile, fs, s.stream), 250);
+      }));
     });
     body.querySelectorAll('[data-save-stream]').forEach(btn =>
       btn.addEventListener('click', () => saveCeVideoStream(tile, parseInt(btn.dataset.saveStream, 10), btn)));
@@ -1596,6 +1626,7 @@ async function saveCeVideoStream(tile, stream, btn) {
   const profile = {
     setResolution: true, width: parseInt(fs.querySelector('.cv-w').value, 10) || 0, height: parseInt(fs.querySelector('.cv-h').value, 10) || 0,
     setCodec: true, codec: fs.querySelector('.cv-codec').value, codecProfile: '',
+    setFps: true, fps: parseInt(fs.querySelector('.cv-fps').value, 10) || 0,
     setBitrate: true, bitrate: parseInt(fs.querySelector('.cv-br').value, 10) || 0, bitrateMode: fs.querySelector('.cv-brmode').value,
     setGop: true, gop: parseInt(fs.querySelector('.cv-gop').value, 10) || 0,
     setSmartCodec: true, smartCodec: fs.querySelector('.cv-smart').checked,
@@ -1606,7 +1637,7 @@ async function saveCeVideoStream(tile, stream, btn) {
     const res = await streamApply([tile.camId], profile);
     const r = res && res[0];
     const bad = r && r.steps ? r.steps.filter(s => !s.ok) : [];
-    if (r && r.ok && !bad.length) { msg.textContent = 'Đã lưu stream ' + stream + '.'; msg.className = 'msg ok'; }
+    if (r && r.ok && !bad.length) { msg.textContent = 'Đã lưu stream ' + stream + '.'; msg.className = 'msg ok'; await loadVideoTab(tile); }
     else { msg.textContent = 'Một số bước lỗi: ' + (bad.map(s => s.step + (s.err ? ' (' + s.err + ')' : '')).join('; ') || (r && r.err) || 'không rõ'); msg.className = 'msg err'; }
   } catch (e) { msg.textContent = 'Lỗi: ' + e.message; msg.className = 'msg err'; }
   finally { btn.disabled = false; }
@@ -1755,7 +1786,7 @@ async function openChannelEdit(tile) {
   switchPictureMode('lite');
   const cam = cameras.find(x => x.id === tile.camId);
   const isDahua = !!cam && cam.vendor === 'dahua';
-  const canEncode = isDahua || (!!cam && cam.vendor === 'tiandy'); // Tiandy encode over CGI/ISAPI
+  const canEncode = !!cam && (cam.vendor === 'dahua' || cam.vendor === 'hikvision' || cam.vendor === 'tiandy');
   document.getElementById('ce-tab-btn-picture').hidden = !isDahua;
   document.getElementById('ce-tab-btn-ptz').hidden = !isDahua;
   document.getElementById('ce-tab-btn-video').hidden = !canEncode;

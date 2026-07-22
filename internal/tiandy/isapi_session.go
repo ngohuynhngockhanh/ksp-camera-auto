@@ -64,6 +64,7 @@ const netIfacesPath = "/ISAPI/System/Network/interfaces"
 var (
 	// encode: hik id = ch0*100 + stream0 + 1 (ch0 streams -> 1,2,3; ch1 -> 101..).
 	streamChannelRe = regexp.MustCompile(`^/ISAPI/Streaming/channels/(\d+)$`)
+	streamCapsRe    = regexp.MustCompile(`^/ISAPI/Streaming/channels/(\d+)/capabilities$`)
 	// OSD overlay doc (VideoOverlay/TextOverlayList) — Tiandy wants /type/1.
 	overlaysRe = regexp.MustCompile(`^/ISAPI/System/Video/inputs/channels/(\d+)/overlays$`)
 	// InputProxy per-channel (logical channel name). Collection (no id) stays /ISAPI.
@@ -71,6 +72,11 @@ var (
 )
 
 func remapPath(path string) string {
+	if m := streamCapsRe.FindStringSubmatch(path); m != nil {
+		if id, _ := strconv.Atoi(m[1]); id >= 1 {
+			return fmt.Sprintf("/CGI/Streaming/channels/%d/type/%d/capabilities", (id-1)/100+1, (id-1)%100+1)
+		}
+	}
 	if m := streamChannelRe.FindStringSubmatch(path); m != nil {
 		if id, _ := strconv.Atoi(m[1]); id >= 1 {
 			return fmt.Sprintf("/CGI/Streaming/channels/%d/type/%d", (id-1)/100+1, (id-1)%100+1)

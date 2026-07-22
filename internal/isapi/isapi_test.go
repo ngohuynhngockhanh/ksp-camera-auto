@@ -13,6 +13,33 @@ import (
 	"time"
 )
 
+type staticTransport struct {
+	body []byte
+	err  error
+}
+
+func (s staticTransport) Do(context.Context, string, string, []byte) ([]byte, error) {
+	return s.body, s.err
+}
+
+func TestGetMaxFPSCapabilities(t *testing.T) {
+	c := NewWithTransport(staticTransport{body: []byte(`<StreamingChannel><Video><maxFrameRate opt="500,2000,2500" max="3000">2500</maxFrameRate></Video></StreamingChannel>`)})
+	got, err := c.GetMaxFPS(context.Background(), 1, 0, 1920, 1080, CodecH265)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 30 {
+		t.Fatalf("max FPS = %d, want 30", got)
+	}
+}
+
+func TestGetMaxFPSCapabilitiesMissing(t *testing.T) {
+	c := NewWithTransport(staticTransport{body: []byte(`<StreamingChannel/>`)})
+	if _, err := c.GetMaxFPS(context.Background(), 1, 0, 0, 0, ""); err == nil {
+		t.Fatal("expected missing maxFrameRate error")
+	}
+}
+
 // fakeISAPIServer emulates just enough of a Hikvision device to exercise the
 // Client: Digest auth on every request, and a StreamingChannel resource per
 // compound channel id that GET returns and PUT replaces (checked for
