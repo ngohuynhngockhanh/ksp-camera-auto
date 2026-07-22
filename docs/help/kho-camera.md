@@ -4,8 +4,8 @@ title: "Kho camera: thêm, sửa, xóa"
 section: cameras
 order: 10
 keywords: [kho camera, thêm cam, thêm camera, sửa camera, xóa camera, đổi tên, host, IP, cổng, port, dahua, kbvision, hikvision, tài khoản, mật khẩu, mã hóa, danh sách camera]
-ui: "#cameras"
-covers: ["/api/cameras", "/api/cameras/delete"]
+ui: "#cameras/list"
+covers: ["/api/cameras", "/api/cameras/delete", "/api/nvr/scan", "/api/nvr/link"]
 related: [gioi-thieu, doc-cau-hinh, anh-chup, chinh-hang-loat]
 ---
 ## Mục đích
@@ -17,7 +17,7 @@ camera có trong kho này.
 
 ## Cách dùng
 
-1. Mở tab [Kho camera](#cameras). Thẻ **Thêm / sửa camera** ở trên cùng.
+1. Mở **Camera → Danh sách**, rồi bấm **Thêm camera** để mở form.
 2. Nhập thông tin:
    - **Tên** — nhãn tùy bạn đặt, chỉ hiển thị trong kspcam (không ghi xuống
      camera).
@@ -39,8 +39,10 @@ camera có trong kho này.
    - **Xóa** — xóa camera khỏi kho, có hộp thoại xác nhận.
 5. Để sửa một camera đã có: bấm **Sửa**, form phía trên tự điền sẵn dữ liệu,
    chỉnh xong bấm lại **Thêm / Lưu camera**.
-6. Tick chọn ô ở đầu mỗi dòng (hoặc ô **Chọn tất cả** trên tiêu đề bảng) để
-   dùng camera đó cho **Chỉnh hàng loạt** hoặc **Đổi mật khẩu**.
+6. Tick chọn ô ở đầu mỗi dòng (hoặc ô **Chọn tất cả** trên tiêu đề bảng), rồi
+   chuyển sang **Chỉnh hàng loạt**. Lựa chọn được giữ khi đổi tab.
+7. Dùng ô **Tìm camera** và bộ lọc **Hãng** để thu gọn danh sách; mật khẩu
+   được che mặc định và chỉ hiện khi bấm **Hiện**.
 
 ## Lưu ý
 

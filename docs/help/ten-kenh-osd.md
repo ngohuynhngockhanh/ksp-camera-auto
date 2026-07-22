@@ -5,7 +5,7 @@ section: cameras
 order: 40
 keywords: [tên kênh, đổi tên kênh, OSD, chữ trên hình, overlay, dòng chữ, hiện chữ, sửa tên, chỉnh OSD, tên camera trên hình, watermark, xem trước]
 ui: "#cameras"
-covers: ["/api/channel-info", "/api/channel-name", "/api/osd"]
+covers: ["/api/channel-info", "/api/channel-name", "/api/channel-names", "/api/osd"]
 related: [anh-chup, kho-camera, doc-cau-hinh, hinh-anh-mau-sac]
 ---
 ## Mục đích

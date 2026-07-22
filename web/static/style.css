@@ -264,8 +264,8 @@ button { font-family: inherit; }
 @media (max-width: 767px) {
   .page-heading { align-items: center; }
   .page-lead { display: none; }
-  .task-tabs { margin-left: -4px; margin-right: -4px; }
-  .task-tabs a { padding-inline: 12px; }
+  .task-tabs { display: grid; grid-template-columns: 1fr 1fr; margin-left: -4px; margin-right: -4px; overflow: visible; }
+  .task-tabs a { padding-inline: 10px; }
   .camera-toolbar > * { width: 100%; max-width: none; }
   .bulk-camera-picker { grid-template-columns: 1fr; max-height: none; }
 }

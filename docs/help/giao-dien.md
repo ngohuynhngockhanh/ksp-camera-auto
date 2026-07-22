@@ -5,21 +5,21 @@ section: start
 order: 30
 keywords: [giao diện, điều hướng, menu, thanh bên, sidebar, thanh dưới, bottom nav, drawer, giao diện sáng tối, dark mode, light mode, đổi giao diện, thông báo, toast, đăng xuất]
 ui: ""
-covers: []
+covers: ["/api/config"]
 related: [tong-quan, dang-nhap]
 ---
 ## Mục đích
 
-kspcam có 4 khu vực chính: **Tổng quan**, **Quét mạng**, **Kho camera**,
-**Nhập Shinobi**. Bài này giải thích cách di chuyển giữa các khu vực đó trên
+kspcam có các khu vực chính: **Tổng quan**, **Quét mạng**, **Camera**,
+**Xem lại**, **Nhập Shinobi** và **Trợ giúp**. Bài này giải thích cách di chuyển giữa các khu vực đó trên
 máy tính lẫn điện thoại, và cách đổi giao diện sáng/tối.
 
 ## Cách dùng
 
 **Trên máy tính (màn hình rộng):**
 
-1. Dùng **thanh bên trái** (sidebar) để chuyển giữa các tab: Tổng quan, Quét
-   mạng, Kho camera, Nhập Shinobi. Tab đang mở được tô sáng.
+1. Dùng **thanh bên trái** để chuyển giữa các khu vực. Trong **Camera**, dùng
+   bốn tab tác vụ: Danh sách, Chỉnh hàng loạt, Thiết bị & NVR, Kết quả.
 2. Góc trên bên phải có nút **hình mặt trời/mặt trăng** để đổi giao diện
    sáng/tối, và liên kết **Đăng xuất**.
 

@@ -5,7 +5,7 @@ section: cameras
 order: 30
 keywords: [ảnh chụp, chụp hình, xem hình, xem hình hàng loạt, snapshot, tất cả kênh, lightbox, phóng to, tải lại ảnh, kiểm tra hình ảnh, gallery, đầu ghi]
 ui: "#cameras"
-covers: ["/api/snapshot"]
+covers: ["/api/snapshot", "/api/live"]
 related: [kho-camera, doc-cau-hinh, ten-kenh-osd]
 ---
 ## Mục đích

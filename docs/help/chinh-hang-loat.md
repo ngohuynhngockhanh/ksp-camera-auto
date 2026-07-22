@@ -4,8 +4,8 @@ title: "Chỉnh thông số hàng loạt"
 section: bulk
 order: 10
 keywords: [chỉnh hàng loạt, áp dụng, độ phân giải, codec, H.264, H.265, MJPEG, smart codec, H.265+, GOP, I-frame, bitrate, CBR, VBR, âm thanh, AAC, luồng, main, sub, kênh, đầu ghi]
-ui: "#cameras"
-covers: ["/api/apply"]
+ui: "#cameras/bulk"
+covers: ["/api/apply", "/api/fps-capability"]
 related: [doc-cau-hinh, anh-chup, doi-mat-khau-thiet-bi]
 ---
 ## Mục đích
@@ -17,8 +17,8 @@ hình chung.
 
 ## Cách dùng
 
-1. Mở tab [Kho camera](#cameras), **tick chọn** các camera muốn chỉnh trong
-   danh sách (cam đã chọn hiện thành chip ở thẻ **Chỉnh hàng loạt**).
+1. Mở **Camera → Chỉnh hàng loạt** và tick các camera ngay trong bộ chọn đầu
+   trang. Camera đã chọn cũng được giữ từ tab **Danh sách**.
 2. Chọn **Luồng áp dụng**: Main / Sub1 / Sub2 (chọn được nhiều luồng).
 3. Nhập **Kênh** — với camera thường để `1`; với đầu ghi nhiều kênh nhập
    khoảng, ví dụ `1-8` hoặc `1,3,5`.
@@ -35,8 +35,8 @@ hình chung.
 5. Chỉnh **Timeout mỗi cam** nếu có đầu ghi phản hồi chậm (mặc định 30 giây).
 6. Bấm **Dò các cam đã chọn** để xem cấu hình hiện tại trước khi đổi
    (khuyến nghị), rồi bấm **Áp dụng**.
-7. Theo dõi **log trực tiếp**: từng cam, từng bước, thành công/lỗi hiện ngay.
-   Kết quả tổng hợp nằm ở bảng **Kết quả** cuối trang.
+7. Khi bắt đầu chạy, giao diện tự chuyển sang tab **Kết quả** để hiển thị log
+   trực tiếp, tiến trình và bảng tổng hợp thành công/lỗi.
 
 ## Lưu ý
 
