@@ -16,6 +16,11 @@
 /config.yaml
 *.log
 
+# UI test dependencies and artifacts
+/node_modules/
+/test-results/
+/playwright-report/
+
 # OS / editor
 .DS_Store
 *.swp
