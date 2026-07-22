@@ -105,8 +105,21 @@
 
         <!-- Kho camera -->
         <section class="view" id="view-cameras" data-view="cameras">
-          <h2 class="page-title">Kho camera</h2>
-          <div class="card">
+          <div class="page-heading">
+            <div>
+              <h2 class="page-title">Camera</h2>
+              <p class="page-lead">Quản lý kho, chỉnh hàng loạt và theo dõi kết quả theo từng tác vụ.</p>
+            </div>
+            <button class="btn" type="button" id="camera-add-open">Thêm camera</button>
+          </div>
+          <div class="task-tabs" id="camera-task-tabs" aria-label="Khu vực camera">
+            <a href="#cameras/list" data-camera-task="list">Danh sách</a>
+            <a href="#cameras/bulk" data-camera-task="bulk">Chỉnh hàng loạt</a>
+            <a href="#cameras/devices" data-camera-task="devices">Thiết bị &amp; NVR</a>
+            <a href="#cameras/results" data-camera-task="results">Kết quả</a>
+          </div>
+
+          <div class="card camera-add-card" data-camera-panel="list" hidden>
             <div class="card-title">Thêm / sửa camera</div>
             <form id="add-form">
               <div class="grid">
@@ -144,14 +157,24 @@
             </form>
           </div>
 
-          <div class="card" id="nvr-card">
+          <div class="card" id="nvr-card" data-camera-panel="devices">
+            <div class="card-title">Thiết bị &amp; đầu ghi</div>
+            <p class="card-sub">Chọn một camera để mở cấu hình mạng/bảo trì, hoặc quét đầu ghi để liên kết camera không có bộ nhớ.</p>
+            <div class="row">
+              <div class="field field-grow">
+                <label for="device-manage-select">Camera cần cấu hình</label>
+                <select id="device-manage-select"><option value="">Chọn camera...</option></select>
+              </div>
+              <button class="btn btn-secondary" type="button" id="device-manage-open">Mở cấu hình thiết bị</button>
+            </div>
+            <div class="section-divider"></div>
             <div class="card-title">Đầu ghi (NVR) — dự phòng khi camera không có bộ nhớ</div>
             <p class="card-sub">Liên kết camera với đầu ghi: camera nào không có thẻ nhớ thì khi xem lại/tải sẽ tự lấy từ đầu ghi ở kênh tương ứng; camera offline thì xem trực tiếp cũng lấy từ đầu ghi. Chạy quét 1 lần để tự gán, có thể sửa tay.</p>
             <div class="msg" id="nvr-card-msg"></div>
             <button class="btn" type="button" id="nvr-open-btn">🗄 Quét &amp; liên kết đầu ghi</button>
           </div>
 
-          <div class="card" id="network-card" hidden>
+          <div class="card" id="network-card" data-camera-panel="devices" hidden>
             <div class="card-title">Mạng — <span id="net-device-name"></span></div>
             <p class="card-sub">Chỉ đọc/ghi được qua cổng cấu hình DVRIP đang dùng để kết nối camera này. Quét Wi-Fi cần cổng HTTP (80) của camera — có thể không tới được nếu chỉ NAT cổng DVRIP.</p>
             <div class="msg" id="net-msg"></div>
@@ -160,10 +183,28 @@
             <div id="net-maint"><p class="muted">Đang tải...</p></div>
           </div>
 
-          <div class="card">
-            <div class="card-title">Danh sách camera</div>
-            <p class="card-sub">Tick chọn camera để dùng cho Chỉnh hàng loạt / Đổi mật khẩu bên dưới.</p>
-            <div class="row">
+          <div class="card" data-camera-panel="list">
+            <div class="card-head-row">
+              <div>
+                <div class="card-title">Danh sách camera</div>
+                <p class="card-sub">Chọn camera để chỉnh hàng loạt; lựa chọn được giữ khi chuyển tab.</p>
+              </div>
+              <span class="badge info" id="camera-list-count">0 camera</span>
+            </div>
+            <div class="camera-toolbar">
+              <div class="field field-grow">
+                <label for="camera-search">Tìm camera</label>
+                <input id="camera-search" type="search" placeholder="Tên, IP hoặc tài khoản...">
+              </div>
+              <div class="field field-sm">
+                <label for="camera-vendor-filter">Hãng</label>
+                <select id="camera-vendor-filter">
+                  <option value="">Tất cả hãng</option>
+                  <option value="dahua">Dahua / KBVision</option>
+                  <option value="hikvision">Hikvision</option>
+                  <option value="tiandy">Tiandy</option>
+                </select>
+              </div>
               <button class="btn btn-secondary" type="button" id="probe-names-btn">🔤 Dò tên kênh (tất cả)</button>
               <span class="muted" id="probe-names-msg"></span>
             </div>
@@ -180,13 +221,14 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card" data-camera-panel="bulk">
             <div class="card-title">Chỉnh hàng loạt</div>
-            <p class="card-sub">Áp dụng cho các camera đã tick chọn ở danh sách phía trên.</p>
+            <p class="card-sub">Chọn camera ngay tại đây, sau đó chỉ bật những thiết lập cần thay đổi.</p>
             <div id="bulk-selection">
               <span class="muted" id="bulk-selected-count">Chưa chọn camera nào.</span>
             </div>
             <div class="chip-list" id="bulk-selected-chips"></div>
+            <div class="bulk-camera-picker" id="bulk-camera-picker"></div>
 
             <div class="field section-gap">
               <label>Luồng áp dụng</label>
@@ -311,15 +353,9 @@
               <button class="btn" id="apply-btn">Áp dụng</button>
               <span class="muted" id="apply-count"></span>
             </div>
-            <div class="msg" id="apply-msg"></div>
-
-            <div class="progress" id="apply-progress"><div class="progress-fill" id="apply-progress-fill"></div></div>
-            <div class="progress-label" id="apply-progress-label"></div>
-            <p class="muted" style="margin:10px 0 4px">Nhật ký trực tiếp — chạy tuần tự từng camera một:</p>
-            <div class="log-box" id="apply-log"></div>
           </div>
 
-          <div class="card danger-zone">
+          <div class="card danger-zone" data-camera-panel="bulk">
             <div class="card-title">Đổi mật khẩu camera (cho các cam đã chọn)</div>
             <div class="row">
               <div class="field field-sm">
@@ -335,8 +371,13 @@
             <p class="muted">Đổi xong tool tự cập nhật mật khẩu trong kho để vẫn kết nối được (không bị khóa ngoài).</p>
           </div>
 
-          <div class="card">
+          <div class="card" data-camera-panel="results">
             <div class="card-title">Kết quả</div>
+            <p class="card-sub">Tiến trình chạy tuần tự từng camera và kết quả gần nhất trong phiên này.</p>
+            <div class="msg" id="apply-msg"></div>
+            <div class="progress" id="apply-progress"><div class="progress-fill" id="apply-progress-fill"></div></div>
+            <div class="progress-label" id="apply-progress-label"></div>
+            <div class="log-box" id="apply-log"><span class="muted">Chưa có tác vụ nào chạy.</span></div>
             <div class="table-wrap">
               <table class="reflow" id="result-table">
                 <thead><tr><th>Camera</th><th>Host</th><th>Trạng thái</th><th>Chi tiết</th></tr></thead>
@@ -661,6 +702,7 @@
     </dialog>
 
   </div>
+  <script src="ui-core.js"></script>
   <script src="app.js"></script>
   <script src="help.js"></script>
   <script src="vis-timeline-graph2d.min.js"></script>

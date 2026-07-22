@@ -31,92 +31,8 @@ const NAV_ITEMS = [
   { hash: 'help', label: 'Trợ giúp', short: 'Trợ giúp', icon: ICONS.help, bottom: false },
 ];
 // Old bookmarks/links to the now-merged tabs still land on #cameras.
-const HASH_ALIASES = { bulk: 'cameras', results: 'cameras' };
-
-/* ---------- generic helpers ---------- */
-
-function escapeHtml(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  }[ch]));
-}
-function cssEscape(s) { return String(s).replace(/[^a-zA-Z0-9_-]/g, '_'); }
-
-function timeoutSec() {
-  return parseInt(document.getElementById('g-timeout').value, 10) || 30;
-}
-
-function setBusy(btn, busy, busyLabel) {
-  if (!btn) return;
-  if (busy) {
-    btn.dataset.label = btn.dataset.label || btn.textContent;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span>' + escapeHtml(busyLabel || btn.dataset.label);
-  } else {
-    btn.disabled = false;
-    btn.textContent = btn.dataset.label || btn.textContent;
-  }
-}
-
-/* ---------- toast ---------- */
-
-function showToast(message, type) {
-  const box = document.getElementById('toast-container');
-  const el = document.createElement('div');
-  el.className = 'toast' + (type ? ' ' + type : '');
-  el.textContent = message;
-  box.appendChild(el);
-  setTimeout(() => el.remove(), 4000);
-}
-
-/* ---------- confirm dialog (replaces alert()/confirm()) ---------- */
-
-function showConfirm(title, message, opts) {
-  opts = opts || {};
-  const dlg = document.getElementById('confirm-dialog');
-  document.getElementById('confirm-title').textContent = title;
-  document.getElementById('confirm-message').textContent = message;
-  const okBtn = document.getElementById('confirm-ok');
-  okBtn.textContent = opts.okLabel || 'Xác nhận';
-  okBtn.className = 'btn' + (opts.danger ? ' btn-danger' : '');
-  dlg.showModal();
-  okBtn.focus();
-  return new Promise(resolve => {
-    const cancelBtn = document.getElementById('confirm-cancel');
-    function cleanup(result) {
-      okBtn.removeEventListener('click', onOk);
-      cancelBtn.removeEventListener('click', onCancel);
-      dlg.removeEventListener('cancel', onCancel);
-      dlg.close();
-      resolve(result);
-    }
-    function onOk() { cleanup(true); }
-    function onCancel(ev) { if (ev) ev.preventDefault(); cleanup(false); }
-    okBtn.addEventListener('click', onOk);
-    cancelBtn.addEventListener('click', onCancel);
-    dlg.addEventListener('cancel', onCancel);
-  });
-}
-
-/* ---------- API ---------- */
-
-const jsonHeaders = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
-
-async function api(path, opts) {
-  const res = await fetch(path, Object.assign({ headers: jsonHeaders }, opts || {}));
-  if (res.status === 401) {
-    location.href = '/login';
-    throw new Error('unauthorized');
-  }
-  const text = await res.text();
-  let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch (e) { /* not JSON */ }
-  if (!res.ok) {
-    const msg = (data && data.error) ? data.error : (text || res.statusText);
-    throw new Error(msg);
-  }
-  return data;
-}
+const HASH_ALIASES = { bulk: 'cameras/bulk', results: 'cameras/results' };
+const CAMERA_TASKS = ['list', 'bulk', 'devices', 'results'];
 
 // streamPost POSTs a JSON body and consumes the "data: <event>\n\n" SSE
 // stream, rendering each event to the live log + progress bar. Used by
@@ -216,6 +132,7 @@ function clearLog() { document.getElementById('apply-log').innerHTML = ''; }
 /* ---------- state ---------- */
 
 let cameras = [];
+const selectedCameraSet = new Set();
 const probeCache = {}; // id -> streamInfo[]
 let scanResults = [];
 let lastRun = null; // { type, total, ok, fail, time }
@@ -242,9 +159,41 @@ function fmtStreamInfo(list) {
 function currentHash() {
   // Keep only the view part: "#help/wifi" routes to the help view, and
   // help.js reads the article id from the full location.hash itself.
-  let h = (location.hash || '#dashboard').slice(1).split('/')[0];
-  if (HASH_ALIASES[h]) h = HASH_ALIASES[h];
+  let raw = (location.hash || '#dashboard').slice(1);
+  if (HASH_ALIASES[raw]) raw = HASH_ALIASES[raw];
+  const h = raw.split('/')[0];
   return NAV_ITEMS.some(n => n.hash === h) ? h : 'dashboard';
+}
+
+function currentCameraTask() {
+  let raw = (location.hash || '').slice(1);
+  if (HASH_ALIASES[raw]) raw = HASH_ALIASES[raw];
+  const task = raw.split('/')[1];
+  return CAMERA_TASKS.includes(task) ? task : 'list';
+}
+
+function setCameraTask(task) {
+  location.hash = '#cameras/' + (CAMERA_TASKS.includes(task) ? task : 'list');
+}
+
+function renderCameraTask() {
+  const task = currentCameraTask();
+  document.querySelectorAll('[data-camera-panel]').forEach(el => {
+    if (el.classList.contains('camera-add-card')) {
+      if (task !== 'list') el.hidden = true;
+      return;
+    }
+    el.hidden = el.dataset.cameraPanel !== task;
+  });
+  document.querySelectorAll('[data-camera-task]').forEach(el => {
+    const active = el.dataset.cameraTask === task;
+    el.classList.toggle('active', active);
+    if (active) el.setAttribute('aria-current', 'page');
+    else el.removeAttribute('aria-current');
+  });
+  document.getElementById('camera-add-open').hidden = task !== 'list';
+  if (task === 'bulk') renderBulkSelection();
+  if (task === 'devices') renderDevicePicker();
 }
 
 function setRoute() {
@@ -258,7 +207,7 @@ function setRoute() {
     el.classList.toggle('active', el.dataset.navHash === hash);
   });
   closeDrawer();
-  if (hash === 'cameras') renderBulkSelection();
+  if (hash === 'cameras') renderCameraTask();
   if (hash === 'dashboard') renderDashboard();
   if (hash === 'review') {
     // reviewOnShow may not exist yet if review.js is still loading (a viewer is
@@ -389,15 +338,27 @@ function renderCameras() {
     th.classList.toggle('sort-asc', th.dataset.sort === camSort.key && camSort.dir === 1);
     th.classList.toggle('sort-desc', th.dataset.sort === camSort.key && camSort.dir === -1);
   });
+  const query = (document.getElementById('camera-search').value || '').trim().toLocaleLowerCase('vi');
+  const vendor = document.getElementById('camera-vendor-filter').value;
+  const visible = sortedCameras().filter(c => {
+    if (vendor && c.vendor !== vendor) return false;
+    if (!query) return true;
+    return [c.name, c.channelName, c.host, c.username].some(v => String(v || '').toLocaleLowerCase('vi').includes(query));
+  });
+  document.getElementById('camera-list-count').textContent = `${visible.length}/${cameras.length} camera`;
   if (!cameras.length) {
     tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Chưa có camera nào. Thêm ở form phía trên.</td></tr>';
     renderDashboard();
     return;
   }
-  const checked = new Set(Array.from(document.querySelectorAll('.cam-cb:checked')).map(cb => cb.value));
-  tbody.innerHTML = sortedCameras().map(c => `
+  if (!visible.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Không có camera khớp bộ lọc.</td></tr>';
+    renderDashboard();
+    return;
+  }
+  tbody.innerHTML = visible.map(c => `
     <tr data-id="${escapeHtml(c.id)}">
-      <td class="cell-check"><input type="checkbox" class="cam-cb" value="${escapeHtml(c.id)}" ${checked.has(c.id) ? 'checked' : ''} aria-label="Chọn camera"></td>
+      <td class="cell-check"><input type="checkbox" class="cam-cb" value="${escapeHtml(c.id)}" ${selectedCameraSet.has(c.id) ? 'checked' : ''} aria-label="Chọn ${escapeHtml(c.name || c.host)}"></td>
       <td data-label="Tên" class="cell-name">
         <span class="cell-name-text">${escapeHtml(c.name || '(chưa đặt tên)')}</span>${c.channelName ? '<span class="muted"> · ' + escapeHtml(c.channelName) + '</span>' : ''}
         ${c.isNvr ? '<span class="badge">NVR</span>' : ''}
@@ -408,7 +369,7 @@ function renderCameras() {
       <td data-label="Cổng">${c.port}</td>
       <td data-label="Hãng">${escapeHtml(c.vendor)}</td>
       <td data-label="Tài khoản">${escapeHtml(c.username || '')}</td>
-      <td data-label="Mật khẩu"><code>${escapeHtml(c.password || '')}</code></td>
+      <td data-label="Mật khẩu"><span class="password-cell"><code data-password-for="${escapeHtml(c.id)}">••••••••</code><button class="btn-icon password-toggle" data-action="reveal-pass" data-id="${escapeHtml(c.id)}" aria-label="Hiện mật khẩu">Hiện</button></span></td>
       <td data-label="Thông tin luồng" class="probe-box" id="probe-${cssEscape(c.id)}">${fmtStreamInfo(probeCache[c.id]) || '<span class="muted">chưa dò</span>'}</td>
       <td class="actions-cell">
         <button class="btn btn-secondary" data-action="probe" data-id="${escapeHtml(c.id)}">Dò</button>
@@ -426,7 +387,10 @@ async function loadCameras() {
   renderCameraSkeleton();
   try {
     cameras = await api('/api/cameras');
+    for (const id of selectedCameraSet) if (!cameras.some(c => c.id === id)) selectedCameraSet.delete(id);
     renderCameras();
+    renderBulkSelection();
+    renderDevicePicker();
   } catch (e) {
     document.getElementById('cam-tbody').innerHTML =
       `<tr><td colspan="7"><span class="msg err">Lỗi tải danh sách: ${escapeHtml(e.message)}</span></td></tr>`;
@@ -524,7 +488,25 @@ async function loadCameras() {
 })();
 
 function selectedCameraIds() {
-  return Array.from(document.querySelectorAll('.cam-cb:checked')).map(cb => cb.value);
+  return Array.from(selectedCameraSet);
+}
+
+function setCameraSelected(id, selected) {
+  if (selected) selectedCameraSet.add(id);
+  else selectedCameraSet.delete(id);
+  document.querySelectorAll('.cam-cb, .bulk-cam-cb').forEach(cb => {
+    if (cb.value === id) cb.checked = selected;
+  });
+  renderBulkSelection();
+}
+
+function renderDevicePicker() {
+  const select = document.getElementById('device-manage-select');
+  const current = select.value;
+  select.innerHTML = '<option value="">Chọn camera...</option>' + cameras.map(c =>
+    `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name || c.host)} · ${escapeHtml(c.host)}</option>`
+  ).join('');
+  if (cameras.some(c => c.id === current)) select.value = current;
 }
 
 function renderBulkSelection() {
@@ -535,13 +517,18 @@ function renderBulkSelection() {
   if (!ids.length) {
     countEl.textContent = 'Chưa chọn camera nào.';
     chipsEl.innerHTML = '';
-    return;
+  } else {
+    countEl.textContent = ids.length + ' camera đã chọn:';
+    chipsEl.innerHTML = ids.map(id => {
+      const c = cameras.find(x => x.id === id);
+      return `<button type="button" class="chip chip-btn" data-unselect-camera="${escapeHtml(id)}" title="Bỏ chọn">${escapeHtml(c ? (c.name || c.host) : id)} ×</button>`;
+    }).join('');
   }
-  countEl.textContent = ids.length + ' camera đã chọn:';
-  chipsEl.innerHTML = ids.map(id => {
-    const c = cameras.find(x => x.id === id);
-    return `<span class="chip">${escapeHtml(c ? (c.name || c.host) : id)}</span>`;
-  }).join('');
+  document.getElementById('bulk-camera-picker').innerHTML = cameras.length ? cameras.map(c => `
+    <label class="bulk-camera-option">
+      <input type="checkbox" class="bulk-cam-cb" value="${escapeHtml(c.id)}" ${selectedCameraSet.has(c.id) ? 'checked' : ''}>
+      <span><strong>${escapeHtml(c.name || '(chưa đặt tên)')}</strong><small>${escapeHtml(c.host)} · ${escapeHtml(c.vendor)}</small></span>
+    </label>`).join('') : '<p class="empty-hint">Chưa có camera trong kho.</p>';
 }
 
 /* ---------- add / edit / delete / probe ---------- */
@@ -567,6 +554,7 @@ document.getElementById('add-form').addEventListener('submit', async (ev) => {
     msg.textContent = 'Đã thêm camera.';
     msg.className = 'msg ok';
     showToast('Đã lưu camera.', 'ok');
+    document.querySelector('.camera-add-card').hidden = true;
     await loadCameras();
   } catch (e) {
     msg.textContent = 'Lỗi: ' + e.message;
@@ -595,14 +583,10 @@ document.getElementById('cam-tbody').addEventListener('click', async (ev) => {
     pw.placeholder = 'để trống = giữ mật khẩu cũ';
     const m = document.getElementById('add-msg');
     m.className = 'msg'; m.textContent = 'Đang sửa "' + (c.name || c.host) + '". Đổi thông tin rồi bấm "Thêm/Lưu camera". (Đổi host/cổng sẽ tạo mục mới.)';
-    goto('cameras');
+    setCameraTask('list');
+    document.querySelector('.camera-add-card').hidden = false;
     document.getElementById('add-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
     document.getElementById('f-name').focus();
-    if (c.vendor === 'dahua' || c.vendor === 'hikvision' || c.vendor === 'tiandy') {
-      openNetworkCard(c);
-    } else {
-      closeNetworkCard();
-    }
     return;
   }
   if (btn.dataset.action === 'delete') {
@@ -638,7 +622,38 @@ document.getElementById('cam-tbody').addEventListener('click', async (ev) => {
     await viewAllChannels(id, btn);
   } else if (btn.dataset.action === 'rename-inline') {
     startInlineRename(btn.closest('.cell-name'), id);
+  } else if (btn.dataset.action === 'reveal-pass') {
+    const c = cameras.find(x => x.id === id);
+    const code = Array.from(document.querySelectorAll('[data-password-for]')).find(el => el.dataset.passwordFor === id);
+    if (!c || !code) return;
+    const revealed = btn.dataset.revealed === 'true';
+    code.textContent = revealed ? '••••••••' : (c.password || '(trống)');
+    btn.dataset.revealed = revealed ? 'false' : 'true';
+    btn.textContent = revealed ? 'Hiện' : 'Ẩn';
+    btn.setAttribute('aria-label', revealed ? 'Hiện mật khẩu' : 'Ẩn mật khẩu');
   }
+});
+
+document.getElementById('camera-add-open').addEventListener('click', () => {
+  const card = document.querySelector('.camera-add-card');
+  card.hidden = !card.hidden;
+  if (!card.hidden) document.getElementById('f-name').focus();
+});
+document.getElementById('camera-search').addEventListener('input', renderCameras);
+document.getElementById('camera-vendor-filter').addEventListener('change', renderCameras);
+document.getElementById('device-manage-open').addEventListener('click', () => {
+  const id = document.getElementById('device-manage-select').value;
+  const c = cameras.find(x => x.id === id);
+  if (!c) { showToast('Chọn camera cần cấu hình.', 'err'); return; }
+  openNetworkCard(c);
+  document.getElementById('network-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+document.getElementById('bulk-camera-picker').addEventListener('change', ev => {
+  if (ev.target.classList.contains('bulk-cam-cb')) setCameraSelected(ev.target.value, ev.target.checked);
+});
+document.getElementById('bulk-selected-chips').addEventListener('click', ev => {
+  const btn = ev.target.closest('[data-unselect-camera]');
+  if (btn) setCameraSelected(btn.dataset.unselectCamera, false);
 });
 
 /* ---------- Mạng (Dahua/KBVision): static IP + Wi-Fi, device-level ---------- */
@@ -740,21 +755,7 @@ async function renderMaintenance(c) {
   renderPlayback(c);
 }
 
-// pad2 zero-pads to 2 digits.
-function pad2(n) { return String(n).padStart(2, '0'); }
-
-// localDatetimeValue formats a Date as the value an <input type=datetime-local>
-// expects (YYYY-MM-DDTHH:MM), in local wall-clock.
-function localDatetimeValue(d) {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-}
-
-// renderPlayback builds the "Xem lại video" panel: a time-range picker, a
-// button to list recorded segments (the timeline), an inline HTML5 player, and
-// a download link. Playback/download stream straight from the camera via the
-// server (RTSP remux, nothing stored on the box).
-// renderPlayback now just links to the dedicated "Xem lại" timeline view — the
-// full playback/download UI lives there (web/static/review.js).
+// Playback lives in the dedicated timeline view; maintenance only links there.
 function renderPlayback(c) {
   const el = document.getElementById('maint-playback');
   if (!el) return;
@@ -766,60 +767,6 @@ function renderPlayback(c) {
     if (c && c.id) window._rvPreselect = c.id;
     goto('review');
   });
-}
-
-// pbParams reads the current start/end/channel from the playback picker.
-function pbParams(c) {
-  const start = document.getElementById('pb-start').value;
-  const end = document.getElementById('pb-end').value;
-  const channel = parseInt(document.getElementById('pb-channel').value, 10) || 0;
-  return { id: c.id, start, end, channel };
-}
-
-async function loadRecordings(c) {
-  const tl = document.getElementById('pb-timeline');
-  const p = pbParams(c);
-  if (!p.start || !p.end) { showToast('Chọn khoảng thời gian.', 'err'); return; }
-  tl.innerHTML = '<p class="muted">Đang tải danh sách bản ghi (qua cổng cấu hình camera, có thể chậm nếu camera đang bận)...</p>';
-  try {
-    const q = `id=${encodeURIComponent(p.id)}&channel=${p.channel}&start=${encodeURIComponent(p.start)}&end=${encodeURIComponent(p.end)}&timeoutSeconds=${timeoutSec()}`;
-    const res = await api('/api/recordings?' + q);
-    const recs = (res && res.recordings) || [];
-    if (!recs.length) { tl.innerHTML = '<p class="muted">Không có bản ghi trong khoảng này.</p>'; return; }
-    tl.innerHTML = '<div class="chip-list">' + recs.map((r, i) => {
-      const st = r.startTime.slice(11), en = r.endTime.slice(11);
-      const ev = (r.events && r.events.length) ? ' 👤' : '';
-      return `<button type="button" class="chip chip-btn" data-pb-idx="${i}" data-start="${escapeHtml(r.startTime)}" data-end="${escapeHtml(r.endTime)}">${st}–${en} (${r.duration}s)${ev}</button>`;
-    }).join('') + '</div>';
-    tl.querySelectorAll('[data-pb-idx]').forEach(b => b.addEventListener('click', () => {
-      // Fill the pickers with this segment and play it.
-      document.getElementById('pb-start').value = b.dataset.start.replace(' ', 'T').slice(0, 16);
-      document.getElementById('pb-end').value = b.dataset.end.replace(' ', 'T').slice(0, 16);
-      playRange(c, false);
-    }));
-  } catch (e) {
-    tl.innerHTML = `<p class="msg err">Lỗi tải danh sách: ${escapeHtml(e.message)}</p>`;
-  }
-}
-
-// playRange plays (download=false) or downloads (download=true) the selected
-// time range. Playback points an HTML5 <video> at /api/playback; download
-// navigates to the same endpoint with download=1 so the browser saves the file.
-function playRange(c, download, fast) {
-  const p = pbParams(c);
-  if (!p.start || !p.end) { showToast('Chọn khoảng thời gian.', 'err'); return; }
-  if (p.end <= p.start) { showToast('Thời gian kết thúc phải sau thời gian bắt đầu.', 'err'); return; }
-  let base = `/api/playback?id=${encodeURIComponent(p.id)}&channel=${p.channel}&start=${encodeURIComponent(p.start)}&end=${encodeURIComponent(p.end)}`;
-  if (fast) base += '&fast=1';
-  if (download) {
-    window.location.href = base + '&download=1';
-    showToast('Đang tải MP4... (khoảng dài có thể mất thời gian)', 'ok');
-  } else {
-    const v = document.getElementById('pb-video');
-    v.hidden = false;
-    v.src = base;
-    v.play().catch(() => {});
-  }
 }
 
 async function rebootDevice(c) {
@@ -1083,12 +1030,16 @@ document.querySelector('#cam-table thead').addEventListener('click', (ev) => {
 });
 
 document.getElementById('select-all').addEventListener('change', (ev) => {
-  document.querySelectorAll('.cam-cb').forEach(cb => cb.checked = ev.target.checked);
+  document.querySelectorAll('.cam-cb').forEach(cb => {
+    cb.checked = ev.target.checked;
+    if (ev.target.checked) selectedCameraSet.add(cb.value);
+    else selectedCameraSet.delete(cb.value);
+  });
   renderBulkSelection();
 });
 
 document.getElementById('cam-tbody').addEventListener('change', (ev) => {
-  if (ev.target.classList.contains('cam-cb')) renderBulkSelection();
+  if (ev.target.classList.contains('cam-cb')) setCameraSelected(ev.target.value, ev.target.checked);
 });
 
 /* ---------- bulk-edit form wiring ---------- */
@@ -2285,6 +2236,7 @@ document.getElementById('apply-btn').addEventListener('click', async () => {
     return;
   }
   const btn = document.getElementById('apply-btn');
+  setCameraTask('results');
   setBusy(btn, true, 'Đang áp dụng...');
   clearLog();
   msg.textContent = `Đang áp dụng tuần tự cho ${ids.length} camera...`;
@@ -2323,6 +2275,7 @@ document.getElementById('pw-btn').addEventListener('click', async () => {
   );
   if (!ok) return;
   const btn = document.getElementById('pw-btn');
+  setCameraTask('results');
   setBusy(btn, true, 'Đang đổi...');
   clearLog();
   msg.textContent = `Đang đổi mật khẩu ${ids.length} camera...`;
