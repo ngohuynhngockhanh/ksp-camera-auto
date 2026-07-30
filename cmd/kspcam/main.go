@@ -76,6 +76,8 @@ func main() {
 			// re-importing from Shinobi (every deploy) doesn't wipe the NVR
 			// channel link and leave the camera pointing at its own dead port.
 			if ex, ok := inv.Get(d.ID); ok {
+				d.NVRWatchdog, d.NVRSyncTimeFromHost = ex.NVRWatchdog, ex.NVRSyncTimeFromHost
+				d.SerialNumber = ex.SerialNumber
 				if ex.NVRID != "" {
 					d.NVRID, d.NVRChannel, d.NVRName, d.NoStorage = ex.NVRID, ex.NVRChannel, ex.NVRName, ex.NoStorage
 				}
@@ -98,6 +100,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("server: %v", err)
 	}
+	defer srv.Close()
 
 	httpSrv := &http.Server{
 		Addr:              cfg.Server.Addr,

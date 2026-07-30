@@ -29,7 +29,7 @@ Tự động tìm camera đang có trong mạng LAN thay vì phải gõ tay từ
    xác thực bằng đúng giao thức của hãng, nên cột Hãng/Model có thể để trống.
 5. Ở dòng muốn thêm, bấm **Thêm vào kho** — công cụ điền sẵn IP, Cổng, Hãng,
    Tên vào form **Thêm/sửa camera** ở tab [Kho camera](#cameras); bạn tự nhập
-   **Tài khoản**/**Mật khẩu** rồi bấm **Thêm/Lưu camera**.
+   **Tài khoản**/**Mật khẩu** rồi bấm **Thêm camera**.
 6. Có thể tick chọn nhiều dòng (checkbox đầu bảng, hoặc **Chọn tất cả**) để
    dùng cho [Thử mật khẩu hàng loạt](#help/thu-mat-khau).
 

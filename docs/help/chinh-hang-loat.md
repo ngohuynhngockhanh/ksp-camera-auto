@@ -32,7 +32,8 @@ hình chung.
      đổi số). Cam Hikvision đang bật Smart Codec sẽ hiểu đây là bitrate
      trung bình.
    - **Bật âm thanh AAC**.
-5. Chỉnh **Timeout mỗi cam** nếu có đầu ghi phản hồi chậm (mặc định 30 giây).
+5. Chỉnh **Timeout mỗi thiết bị** ở nút ⚙ trên thanh tiêu đề nếu có đầu ghi
+   phản hồi chậm (mặc định 30 giây). Thiết lập này áp dụng cho mọi tác vụ.
 6. Bấm **Dò các cam đã chọn** để xem cấu hình hiện tại trước khi đổi
    (khuyến nghị), rồi bấm **Áp dụng**.
 7. Khi bắt đầu chạy, giao diện tự chuyển sang tab **Kết quả** để hiển thị log
@@ -55,7 +56,7 @@ hình chung.
   bấm **Dò** xem giá trị hiện tại và chọn preset gần nhất mà cam hỗ trợ.
 - Đổi codec báo thành công nhưng giá trị **không đổi** → một số model âm thầm
   bỏ qua codec không hỗ trợ; log đọc-lại sẽ báo đúng giá trị thật trên máy.
-- Đầu ghi nhiều kênh bị **timeout** → tăng **Timeout mỗi cam** (60–120 giây)
+- Đầu ghi nhiều kênh bị **timeout** → tăng **Timeout mỗi thiết bị** ở nút ⚙ (60–120 giây)
   và thu hẹp khoảng kênh.
 - Cam không phản hồi → kiểm tra cổng cấu hình (Dahua 37777, Hikvision 80) và
   tài khoản; thử [Đọc cấu hình (Dò)](#help/doc-cau-hinh) trước.

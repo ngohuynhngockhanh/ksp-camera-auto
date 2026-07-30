@@ -19,7 +19,8 @@ máy tính lẫn điện thoại, và cách đổi giao diện sáng/tối.
 **Trên máy tính (màn hình rộng):**
 
 1. Dùng **thanh bên trái** để chuyển giữa các khu vực. Trong **Camera**, dùng
-   bốn tab tác vụ: Danh sách, Chỉnh hàng loạt, Thiết bị & NVR, Kết quả.
+   bốn tab tác vụ: Danh sách, Chỉnh hàng loạt, Đầu ghi, Kết quả. Bấm một hàng
+   trong Danh sách để mở trang chi tiết của camera đó.
 2. Góc trên bên phải có nút **hình mặt trời/mặt trăng** để đổi giao diện
    sáng/tối, và liên kết **Đăng xuất**.
 

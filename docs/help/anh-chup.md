@@ -28,7 +28,7 @@ xem camera riêng.
    từng đợt nhỏ (không tải cùng lúc tất cả) để không làm quá tải camera/đầu
    ghi yếu.
 4. Trong lưới ảnh: mỗi ô có nút tải lại (icon vòng tròn) để chụp ảnh mới, và
-   nút **Sửa tên & OSD** để mở nhanh hộp chỉnh
+   nút **Cấu hình chi tiết** để mở nhanh trang chỉnh
    [Tên kênh & OSD](#help/ten-kenh-osd) cho đúng kênh đó.
 5. Bấm vào một ảnh để phóng to (lightbox); trong lightbox có **Tải lại** để
    chụp ảnh mới và **Đóng** để quay về lưới.
@@ -50,7 +50,7 @@ xem camera riêng.
 ## Sự cố thường gặp
 
 - Ô ảnh báo lỗi kết nối/timeout → camera không phản hồi kịp; bấm vào ô để thử
-  lại, hoặc tăng **Timeout mỗi cam** ở thẻ Chỉnh hàng loạt nếu cam/đầu ghi
+  lại, hoặc tăng **Timeout mỗi thiết bị** (nút ⚙ trên thanh tiêu đề) nếu cam/đầu ghi
   vốn chậm.
 - Ảnh không đổi dù đã đổi cấu hình → dùng nút **tải lại** (ảnh có thể đang
   được phục vụ từ bộ nhớ đệm vài giây gần nhất).

@@ -21,8 +21,8 @@ kspcam).
 1. Mở hộp thoại xem hình cho camera cần sửa: bấm **Xem hình**, **Tất cả
    kênh** hoặc **Xem hình hàng loạt** ở tab [Kho camera](#cameras). Xem chi
    tiết ở bài [Ảnh chụp nhanh](#help/anh-chup).
-2. Trên ô hình của đúng kênh cần sửa, bấm **Sửa tên & OSD**. Hộp thoại
-   **Sửa tên & OSD** mở ra, bên trái là ảnh xem trước, bên phải là form (tab
+2. Trên ô hình của đúng kênh cần sửa, bấm **Cấu hình chi tiết**. Trang chi tiết
+   camera mở ra, bên trái là ảnh xem trước, bên phải là các tab (tab
    **Tên & OSD** được chọn sẵn).
 3. Đợi vài giây để kspcam đọc cấu hình hiện tại từ camera, form sẽ tự điền:
    - **Tên trên camera (kênh)** — tên overlay hiện tại.

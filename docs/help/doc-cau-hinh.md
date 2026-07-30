@@ -36,7 +36,7 @@ Dùng để biết cam đang cấu hình ra sao trước khi đổi, và để x
   quả dò gần nhất mà không cần dò lại.
 - Với đầu ghi nhiều kênh, kết quả dò gộp cả các kênh đã cấu hình sẵn trên
   thiết bị — không phụ thuộc vào ô **Kênh** ở form Chỉnh hàng loạt.
-- Camera phản hồi chậm (đầu ghi nhiều kênh) nên tăng **Timeout mỗi cam** ở
+- Camera phản hồi chậm (đầu ghi nhiều kênh) nên tăng **Timeout mỗi thiết bị** ở
   thẻ Chỉnh hàng loạt trước khi dò hàng loạt.
 
 ## Sự cố thường gặp
@@ -45,7 +45,7 @@ Dùng để biết cam đang cấu hình ra sao trước khi đổi, và để x
   Hikvision 80) hoặc sai **Tài khoản/Mật khẩu** đã lưu trong
   [Kho camera](#help/kho-camera).
 - Dò hàng loạt bị dừng giữa chừng ở một cam → cam đó không phản hồi kịp
-  trong thời gian chờ; tăng **Timeout mỗi cam** rồi dò lại riêng cam đó.
+  trong thời gian chờ; tăng **Timeout mỗi thiết bị** rồi dò lại riêng cam đó.
 - Kết quả hiện thiếu một số luồng (chỉ có main, không có sub) → một số model
   không trả về sub-stream khi chưa từng cấu hình; bấm **Chỉnh hàng loạt** với
   luồng đó một lần để camera tạo ra cấu hình cho luồng.

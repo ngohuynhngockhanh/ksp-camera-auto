@@ -23,7 +23,7 @@ related: [hinh-anh-mau-sac, anh-chup, ten-kenh-osd]
 
 1. Mở tab [Kho camera](#cameras), bấm **Xem hình** (hoặc **Tất cả kênh**) ở
    camera cần điều khiển.
-2. Ở kênh đó bấm **Sửa tên & OSD** để mở hộp thoại, rồi chuyển sang tab **PTZ**
+2. Ở kênh đó bấm **Cấu hình chi tiết**, rồi chuyển sang tab **PTZ**
    (chỉ hiện với camera Dahua/KBVision).
 3. Dùng **bàn phím 8 hướng**: **giữ** nút hướng (↑ ↓ ← → và 4 góc chéo) để
    camera quay, **thả tay** ra là dừng.

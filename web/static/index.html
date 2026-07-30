@@ -29,6 +29,18 @@
     <div class="main-wrap">
       <header class="topbar">
         <h1 id="view-title">Tổng quan</h1>
+        <!-- Timeout là thiết lập toàn cục (mọi lời gọi API đọc nó) nên nằm ở
+             topbar, không chôn trong một card của tab Chỉnh hàng loạt nữa. -->
+        <div class="topbar-settings">
+          <button class="btn-icon" id="settings-toggle" type="button" title="Cài đặt" aria-label="Cài đặt" aria-expanded="false" data-testid="settings-toggle">⚙</button>
+          <div class="popover" id="settings-popover" data-testid="settings-popover" hidden>
+            <div class="field field-sm">
+              <label for="g-timeout">Timeout mỗi thiết bị (giây)</label>
+              <input id="g-timeout" type="number" value="30" min="5" max="600" data-testid="settings-timeout">
+            </div>
+            <p class="muted">Đầu ghi chậm nhiều kênh thì để cao hơn. Áp dụng cho mọi tác vụ.</p>
+          </div>
+        </div>
         <button class="btn-icon theme-toggle" id="theme-toggle" type="button" title="Đổi giao diện" aria-label="Đổi giao diện sáng/tối"></button>
         <a class="logout-link" href="/logout">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
@@ -110,77 +122,145 @@
               <h2 class="page-title">Camera</h2>
               <p class="page-lead">Quản lý kho, chỉnh hàng loạt và theo dõi kết quả theo từng tác vụ.</p>
             </div>
-            <button class="btn" type="button" id="camera-add-open">Thêm camera</button>
+            <button class="btn" type="button" id="camera-add-open" data-testid="camera-add-open">Thêm camera</button>
           </div>
           <div class="task-tabs" id="camera-task-tabs" aria-label="Khu vực camera">
-            <a href="#cameras/list" data-camera-task="list">Danh sách</a>
-            <a href="#cameras/bulk" data-camera-task="bulk">Chỉnh hàng loạt</a>
-            <a href="#cameras/devices" data-camera-task="devices">Thiết bị &amp; NVR</a>
-            <a href="#cameras/results" data-camera-task="results">Kết quả</a>
+            <a href="#cameras/list" data-camera-task="list" data-testid="task-tab-list">Danh sách</a>
+            <a href="#cameras/bulk" data-camera-task="bulk" data-testid="task-tab-bulk">Chỉnh hàng loạt</a>
+            <a href="#cameras/nvr" data-camera-task="nvr" data-testid="task-tab-nvr">Đầu ghi</a>
+            <a href="#cameras/results" data-camera-task="results" data-testid="task-tab-results">Kết quả</a>
           </div>
 
-          <div class="card camera-add-card" data-camera-panel="list" hidden>
-            <div class="card-title">Thêm / sửa camera</div>
-            <form id="add-form">
-              <div class="grid">
-                <div class="field">
-                  <label for="f-name">Tên</label>
-                  <input id="f-name" name="name" placeholder="Camera cổng chính">
-                </div>
-                <div class="field">
-                  <label for="f-host">Host / IP</label>
-                  <input id="f-host" name="host" required placeholder="192.168.1.10">
-                </div>
-                <div class="field">
-                  <label for="f-port">Cổng</label>
-                  <input id="f-port" name="port" type="number" placeholder="37777">
-                </div>
-                <div class="field">
-                  <label for="f-vendor">Hãng</label>
-                  <select id="f-vendor" name="vendor">
-                    <option value="dahua">Dahua / KBVision</option>
-                    <option value="hikvision">Hikvision</option>
-                    <option value="tiandy">Tiandy (xem lại + xem IP)</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="f-username">Tài khoản</label>
-                  <input id="f-username" name="username" placeholder="admin">
-                </div>
-                <div class="field">
-                  <label for="f-password">Mật khẩu</label>
-                  <input id="f-password" name="password" type="text" placeholder="••••••">
-                </div>
+          <!-- Trang chi tiết camera: thay cho modal 6 tab trước đây. Ảnh xem
+               trực tiếp nằm ở cột trái và KHÔNG tắt khi đổi tab. -->
+          <section class="camera-detail" id="camera-detail" data-testid="camera-detail" hidden>
+            <div class="detail-head">
+              <a class="btn btn-secondary btn-sm" href="#cameras/list" data-testid="detail-back">← Kho camera</a>
+              <div class="detail-ident">
+                <h3 id="detail-name">—</h3>
+                <p class="muted" id="detail-meta"></p>
               </div>
-              <button class="btn" type="submit" id="add-submit-btn">Thêm / Lưu camera</button>
-              <div class="msg" id="add-msg"></div>
-            </form>
-          </div>
-
-          <div class="card" id="nvr-card" data-camera-panel="devices">
-            <div class="card-title">Thiết bị &amp; đầu ghi</div>
-            <p class="card-sub">Chọn một camera để mở cấu hình mạng/bảo trì, hoặc quét đầu ghi để liên kết camera không có bộ nhớ.</p>
-            <div class="row">
-              <div class="field field-grow">
-                <label for="device-manage-select">Camera cần cấu hình</label>
-                <select id="device-manage-select"><option value="">Chọn camera...</option></select>
-              </div>
-              <button class="btn btn-secondary" type="button" id="device-manage-open">Mở cấu hình thiết bị</button>
             </div>
-            <div class="section-divider"></div>
-            <div class="card-title">Đầu ghi (NVR) — dự phòng khi camera không có bộ nhớ</div>
-            <p class="card-sub">Liên kết camera với đầu ghi: camera nào không có thẻ nhớ thì khi xem lại/tải sẽ tự lấy từ đầu ghi ở kênh tương ứng; camera offline thì xem trực tiếp cũng lấy từ đầu ghi. Chạy quét 1 lần để tự gán, có thể sửa tay.</p>
-            <div class="msg" id="nvr-card-msg"></div>
-            <button class="btn" type="button" id="nvr-open-btn">🗄 Quét &amp; liên kết đầu ghi</button>
-          </div>
 
-          <div class="card" id="network-card" data-camera-panel="devices" hidden>
-            <div class="card-title">Mạng — <span id="net-device-name"></span></div>
-            <p class="card-sub">Chỉ đọc/ghi được qua cổng cấu hình DVRIP đang dùng để kết nối camera này. Quét Wi-Fi cần cổng HTTP (80) của camera — có thể không tới được nếu chỉ NAT cổng DVRIP.</p>
-            <div class="msg" id="net-msg"></div>
-            <div id="net-body"></div>
-            <div class="card-title section-gap">Bảo trì</div>
-            <div id="net-maint"><p class="muted">Đang tải...</p></div>
+            <div class="detail-layout">
+              <aside class="detail-preview">
+                <div class="ce-preview-img-wrap" id="ce-preview-img-wrap"><span class="spinner"></span></div>
+                <img id="cd-live" class="ptz-live-img" alt="Xem trực tiếp" hidden>
+                <div class="detail-preview-actions">
+                  <button class="btn btn-primary btn-sm" type="button" id="cd-live-start" data-testid="live-start">▶ Xem trực tiếp</button>
+                  <button class="btn btn-secondary btn-sm" type="button" id="cd-live-extend" data-testid="live-extend" hidden>+5 phút</button>
+                  <button class="btn btn-secondary btn-sm" type="button" id="cd-live-stop" data-testid="live-stop" hidden>Dừng</button>
+                  <button class="btn btn-secondary btn-sm" type="button" id="ce-preview-reload">Tải lại ảnh</button>
+                </div>
+                <span class="muted" id="cd-live-status" data-testid="live-status"></span>
+                <div class="field field-sm section-gap">
+                  <label for="detail-channel">Kênh</label>
+                  <select id="detail-channel" data-testid="detail-channel"></select>
+                </div>
+              </aside>
+
+              <div class="detail-body">
+                <div class="tab-strip" id="ce-tabs" role="tablist">
+                  <button type="button" class="tab-btn active" data-ce-tab="osd" data-testid="detail-tab-osd">Tên &amp; OSD</button>
+                  <button type="button" class="tab-btn" id="ce-tab-btn-picture" data-ce-tab="picture" data-testid="detail-tab-picture">Chỉnh màu</button>
+                  <button type="button" class="tab-btn" id="ce-tab-btn-video" data-ce-tab="video" data-testid="detail-tab-video">Video</button>
+                  <button type="button" class="tab-btn" id="ce-tab-btn-audio" data-ce-tab="audio" data-testid="detail-tab-audio">Âm thanh</button>
+                  <button type="button" class="tab-btn" id="ce-tab-btn-network" data-ce-tab="network" data-testid="detail-tab-network">Mạng</button>
+                  <button type="button" class="tab-btn" id="ce-tab-btn-ptz" data-ce-tab="ptz" data-testid="detail-tab-ptz">PTZ</button>
+                  <button type="button" class="tab-btn" id="ce-tab-btn-maint" data-ce-tab="maint" data-testid="detail-tab-maint">Bảo trì</button>
+                </div>
+
+                <div class="card detail-panel" id="ce-panel-osd">
+                  <div class="msg" id="ce-msg"></div>
+                  <div class="field">
+                    <label for="ce-name">Tên trên camera (kênh)</label>
+                    <input id="ce-name" data-testid="detail-channel-name">
+                  </div>
+                  <div id="ce-osd-fields"></div>
+                  <p class="muted" id="ce-osd-hint"></p>
+                  <div class="sticky-actionbar">
+                    <button class="btn" type="button" id="ce-save" data-testid="detail-save-osd">Lưu tên &amp; OSD</button>
+                  </div>
+                </div>
+
+                <div class="card detail-panel" id="ce-panel-picture" hidden>
+                  <div class="tab-strip" id="ce-picture-mode-tabs">
+                    <button type="button" class="tab-btn active" data-pf-mode="lite">Cơ bản</button>
+                    <button type="button" class="tab-btn" data-pf-mode="full">Đầy đủ</button>
+                  </div>
+                  <div class="msg" id="ce-picture-msg"></div>
+                  <div id="ce-picture-lite-body"></div>
+                  <div id="ce-picture-body" hidden></div>
+                  <p class="muted" id="ce-picture-full-hint" hidden>Đọc/ghi trực tiếp mọi thông số Dahua hỗ trợ cho kênh này (VideoColor + VideoInOptions, gồm cả profile Ban đêm/Ban ngày phụ). Trường bị camera báo không hỗ trợ sẽ bị khoá.</p>
+                  <div class="sticky-actionbar">
+                    <button class="btn" type="button" id="ce-picture-save" data-testid="detail-save-picture">Lưu chỉnh màu</button>
+                  </div>
+                </div>
+
+                <div class="card detail-panel" id="ce-panel-video" hidden>
+                  <div class="msg" id="ce-vid-msg"></div>
+                  <div id="ce-vid-body"></div>
+                </div>
+
+                <div class="card detail-panel" id="ce-panel-audio" hidden>
+                  <div class="msg" id="ce-aud-msg"></div>
+                  <div id="ce-aud-body"></div>
+                </div>
+
+                <div class="card detail-panel" id="ce-panel-network" hidden>
+                  <p class="card-sub">Đọc/ghi qua cổng cấu hình DVRIP đang dùng. Quét Wi-Fi cần thêm cổng HTTP (80) của camera.</p>
+                  <div class="msg" id="net-msg"></div>
+                  <div id="net-body" data-testid="detail-network-body"></div>
+                </div>
+
+                <div class="card detail-panel" id="ce-panel-ptz" hidden>
+                  <p class="card-sub">Giữ nút để xoay/zoom, thả ra để dừng. Bật <b>Xem trực tiếp</b> ở cột trái để canh chỉnh realtime.</p>
+                  <div class="msg" id="ce-ptz-msg"></div>
+                  <div class="ptz-pad">
+                    <button class="ptz-btn" data-ptz="LeftUp" aria-label="Trái trên">↖</button>
+                    <button class="ptz-btn" data-ptz="Up" aria-label="Lên">↑</button>
+                    <button class="ptz-btn" data-ptz="RightUp" aria-label="Phải trên">↗</button>
+                    <button class="ptz-btn" data-ptz="Left" aria-label="Trái">←</button>
+                    <button class="ptz-btn ptz-center" disabled aria-hidden="true">●</button>
+                    <button class="ptz-btn" data-ptz="Right" aria-label="Phải">→</button>
+                    <button class="ptz-btn" data-ptz="LeftDown" aria-label="Trái dưới">↙</button>
+                    <button class="ptz-btn" data-ptz="Down" aria-label="Xuống">↓</button>
+                    <button class="ptz-btn" data-ptz="RightDown" aria-label="Phải dưới">↘</button>
+                  </div>
+                  <div class="field field-sm section-gap">
+                    <label for="ce-ptz-speed">Tốc độ (1–8)</label>
+                    <input id="ce-ptz-speed" type="range" min="1" max="8" value="5">
+                  </div>
+                  <div class="row">
+                    <button class="btn btn-secondary" data-ptz="ZoomTele" aria-label="Zoom vào">Zoom + (gần)</button>
+                    <button class="btn btn-secondary" data-ptz="ZoomWide" aria-label="Zoom ra">Zoom − (xa)</button>
+                    <button class="btn btn-secondary" data-ptz="FocusFar" aria-label="Lấy nét xa">Nét xa</button>
+                    <button class="btn btn-secondary" data-ptz="FocusNear" aria-label="Lấy nét gần">Nét gần</button>
+                  </div>
+                </div>
+
+                <div class="card detail-panel" id="ce-panel-maint" hidden>
+                  <div id="net-maint" data-testid="detail-maint-body"><p class="muted">Đang tải...</p></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div class="card" data-camera-panel="nvr">
+            <div class="card-head-row">
+              <div>
+                <div class="card-title">Đầu ghi (NVR)</div>
+                <p class="card-sub">Camera không có thẻ nhớ sẽ xem lại/tải từ đầu ghi ở kênh đã liên kết. <a href="#help/kho-camera">Xem hướng dẫn</a></p>
+              </div>
+              <button class="btn" type="button" id="nvr-open-btn" data-testid="nvr-link-open">Quét &amp; liên kết đầu ghi</button>
+            </div>
+            <div class="msg" id="nvr-card-msg"></div>
+            <div class="table-wrap">
+              <table class="reflow" id="nvr-list-table">
+                  <thead><tr><th>Đầu ghi</th><th>Host</th><th>Camera đã liên kết</th><th>Sức khỏe</th><th></th></tr></thead>
+                <tbody id="nvr-list-tbody" data-testid="nvr-list"><tr><td colspan="4" class="empty-hint">Đang tải...</td></tr></tbody>
+              </table>
+            </div>
           </div>
 
           <div class="card" data-camera-panel="list">
@@ -194,11 +274,11 @@
             <div class="camera-toolbar">
               <div class="field field-grow">
                 <label for="camera-search">Tìm camera</label>
-                <input id="camera-search" type="search" placeholder="Tên, IP hoặc tài khoản...">
+                <input id="camera-search" type="search" data-testid="camera-search" placeholder="Tên, IP hoặc tài khoản...">
               </div>
               <div class="field field-sm">
                 <label for="camera-vendor-filter">Hãng</label>
-                <select id="camera-vendor-filter">
+                <select id="camera-vendor-filter" data-testid="camera-vendor-filter">
                   <option value="">Tất cả hãng</option>
                   <option value="dahua">Dahua / KBVision</option>
                   <option value="hikvision">Hikvision</option>
@@ -213,10 +293,10 @@
                 <thead>
                   <tr>
                     <th><input type="checkbox" id="select-all" aria-label="Chọn tất cả"></th>
-                    <th class="sortable" data-sort="name">Tên</th><th class="sortable" data-sort="host">Host</th><th class="sortable" data-sort="port">Cổng</th><th class="sortable" data-sort="vendor">Hãng</th><th class="sortable" data-sort="username">Tài khoản</th><th class="sortable" data-sort="password">Mật khẩu</th><th class="sortable" data-sort="stream">Thông tin luồng</th><th></th>
+                    <th class="sortable" data-sort="name">Tên</th><th class="sortable" data-sort="host">Host</th><th class="sortable" data-sort="port">Cổng</th><th class="sortable" data-sort="vendor">Hãng</th><th>SN / QR</th><th class="sortable" data-sort="username">Tài khoản</th><th class="sortable" data-sort="password">Mật khẩu</th><th class="sortable" data-sort="stream">Thông tin luồng</th><th></th>
                   </tr>
                 </thead>
-                <tbody id="cam-tbody"><tr><td colspan="7" class="empty-hint">Đang tải...</td></tr></tbody>
+                <tbody id="cam-tbody" data-testid="camera-list"><tr><td colspan="7" class="empty-hint">Đang tải...</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -228,7 +308,15 @@
               <span class="muted" id="bulk-selected-count">Chưa chọn camera nào.</span>
             </div>
             <div class="chip-list" id="bulk-selected-chips"></div>
-            <div class="bulk-camera-picker" id="bulk-camera-picker"></div>
+            <div class="bulk-camera-picker" id="bulk-camera-picker" data-testid="bulk-picker"></div>
+
+            <!-- Tóm tắt "sẽ đổi gì": trả lời câu hỏi đó mà không phải cuộn qua
+                 hết các thẻ thiết lập bên dưới. Bấm chip = cuộn tới thẻ đó. -->
+            <div class="summary-bar section-gap" id="bulk-summary" data-testid="bulk-summary">
+              <span class="summary-label">Sẽ đổi:</span>
+              <span class="muted" id="bulk-summary-empty">chưa bật thiết lập nào</span>
+              <div class="chip-list" id="bulk-summary-chips"></div>
+            </div>
 
             <div class="field section-gap">
               <label>Luồng áp dụng</label>
@@ -244,7 +332,7 @@
               <input id="p-channel" type="text" value="1" placeholder="1-8">
             </div>
 
-            <div class="setting-card">
+            <div class="setting-card" id="setting-codec">
               <div class="checkbox-row"><input type="checkbox" id="p-codec-enable"><label for="p-codec-enable">Đổi codec (H.264/H.265)</label></div>
               <div class="setting-body" id="p-codec-fields" hidden>
                 <div class="field field-sm">
@@ -260,7 +348,7 @@
               </div>
             </div>
 
-            <div class="setting-card">
+            <div class="setting-card" id="setting-res">
               <div class="checkbox-row"><input type="checkbox" id="p-res-enable"><label for="p-res-enable">Đổi độ phân giải</label></div>
               <div class="setting-body row" id="p-res-fields" hidden>
                 <div class="field field-sm">
@@ -286,7 +374,7 @@
               </div>
             </div>
 
-            <div class="setting-card">
+            <div class="setting-card" id="setting-smart">
               <div class="checkbox-row"><input type="checkbox" id="p-smart-enable"><label for="p-smart-enable">Đổi Smart Codec (H.264+/H.265+)</label></div>
               <div class="setting-body" id="p-smart-fields" hidden>
                 <div class="field field-sm">
@@ -296,7 +384,7 @@
               </div>
             </div>
 
-            <div class="setting-card">
+            <div class="setting-card" id="setting-gop">
               <div class="checkbox-row"><input type="checkbox" id="p-gop-enable"><label for="p-gop-enable">Đổi khoảng I-frame (GOP, số khung hình)</label></div>
               <div class="setting-body" id="p-gop-fields" hidden>
                 <div class="field field-sm">
@@ -306,7 +394,7 @@
               </div>
             </div>
 
-            <div class="setting-card">
+            <div class="setting-card" id="setting-bitrate">
               <div class="checkbox-row"><input type="checkbox" id="p-bitrate-enable"><label for="p-bitrate-enable">Đổi bitrate</label></div>
               <div class="setting-body row" id="p-bitrate-fields" hidden>
                 <div class="field" style="max-width:160px">
@@ -325,7 +413,7 @@
               </div>
             </div>
 
-            <div class="setting-card">
+            <div class="setting-card" id="setting-osd">
               <div class="checkbox-row"><input type="checkbox" id="p-osd-enable"><label for="p-osd-enable">Cài OSD (chữ hiện trên hình — Dahua/KBVision)</label></div>
               <div class="setting-body" id="p-osd-fields" hidden>
                 <div class="field field-sm">
@@ -340,24 +428,19 @@
               </div>
             </div>
 
-            <div class="checkbox-row"><input type="checkbox" id="p-audio-enable"><label for="p-audio-enable">Bật âm thanh AAC</label></div>
-
-            <div class="field field-sm section-gap">
-              <label for="g-timeout">Timeout mỗi cam (giây) — đầu ghi chậm để cao</label>
-              <input id="g-timeout" type="number" value="30" min="5" max="600">
-            </div>
+            <div class="checkbox-row" id="setting-audio"><input type="checkbox" id="p-audio-enable"><label for="p-audio-enable">Bật âm thanh AAC</label></div>
 
             <div class="sticky-actionbar">
               <button class="btn btn-secondary" id="probe-selected-btn">Dò các cam đã chọn</button>
               <button class="btn btn-secondary" id="view-selected-btn">Xem hình hàng loạt</button>
-              <button class="btn" id="apply-btn">Áp dụng</button>
+              <button class="btn" id="apply-btn" data-testid="bulk-apply">Áp dụng</button>
               <span class="muted" id="apply-count"></span>
             </div>
           </div>
 
-          <div class="card danger-zone" data-camera-panel="bulk">
-            <div class="card-title">Đổi mật khẩu camera (cho các cam đã chọn)</div>
-            <div class="row">
+          <details class="card danger-zone" data-camera-panel="bulk" data-testid="bulk-password">
+            <summary class="card-title">Đổi mật khẩu camera (cho các cam đã chọn)</summary>
+            <div class="row section-gap">
               <div class="field field-sm">
                 <label for="pw-user">Tài khoản mới</label>
                 <input id="pw-user" type="text" value="admin">
@@ -366,10 +449,10 @@
                 <label for="pw-pass">Mật khẩu mới</label>
                 <input id="pw-pass" type="text" value="smarthome12345">
               </div>
-              <button class="btn btn-danger" id="pw-btn">Đổi mật khẩu</button>
+              <button class="btn btn-danger" id="pw-btn" data-testid="bulk-password-apply">Đổi mật khẩu</button>
             </div>
             <p class="muted">Đổi xong tool tự cập nhật mật khẩu trong kho để vẫn kết nối được (không bị khóa ngoài).</p>
-          </div>
+          </details>
 
           <div class="card" data-camera-panel="results">
             <div class="card-title">Kết quả</div>
@@ -381,7 +464,7 @@
             <div class="table-wrap">
               <table class="reflow" id="result-table">
                 <thead><tr><th>Camera</th><th>Host</th><th>Trạng thái</th><th>Chi tiết</th></tr></thead>
-                <tbody id="result-tbody"><tr><td colspan="4" class="empty-hint">Chưa có kết quả.</td></tr></tbody>
+                <tbody id="result-tbody" data-testid="result-list"><tr><td colspan="4" class="empty-hint">Chưa có kết quả.</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -389,52 +472,58 @@
 
         <!-- Xem lại video (timeline review) -->
         <section class="view" id="view-review" data-view="review">
-          <div class="review-toolbar">
-            <div class="field field-sm"><label for="rv-cam">Camera</label><select id="rv-cam"></select></div>
-            <div class="field field-sm" style="max-width:6rem"><label for="rv-channel">Kênh</label><input id="rv-channel" type="number" min="0" value="0"></div>
+          <!-- Hai nhóm có nhãn thay cho ba thanh công cụ phẳng: chọn nguồn
+               trước, rồi mới tới điều khiển phát/cắt bên dưới khung hình. -->
+          <fieldset class="review-group" data-testid="review-source">
+            <legend>Nguồn</legend>
+            <div class="review-toolbar">
+              <div class="field field-sm"><label for="rv-cam">Camera</label><select id="rv-cam" data-testid="review-camera"></select></div>
+              <div class="field field-sm rv-channel-field"><label for="rv-channel">Kênh</label><input id="rv-channel" type="number" min="0" value="0"></div>
+              <div class="field field-sm"><label for="rv-date">Ngày</label><input type="date" id="rv-date"></div>
+              <button class="btn btn-sm btn-secondary" type="button" id="rv-load-day">Xem cả ngày</button>
+              <span class="rv-days muted" id="rv-days"></span>
+            </div>
+            <div class="review-toolbar rv-picker">
+              <div class="field field-sm"><label for="rv-from">Từ</label><input type="datetime-local" id="rv-from"></div>
+              <div class="field field-sm"><label for="rv-to">đến</label><input type="datetime-local" id="rv-to"></div>
+              <button class="btn btn-sm" type="button" id="rv-load-range">Xem khoảng này</button>
+              <button class="btn btn-sm btn-secondary" type="button" id="rv-split5-btn">Chia 5 phút</button>
+              <button class="btn btn-sm btn-secondary" type="button" id="rv-reload">Tải clip mới</button>
+              <button class="btn btn-sm btn-secondary" type="button" id="rv-copy-link">Sao chép link camera</button>
+            </div>
             <div class="rv-quick" id="rv-quick"></div>
-            <button class="btn btn-secondary" type="button" id="rv-reload">Tải clip mới</button>
-          </div>
-          <div class="review-toolbar rv-picker">
-            <label class="field-sm" style="margin:0">Từ <input type="datetime-local" id="rv-from"></label>
-            <label class="field-sm" style="margin:0">đến <input type="datetime-local" id="rv-to"></label>
-            <button class="btn btn-sm" type="button" id="rv-load-range">Xem khoảng này</button>
-            <span class="muted">·</span>
-            <label class="field-sm" style="margin:0">Ngày <input type="date" id="rv-date"></label>
-            <button class="btn btn-sm btn-secondary" type="button" id="rv-load-day">Xem cả ngày</button>
-            <span class="rv-days muted" id="rv-days"></span>
-            <span class="muted">·</span>
-            <button class="btn btn-sm btn-secondary" type="button" id="rv-split5-btn">Chia 5 phút</button>
-          </div>
+          </fieldset>
           <div class="rv-quick" id="rv-split5-list" hidden></div>
           <div class="review-stage">
             <div class="review-video-wrap">
               <video id="rv-video" controls playsinline preload="metadata" poster="/logo.png"></video>
-              <p id="rv-hevc-hint" class="muted" hidden>Trình duyệt này không phát được H.265/HEVC. Hãy mở trên iPhone/Safari, hoặc tải về và mở bằng VLC trên máy tính.</p>
+              <p id="rv-hevc-hint" class="msg err" hidden>Không phát được video trong trình duyệt. Có thể codec H.265 không được hỗ trợ hoặc cổng RTSP của đầu ghi đang đóng. Timeline vẫn đọc được; hãy dùng nút tải file gốc và mở bằng VLC.</p>
             </div>
             <div id="rv-timeline"></div>
-            <div class="review-markers-hint muted">Kéo <b style="color:#2ecc71">▮ xanh</b> và <b style="color:#f1c40f">▮ vàng</b> trên timeline để chọn đoạn cắt · <b style="color:#e74c3c">▮ đỏ</b> = vị trí phát</div>
+            <div class="review-markers-hint muted">Kéo <b class="marker-start">▮ xanh</b> và <b class="marker-end">▮ vàng</b> trên timeline để chọn đoạn cắt · <b class="marker-play">▮ đỏ</b> = vị trí phát</div>
             <div class="review-controls">
-              <button class="btn" type="button" id="rv-play">▶ Phát</button>
-              <button class="btn btn-secondary" type="button" data-seek="-10">-10s</button>
-              <button class="btn btn-secondary" type="button" data-seek="-5">-5s</button>
-              <button class="btn btn-secondary" type="button" data-seek="-2">-2s</button>
-              <button class="btn btn-secondary" type="button" data-seek="2">+2s</button>
-              <button class="btn btn-secondary" type="button" data-seek="5">+5s</button>
-              <div class="rv-speeds" id="rv-speeds"><span class="muted" style="margin-right:.3rem">Tốc độ</span>
-                <button class="btn btn-sm btn-secondary" type="button" data-speed="0.1">0.1x</button>
-                <button class="btn btn-sm btn-secondary" type="button" data-speed="0.25">0.25x</button>
-                <button class="btn btn-sm btn-secondary" type="button" data-speed="0.5">0.5x</button>
-                <button class="btn btn-sm btn-secondary" type="button" data-speed="1">1x</button>
-                <button class="btn btn-sm btn-secondary" type="button" data-speed="2">2x</button>
-                <button class="btn btn-sm btn-secondary" type="button" data-speed="4">4x</button>
+              <button class="btn" type="button" id="rv-play" data-testid="review-play">▶ Phát</button>
+              <button class="btn btn-secondary" type="button" data-seek="-10" aria-label="Lùi 10 giây">-10s</button>
+              <button class="btn btn-secondary" type="button" data-seek="-5" aria-label="Lùi 5 giây">-5s</button>
+              <button class="btn btn-secondary" type="button" data-seek="5" aria-label="Tiến 5 giây">+5s</button>
+              <button class="btn btn-secondary" type="button" data-seek="10" aria-label="Tiến 10 giây">+10s</button>
+              <div class="field field-sm rv-speed-field">
+                <label for="rv-speed">Tốc độ</label>
+                <select id="rv-speed" data-testid="review-speed">
+                  <option value="0.1">0.1x</option>
+                  <option value="0.25">0.25x</option>
+                  <option value="0.5">0.5x</option>
+                  <option value="1" selected>1x</option>
+                  <option value="2">2x</option>
+                  <option value="4">4x</option>
+                </select>
               </div>
-              <label class="checkbox-row" style="margin:0"><input type="checkbox" id="rv-auto" checked> Tự phát đoạn kế</label>
+              <label class="checkbox-row rv-auto-row"><input type="checkbox" id="rv-auto" checked> Tự phát đoạn kế</label>
             </div>
             <div class="review-cut">
               <span class="muted">Đoạn đã chọn: <b id="rv-range">—</b></span>
-              <label class="field-sm" style="margin:0">Cắt từ <input type="datetime-local" id="rv-cut-from" step="1"></label>
-              <label class="field-sm" style="margin:0">đến <input type="datetime-local" id="rv-cut-to" step="1"></label>
+              <div class="field field-sm"><label for="rv-cut-from">Cắt từ</label><input type="datetime-local" id="rv-cut-from" step="1"></div>
+              <div class="field field-sm"><label for="rv-cut-to">đến</label><input type="datetime-local" id="rv-cut-to" step="1"></div>
               <button class="btn btn-primary" type="button" id="rv-download">⬇ Tải MP4 (nhanh)</button>
               <button class="btn btn-secondary" type="button" id="rv-download-dav">Tải gốc</button>
               <button class="btn btn-secondary" type="button" id="rv-qr">QR tải về ĐT</button>
@@ -445,9 +534,9 @@
             </div>
             <div class="msg" id="rv-msg"></div>
           </div>
-          <div id="rv-qr-modal" class="rv-qr-modal" hidden>
-            <div class="rv-qr-box"><div id="rv-qr-canvas"></div><p class="muted">Quét QR bằng điện thoại để tải đoạn đã chọn</p><a id="rv-qr-link" href="#" target="_blank" rel="noopener" style="font-size:.85rem;word-break:break-all"></a><button class="btn btn-secondary" type="button" id="rv-qr-close">Đóng</button></div>
-          </div>
+          <dialog id="rv-qr-modal" class="rv-qr-modal" data-testid="review-qr">
+            <div class="rv-qr-box"><div id="rv-qr-canvas"></div><p class="muted">Quét QR bằng điện thoại để tải đoạn đã chọn</p><a id="rv-qr-link" href="#" target="_blank" rel="noopener" class="rv-qr-link"></a><button class="btn btn-secondary" type="button" id="rv-qr-close">Đóng</button></div>
+          </dialog>
         </section>
 
         <!-- Nhập từ Shinobi -->
@@ -580,126 +669,55 @@
       </div>
     </dialog>
 
-    <dialog id="channel-edit-dialog" class="dialog-wide">
+    <!-- Thêm/sửa camera. Hai chế độ tách bạch: khi sửa, host/cổng bị khoá vì
+         đổi chúng tạo ra một bản ghi MỚI (id = host:port) chứ không sửa tại chỗ. -->
+    <dialog id="camera-form-dialog">
       <div class="dialog-body">
-        <div class="dialog-title" id="ce-title">Sửa tên &amp; OSD</div>
-        <div class="ce-layout">
-          <div class="ce-preview">
-            <div class="ce-preview-img-wrap" id="ce-preview-img-wrap"><span class="spinner"></span></div>
-            <button class="btn btn-secondary btn-block" type="button" id="ce-preview-reload">Tải lại ảnh</button>
-          </div>
-          <div class="ce-form">
-            <div class="tab-strip" id="ce-tabs">
-              <button type="button" class="tab-btn active" data-ce-tab="name">Tên &amp; OSD</button>
-              <button type="button" class="tab-btn" id="ce-tab-btn-picture" data-ce-tab="picture" hidden>Chỉnh màu</button>
-              <button type="button" class="tab-btn" id="ce-tab-btn-video" data-ce-tab="video" hidden>Video</button>
-              <button type="button" class="tab-btn" id="ce-tab-btn-audio" data-ce-tab="audio" hidden>Âm thanh</button>
-              <button type="button" class="tab-btn" id="ce-tab-btn-network" data-ce-tab="network" hidden>Mạng</button>
-              <button type="button" class="tab-btn" id="ce-tab-btn-ptz" data-ce-tab="ptz" hidden>PTZ</button>
+        <div class="dialog-title" id="camera-form-title">Thêm camera</div>
+        <form id="add-form">
+          <div class="grid">
+            <div class="field">
+              <label for="f-name">Tên</label>
+              <input id="f-name" name="name" placeholder="Camera cổng chính" data-testid="form-name">
             </div>
-
-            <div id="ce-panel-name">
-              <div class="msg" id="ce-msg"></div>
-              <div class="field">
-                <label for="ce-name">Tên trên camera (kênh)</label>
-                <input id="ce-name">
-              </div>
-              <div id="ce-osd-fields"></div>
-              <p class="muted" id="ce-osd-hint"></p>
-              <div class="ptz-live section-gap">
-                <img id="ce-osd-live" class="ptz-live-img" alt="Xem trực tiếp" hidden>
-                <div class="row">
-                  <button class="btn btn-secondary" type="button" id="ce-osd-live-start">▶ Xem trực tiếp (5 phút)</button>
-                  <button class="btn btn-secondary" type="button" id="ce-osd-live-extend" hidden>+5 phút</button>
-                  <button class="btn btn-secondary" type="button" id="ce-osd-live-stop" hidden>Dừng</button>
-                  <span class="muted" id="ce-osd-live-status"></span>
-                </div>
-              </div>
+            <div class="field">
+              <label for="f-host">Host / IP</label>
+              <input id="f-host" name="host" required placeholder="192.168.1.10" data-testid="form-host">
             </div>
-
-            <div id="ce-panel-picture" hidden>
-              <div class="tab-strip" id="ce-picture-mode-tabs">
-                <button type="button" class="tab-btn active" data-pf-mode="lite">Cơ bản</button>
-                <button type="button" class="tab-btn" data-pf-mode="full">Đầy đủ</button>
-              </div>
-              <div class="ptz-live">
-                <img id="ce-pic-live" class="ptz-live-img" alt="Xem trực tiếp" hidden>
-                <div class="row">
-                  <button class="btn btn-primary" type="button" id="ce-pic-live-start">▶ Xem trực tiếp (5 phút)</button>
-                  <button class="btn btn-secondary" type="button" id="ce-pic-live-extend" hidden>+5 phút</button>
-                  <button class="btn btn-secondary" type="button" id="ce-pic-live-stop" hidden>Dừng</button>
-                  <span class="muted" id="ce-pic-live-status"></span>
-                </div>
-              </div>
-              <div class="msg" id="ce-picture-msg"></div>
-
-              <div id="ce-picture-lite-body"></div>
-
-              <div id="ce-picture-body" hidden></div>
-              <p class="muted" id="ce-picture-full-hint" hidden>Đọc/ghi trực tiếp mọi thông số Dahua hỗ trợ cho kênh này (VideoColor + VideoInOptions, gồm cả profile Ban đêm/Ban ngày phụ). Trường bị camera báo không hỗ trợ sẽ bị khoá.</p>
-
-              <button class="btn section-gap" type="button" id="ce-picture-save">Lưu chỉnh màu</button>
+            <div class="field">
+              <label for="f-port">Cổng</label>
+              <input id="f-port" name="port" type="number" placeholder="37777" data-testid="form-port">
             </div>
-
-            <div id="ce-panel-video" hidden>
-              <div class="msg" id="ce-vid-msg"></div>
-              <div id="ce-vid-body"></div>
+            <div class="field">
+              <label for="f-vendor">Hãng</label>
+              <select id="f-vendor" name="vendor" data-testid="form-vendor">
+                <option value="dahua">Dahua / KBVision</option>
+                <option value="hikvision">Hikvision</option>
+                <option value="tiandy">Tiandy (xem lại + xem IP)</option>
+              </select>
             </div>
-
-            <div id="ce-panel-audio" hidden>
-              <div class="msg" id="ce-aud-msg"></div>
-              <div id="ce-aud-body"></div>
+            <div class="field">
+              <label for="f-username">Tài khoản</label>
+              <input id="f-username" name="username" placeholder="admin" data-testid="form-username">
             </div>
-
-            <div id="ce-panel-network" hidden>
-              <div class="msg" id="ce-net-msg"></div>
-              <div id="ce-net-body"></div>
-            </div>
-
-            <div id="ce-panel-ptz" hidden>
-              <p class="card-sub">Giữ nút để xoay/zoom, thả ra để dừng. Chạy qua cổng cấu hình DVRIP (không cần cổng HTTP 80). Bật <b>Xem trực tiếp</b> để canh chỉnh realtime.</p>
-              <div class="ptz-live">
-                <img id="ce-ptz-live" class="ptz-live-img" alt="Xem trực tiếp" hidden>
-                <div class="row">
-                  <button class="btn btn-primary" type="button" id="ce-ptz-live-start">▶ Xem trực tiếp (5 phút)</button>
-                  <button class="btn btn-secondary" type="button" id="ce-ptz-live-extend" hidden>+5 phút</button>
-                  <button class="btn btn-secondary" type="button" id="ce-ptz-live-stop" hidden>Dừng</button>
-                  <span class="muted" id="ce-ptz-live-status"></span>
-                </div>
-              </div>
-              <div class="msg" id="ce-ptz-msg"></div>
-              <div class="ptz-pad">
-                <button class="ptz-btn" data-ptz="LeftUp" aria-label="Trái trên">↖</button>
-                <button class="ptz-btn" data-ptz="Up" aria-label="Lên">↑</button>
-                <button class="ptz-btn" data-ptz="RightUp" aria-label="Phải trên">↗</button>
-                <button class="ptz-btn" data-ptz="Left" aria-label="Trái">←</button>
-                <button class="ptz-btn ptz-center" disabled>●</button>
-                <button class="ptz-btn" data-ptz="Right" aria-label="Phải">→</button>
-                <button class="ptz-btn" data-ptz="LeftDown" aria-label="Trái dưới">↙</button>
-                <button class="ptz-btn" data-ptz="Down" aria-label="Xuống">↓</button>
-                <button class="ptz-btn" data-ptz="RightDown" aria-label="Phải dưới">↘</button>
-              </div>
-              <div class="field field-sm section-gap">
-                <label for="ce-ptz-speed">Tốc độ (1–8)</label>
-                <input id="ce-ptz-speed" type="range" min="1" max="8" value="5">
-              </div>
-              <div class="row">
-                <button class="btn btn-secondary" data-ptz="ZoomTele">Zoom + (gần)</button>
-                <button class="btn btn-secondary" data-ptz="ZoomWide">Zoom − (xa)</button>
-              </div>
-              <div class="row section-gap">
-                <button class="btn btn-secondary" data-ptz="FocusFar">Nét xa</button>
-                <button class="btn btn-secondary" data-ptz="FocusNear">Nét gần</button>
-              </div>
+            <div class="field">
+              <label for="f-password">Mật khẩu</label>
+              <input id="f-password" name="password" type="text" placeholder="••••••" data-testid="form-password">
             </div>
           </div>
-        </div>
-      </div>
-      <div class="dialog-actions">
-        <button class="btn btn-secondary" id="ce-cancel">Đóng</button>
-        <button class="btn" id="ce-save">Lưu tên &amp; OSD</button>
+          <p class="muted" id="camera-form-locked" hidden>
+            Host và cổng đang khoá — đổi địa chỉ sẽ tạo camera mới chứ không sửa camera này.
+            <button class="btn btn-sm btn-secondary" type="button" id="camera-form-unlock" data-testid="form-unlock">Đổi địa chỉ</button>
+          </p>
+          <div class="msg" id="add-msg"></div>
+          <div class="dialog-actions">
+            <button class="btn btn-secondary" type="button" id="camera-form-cancel">Hủy</button>
+            <button class="btn" type="submit" id="add-submit-btn" data-testid="form-submit">Thêm camera</button>
+          </div>
+        </form>
       </div>
     </dialog>
+
 
   </div>
   <script src="ui-core.js"></script>

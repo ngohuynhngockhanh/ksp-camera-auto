@@ -101,36 +101,42 @@ func (s *Server) reqTimeout(sec int) time.Duration {
 // passed login, the same trust boundary every other admin action here relies
 // on (ChangePassword, network/Wi-Fi config, etc.).
 type deviceView struct {
-	ID          string        `json:"id"`
-	Name        string        `json:"name"`
-	Host        string        `json:"host"`
-	Port        int           `json:"port"`
-	Vendor      config.Vendor `json:"vendor"`
-	Username    string        `json:"username"`
-	Password    string        `json:"password"`
-	NVRID       string        `json:"nvrId,omitempty"`
-	NVRChannel  int           `json:"nvrChannel,omitempty"`
-	NVRName     string        `json:"nvrName,omitempty"`
-	ChannelName string        `json:"channelName,omitempty"`
-	NoStorage   bool          `json:"noStorage,omitempty"`
-	IsNVR       bool          `json:"isNvr,omitempty"`
+	ID                  string        `json:"id"`
+	Name                string        `json:"name"`
+	Host                string        `json:"host"`
+	Port                int           `json:"port"`
+	Vendor              config.Vendor `json:"vendor"`
+	Username            string        `json:"username"`
+	Password            string        `json:"password"`
+	SerialNumber        string        `json:"serialNumber,omitempty"`
+	NVRID               string        `json:"nvrId,omitempty"`
+	NVRChannel          int           `json:"nvrChannel,omitempty"`
+	NVRName             string        `json:"nvrName,omitempty"`
+	ChannelName         string        `json:"channelName,omitempty"`
+	NoStorage           bool          `json:"noStorage,omitempty"`
+	IsNVR               bool          `json:"isNvr,omitempty"`
+	NVRWatchdog         bool          `json:"nvrWatchdog,omitempty"`
+	NVRSyncTimeFromHost bool          `json:"nvrSyncTimeFromHost,omitempty"`
 }
 
 func toView(d config.Device) deviceView {
 	return deviceView{
-		ID:          d.ID,
-		Name:        d.Name,
-		Host:        d.Host,
-		Port:        d.Port,
-		Vendor:      d.Vendor,
-		Username:    d.Username,
-		Password:    d.Password,
-		NVRID:       d.NVRID,
-		NVRChannel:  d.NVRChannel,
-		NVRName:     d.NVRName,
-		ChannelName: d.ChannelName,
-		NoStorage:   d.NoStorage,
-		IsNVR:       d.IsNVR,
+		ID:                  d.ID,
+		Name:                d.Name,
+		Host:                d.Host,
+		Port:                d.Port,
+		Vendor:              d.Vendor,
+		Username:            d.Username,
+		Password:            d.Password,
+		SerialNumber:        d.SerialNumber,
+		NVRID:               d.NVRID,
+		NVRChannel:          d.NVRChannel,
+		NVRName:             d.NVRName,
+		ChannelName:         d.ChannelName,
+		NoStorage:           d.NoStorage,
+		IsNVR:               d.IsNVR,
+		NVRWatchdog:         d.NVRWatchdog,
+		NVRSyncTimeFromHost: d.NVRSyncTimeFromHost,
 	}
 }
 
@@ -243,7 +249,9 @@ func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
 	}
 	if existing, ok := s.inv.Get(id); ok {
 		d.NVRID, d.NVRChannel, d.NVRName, d.NoStorage, d.IsNVR = existing.NVRID, existing.NVRChannel, existing.NVRName, existing.NoStorage, existing.IsNVR
+		d.NVRWatchdog, d.NVRSyncTimeFromHost = existing.NVRWatchdog, existing.NVRSyncTimeFromHost
 		d.ChannelName = existing.ChannelName
+		d.SerialNumber = existing.SerialNumber
 	}
 	if err := s.inv.Upsert(d); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
@@ -424,8 +432,15 @@ func (s *Server) handleCamerasDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
+type probeView struct {
+	Streams      []camera.StreamInfo `json:"streams"`
+	SerialNumber string              `json:"serialNumber,omitempty"`
+	Port         int                 `json:"port"`
+}
+
 // handleProbe handles POST /api/probe: connect to a device and read back its
-// current stream settings.
+// current stream settings plus a Dahua serial number when the verified port
+// remains 37777.
 func (s *Server) handleProbe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -458,7 +473,24 @@ func (s *Server) handleProbe(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, info)
+
+	// Open may have verified the known KBVision 8888 fallback and persisted
+	// that port. Re-read before reporting identity so the UI always shows the
+	// actual saved port, never the stale value from the request lookup.
+	if current, found := s.inv.Get(req.ID); found {
+		d = current
+	}
+	if d.Vendor == config.VendorDahua && d.Port == 37777 {
+		if identity, supported := cam.(camera.DeviceIdentity); supported {
+			if serial, serialErr := identity.GetSerialNumber(ctx); serialErr == nil && serial != "" {
+				d.SerialNumber = serial
+				if err := s.inv.Upsert(d); err != nil {
+					log.Printf("dahua %s: save serial number: %v", d.ID, err)
+				}
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, probeView{Streams: info, SerialNumber: d.SerialNumber, Port: d.Port})
 }
 
 // handleFPSCapability returns a safe per-stream FPS ceiling. Vendor
@@ -583,6 +615,101 @@ type nvrScanRow struct {
 	SuggestedCameraID   string `json:"suggestedCameraId"`
 	SuggestedCameraName string `json:"suggestedCameraName"`
 	NoStorage           bool   `json:"noStorage"`
+}
+
+func (s *Server) handleNVRChannels(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	q := r.URL.Query()
+	cam, ctx, cancel, ok := s.openDeviceCamera(w, r, q.Get("id"), atoiDefault(q.Get("timeoutSeconds"), 0))
+	if !ok {
+		return
+	}
+	defer cancel()
+	defer cam.Close()
+	lister, ok := cam.(camera.RemoteDeviceLister)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "thiết bị không hỗ trợ danh sách kênh NVR")
+		return
+	}
+	channels, err := lister.GetRemoteDevices(ctx)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"channels": channels})
+}
+
+func (s *Server) handleNVRHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	id := r.URL.Query().Get("id")
+	if d, ok := s.inv.Get(id); !ok || !d.IsNVR {
+		writeErr(w, http.StatusNotFound, "không tìm thấy đầu ghi")
+		return
+	}
+	if report, ok := s.nvrWatch.get(id); ok {
+		writeJSON(w, http.StatusOK, report)
+		return
+	}
+	s.nvrWatch.check(id, true)
+	report, _ := s.nvrWatch.get(id)
+	writeJSON(w, http.StatusOK, report)
+}
+
+func (s *Server) handleNVRHealthCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	if d, ok := s.inv.Get(req.ID); !ok || !d.IsNVR {
+		writeErr(w, http.StatusNotFound, "không tìm thấy đầu ghi")
+		return
+	}
+	s.nvrWatch.check(req.ID, true)
+	report, _ := s.nvrWatch.get(req.ID)
+	writeJSON(w, http.StatusOK, report)
+}
+
+func (s *Server) handleNVRWatchdog(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req struct {
+		ID               string `json:"id"`
+		Enabled          bool   `json:"enabled"`
+		SyncTimeFromHost bool   `json:"syncTimeFromHost"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	d, ok := s.inv.Get(req.ID)
+	if !ok || !d.IsNVR {
+		writeErr(w, http.StatusNotFound, "không tìm thấy đầu ghi")
+		return
+	}
+	d.NVRWatchdog, d.NVRSyncTimeFromHost = req.Enabled, req.SyncTimeFromHost
+	if err := s.inv.Upsert(d); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if req.Enabled {
+		s.nvrWatch.trigger(req.ID)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "enabled": d.NVRWatchdog, "syncTimeFromHost": d.NVRSyncTimeFromHost})
 }
 
 // handleNVRScan reads an NVR's channel→camera map (RemoteDevice) and, for each
@@ -721,6 +848,13 @@ func (s *Server) handleNVRLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nvr := s.nvrDeviceFrom(req.NVR.Host, req.NVR.Port, req.NVR.Username, req.NVR.Password, req.NVR.Name, req.NVR.Vendor)
+	if existing, ok := s.inv.Get(nvr.ID); ok {
+		nvr.NVRWatchdog = existing.NVRWatchdog
+		nvr.NVRSyncTimeFromHost = existing.NVRSyncTimeFromHost
+		if nvr.Password == "" {
+			nvr.Password = existing.Password
+		}
+	}
 	if nvr.Name == "" {
 		nvr.Name = "Đầu ghi " + req.NVR.Host
 	}
@@ -1524,6 +1658,63 @@ func (s *Server) handleStorageFormat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "note": "đã gửi lệnh format. Thẻ đang được định dạng, đọc lại sau ít giây."})
+}
+
+func (s *Server) handleDeviceTime(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		q := r.URL.Query()
+		cam, ctx, cancel, ok := s.openDeviceCamera(w, r, q.Get("id"), atoiDefault(q.Get("timeoutSeconds"), 0))
+		if !ok {
+			return
+		}
+		defer cancel()
+		defer cam.Close()
+		tc, ok := cam.(camera.DeviceTimeConfig)
+		if !ok {
+			writeErr(w, http.StatusBadRequest, notDahuaErr)
+			return
+		}
+		cfg, err := tc.GetTimeConfig(ctx)
+		if err != nil {
+			writeErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, cfg)
+	case http.MethodPost:
+		var req struct {
+			ID             string `json:"id"`
+			TimeoutSeconds int    `json:"timeoutSeconds"`
+			dahua.TimeConfig
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+			return
+		}
+		cam, ctx, cancel, ok := s.openDeviceCamera(w, r, req.ID, req.TimeoutSeconds)
+		if !ok {
+			return
+		}
+		defer cancel()
+		defer cam.Close()
+		tc, ok := cam.(camera.DeviceTimeConfig)
+		if !ok {
+			writeErr(w, http.StatusBadRequest, notDahuaErr)
+			return
+		}
+		if err := tc.SetTimeConfig(ctx, req.TimeConfig); err != nil {
+			writeErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		cfg, err := tc.GetTimeConfig(ctx)
+		if err != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+			return
+		}
+		writeJSON(w, http.StatusOK, cfg)
+	default:
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
 }
 
 // handleAutoReboot handles GET /api/autoreboot?id=&timeoutSeconds= (read the

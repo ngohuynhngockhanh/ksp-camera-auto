@@ -23,7 +23,7 @@ quả trước và sau khi chỉnh.
 
 1. Mở tab [Kho camera](#cameras), bấm **Xem hình** (hoặc **Tất cả kênh**) ở
    camera cần chỉnh để mở khung xem.
-2. Ở kênh muốn chỉnh, bấm **Sửa tên & OSD** để mở hộp thoại.
+2. Ở kênh muốn chỉnh, bấm **Cấu hình chi tiết** để mở trang chi tiết camera.
 3. Chuyển sang tab **Chỉnh màu** (chỉ hiện với camera Dahua/KBVision).
 4. Chọn chế độ chỉnh:
    - **Cơ bản** — các thông số hay dùng nhất, gồm: **WhiteBalance** (cân bằng

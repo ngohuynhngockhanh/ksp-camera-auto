@@ -24,7 +24,7 @@ gặp sự cố, tìm đúng nhóm bên dưới theo *hiện tượng → nguyê
 - **Quét mạng không thấy cam** → quét UDP (ONVIF/Dahua/Hik SADP) chỉ thấy cam
   **cùng mạng LAN**, không thấy cam qua NAT. Cam qua NAT thì thêm thủ công bằng
   `IP:cổng` đã NAT, hoặc quét subnet reachable bằng nmap.
-- **Đầu ghi NVR nhiều kênh phản hồi chậm / timeout** → tăng **Timeout mỗi cam**
+- **Đầu ghi NVR nhiều kênh phản hồi chậm / timeout** → tăng **Timeout mỗi thiết bị** (nút ⚙)
   (60–120 giây, tối đa 600) và thu hẹp khoảng kênh; đặt mặc định trong
   `defaults.timeout_seconds` của [config.yaml](#help/cau-hinh-yaml).
 - **Hikvision qua cổng 8000 không điều khiển được** → cổng 8000 là giao thức

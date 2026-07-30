@@ -16,6 +16,20 @@
 
   const $ = (id) => document.getElementById(id);
   const pad = (n) => String(n).padStart(2, '0');
+  const camKey = c => `${c.id}@@${Number(c.reviewChannel || 0)}`;
+
+  function hashSelection() {
+    const p = (location.hash || '').slice(1).split('/');
+    if (p[0] !== 'review' || !p[1]) return null;
+    try { return { id: decodeURIComponent(p[1]), channel: Math.max(0, parseInt(p[2], 10) || 0) }; }
+    catch (e) { return null; }
+  }
+
+  function updateSharePath() {
+    if (!cam) return;
+    const ch = parseInt($('rv-channel').value, 10) || 0;
+    history.replaceState(null, '', `#review/${encodeURIComponent(cam.id)}/${ch}`);
+  }
 
   // "2026-07-18 20:00:00" (device-local) -> Date (local wall clock, no tz shift).
   function parseDev(s) { return new Date(s.replace(' ', 'T')); }
@@ -38,11 +52,22 @@
   // reviewOnShow is called by app.js setRoute() each time the view opens.
   window.reviewOnShow = function () {
     if (!inited) { init(); inited = true; return; }
+    const shared = hashSelection();
+    if (shared && window._rvCams) {
+      const c = window._rvCams.find(c => c.id === shared.id && Number(c.reviewChannel || 0) === shared.channel);
+      if (c && camKey(c) !== (cam && camKey(cam))) {
+        cam = c; $('rv-cam').value = camKey(c); $('rv-channel').value = shared.channel; updateDownloadLabel(); load(1440); refreshDays();
+      }
+      return;
+    }
     // Honor a preselected camera when opened from the maintenance panel button.
     if (window._rvPreselect && window._rvCams) {
       const c = window._rvCams.find(c => c.id === window._rvPreselect);
       window._rvPreselect = null;
-      if (c && c.id !== (cam && cam.id)) { $('rv-cam').value = c.id; cam = c; updateDownloadLabel(); load(1440); }
+      if (c && camKey(c) !== (cam && camKey(cam))) {
+        cam = c; $('rv-cam').value = camKey(c); $('rv-channel').value = Number(c.reviewChannel || 0);
+        updateSharePath(); updateDownloadLabel(); load(1440); refreshDays();
+      }
     }
   };
 
@@ -52,18 +77,40 @@
     // any vendor camera.Open()'s Camera implements camera.Recorder for).
     const sel = $('rv-cam');
     try {
-      const cams = (await api('/api/cameras') || []).filter(c => c.vendor === 'dahua' || c.vendor === 'hikvision' || c.vendor === 'tiandy');
+      const devices = (await api('/api/cameras') || []).filter(c => c.vendor === 'dahua' || c.vendor === 'hikvision' || c.vendor === 'tiandy');
+      const cams = [];
+      for (const d of devices) {
+        if (!d.isNvr) { cams.push(Object.assign({}, d, { reviewChannel: 0 })); continue; }
+        try {
+          const res = await api(`/api/nvr/channels?id=${encodeURIComponent(d.id)}&timeoutSeconds=${timeoutSec()}`);
+          const channels = (res && res.channels) || [];
+          if (channels.length) {
+            channels.filter(x => x.enable !== false).forEach(x => cams.push(Object.assign({}, d, {
+              reviewChannel: Number(x.channel || 0),
+              reviewLabel: `${d.name || d.host} · Kênh ${Number(x.channel || 0) + 1} · ${x.name || x.address || ''}`
+            })));
+          } else cams.push(Object.assign({}, d, { reviewChannel: 0 }));
+        } catch (e) { cams.push(Object.assign({}, d, { reviewChannel: 0 })); }
+      }
       if (!cams.length) { sel.innerHTML = '<option>Không có camera hỗ trợ xem lại</option>'; return; }
       sel.innerHTML = cams.map(c => {
         const chan = c.channelName || c.nvrName || '';
-        const label = (c.name || c.host) + (chan ? ' - ' + chan : '');
-        return `<option value="${escapeHtml(c.id)}">${escapeHtml(label)}</option>`;
+        const label = c.reviewLabel || ((c.name || c.host) + (chan ? ' - ' + chan : ''));
+        return `<option value="${escapeHtml(camKey(c))}">${escapeHtml(label)}</option>`;
       }).join('');
       window._rvCams = cams;
-      sel.addEventListener('change', () => { cam = cams.find(c => c.id === sel.value); updateDownloadLabel(); load(1440); refreshDays(); });
-      cam = (window._rvPreselect && cams.find(c => c.id === window._rvPreselect)) || cams[0];
+      sel.addEventListener('change', () => {
+        cam = cams.find(c => camKey(c) === sel.value);
+        $('rv-channel').value = Number(cam.reviewChannel || 0);
+        updateSharePath(); updateDownloadLabel(); load(1440); refreshDays();
+      });
+      const shared = hashSelection();
+      cam = (shared && cams.find(c => c.id === shared.id && Number(c.reviewChannel || 0) === shared.channel)) ||
+        (window._rvPreselect && cams.find(c => c.id === window._rvPreselect)) || cams[0];
       window._rvPreselect = null;
-      sel.value = cam.id;
+      sel.value = camKey(cam);
+      $('rv-channel').value = Number(cam.reviewChannel || 0);
+      updateSharePath();
       updateDownloadLabel();
     } catch (e) { sel.innerHTML = '<option>Lỗi tải camera</option>'; return; }
 
@@ -71,6 +118,16 @@
     $('rv-quick').innerHTML = QUICK.map(q => `<button class="btn btn-sm btn-secondary" type="button" data-min="${q.m}">${q.t} trước</button>`).join('');
     $('rv-quick').querySelectorAll('[data-min]').forEach(b => b.addEventListener('click', () => load(parseInt(b.dataset.min, 10))));
     $('rv-reload').addEventListener('click', () => { load(currentWindowMinutes()); refreshDays(); });
+    $('rv-channel').addEventListener('change', () => { updateSharePath(); load(currentWindowMinutes()); refreshDays(); });
+    $('rv-copy-link').addEventListener('click', async () => {
+      updateSharePath();
+      try {
+        await navigator.clipboard.writeText(location.href);
+        showToast('Đã sao chép link đúng camera/kênh.', 'ok');
+      } catch (e) {
+        showToast('Link camera: ' + location.href, 'ok');
+      }
+    });
     $('rv-load-range').addEventListener('click', loadFormRange);
     $('rv-load-day').addEventListener('click', () => loadDay($('rv-date').value));
 
@@ -385,13 +442,12 @@
     $('rv-play').addEventListener('click', () => loadPreview(markerTime('playhead')));
     document.querySelectorAll('#view-review [data-seek]').forEach(b =>
       b.addEventListener('click', () => { v.currentTime = Math.max(0, v.currentTime + parseFloat(b.dataset.seek)); }));
-    const speeds = $('rv-speeds');
-    speeds.querySelectorAll('[data-speed]').forEach(b => b.addEventListener('click', () => {
-      curSpeed = parseFloat(b.dataset.speed) || 1;
+    // Six speed buttons became one <select>: the current rate is readable at a
+    // glance instead of being encoded in which button is highlighted.
+    $('rv-speed').addEventListener('change', (ev) => {
+      curSpeed = parseFloat(ev.target.value) || 1;
       v.playbackRate = curSpeed;
-      speeds.querySelectorAll('[data-speed]').forEach(x => x.classList.toggle('btn-primary', x === b));
-    }));
-    const one = speeds.querySelector('[data-speed="1"]'); if (one) one.classList.add('btn-primary');
+    });
     // The red playhead follows playback — but never while the user is dragging it.
     v.addEventListener('timeupdate', () => {
       if (draggingPlayhead || !previewBase) return;
@@ -415,7 +471,7 @@
     $('rv-download-dav').addEventListener('click', () => download('&format=native'));
     $('rv-split5-btn').addEventListener('click', buildSplit5);
     $('rv-qr').addEventListener('click', showQR);
-    $('rv-qr-close').addEventListener('click', () => { $('rv-qr-modal').hidden = true; });
+    $('rv-qr-close').addEventListener('click', () => closeDialog($('rv-qr-modal')));
   }
 
   function download(extra) {
@@ -509,12 +565,12 @@
       const tok = await api('/api/playback-token?' + q);
       const url = `${location.origin}${playbackURL(p, '&fast=1&download=1')}&exp=${tok.exp}&token=${tok.token}`;
       const box = $('rv-qr-canvas'); box.innerHTML = '';
-      $('rv-qr-modal').hidden = false; // show first so QRCode can size the element
+      openDialog($('rv-qr-modal')); // show first so QRCode can size the element
       try {
         // correctLevel L = max data capacity (the tokenized URL is long); H overflows.
         new QRCode(box, { text: url, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.L });
       } catch (err) {
-        box.innerHTML = '<p style="color:#c0392b">Link quá dài cho QR.</p>';
+        box.innerHTML = '<p class="msg err">Link quá dài cho QR.</p>';
       }
       // Always show a tappable link fallback (works even if the QR fails to render).
       const link = document.getElementById('rv-qr-link');

@@ -111,8 +111,9 @@ Then all calls are JSON-RPC `{"method","params","id","session"}` over `\xf6` fra
 - **KBVision port fallback**: some KBVision units serve DVRIP on **8888**
   instead of 37777. `camera.Open()` retries on 8888 when the configured port
   fails at the TCP-connect stage (`dahua.ErrDialUnreachable` — see
-  `dhip.go`'s `Dial`), never on a login/auth failure, and never persists the
-  fallback back into the saved inventory (per-connection only).
+  `dhip.go`'s `Dial`), never on a login/auth failure. A successful 8888 retry
+  is persisted so the management UI and later connections show/use the
+  verified port directly.
 
 Capabilities RPCs are unreliable across firmware — probe `getConfig`/read-back
 rather than assuming a fixed value set.

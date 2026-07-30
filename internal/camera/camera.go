@@ -31,11 +31,6 @@ const (
 // use instead of the 37777 default. See Open()'s VendorDahua case.
 const kbvisionFallbackPort = 8888
 
-// dahuaDefaultPort is the stock DVRIP config port. A device configured on it
-// may really live on kbvisionFallbackPort (the importer assigns the default
-// blindly), so Open retries 8888 on any failure of a default-port attempt.
-const dahuaDefaultPort = 37777
-
 // OnDahuaPortFallback, when set, is called after a Dahua device could only be
 // reached on the KBVision fallback port (8888) instead of its configured port.
 // The server wires this to hard-set the working port in the saved inventory so
@@ -158,6 +153,12 @@ type FPSSettings interface {
 	GetFPSCapability(ctx context.Context, channel, stream, width, height int, codec string) (FPSCapability, error)
 }
 
+// DeviceIdentity is implemented by cameras that can read a stable hardware
+// serial number from the authenticated device session.
+type DeviceIdentity interface {
+	GetSerialNumber(ctx context.Context) (string, error)
+}
+
 // Camera is the vendor-agnostic control surface the orchestrator drives.
 type Camera interface {
 	// Probe reads back current encode settings for the requested streams.
@@ -269,6 +270,21 @@ type AutoRebootConfig interface {
 	SetAutoReboot(ctx context.Context, ar dahua.AutoReboot) error
 }
 
+type DeviceTimeConfig interface {
+	GetTimeConfig(ctx context.Context) (dahua.TimeConfig, error)
+	SetTimeConfig(ctx context.Context, cfg dahua.TimeConfig) error
+}
+
+// NVRHealthConfig exposes Dahua recording switches and uptime for the health
+// watchdog. It is kept separate from Recorder because ordinary cameras and
+// non-Dahua recorders do not necessarily expose these configuration tables.
+type NVRHealthConfig interface {
+	GetRecordState(ctx context.Context, channelCount int) ([]dahua.RecordChannelState, error)
+	EnableTimingRecord(ctx context.Context, channels []int) error
+	RestartRecording(ctx context.Context, channels []int) error
+	GetUptime(ctx context.Context) (time.Duration, error)
+}
+
 // Recorder is implemented by cameras that expose recorded footage: a timeline
 // listing of stored segments, and a streamed remux of an arbitrary time range.
 // Dahua-only (mediaFileFind + RTSP playback). callers type-assert.
@@ -320,17 +336,11 @@ func Open(ctx context.Context, d config.Device, timeout time.Duration) (Camera, 
 	switch d.Vendor {
 	case config.VendorDahua:
 		cl, err := dahua.Dial(d.Addr(), d.Username, d.Password, timeout)
-		if err != nil && d.Port != kbvisionFallbackPort &&
-			(d.Port == dahuaDefaultPort || errors.Is(err, dahua.ErrDialUnreachable)) {
+		if shouldTryDahuaFallback(d.Port, err) {
 			// KBVision (a Dahua OEM) sometimes serves DVRIP on 8888 instead of
-			// the 37777 default. When the configured port is the stock default
-			// (assigned blindly by the importer) retry 8888 on ANY failure —
-			// 37777 can be open-but-dead (another service, a hung stack) and
-			// still not be the config port. For a deliberately customized port
-			// (e.g. a NAT forward) only retry when it was unreachable at the
-			// TCP level, so a real login/credential failure there isn't masked
-			// by a second, confusing attempt. On success the working port is
-			// hard-set into the inventory via OnDahuaPortFallback.
+			// the configured port. Only a TCP-unreachable error permits this
+			// retry: authentication/protocol failures prove the configured port
+			// answered and must never rewrite 37777 to an inaccurate 8888.
 			fallbackAddr := fmt.Sprintf("%s:%d", d.Host, kbvisionFallbackPort)
 			if cl2, err2 := dahua.Dial(fallbackAddr, d.Username, d.Password, timeout); err2 == nil {
 				cl, err = cl2, nil
@@ -368,6 +378,10 @@ func Open(ctx context.Context, d config.Device, timeout time.Duration) (Camera, 
 	}
 }
 
+func shouldTryDahuaFallback(port int, err error) bool {
+	return err != nil && port != kbvisionFallbackPort && errors.Is(err, dahua.ErrDialUnreachable)
+}
+
 // dahuaCamera adapts *dahua.Client to the Camera interface. device/timeout
 // are kept alongside the DVRIP client so Snapshot can open a separate plain
 // HTTP+Digest connection (Dahua's snapshot.cgi is not reachable over the
@@ -376,6 +390,10 @@ type dahuaCamera struct {
 	client  *dahua.Client
 	device  config.Device
 	timeout time.Duration
+}
+
+func (d *dahuaCamera) GetSerialNumber(ctx context.Context) (string, error) {
+	return d.client.GetSerialNumber()
 }
 
 func (d *dahuaCamera) Close() error { return d.client.Close() }
@@ -459,6 +477,31 @@ func (d *dahuaCamera) GetAutoReboot(ctx context.Context) (dahua.AutoReboot, erro
 // SetAutoReboot writes the scheduled auto-reboot (AutoMaintain).
 func (d *dahuaCamera) SetAutoReboot(ctx context.Context, ar dahua.AutoReboot) error {
 	return d.client.SetAutoReboot(ar)
+}
+
+func (d *dahuaCamera) GetTimeConfig(ctx context.Context) (dahua.TimeConfig, error) {
+	return dahua.GetTimeConfig(ctx, d.device.Host, d.device.Username, d.device.Password)
+}
+
+func (d *dahuaCamera) SetTimeConfig(ctx context.Context, cfg dahua.TimeConfig) error {
+	return dahua.SetTimeConfig(ctx, d.device.Host, d.device.Username, d.device.Password, cfg)
+}
+
+func (d *dahuaCamera) GetRecordState(ctx context.Context, channelCount int) ([]dahua.RecordChannelState, error) {
+	return d.client.GetRecordState(channelCount)
+}
+
+func (d *dahuaCamera) EnableTimingRecord(ctx context.Context, channels []int) error {
+	return d.client.EnableTimingRecord(channels)
+}
+
+func (d *dahuaCamera) RestartRecording(ctx context.Context, channels []int) error {
+	return d.client.RestartRecording(channels)
+}
+
+func (d *dahuaCamera) GetUptime(ctx context.Context) (time.Duration, error) {
+	seconds, err := d.client.Uptime()
+	return time.Duration(seconds) * time.Second, err
 }
 
 // SetOSDLines writes free-text OSD lines and enable state for a channel.

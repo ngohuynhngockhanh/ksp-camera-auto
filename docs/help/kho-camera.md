@@ -5,7 +5,7 @@ section: cameras
 order: 10
 keywords: [kho camera, thêm cam, thêm camera, sửa camera, xóa camera, đổi tên, host, IP, cổng, port, dahua, kbvision, hikvision, tài khoản, mật khẩu, mã hóa, danh sách camera]
 ui: "#cameras/list"
-covers: ["/api/cameras", "/api/cameras/delete", "/api/nvr/scan", "/api/nvr/link"]
+covers: ["/api/cameras", "/api/cameras/delete", "/api/nvr/scan", "/api/nvr/link", "/api/nvr/channels"]
 related: [gioi-thieu, doc-cau-hinh, anh-chup, chinh-hang-loat]
 ---
 ## Mục đích
@@ -26,19 +26,24 @@ camera có trong kho này.
      hình). Bỏ trống thì dùng cổng mặc định theo hãng.
    - **Hãng** — chọn **Dahua / KBVision** hoặc **Hikvision**.
    - **Tài khoản**, **Mật khẩu** — thông tin đăng nhập của chính camera đó.
-3. Bấm **Thêm / Lưu camera** để lưu vào kho.
-4. Danh sách bên dưới hiện mỗi camera một dòng, có các nút:
+3. Bấm **Thêm camera** trong hộp thoại để lưu vào kho.
+4. Danh sách bên dưới hiện mỗi camera một dòng. **Bấm vào hàng** (bất kỳ đâu
+   ngoài ô tick và các nút) để mở trang chi tiết của camera đó — nơi chỉnh
+   tên/OSD, màu, video, âm thanh, mạng, PTZ và bảo trì.
    - Icon bút chì cạnh **Tên** — sửa nhanh tên trong kho (không đổi gì trên
      thiết bị), gõ tên mới rồi Enter để lưu, Esc để hủy.
-   - **Dò** — đọc cấu hình luồng hiện tại. Xem bài
-     [Đọc cấu hình (Dò)](#help/doc-cau-hinh).
    - **Xem hình** — chụp ảnh nhanh từ camera. Xem bài
      [Ảnh chụp nhanh](#help/anh-chup).
-   - **Tất cả kênh** — với đầu ghi, mở lưới ảnh mọi kênh cùng lúc.
-   - **Sửa** — nạp lại thông tin của camera vào form phía trên để chỉnh sửa.
-   - **Xóa** — xóa camera khỏi kho, có hộp thoại xác nhận.
-5. Để sửa một camera đã có: bấm **Sửa**, form phía trên tự điền sẵn dữ liệu,
-   chỉnh xong bấm lại **Thêm / Lưu camera**.
+   - Nút **⋯** mở các thao tác còn lại:
+     - **Cấu hình chi tiết** — giống bấm vào hàng.
+     - **Dò cấu hình** — đọc cấu hình luồng hiện tại. Xem bài
+       [Đọc cấu hình (Dò)](#help/doc-cau-hinh).
+     - **Xem tất cả kênh** — với đầu ghi, mở lưới ảnh mọi kênh cùng lúc.
+     - **Sửa thông tin kho** — mở hộp thoại sửa tên/tài khoản/mật khẩu.
+     - **Xóa khỏi kho** — có hộp thoại xác nhận.
+5. Để sửa một camera đã có: bấm **⋯ → Sửa thông tin kho**. Trong hộp thoại,
+   **Host** và **Cổng** bị khoá sẵn (xem Lưu ý bên dưới); bấm **Đổi địa chỉ**
+   nếu thực sự muốn sửa. Chỉnh xong bấm **Lưu thay đổi**.
 6. Tick chọn ô ở đầu mỗi dòng (hoặc ô **Chọn tất cả** trên tiêu đề bảng), rồi
    chuyển sang **Chỉnh hàng loạt**. Lựa chọn được giữ khi đổi tab.
 7. Dùng ô **Tìm camera** và bộ lọc **Hãng** để thu gọn danh sách; mật khẩu
@@ -48,7 +53,7 @@ camera có trong kho này.
 
 - **Đổi Host hoặc Cổng khi sửa sẽ tạo một mục mới** trong kho (vì kspcam dùng
   `host:cổng` làm mã định danh), chứ không ghi đè mục cũ — nhớ xóa mục cũ nếu
-  không cần nữa.
+  không cần nữa. Vì vậy hai ô này bị khoá cho tới khi bấm **Đổi địa chỉ**.
 - Để trống ô **Mật khẩu** khi sửa sẽ **giữ nguyên mật khẩu cũ đã lưu** — tiện
   khi chỉ muốn đổi tên hoặc tài khoản mà không gõ lại mật khẩu.
 - Dữ liệu kho được lưu trong file `cameras.yaml` trên máy chủ; mật khẩu lưu

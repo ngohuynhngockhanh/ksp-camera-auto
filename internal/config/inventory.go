@@ -11,22 +11,25 @@ import (
 
 // Device is a persisted camera inventory entry, managed from the web UI.
 type Device struct {
-	ID       string `yaml:"id"`             // stable identifier (host:port)
-	Name     string `yaml:"name,omitempty"` // human label
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
-	Vendor   Vendor `yaml:"vendor"`
-	Username string `yaml:"username,omitempty"`
-	Password string `yaml:"password,omitempty"`
+	ID           string `yaml:"id"`             // stable identifier (host:port)
+	Name         string `yaml:"name,omitempty"` // human label
+	Host         string `yaml:"host"`
+	Port         int    `yaml:"port"`
+	Vendor       Vendor `yaml:"vendor"`
+	Username     string `yaml:"username,omitempty"`
+	Password     string `yaml:"password,omitempty"`
+	SerialNumber string `yaml:"serialNumber,omitempty"`
 
 	// NVR fallback: a camera with no local storage serves its recordings (and,
 	// when offline, its live/snapshot) from a linked NVR's channel instead.
-	NVRID      string `yaml:"nvrId,omitempty"`      // fallback NVR device ID (empty = none)
-	NVRChannel int    `yaml:"nvrChannel,omitempty"` // 1-based NVR channel this camera maps to
-	NVRName     string `yaml:"nvrName,omitempty"`     // the NVR channel's name (e.g. "Bàn 8"), for display
-	ChannelName string `yaml:"channelName,omitempty"` // the camera's own channel/OSD title (probed), for display
-	NoStorage  bool   `yaml:"noStorage,omitempty"`  // no usable local SD → recordings come from the NVR
-	IsNVR      bool   `yaml:"isNvr,omitempty"`       // this device is the NVR itself
+	NVRID               string `yaml:"nvrId,omitempty"`               // fallback NVR device ID (empty = none)
+	NVRChannel          int    `yaml:"nvrChannel,omitempty"`          // 1-based NVR channel this camera maps to
+	NVRName             string `yaml:"nvrName,omitempty"`             // the NVR channel's name (e.g. "Bàn 8"), for display
+	ChannelName         string `yaml:"channelName,omitempty"`         // the camera's own channel/OSD title (probed), for display
+	NoStorage           bool   `yaml:"noStorage,omitempty"`           // no usable local SD → recordings come from the NVR
+	IsNVR               bool   `yaml:"isNvr,omitempty"`               // this device is the NVR itself
+	NVRWatchdog         bool   `yaml:"nvrWatchdog,omitempty"`         // automatically verify/repair recording
+	NVRSyncTimeFromHost bool   `yaml:"nvrSyncTimeFromHost,omitempty"` // sync from trusted INUT clock
 }
 
 // Addr returns host:port for dialling.

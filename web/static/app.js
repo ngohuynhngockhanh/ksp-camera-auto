@@ -30,9 +30,17 @@ const NAV_ITEMS = [
   { hash: 'import', label: 'Nhập Shinobi', short: 'Nhập', icon: ICONS.upload, bottom: false },
   { hash: 'help', label: 'Trợ giúp', short: 'Trợ giúp', icon: ICONS.help, bottom: false },
 ];
-// Old bookmarks/links to the now-merged tabs still land on #cameras.
-const HASH_ALIASES = { bulk: 'cameras/bulk', results: 'cameras/results' };
-const CAMERA_TASKS = ['list', 'bulk', 'devices', 'results'];
+// Old bookmarks/links to the now-merged or renamed tabs still land somewhere
+// sensible. 'cameras/devices' was split: per-camera config moved to the camera
+// detail page, the NVR linking stayed behind as 'cameras/nvr'.
+const HASH_ALIASES = {
+  bulk: 'cameras/bulk',
+  results: 'cameras/results',
+  'cameras/devices': 'cameras/nvr',
+};
+const CAMERA_TASKS = ['list', 'bulk', 'nvr', 'results'];
+// Tabs of the camera detail page (#cameras/cam/<encodedId>/<tab>).
+const DETAIL_TABS = ['osd', 'picture', 'video', 'audio', 'network', 'ptz', 'maint'];
 
 // streamPost POSTs a JSON body and consumes the "data: <event>\n\n" SSE
 // stream, rendering each event to the live log + progress bar. Used by
@@ -105,15 +113,10 @@ function handleEvent(ev, results, byId) {
 
 /* ---------- progress bar + live log ---------- */
 
-function setProgress(index, total, label) {
-  const bar = document.getElementById('apply-progress');
-  const fill = document.getElementById('apply-progress-fill');
-  const text = document.getElementById('apply-progress-label');
-  if (index == null) { bar.classList.remove('active'); text.textContent = ''; return; }
-  bar.classList.add('active');
-  fill.style.width = Math.round((index / total) * 100) + '%';
-  text.textContent = label || '';
-}
+// Both long-running flows share ui-core's progressBar; they used to carry two
+// copies of the same three-element bookkeeping.
+const applyProgress = progressBar('apply-progress');
+const setProgress = (index, total, label) => applyProgress.set(index, total, label);
 
 function logTime() {
   const d = new Date();
@@ -154,6 +157,37 @@ function fmtStreamInfo(list) {
   }).join('<br>');
 }
 
+function rememberProbeResult(id, payload) {
+  const result = Array.isArray(payload) ? { streams: payload } : (payload || {});
+  const streams = Array.isArray(result.streams) ? result.streams : [];
+  probeCache[id] = streams;
+  cameras = cameras.map(c => c.id === id ? Object.assign({}, c, {
+    port: result.port || c.port,
+    serialNumber: result.serialNumber || c.serialNumber || '',
+  }) : c);
+  return streams;
+}
+
+function cameraSerialHtml(c) {
+  if (c.vendor !== 'dahua') return '<span class="muted">–</span>';
+  if (!c.serialNumber) return '<span class="muted">chưa dò SN</span>';
+  return `<div class="camera-serial"><code>${escapeHtml(c.serialNumber)}</code>` +
+    `<div class="camera-serial-qr" data-testid="camera-serial-qr" data-serial="${escapeHtml(c.serialNumber)}"></div></div>`;
+}
+
+function renderCameraSerialQRCodes(root) {
+  if (typeof QRCode === 'undefined') return;
+  root.querySelectorAll('.camera-serial-qr[data-serial]').forEach(el => {
+    el.innerHTML = '';
+    new QRCode(el, {
+      text: el.dataset.serial,
+      width: 88,
+      height: 88,
+      correctLevel: QRCode.CorrectLevel.M,
+    });
+  });
+}
+
 /* ---------- routing ---------- */
 
 function currentHash() {
@@ -165,38 +199,66 @@ function currentHash() {
   return NAV_ITEMS.some(n => n.hash === h) ? h : 'dashboard';
 }
 
-function currentCameraTask() {
+// cameraHashParts returns the alias-resolved segments after '#cameras/'.
+function cameraHashParts() {
   let raw = (location.hash || '').slice(1);
   if (HASH_ALIASES[raw]) raw = HASH_ALIASES[raw];
-  const task = raw.split('/')[1];
-  return CAMERA_TASKS.includes(task) ? task : 'list';
+  const parts = raw.split('/');
+  return parts[0] === 'cameras' ? parts.slice(1) : [];
+}
+
+// currentDetail parses '#cameras/cam/<encodedId>/<tab>' into {id, tab}, or
+// null when the hash addresses a plain task tab instead. Camera ids contain a
+// colon (host:port) so they are percent-encoded, same as review.js does.
+function currentDetail() {
+  const parts = cameraHashParts();
+  if (parts[0] !== 'cam' || !parts[1]) return null;
+  let id;
+  try { id = decodeURIComponent(parts[1]); } catch (e) { id = parts[1]; }
+  const tab = DETAIL_TABS.includes(parts[2]) ? parts[2] : 'osd';
+  return { id, tab };
+}
+
+function currentCameraTask() {
+  const parts = cameraHashParts();
+  return CAMERA_TASKS.includes(parts[0]) ? parts[0] : 'list';
 }
 
 function setCameraTask(task) {
   location.hash = '#cameras/' + (CAMERA_TASKS.includes(task) ? task : 'list');
 }
 
+function cameraDetailHash(id, tab) {
+  return '#cameras/cam/' + encodeURIComponent(id) + '/' + (DETAIL_TABS.includes(tab) ? tab : 'osd');
+}
+
+function gotoCameraDetail(id, tab) { location.hash = cameraDetailHash(id, tab); }
+
 function renderCameraTask() {
+  const detail = currentDetail();
   const task = currentCameraTask();
+  // Detail mode takes over the whole camera workspace: task panels, the tab
+  // strip and the page heading all step aside so one camera fills the screen.
   document.querySelectorAll('[data-camera-panel]').forEach(el => {
-    if (el.classList.contains('camera-add-card')) {
-      if (task !== 'list') el.hidden = true;
-      return;
-    }
-    el.hidden = el.dataset.cameraPanel !== task;
+    el.hidden = !!detail || el.dataset.cameraPanel !== task;
   });
+  document.getElementById('camera-detail').hidden = !detail;
+  document.getElementById('camera-task-tabs').hidden = !!detail;
+  document.querySelector('#view-cameras .page-heading').hidden = !!detail;
   document.querySelectorAll('[data-camera-task]').forEach(el => {
-    const active = el.dataset.cameraTask === task;
+    const active = !detail && el.dataset.cameraTask === task;
     el.classList.toggle('active', active);
     if (active) el.setAttribute('aria-current', 'page');
     else el.removeAttribute('aria-current');
   });
-  document.getElementById('camera-add-open').hidden = task !== 'list';
+  if (detail) { openCameraDetail(detail); return; }
+  closeCameraDetail();
   if (task === 'bulk') renderBulkSelection();
-  if (task === 'devices') renderDevicePicker();
+  if (task === 'nvr') renderNvrList();
 }
 
 function setRoute() {
+  if (resolveLegacyHash()) return;
   let hash = currentHash();
   // A viewer is locked to the review view — bounce any other route back.
   if (appRole === 'viewer' && hash !== 'review') { location.hash = '#review'; return; }
@@ -303,7 +365,7 @@ function renderDashboard() {
 function renderCameraSkeleton() {
   const tbody = document.getElementById('cam-tbody');
   tbody.innerHTML = Array.from({ length: 3 }).map(() => `
-    <tr class="skeleton-row"><td colspan="7"><span class="skeleton" style="width:100%;display:block"></span></td></tr>
+    <tr class="skeleton-row"><td colspan="10"><span class="skeleton" style="width:100%;display:block"></span></td></tr>
   `).join('');
 }
 
@@ -347,17 +409,17 @@ function renderCameras() {
   });
   document.getElementById('camera-list-count').textContent = `${visible.length}/${cameras.length} camera`;
   if (!cameras.length) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Chưa có camera nào. Thêm ở form phía trên.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty-hint">Chưa có camera nào. Bấm “Thêm camera”.</td></tr>';
     renderDashboard();
     return;
   }
   if (!visible.length) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Không có camera khớp bộ lọc.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty-hint">Không có camera khớp bộ lọc.</td></tr>';
     renderDashboard();
     return;
   }
   tbody.innerHTML = visible.map(c => `
-    <tr data-id="${escapeHtml(c.id)}">
+    <tr data-id="${escapeHtml(c.id)}" data-testid="camera-row" tabindex="0" aria-label="Mở cấu hình ${escapeHtml(c.name || c.host)}">
       <td class="cell-check"><input type="checkbox" class="cam-cb" value="${escapeHtml(c.id)}" ${selectedCameraSet.has(c.id) ? 'checked' : ''} aria-label="Chọn ${escapeHtml(c.name || c.host)}"></td>
       <td data-label="Tên" class="cell-name">
         <span class="cell-name-text">${escapeHtml(c.name || '(chưa đặt tên)')}</span>${c.channelName ? '<span class="muted"> · ' + escapeHtml(c.channelName) + '</span>' : ''}
@@ -368,18 +430,26 @@ function renderCameras() {
       <td data-label="Host">${escapeHtml(c.host)}</td>
       <td data-label="Cổng">${c.port}</td>
       <td data-label="Hãng">${escapeHtml(c.vendor)}</td>
+      <td data-label="SN / QR">${cameraSerialHtml(c)}</td>
       <td data-label="Tài khoản">${escapeHtml(c.username || '')}</td>
       <td data-label="Mật khẩu"><span class="password-cell"><code data-password-for="${escapeHtml(c.id)}">••••••••</code><button class="btn-icon password-toggle" data-action="reveal-pass" data-id="${escapeHtml(c.id)}" aria-label="Hiện mật khẩu">Hiện</button></span></td>
       <td data-label="Thông tin luồng" class="probe-box" id="probe-${cssEscape(c.id)}">${fmtStreamInfo(probeCache[c.id]) || '<span class="muted">chưa dò</span>'}</td>
       <td class="actions-cell">
-        <button class="btn btn-secondary" data-action="probe" data-id="${escapeHtml(c.id)}">Dò</button>
         <button class="btn btn-secondary" data-action="view" data-id="${escapeHtml(c.id)}">Xem hình</button>
-        <button class="btn btn-secondary" data-action="view-all" data-id="${escapeHtml(c.id)}">Tất cả kênh</button>
-        <button class="btn btn-secondary" data-action="edit" data-id="${escapeHtml(c.id)}">Sửa</button>
-        <button class="btn btn-danger" data-action="delete" data-id="${escapeHtml(c.id)}">Xóa</button>
+        <details class="row-menu">
+          <summary class="btn btn-secondary" aria-label="Thao tác khác cho ${escapeHtml(c.name || c.host)}">⋯</summary>
+          <div class="row-menu-items">
+            <button class="btn btn-secondary" data-action="detail" data-id="${escapeHtml(c.id)}">Cấu hình chi tiết</button>
+            <button class="btn btn-secondary" data-action="probe" data-id="${escapeHtml(c.id)}">Dò cấu hình</button>
+            <button class="btn btn-secondary" data-action="view-all" data-id="${escapeHtml(c.id)}">Xem tất cả kênh</button>
+            <button class="btn btn-secondary" data-action="edit" data-id="${escapeHtml(c.id)}">Sửa thông tin kho</button>
+            <button class="btn btn-danger" data-action="delete" data-id="${escapeHtml(c.id)}">Xóa khỏi kho</button>
+          </div>
+        </details>
       </td>
     </tr>
   `).join('');
+  renderCameraSerialQRCodes(tbody);
   renderDashboard();
 }
 
@@ -390,11 +460,30 @@ async function loadCameras() {
     for (const id of selectedCameraSet) if (!cameras.some(c => c.id === id)) selectedCameraSet.delete(id);
     renderCameras();
     renderBulkSelection();
-    renderDevicePicker();
+    if (currentCameraTask() === 'nvr') renderNvrList();
+    setRoute();
   } catch (e) {
     document.getElementById('cam-tbody').innerHTML =
       `<tr><td colspan="7"><span class="msg err">Lỗi tải danh sách: ${escapeHtml(e.message)}</span></td></tr>`;
   }
+}
+
+// resolveLegacyHash rewrites the one deep link that can't be a static alias:
+// '#cameras/devices/nvr-storage' meant "open the first NVR's storage page".
+// It runs from setRoute (not just at boot, as it used to), so pasting the link
+// into an already-loaded tab works instead of silently doing nothing. Returns
+// true when it redirected — the caller should stop and wait for the new hash.
+function resolveLegacyHash() {
+  const raw = (location.hash || '').slice(1);
+  if (raw !== 'cameras/devices/nvr-storage') return false;
+  const nvr = cameras.find(x => x.isNvr);
+  if (!nvr) {
+    // Inventory not loaded yet: loadCameras() calls setRoute again once it is.
+    if (cameras.length) { location.hash = '#cameras/nvr'; return true; }
+    return false;
+  }
+  location.hash = cameraDetailHash(nvr.id, 'maint');
+  return true;
 }
 
 /* ---------- NVR link: cameras with no storage play back from the NVR ---------- */
@@ -500,13 +589,71 @@ function setCameraSelected(id, selected) {
   renderBulkSelection();
 }
 
-function renderDevicePicker() {
-  const select = document.getElementById('device-manage-select');
-  const current = select.value;
-  select.innerHTML = '<option value="">Chọn camera...</option>' + cameras.map(c =>
-    `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name || c.host)} · ${escapeHtml(c.host)}</option>`
-  ).join('');
-  if (cameras.some(c => c.id === current)) select.value = current;
+// renderNvrList fills the Đầu ghi tab: one row per NVR in the inventory, with
+// how many cameras fall back to it and a direct link to its storage page.
+function renderNvrList() {
+  const tbody = document.getElementById('nvr-list-tbody');
+  const nvrs = cameras.filter(c => c.isNvr);
+  if (!nvrs.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-hint">Chưa có đầu ghi nào trong kho. Bấm “Quét &amp; liên kết đầu ghi” để thêm.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = nvrs.map(n => {
+    const linked = cameras.filter(c => c.nvrId === n.id);
+    const detail = linked.length
+      ? linked.map(c => `<a data-testid="nvr-camera-link" href="#review/${encodeURIComponent(c.id)}/${Math.max(0, Number(c.nvrChannel || 1) - 1)}">${escapeHtml(c.name || c.host)} → K${c.nvrChannel || '?'}</a>`).join('<br>')
+      : '<span class="muted">chưa liên kết camera nào</span>';
+    return `<tr data-id="${escapeHtml(n.id)}">
+      <td data-label="Đầu ghi">${escapeHtml(n.name || n.host)}</td>
+      <td data-label="Host">${escapeHtml(n.host)}:${n.port}</td>
+      <td data-label="Camera đã liên kết">${detail}</td>
+      <td data-label="Sức khỏe"><span class="badge" data-testid="nvr-status" data-nvr-status="${escapeHtml(n.id)}">Đang kiểm tra</span><br><span class="muted" data-nvr-next="${escapeHtml(n.id)}"></span></td>
+      <td class="actions-cell nvr-actions">
+        <label class="checkbox-row compact"><input type="checkbox" data-testid="nvr-watchdog" data-nvr-watchdog="${escapeHtml(n.id)}" ${n.nvrWatchdog ? 'checked' : ''}> Tự sửa ghi hình</label>
+        <label class="checkbox-row compact"><input type="checkbox" data-testid="nvr-sync-time" data-nvr-sync="${escapeHtml(n.id)}" ${n.nvrSyncTimeFromHost ? 'checked' : ''}> Lấy giờ từ INUT</label>
+        <button class="btn btn-sm" type="button" data-nvr-check="${escapeHtml(n.id)}">Kiểm tra ngay</button>
+        <a class="btn btn-secondary btn-sm" href="${cameraDetailHash(n.id, 'maint')}" data-testid="nvr-open-maint">HDD &amp; ghi hình</a>
+      </td>
+    </tr>`;
+  }).join('');
+  tbody.querySelectorAll('[data-nvr-watchdog],[data-nvr-sync]').forEach(input => input.addEventListener('change', () => saveNvrWatchdog(input.closest('tr'))));
+  tbody.querySelectorAll('[data-nvr-check]').forEach(btn => btn.addEventListener('click', () => checkNvrHealth(btn.dataset.nvrCheck, btn)));
+  nvrs.forEach(n => loadNvrListHealth(n.id));
+}
+
+function nvrStatusLabel(status) {
+  return ({ healthy: 'Tốt', repairing: 'Đang sửa', warning: 'Cảnh báo', critical: 'Lỗi ghi hình', unknown: 'Chưa rõ' })[status] || 'Chưa rõ';
+}
+
+async function loadNvrListHealth(id) {
+  const badge = document.querySelector(`[data-nvr-status="${CSS.escape(id)}"]`);
+  if (!badge) return;
+  try {
+    const h = await api(`/api/nvr/health?id=${encodeURIComponent(id)}`);
+    badge.textContent = nvrStatusLabel(h.status);
+    badge.className = `badge nvr-health-${h.status || 'unknown'}`;
+    const next = document.querySelector(`[data-nvr-next="${CSS.escape(id)}"]`);
+    if (next) next.textContent = h.nextCheck ? `Lần tới: ${new Date(h.nextCheck).toLocaleTimeString('vi-VN')}` : 'Watchdog đang tắt';
+  } catch (e) { badge.textContent = 'Không tải được'; badge.className = 'badge nvr-health-critical'; }
+}
+
+async function saveNvrWatchdog(row) {
+  const id = row.dataset.id;
+  const enabled = row.querySelector('[data-nvr-watchdog]').checked;
+  const syncTimeFromHost = row.querySelector('[data-nvr-sync]').checked;
+  try {
+    await api('/api/nvr/watchdog', { method: 'POST', body: JSON.stringify({ id, enabled, syncTimeFromHost }) });
+    const n = cameras.find(x => x.id === id); if (n) { n.nvrWatchdog = enabled; n.nvrSyncTimeFromHost = syncTimeFromHost; }
+    showToast(enabled ? 'Đã bật watchdog ghi hình.' : 'Đã tắt watchdog ghi hình.', 'ok');
+    await loadNvrListHealth(id);
+  } catch (e) { showToast('Lỗi lưu watchdog: ' + e.message, 'err'); }
+}
+
+async function checkNvrHealth(id, button) {
+  if (button) button.disabled = true;
+  try { await api('/api/nvr/health/check', { method: 'POST', body: JSON.stringify({ id }) }); await loadNvrListHealth(id); }
+  catch (e) { showToast('Kiểm tra NVR lỗi: ' + e.message, 'err'); }
+  finally { if (button) button.disabled = false; }
 }
 
 function renderBulkSelection() {
@@ -533,12 +680,58 @@ function renderBulkSelection() {
 
 /* ---------- add / edit / delete / probe ---------- */
 
+// The camera form is one <dialog> in two explicit modes. Editing used to reuse
+// the inline "add" card, which quietly created a SECOND inventory entry when
+// host/port changed (the id is host:port). Now editing locks those two fields
+// behind a deliberate "Đổi địa chỉ" click that says what will happen.
+let cameraFormMode = 'add'; // 'add' | 'edit'
+
+function openCameraForm(cam) {
+  cameraFormMode = cam ? 'edit' : 'add';
+  const dlg = document.getElementById('camera-form-dialog');
+  const msg = document.getElementById('add-msg');
+  const locked = document.getElementById('camera-form-locked');
+  msg.textContent = ''; msg.className = 'msg';
+  document.getElementById('camera-form-title').textContent =
+    cam ? `Sửa "${cam.name || cam.host}"` : 'Thêm camera';
+  document.getElementById('add-submit-btn').textContent = cam ? 'Lưu thay đổi' : 'Thêm camera';
+  document.getElementById('f-name').value = cam ? (cam.name || '') : '';
+  document.getElementById('f-host').value = cam ? (cam.host || '') : '';
+  document.getElementById('f-port').value = cam ? (cam.port || '') : '';
+  document.getElementById('f-vendor').value = cam ? (cam.vendor || 'dahua') : 'dahua';
+  document.getElementById('f-username').value = cam ? (cam.username || '') : '';
+  const pw = document.getElementById('f-password');
+  pw.value = cam ? (cam.password || '') : '';
+  pw.placeholder = cam ? 'để trống = giữ mật khẩu cũ' : '••••••';
+  setCameraFormAddressLocked(!!cam);
+  locked.hidden = !cam;
+  openDialog(dlg);
+  document.getElementById('f-name').focus();
+}
+
+function setCameraFormAddressLocked(lock) {
+  document.getElementById('f-host').disabled = lock;
+  document.getElementById('f-port').disabled = lock;
+}
+
+document.getElementById('camera-add-open').addEventListener('click', () => openCameraForm(null));
+document.getElementById('camera-form-cancel').addEventListener('click',
+  () => closeDialog(document.getElementById('camera-form-dialog')));
+document.getElementById('camera-form-unlock').addEventListener('click', () => {
+  setCameraFormAddressLocked(false);
+  const m = document.getElementById('add-msg');
+  m.className = 'msg';
+  m.textContent = 'Lưu với địa chỉ mới sẽ tạo một camera mới; camera cũ vẫn còn trong kho.';
+});
+
 document.getElementById('add-form').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const msg = document.getElementById('add-msg');
   msg.textContent = ''; msg.className = 'msg';
   const body = {
     name: document.getElementById('f-name').value.trim(),
+    // .value still reads correctly on a disabled input; disabling only stops
+    // the user editing it and keeps it out of the form's own submission set.
     host: document.getElementById('f-host').value.trim(),
     port: parseInt(document.getElementById('f-port').value, 10) || 0,
     vendor: document.getElementById('f-vendor').value,
@@ -549,12 +742,8 @@ document.getElementById('add-form').addEventListener('submit', async (ev) => {
   setBusy(btn, true, 'Đang lưu...');
   try {
     await api('/api/cameras', { method: 'POST', body: JSON.stringify(body) });
-    ev.target.reset();
-    document.getElementById('f-vendor').value = body.vendor;
-    msg.textContent = 'Đã thêm camera.';
-    msg.className = 'msg ok';
-    showToast('Đã lưu camera.', 'ok');
-    document.querySelector('.camera-add-card').hidden = true;
+    showToast(cameraFormMode === 'edit' ? 'Đã lưu thay đổi.' : 'Đã thêm camera.', 'ok');
+    closeDialog(document.getElementById('camera-form-dialog'));
     await loadCameras();
   } catch (e) {
     msg.textContent = 'Lỗi: ' + e.message;
@@ -565,28 +754,27 @@ document.getElementById('add-form').addEventListener('submit', async (ev) => {
   }
 });
 
+// Clicking the row opens the camera detail page; the checkbox, the inline
+// rename input and every action control opt out via this guard.
+function rowOpensDetail(ev) {
+  if (ev.target.closest('button, input, select, textarea, a, summary, details')) return null;
+  const tr = ev.target.closest('tr[data-id]');
+  return tr ? tr.dataset.id : null;
+}
+
 document.getElementById('cam-tbody').addEventListener('click', async (ev) => {
+  const rowId = rowOpensDetail(ev);
+  if (rowId) { gotoCameraDetail(rowId, 'osd'); return; }
   const btn = ev.target.closest('button[data-action]');
   if (!btn) return;
   const id = btn.dataset.id;
+  // Close the ⋯ menu the action was chosen from.
+  const menu = btn.closest('details.row-menu');
+  if (menu) menu.open = false;
+  if (btn.dataset.action === 'detail') { gotoCameraDetail(id, 'osd'); return; }
   if (btn.dataset.action === 'edit') {
     const c = cameras.find(x => x.id === id);
-    if (!c) return;
-    document.getElementById('f-name').value = c.name || '';
-    document.getElementById('f-host').value = c.host || '';
-    document.getElementById('f-port').value = c.port || '';
-    document.getElementById('f-vendor').value = c.vendor || 'dahua';
-    document.getElementById('f-username').value = c.username || '';
-    const pw = document.getElementById('f-password');
-    pw.value = c.password || '';
-    pw.type = 'text';
-    pw.placeholder = 'để trống = giữ mật khẩu cũ';
-    const m = document.getElementById('add-msg');
-    m.className = 'msg'; m.textContent = 'Đang sửa "' + (c.name || c.host) + '". Đổi thông tin rồi bấm "Thêm/Lưu camera". (Đổi host/cổng sẽ tạo mục mới.)';
-    setCameraTask('list');
-    document.querySelector('.camera-add-card').hidden = false;
-    document.getElementById('add-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    document.getElementById('f-name').focus();
+    if (c) openCameraForm(c);
     return;
   }
   if (btn.dataset.action === 'delete') {
@@ -608,9 +796,8 @@ document.getElementById('cam-tbody').addEventListener('click', async (ev) => {
     const cell = document.getElementById('probe-' + cssEscape(id));
     cell.innerHTML = '<span class="muted">đang dò...</span>';
     try {
-      const info = await api('/api/probe', { method: 'POST', body: JSON.stringify({ id, timeoutSeconds: timeoutSec() }) });
-      probeCache[id] = info;
-      cell.innerHTML = fmtStreamInfo(info);
+      rememberProbeResult(id, await api('/api/probe', { method: 'POST', body: JSON.stringify({ id, timeoutSeconds: timeoutSec() }) }));
+      renderCameras();
     } catch (e) {
       cell.innerHTML = `<span class="msg err">${escapeHtml(e.message)}</span>`;
     } finally {
@@ -634,19 +821,13 @@ document.getElementById('cam-tbody').addEventListener('click', async (ev) => {
   }
 });
 
-document.getElementById('camera-add-open').addEventListener('click', () => {
-  const card = document.querySelector('.camera-add-card');
-  card.hidden = !card.hidden;
-  if (!card.hidden) document.getElementById('f-name').focus();
-});
 document.getElementById('camera-search').addEventListener('input', renderCameras);
 document.getElementById('camera-vendor-filter').addEventListener('change', renderCameras);
-document.getElementById('device-manage-open').addEventListener('click', () => {
-  const id = document.getElementById('device-manage-select').value;
-  const c = cameras.find(x => x.id === id);
-  if (!c) { showToast('Chọn camera cần cấu hình.', 'err'); return; }
-  openNetworkCard(c);
-  document.getElementById('network-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+// Keyboard parity with the row click.
+document.getElementById('cam-tbody').addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Enter' || ev.target.tagName !== 'TR') return;
+  const id = ev.target.dataset.id;
+  if (id) { ev.preventDefault(); gotoCameraDetail(id, 'osd'); }
 });
 document.getElementById('bulk-camera-picker').addEventListener('change', ev => {
   if (ev.target.classList.contains('bulk-cam-cb')) setCameraSelected(ev.target.value, ev.target.checked);
@@ -658,23 +839,22 @@ document.getElementById('bulk-selected-chips').addEventListener('click', ev => {
 
 /* ---------- Mạng (Dahua/KBVision): static IP + Wi-Fi, device-level ---------- */
 
-let networkEditDevice = null; // {id, name, host, vendor, ...} of the device whose Mạng card is open
+// This is the ONLY network editor. The camera detail dialog used to carry a
+// second, near-identical one (renderCeNetwork, ids ce-net-*) with its own save
+// handlers; that copy is gone and its Mạng tab now mounts these ids.
+let networkEditDevice = null; // device whose Mạng/Bảo trì tabs are loaded
 let lastWiFiConfig = null; // last-fetched WLan config, kept so a static-IP save doesn't have to re-fetch/hide it
 
 function closeNetworkCard() {
   networkEditDevice = null;
   lastWiFiConfig = null;
-  document.getElementById('network-card').hidden = true;
 }
 
 async function openNetworkCard(c) {
   networkEditDevice = c;
   lastWiFiConfig = null;
-  const card = document.getElementById('network-card');
   const body = document.getElementById('net-body');
   const msg = document.getElementById('net-msg');
-  document.getElementById('net-device-name').textContent = c.name || c.host;
-  card.hidden = false;
   msg.textContent = ''; msg.className = 'msg';
   body.innerHTML = '<p class="muted">Đang tải cấu hình mạng...</p>';
   try {
@@ -689,7 +869,6 @@ async function openNetworkCard(c) {
     msg.textContent = 'Lỗi tải cấu hình mạng: ' + e.message;
     msg.className = 'msg err';
   }
-  renderMaintenance(c);
 }
 
 // formatBytes renders a byte count as a human-readable GB/MB string.
@@ -700,6 +879,11 @@ function formatBytes(n) {
   return (n / (1024 * 1024)).toFixed(0) + ' MB';
 }
 
+function formatDiskCapacity(n) {
+  if (!n || n < 0) return '0 GB';
+  return `${(n / 1e9).toFixed(1)} GB (${(n / (1024 * 1024 * 1024)).toFixed(1)} GiB)`;
+}
+
 // renderMaintenance fills the "Bảo trì" section: a reboot button (all
 // vendors), plus storage status/format and scheduled auto-reboot (Dahua only).
 async function renderMaintenance(c) {
@@ -707,7 +891,9 @@ async function renderMaintenance(c) {
   const isDahua = c.vendor === 'dahua';
   let html = `<div class="row"><button class="btn btn-danger" type="button" id="maint-reboot-btn">Khởi động lại camera</button></div>`;
   if (isDahua) {
-    html += `<div class="card-title section-gap">Thẻ nhớ / Lưu trữ</div><div id="maint-storage"><p class="muted">Đang đọc thẻ nhớ...</p></div>`;
+    html += `<div class="card-title section-gap">${c.isNvr ? 'Ổ cứng đầu ghi (NVR)' : 'Thẻ nhớ / Lưu trữ'}</div><div id="maint-storage"><p class="muted">Đang đọc bộ nhớ...</p></div>`;
+    if (c.isNvr) html += `<div class="card-title section-gap">Tình trạng ghi hình</div><div id="maint-record-health"><p class="muted">Đang kiểm tra bản ghi gần nhất...</p></div>`;
+    html += `<div class="card-title section-gap">Ngày giờ &amp; NTP</div><div id="maint-device-time"><p class="muted">Đang đọc đồng hồ thiết bị...</p></div>`;
     html += `<div class="card-title section-gap">Tự khởi động lại</div><div id="maint-autoreboot"><p class="muted">Đang đọc lịch...</p></div>`;
     html += `<div class="card-title section-gap">Xem lại video</div><div id="maint-playback"></div>`;
   }
@@ -724,10 +910,15 @@ async function renderMaintenance(c) {
     } else {
       let sh = '';
       for (const d of devs) {
-        const det = (d.details && d.details[0]) || {};
-        const err = det.isError || det.isNeedFormat;
-        sh += `<p>Thiết bị <b>${escapeHtml(d.name)}</b> · trạng thái: ${escapeHtml(d.state || '?')}${err ? ' · <span style="color:#c0392b">CẦN FORMAT/LỖI</span>' : ''}<br>
-          Dung lượng: ${formatBytes(det.totalBytes)} · đã dùng: ${formatBytes(det.usedBytes)}${det.type ? ' · ' + escapeHtml(det.type) : ''}</p>
+        const details = d.details || [];
+        const total = details.reduce((sum, x) => sum + Number(x.totalBytes || 0), 0);
+        const used = details.reduce((sum, x) => sum + Number(x.usedBytes || 0), 0);
+        const err = details.some(x => x.isError || x.isNeedFormat) || String(d.state || '').toLowerCase() !== 'success';
+        const writable = details.length > 0 && details.every(x => x.type === 'ReadWrite');
+        const health = !err && writable ? '<span style="color:var(--success)">HEALTHY · đọc/ghi tốt</span>' : '<span style="color:var(--danger)">CẦN KIỂM TRA / FORMAT</span>';
+        sh += `<p>Thiết bị <b>${escapeHtml(d.name)}</b> · trạng thái: ${escapeHtml(d.state || '?')} · ${health}<br>
+          Tổng dung lượng: <b>${formatDiskCapacity(total)}</b> · đã dùng: ${formatBytes(used)} · ${details.length} vùng lưu trữ.<br>
+          <span class="muted">Ổ “500 GB” của nhà sản xuất tương đương khoảng 466 GiB; firmware đầu ghi này chia thành nhiều vùng nên phải cộng toàn bộ, không chỉ vùng đầu.</span></p>
           <div class="row"><button class="btn btn-danger" type="button" data-fmt="${escapeHtml(d.name)}">Format ${escapeHtml(d.name)} (xoá sạch dữ liệu)</button></div>`;
       }
       const box = document.getElementById('maint-storage');
@@ -735,8 +926,10 @@ async function renderMaintenance(c) {
       box.querySelectorAll('button[data-fmt]').forEach(b => b.addEventListener('click', () => formatStorage(c, b.getAttribute('data-fmt'))));
     }
   } catch (e) {
-    document.getElementById('maint-storage').innerHTML = `<p class="msg err">Lỗi đọc thẻ nhớ: ${escapeHtml(e.message)}</p>`;
+    document.getElementById('maint-storage').innerHTML = `<p class="msg err">Lỗi đọc bộ nhớ: ${escapeHtml(e.message)}</p>`;
   }
+  if (c.isNvr) await renderRecordHealth(c);
+  await renderDeviceTime(c);
   // Auto-reboot
   try {
     const ar = await api('/api/autoreboot?' + q);
@@ -753,6 +946,101 @@ async function renderMaintenance(c) {
     document.getElementById('maint-autoreboot').innerHTML = `<p class="msg err">Lỗi đọc lịch: ${escapeHtml(e.message)}</p>`;
   }
   renderPlayback(c);
+}
+
+let deviceTimeRefreshTimer = null;
+
+async function renderDeviceTime(c) {
+  const el = document.getElementById('maint-device-time');
+  if (!el) return;
+  const q = `id=${encodeURIComponent(c.id)}&timeoutSeconds=${timeoutSec()}`;
+  try {
+    const t = await api('/api/device-time?' + q);
+    const deviceMs = new Date((t.currentTime || '').replace(' ', 'T')).getTime();
+    const driftSeconds = Number.isFinite(deviceMs) ? Math.round((deviceMs - Date.now()) / 1000) : null;
+    const driftAbs = driftSeconds == null ? null : Math.abs(driftSeconds);
+    const driftText = driftAbs == null ? 'Không tính được độ lệch giờ.' :
+      driftAbs <= 300 ? `ĐÚNG GIỜ · lệch ${driftAbs} giây` :
+      `SAI GIỜ · ${driftSeconds > 0 ? 'nhanh' : 'chậm'} ${Math.floor(driftAbs / 3600)} giờ ${Math.floor((driftAbs % 3600) / 60)} phút`;
+    const driftClass = driftAbs != null && driftAbs <= 300 ? 'ok' : 'err';
+    el.innerHTML = `
+      <div class="msg ${driftClass}"><b>Tự kiểm tra: ${escapeHtml(driftText)}</b>${driftClass === 'err' ? '<br>Video có thể xuất hiện sai ngày hoặc mất khỏi khoảng thời gian đang xem.' : ''}</div>
+      <p>Giờ hiện tại trên thiết bị: <b>${escapeHtml(t.currentTime || '?')}</b></p>
+      <div class="form-grid">
+        <div class="field"><label for="dt-value">Ngày giờ thiết bị</label><input id="dt-value" type="datetime-local" step="1" value="${escapeHtml((t.currentTime || '').replace(' ', 'T'))}"></div>
+        <div class="field"><label for="dt-timezone">Mã timezone Dahua</label><input id="dt-timezone" type="number" value="${Number(t.timeZone || 0)}"></div>
+        <div class="field"><label for="dt-timezone-desc">Tên timezone</label><input id="dt-timezone-desc" value="${escapeHtml(t.timeZoneDesc || '')}" placeholder="Bangkok"></div>
+        <div class="field"><label for="dt-ntp-address">Máy chủ NTP</label><input id="dt-ntp-address" value="${escapeHtml(t.ntpAddress || 'time.google.com')}"></div>
+        <div class="field"><label for="dt-ntp-port">Cổng NTP</label><input id="dt-ntp-port" type="number" min="1" max="65535" value="${Number(t.ntpPort || 123)}"></div>
+        <div class="field"><label for="dt-ntp-period">Chu kỳ đồng bộ (phút)</label><input id="dt-ntp-period" type="number" min="1" value="${Number(t.updatePeriod || 60)}"></div>
+      </div>
+      <div class="checkbox-row"><input id="dt-ntp-enable" type="checkbox" ${t.ntpEnable ? 'checked' : ''}><label for="dt-ntp-enable">Bật tự động đồng bộ NTP</label></div>
+      <p class="muted">Việt Nam trên firmware này: mã 12, tên Bangkok (UTC+7). Sai ngày giờ sẽ làm video xuất hiện nhầm ngày trên timeline.</p>
+      <div class="row">
+        <button class="btn btn-secondary" type="button" id="dt-browser-btn">Lấy giờ máy đang mở web</button>
+        <button class="btn btn-primary" type="button" id="dt-save-btn">Lưu &amp; kiểm tra lại</button>
+        <button class="btn" type="button" id="dt-refresh-btn">Đọc lại</button>
+      </div>`;
+    document.getElementById('dt-browser-btn').addEventListener('click', () => {
+      document.getElementById('dt-value').value = localDateTime(new Date());
+    });
+    document.getElementById('dt-refresh-btn').addEventListener('click', () => renderDeviceTime(c));
+    document.getElementById('dt-save-btn').addEventListener('click', () => saveDeviceTime(c));
+    clearTimeout(deviceTimeRefreshTimer);
+    deviceTimeRefreshTimer = setTimeout(() => renderDeviceTime(c), 60000);
+  } catch (e) {
+    el.innerHTML = `<p class="msg err">Lỗi đọc ngày giờ/NTP: ${escapeHtml(e.message)}</p>`;
+    clearTimeout(deviceTimeRefreshTimer);
+    deviceTimeRefreshTimer = setTimeout(() => renderDeviceTime(c), 60000);
+  }
+}
+
+async function saveDeviceTime(c) {
+  const value = document.getElementById('dt-value').value;
+  const body = {
+    id: c.id,
+    currentTime: value ? value.replace('T', ' ') : '',
+    ntpEnable: document.getElementById('dt-ntp-enable').checked,
+    ntpAddress: document.getElementById('dt-ntp-address').value.trim(),
+    ntpPort: parseInt(document.getElementById('dt-ntp-port').value, 10) || 123,
+    updatePeriod: parseInt(document.getElementById('dt-ntp-period').value, 10) || 60,
+    timeZone: parseInt(document.getElementById('dt-timezone').value, 10) || 0,
+    timeZoneDesc: document.getElementById('dt-timezone-desc').value.trim(),
+    timeoutSeconds: timeoutSec()
+  };
+  try {
+    const saved = await api('/api/device-time', { method: 'POST', body: JSON.stringify(body) });
+    showToast(`Đã lưu. Giờ thiết bị: ${saved.currentTime || body.currentTime}`, 'ok');
+    await renderDeviceTime(c);
+  } catch (e) {
+    showToast('Lỗi lưu ngày giờ/NTP: ' + e.message, 'err');
+  }
+}
+
+function localDateTime(d) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+// A recent-media check catches the common failure where the HDD is healthy
+// but the NVR's channel schedule/manual record mode is disabled.
+async function renderRecordHealth(c, selectedChannel = 0) {
+  const el = document.getElementById('maint-record-health');
+  if (!el) return;
+  try {
+    const h = await api(`/api/nvr/health?id=${encodeURIComponent(c.id)}`);
+    const reasons = (h.reasons || []).map(x => escapeHtml(x.message || x.code)).join('<br>');
+    const rows = (h.channels || []).map(ch => `<tr><td>K${Number(ch.channel)+1} · ${escapeHtml(ch.name || '')}</td><td>${ch.recordEnabled && ch.timing24x7 ? 'Bật 24/7' : '<b class="danger-text">Tắt / sai lịch</b>'}</td><td>${ch.latestEnd && !String(ch.latestEnd).startsWith('0001-') ? escapeHtml(new Date(ch.latestEnd).toLocaleString('vi-VN')) : 'Chưa có'}</td><td>${h.uptimeMinutes ? `uptime ${Number(h.uptimeMinutes)} phút · recorded ${Number(ch.recordedMinutes || 0)} phút · coverage ${Number(ch.coveragePercent || 0).toFixed(1)}%` : `Uptime không được firmware hỗ trợ · recorded 24h: ${Number(ch.recordedMinutes || 0)} phút`}</td><td><a data-testid="nvr-camera-link" href="#review/${encodeURIComponent(c.id)}/${Number(ch.channel)}">Xem lại</a></td></tr>`).join('');
+    el.innerHTML = `<div data-testid="nvr-health-panel">
+      <div class="msg ${h.status === 'healthy' ? 'ok' : 'err'}"><b>${h.status === 'healthy' ? 'Ghi hình tốt' : nvrStatusLabel(h.status)}</b>${reasons ? '<br>'+reasons : ''}</div>
+      <div class="nvr-health-summary">HDD: <b>${h.storageHealthy ? 'Healthy' : 'Lỗi'}</b> · ${formatDiskCapacity(h.storageTotalBytes || 0)} · đang tăng dữ liệu: <b>${h.storageGrowing ? 'Có' : 'Chưa thấy'}</b><br>INUT: ${escapeHtml(h.hostTime || '?')} (${h.hostTimeTrusted ? 'NTP tốt' : 'chưa tin cậy'}) · NVR: ${escapeHtml(h.nvrTime || '?')} · lệch ${Math.abs(Number(h.clockDriftSeconds || 0))} giây</div>
+      <div class="row"><button class="btn btn-primary" type="button" data-testid="nvr-check-now" id="nvr-check-now">Kiểm tra ngay</button><span class="muted">Lần cuối: ${escapeHtml(h.lastCheck || '?')} · lần tới: ${escapeHtml(h.nextCheck || 'watchdog tắt')}</span></div>
+      <div class="table-wrap"><table class="reflow"><thead><tr><th>Kênh</th><th>Ghi</th><th>Clip mới nhất</th><th>Từ lúc bật đầu ghi</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="5">Không có kênh.</td></tr>'}</tbody></table></div>
+    </div>`;
+    document.getElementById('nvr-check-now').addEventListener('click', async ev => { await checkNvrHealth(c.id, ev.currentTarget); await renderRecordHealth(c, selectedChannel); });
+  } catch (e) {
+    el.innerHTML = `<div class="msg err">Không kiểm tra được sức khỏe NVR: ${escapeHtml(e.message)}.</div>`;
+  }
 }
 
 // Playback lives in the dedicated timeline view; maintenance only links there.
@@ -781,7 +1069,7 @@ async function rebootDevice(c) {
 
 async function formatStorage(c, name) {
   const label = c.name || c.host;
-  const ok = await showConfirm('Format thẻ nhớ', `Format "${name}" trên camera "${label}"? Toàn bộ dữ liệu ghi hình trên thẻ sẽ bị XOÁ SẠCH.`, { danger: true, okLabel: 'Format (xoá sạch)' });
+  const ok = await showConfirm('Format bộ nhớ', `Format "${name}" trên thiết bị "${label}"? Toàn bộ dữ liệu ghi hình sẽ bị XOÁ SẠCH. Chỉ làm khi trạng thái báo cần format/lỗi.`, { danger: true, okLabel: 'Format (xoá sạch)' });
   if (!ok) return;
   try {
     const res = await api('/api/storage', { method: 'POST', body: JSON.stringify({ id: c.id, name, timeoutSeconds: timeoutSec() }) });
@@ -1044,17 +1332,59 @@ document.getElementById('cam-tbody').addEventListener('change', (ev) => {
 
 /* ---------- bulk-edit form wiring ---------- */
 
-function wireToggle(enableId, fieldsId) {
-  const enable = document.getElementById(enableId);
-  const fields = document.getElementById(fieldsId);
-  enable.addEventListener('change', () => { fields.hidden = !enable.checked; });
+// One spec per bulk setting, instead of six near-identical wireToggle calls
+// plus six hand-written summary strings. `summary` renders the chip shown in
+// the "Sẽ đổi" bar so the tab answers "what am I about to change?" without
+// scrolling through every card.
+const BULK_SETTINGS = [
+  { key: 'codec', enable: 'p-codec-enable', fields: 'p-codec-fields',
+    summary: () => 'Codec ' + document.getElementById('p-codec-value').value },
+  { key: 'res', enable: 'p-res-enable', fields: 'p-res-fields',
+    summary: () => `Độ phân giải ${document.getElementById('p-width').value}x${document.getElementById('p-height').value}` },
+  { key: 'smart', enable: 'p-smart-enable', fields: 'p-smart-fields',
+    summary: () => 'Smart Codec ' + (document.getElementById('p-smart-value').value === 'on' ? 'bật' : 'tắt') },
+  { key: 'gop', enable: 'p-gop-enable', fields: 'p-gop-fields',
+    summary: () => 'GOP ' + document.getElementById('p-gop-value').value },
+  { key: 'bitrate', enable: 'p-bitrate-enable', fields: 'p-bitrate-fields',
+    summary: () => {
+      const mode = document.getElementById('p-bitrate-mode').value;
+      return `Bitrate ${document.getElementById('p-bitrate-value').value} Kbps${mode ? ' ' + mode : ''}`;
+    } },
+  { key: 'osd', enable: 'p-osd-enable', fields: 'p-osd-fields',
+    summary: () => {
+      const n = ['p-osd-line1', 'p-osd-line2'].filter(id => document.getElementById(id).value.trim()).length;
+      return n ? `OSD ${n} dòng` : 'Xoá OSD';
+    } },
+  { key: 'audio', enable: 'p-audio-enable', fields: null, summary: () => 'Bật âm thanh AAC' },
+];
+
+function renderBulkSummary() {
+  const chips = BULK_SETTINGS
+    .filter(sp => document.getElementById(sp.enable).checked)
+    .map(sp => `<button type="button" class="chip chip-btn" data-bulk-jump="setting-${sp.key}">${escapeHtml(sp.summary())}</button>`);
+  document.getElementById('bulk-summary-chips').innerHTML = chips.join('');
+  document.getElementById('bulk-summary-empty').hidden = chips.length > 0;
 }
-wireToggle('p-codec-enable', 'p-codec-fields');
-wireToggle('p-res-enable', 'p-res-fields');
-wireToggle('p-smart-enable', 'p-smart-fields');
-wireToggle('p-gop-enable', 'p-gop-fields');
-wireToggle('p-bitrate-enable', 'p-bitrate-fields');
-wireToggle('p-osd-enable', 'p-osd-fields');
+
+BULK_SETTINGS.forEach(sp => {
+  const enable = document.getElementById(sp.enable);
+  const fields = sp.fields ? document.getElementById(sp.fields) : null;
+  enable.addEventListener('change', () => {
+    if (fields) fields.hidden = !enable.checked;
+    renderBulkSummary();
+  });
+});
+// Any value edit inside the bulk panel refreshes the chips' text.
+document.querySelectorAll('[data-camera-panel="bulk"]').forEach(panel => {
+  panel.addEventListener('input', renderBulkSummary);
+  panel.addEventListener('change', renderBulkSummary);
+});
+document.getElementById('bulk-summary-chips').addEventListener('click', (ev) => {
+  const chip = ev.target.closest('[data-bulk-jump]');
+  if (!chip) return;
+  const target = document.getElementById(chip.dataset.bulkJump);
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
 
 const codecEnable = document.getElementById('p-codec-enable');
 const resEnable = document.getElementById('p-res-enable');
@@ -1087,9 +1417,8 @@ document.getElementById('probe-selected-btn').addEventListener('click', async ()
     const cell = document.getElementById('probe-' + cssEscape(id));
     if (cell) cell.innerHTML = '<span class="muted">đang dò...</span>';
     try {
-      const info = await api('/api/probe', { method: 'POST', body: JSON.stringify({ id, timeoutSeconds: timeoutSec() }) });
-      probeCache[id] = info;
-      if (cell) cell.innerHTML = fmtStreamInfo(info);
+      rememberProbeResult(id, await api('/api/probe', { method: 'POST', body: JSON.stringify({ id, timeoutSeconds: timeoutSec() }) }));
+      renderCameras();
       ok++;
     } catch (e) {
       if (cell) cell.innerHTML = `<span class="msg err">${escapeHtml(e.message)}</span>`;
@@ -1133,8 +1462,7 @@ async function viewAllChannels(id, btn) {
   const camName = c ? (c.name || c.host) : id;
   if (btn) btn.disabled = true;
   try {
-    const info = probeCache[id] || await api('/api/probe', { method: 'POST', body: JSON.stringify({ id, timeoutSeconds: timeoutSec() }) });
-    probeCache[id] = info;
+    const info = probeCache[id] || rememberProbeResult(id, await api('/api/probe', { method: 'POST', body: JSON.stringify({ id, timeoutSeconds: timeoutSec() }) }));
     const channels = Array.from(new Set(info.map(s => s.channel))).sort((a, b) => a - b);
     if (!channels.length) { showToast('Không tìm thấy kênh nào (dò thử trước).', 'err'); return; }
     // StreamInfo.channel is 1-based; the snapshot API's channel param is
@@ -1232,7 +1560,15 @@ async function loadGalleryTile(i, t, cacheBust) {
 
 document.getElementById('gallery-grid').addEventListener('click', (ev) => {
   const editBtn = ev.target.closest('[data-gallery-edit]');
-  if (editBtn) { openChannelEdit(galleryTiles[parseInt(editBtn.dataset.galleryEdit, 10)]); return; }
+  if (editBtn) {
+    const tile = galleryTiles[parseInt(editBtn.dataset.galleryEdit, 10)];
+    closeDialog(document.getElementById('gallery-dialog'));
+    // The channel list is fetched asynchronously, so hand the wanted channel to
+    // openCameraDetail rather than poking the <select> before it has options.
+    pendingDetailChannel = tile.channel || 0;
+    gotoCameraDetail(tile.camId, 'osd');
+    return;
+  }
   const reloadBtn = ev.target.closest('[data-tile-reload]');
   if (reloadBtn) {
     const i = parseInt(reloadBtn.dataset.tileReload, 10);
@@ -1361,106 +1697,64 @@ document.getElementById('ce-panel-ptz').addEventListener('pointerdown', (ev) => 
 document.getElementById('ce-panel-ptz').addEventListener('pointerup', ptzStop);
 document.getElementById('ce-panel-ptz').addEventListener('pointercancel', ptzStop);
 document.getElementById('ce-panel-ptz').addEventListener('pointerleave', ptzStop);
-// Belt-and-suspenders: if the dialog closes mid-press, stop the camera.
-document.getElementById('channel-edit-dialog').addEventListener('close', () => { ptzStop(); stopLive(); });
+// Belt-and-suspenders: if the user routes away mid-press, stop the camera.
+window.addEventListener('hashchange', ptzStop);
 
-/* ---------- PTZ live view (MJPEG over the DVRIP snapshot, no ffmpeg) ---------- */
-// A multipart/x-mixed-replace <img> from /api/live. Capped at 5 min server-side;
-// "+5 phút" reconnects for a fresh session; leaving the page or 30s hidden stops
-// it (clearing the img src drops the connection, which ends the server stream).
-// The live view is shared by the PTZ and Chỉnh màu tabs; only one runs at a
-// time (switchCeTab stops it on any tab change). liveEls points at the active
-// tab's elements so start/stop/extend/tick target the right <img> + controls.
-let liveTimer = null, liveDeadline = 0, liveHideTimer = null, liveEls = null;
-function liveURL() {
-  return `/api/live?id=${encodeURIComponent(channelEditTile.camId)}&channel=${channelEditTile.channel}&fps=6&_r=${Date.now()}`;
-}
-function liveTick() {
-  const left = Math.max(0, Math.round((liveDeadline - Date.now()) / 1000));
-  if (left <= 0) { stopLive(); return; }
-  if (liveEls) liveEls.status.textContent =
-    `Đang phát • còn ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
-}
-function startLive(els) {
-  if (!channelEditTile) return;
-  stopLive(); // never run two at once
-  liveEls = els;
-  els.img.src = liveURL();
-  els.img.hidden = false;
-  els.start.hidden = true;
-  els.extend.hidden = false;
-  els.stop.hidden = false;
-  liveDeadline = Date.now() + 5 * 60 * 1000;
-  liveTimer = setInterval(liveTick, 1000);
-  liveTick();
-}
-function extendLive() {
-  if (!liveTimer || !liveEls || !channelEditTile) return;
-  liveDeadline = Date.now() + 5 * 60 * 1000;
-  liveEls.img.src = liveURL(); // reconnect for a fresh 5-min session
-  liveTick();
-}
-function stopLive() {
-  clearInterval(liveTimer); liveTimer = null;
-  clearTimeout(liveHideTimer); liveHideTimer = null;
-  if (liveEls) {
-    liveEls.img.removeAttribute('src'); liveEls.img.hidden = true;
-    liveEls.start.hidden = false; liveEls.extend.hidden = true;
-    liveEls.stop.hidden = true; liveEls.status.textContent = '';
-    liveEls = null;
-  }
-}
-function wireLive(prefix) {
-  const els = {
-    img: document.getElementById(prefix + '-live'),
-    start: document.getElementById(prefix + '-live-start'),
-    extend: document.getElementById(prefix + '-live-extend'),
-    stop: document.getElementById(prefix + '-live-stop'),
-    status: document.getElementById(prefix + '-live-status'),
-  };
-  els.start.addEventListener('click', () => startLive(els));
-  els.extend.addEventListener('click', extendLive);
-  els.stop.addEventListener('click', stopLive);
-}
-wireLive('ce-ptz');
-wireLive('ce-pic');
-wireLive('ce-osd');
-// Auto-stop after 30s hidden — don't hold a stream nobody is watching.
-document.addEventListener('visibilitychange', () => {
-  if (!liveTimer) return;
-  if (document.hidden) {
-    liveHideTimer = setTimeout(stopLive, 30000);
-  } else {
-    clearTimeout(liveHideTimer); liveHideTimer = null;
-  }
-});
+/* ---------- live view (MJPEG over the DVRIP snapshot, no ffmpeg) ---------- */
+// One preview owned by the detail page's left column. It deliberately keeps
+// running across tab switches: the whole point of the detail layout is to
+// watch the picture while changing colour / OSD / PTZ. Previously each tab had
+// its own start/extend/stop trio and switching tabs killed the stream.
+const detailLive = livePreview({
+  img: document.getElementById('cd-live'),
+  start: document.getElementById('cd-live-start'),
+  extend: document.getElementById('cd-live-extend'),
+  stop: document.getElementById('cd-live-stop'),
+  status: document.getElementById('cd-live-status'),
+}, () => channelEditTile ? { id: channelEditTile.camId, channel: channelEditTile.channel } : null);
 
-// switchCeTab shows the requested channel-edit-dialog panel ('name' or
-// 'picture') and lazily loads the Chỉnh màu tab's data the first time it's
-// opened for the current tile (picturePayload stays null until then).
-// Lazy-load sentinels for the modal's data tabs (null until first opened for the
-// current tile; reset in openChannelEdit).
-let videoPayload = null, audioPayload = null, networkPayload = null;
+function stopLive() { detailLive.stop(); }
 
+// Lazy-load sentinels for the detail page's data tabs (null until the tab is
+// first opened for the current camera; reset in openCameraDetail).
+let videoPayload = null, audioPayload = null, networkPayload = null, maintPayload = null;
+
+// switchCeTab shows one detail panel and lazily fetches its data. The live
+// preview is NOT stopped here — it belongs to the page, not to a tab.
 function switchCeTab(tab) {
+  if (!DETAIL_TABS.includes(tab)) tab = 'osd';
   ceActiveTab = tab;
-  document.querySelectorAll('#ce-tabs .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.ceTab === tab));
-  document.getElementById('ce-panel-name').hidden = tab !== 'name';
-  document.getElementById('ce-panel-picture').hidden = tab !== 'picture';
-  document.getElementById('ce-panel-video').hidden = tab !== 'video';
-  document.getElementById('ce-panel-audio').hidden = tab !== 'audio';
-  document.getElementById('ce-panel-network').hidden = tab !== 'network';
-  document.getElementById('ce-panel-ptz').hidden = tab !== 'ptz';
-  stopLive(); // the live view belongs to one tab; stop it when navigating tabs
-  if (tab === 'picture' && channelEditTile && !picturePayload) loadPictureTab(channelEditTile);
-  if (tab === 'video' && channelEditTile && !videoPayload) loadVideoTab(channelEditTile);
-  if (tab === 'audio' && channelEditTile && !audioPayload) loadAudioTab(channelEditTile);
-  if (tab === 'network' && channelEditTile && !networkPayload) loadNetworkTab(channelEditTile);
+  document.querySelectorAll('#ce-tabs .tab-btn').forEach(b => {
+    const on = b.dataset.ceTab === tab;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  DETAIL_TABS.forEach(t => {
+    const panel = document.getElementById('ce-panel-' + t);
+    if (panel) panel.hidden = t !== tab;
+  });
+  if (!channelEditTile) return;
+  if (tab === 'picture' && !picturePayload) loadPictureTab(channelEditTile);
+  if (tab === 'video' && !videoPayload) loadVideoTab(channelEditTile);
+  if (tab === 'audio' && !audioPayload) loadAudioTab(channelEditTile);
+  if (tab === 'network' && !networkPayload) {
+    networkPayload = {};
+    const cam = cameras.find(x => x.id === channelEditTile.camId);
+    if (cam) openNetworkCard(cam);
+  }
+  if (tab === 'maint' && !maintPayload) {
+    maintPayload = {};
+    const cam = cameras.find(x => x.id === channelEditTile.camId);
+    if (cam) renderMaintenance(cam);
+  }
 }
 
+// Tab clicks drive the hash so the detail page is linkable and the back button
+// steps through tabs, rather than switching panels behind the URL's back.
 document.getElementById('ce-tabs').addEventListener('click', (ev) => {
   const btn = ev.target.closest('.tab-btn');
-  if (btn && !btn.hidden) switchCeTab(btn.dataset.ceTab);
+  if (!btn || btn.disabled || !channelEditTile) return;
+  gotoCameraDetail(channelEditTile.camId, btn.dataset.ceTab);
 });
 
 // ceObjectURLs tracks blob: URLs handed to the preview image so they can be
@@ -1528,7 +1822,7 @@ async function loadVideoTab(tile) {
   const body = document.getElementById('ce-vid-body'), msg = document.getElementById('ce-vid-msg');
   body.innerHTML = '<span class="spinner"></span>'; msg.textContent = '';
   try {
-    const infos = await api('/api/probe', { method: 'POST', body: JSON.stringify({ id: tile.camId, timeoutSeconds: timeoutSec() }) });
+    const infos = rememberProbeResult(tile.camId, await api('/api/probe', { method: 'POST', body: JSON.stringify({ id: tile.camId, timeoutSeconds: timeoutSec() }) }));
     const mine = (infos || []).filter(s => s.channel === tile.channel + 1);
     if (!mine.length) { body.innerHTML = '<p class="muted">Không đọc được thông số video cho kênh này.</p>'; return; }
     body.innerHTML = mine.map(s => {
@@ -1600,7 +1894,7 @@ async function loadAudioTab(tile) {
   const body = document.getElementById('ce-aud-body'), msg = document.getElementById('ce-aud-msg');
   body.innerHTML = '<span class="spinner"></span>'; msg.textContent = '';
   try {
-    const infos = await api('/api/probe', { method: 'POST', body: JSON.stringify({ id: tile.camId, timeoutSeconds: timeoutSec() }) });
+    const infos = rememberProbeResult(tile.camId, await api('/api/probe', { method: 'POST', body: JSON.stringify({ id: tile.camId, timeoutSeconds: timeoutSec() }) }));
     const mine = (infos || []).filter(s => s.channel === tile.channel + 1);
     if (!mine.length) { body.innerHTML = '<p class="muted">Không đọc được thông số âm thanh.</p>'; return; }
     body.innerHTML = `<table class="mini-table"><thead><tr><th>Stream</th><th>Codec</th><th>Bật</th></tr></thead><tbody>${
@@ -1621,141 +1915,145 @@ async function loadAudioTab(tile) {
   } catch (e) { body.innerHTML = ''; msg.textContent = 'Lỗi: ' + e.message; msg.className = 'msg err'; }
 }
 
-/* ---------- Modal: Network tab (static IP + Wi-Fi; reuses /api/network,/api/wifi) ---------- */
-async function loadNetworkTab(tile) {
-  networkPayload = {};
-  const body = document.getElementById('ce-net-body'), msg = document.getElementById('ce-net-msg');
-  body.innerHTML = '<span class="spinner"></span>'; msg.textContent = '';
-  const q = `id=${encodeURIComponent(tile.camId)}&timeoutSeconds=${timeoutSec()}`;
-  try {
-    const net = await api('/api/network?' + q);
-    let wifi = null;
-    try { wifi = await api('/api/wifi?' + q); } catch (e) { /* no radio */ }
-    renderCeNetwork(tile, net, wifi);
-  } catch (e) { body.innerHTML = ''; msg.textContent = 'Lỗi: ' + e.message; msg.className = 'msg err'; }
+/* ---------- camera detail page ---------- */
+
+// openCameraDetail mounts the detail page for '#cameras/cam/<id>/<tab>'. It
+// replaces the old openChannelEdit() modal: same panels, but routed, with one
+// shared live preview and an explicit reason on every unavailable tab.
+async function openCameraDetail(sel) {
+  const cam = cameras.find(x => x.id === sel.id);
+  if (!cam) {
+    // Inventory may still be loading; loadCameras() re-runs setRoute when done.
+    if (cameras.length) {
+      showToast('Không tìm thấy camera trong kho.', 'err');
+      location.hash = '#cameras/list';
+    }
+    return;
+  }
+
+  const sameCamera = channelEditTile && channelEditTile.camId === cam.id;
+  if (!sameCamera) {
+    detailLive.stop();
+    channelEditTile = { camId: cam.id, camName: cam.name || cam.host, channel: 0, stream: 0 };
+    picturePayload = null;
+    videoPayload = null; audioPayload = null; networkPayload = null; maintPayload = null;
+    closeNetworkCard();
+    document.getElementById('detail-name').textContent = cam.name || cam.host;
+    document.getElementById('detail-meta').textContent =
+      `${cam.host}:${cam.port} · ${cam.vendor}${cam.isNvr ? ' · đầu ghi' : ''}`;
+    ['ce-msg', 'ce-picture-msg', 'ce-vid-msg', 'ce-aud-msg', 'ce-net-msg', 'ce-ptz-msg']
+      .forEach(id => { const el = document.getElementById(id); if (el) { el.textContent = ''; el.className = 'msg'; } });
+    ['ce-picture-body', 'ce-picture-lite-body', 'ce-vid-body', 'ce-aud-body', 'ce-osd-fields']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+    document.getElementById('ce-name').value = '';
+    document.getElementById('ce-osd-hint').textContent = '';
+    switchPictureMode('lite');
+    applyDetailCapabilities(cam);
+    await populateDetailChannels(cam);
+    loadCePreview(channelEditTile, false);
+    loadChannelInfo();
+  }
+  switchCeTab(sel.tab);
 }
 
-function renderCeNetwork(tile, net, wifi) {
-  const body = document.getElementById('ce-net-body'), msg = document.getElementById('ce-net-msg');
-  const ifaces = Object.keys(net.interfaces || {});
-  if (!ifaces.length) { body.innerHTML = '<p class="muted">Không đọc được cấu hình mạng.</p>'; return; }
-  const def = (net.defaultInterface && net.interfaces[net.defaultInterface]) ? net.defaultInterface : ifaces[0];
-  const wifiIfaces = wifi ? Object.keys(wifi) : [];
-  const wifiIface = wifiIfaces[0];
-  body.innerHTML = `
-    ${ifaces.length > 1 ? `<div class="field field-sm"><label>Giao diện</label><select id="ce-net-iface">${ifaces.map(i => `<option value="${escapeHtml(i)}"${i === def ? ' selected' : ''}>${escapeHtml(i)}</option>`).join('')}</select></div>` : `<input type="hidden" id="ce-net-iface" value="${escapeHtml(def)}">`}
-    <label class="checkbox-row"><input type="checkbox" id="ce-net-dhcp"> Tự động lấy IP (DHCP)</label>
-    <div id="ce-net-static">
-      <div class="field field-sm"><label>Địa chỉ IP</label><input id="ce-net-ip"></div>
-      <div class="field field-sm"><label>Subnet mask</label><input id="ce-net-mask"></div>
-      <div class="field field-sm"><label>Gateway</label><input id="ce-net-gw"></div>
-      <div class="row"><div class="field field-sm"><label>DNS 1</label><input id="ce-net-dns1"></div><div class="field field-sm"><label>DNS 2</label><input id="ce-net-dns2"></div></div>
-    </div>
-    <p class="muted" id="ce-net-info"></p>
-    <label class="checkbox-row"><input type="checkbox" id="ce-net-risk"> Tôi hiểu đổi IP có thể mất kết nối tới camera</label>
-    <button class="btn btn-primary" type="button" id="ce-net-save" disabled>Lưu cấu hình mạng</button>
-    ${wifiIface ? `<hr class="section-gap"><h4>Wi-Fi (${escapeHtml(wifiIface)})</h4>
-      <input type="hidden" id="ce-net-wifi-iface" value="${escapeHtml(wifiIface)}">
-      <div class="field field-sm"><label>SSID</label><input id="ce-net-wifi-ssid"></div>
-      <div class="field field-sm"><label>Mật khẩu</label><input id="ce-net-wifi-pass"></div>
-      <div class="row"><button class="btn btn-secondary" type="button" id="ce-net-wifi-scan">Quét mạng</button><button class="btn btn-primary" type="button" id="ce-net-wifi-save">Lưu Wi-Fi</button></div>
-      <div id="ce-net-wifi-list" class="chip-row"></div>` : ''}
-  `;
-  const fill = (iface) => {
-    const c = net.interfaces[iface] || {};
-    document.getElementById('ce-net-dhcp').checked = c.DhcpEnable === true || c.DhcpEnable === 'true';
-    document.getElementById('ce-net-ip').value = c.IPAddress || '';
-    document.getElementById('ce-net-mask').value = c.SubnetMask || '';
-    document.getElementById('ce-net-gw').value = c.DefaultGateway || '';
-    const dns = c.DnsServers || [];
-    document.getElementById('ce-net-dns1').value = dns[0] || '';
-    document.getElementById('ce-net-dns2').value = dns[1] || '';
-    document.getElementById('ce-net-info').textContent = `MAC ${c.PhysicalAddress || '?'} · MTU ${c.MTU || '?'}`;
-    toggleStatic();
+function closeCameraDetail() {
+  if (!channelEditTile) return;
+  detailLive.stop();
+  channelEditTile = null;
+  ceObjectURLs.forEach(u => URL.revokeObjectURL(u));
+  ceObjectURLs = [];
+  closeNetworkCard();
+}
+
+// applyDetailCapabilities disables tabs the vendor can't serve — and says why.
+// The modal used to just hide them, so a feature silently vanished with no
+// hint that it exists at all for other vendors.
+function applyDetailCapabilities(cam) {
+  const isDahua = cam.vendor === 'dahua';
+  const canEncode = ['dahua', 'hikvision', 'tiandy'].includes(cam.vendor);
+  const canNetwork = ['dahua', 'hikvision', 'tiandy'].includes(cam.vendor);
+  const dahuaOnly = `Chỉ Dahua/KBVision hỗ trợ qua DVRIP — camera này là ${cam.vendor}.`;
+  const caps = {
+    picture: [isDahua, dahuaOnly],
+    ptz: [isDahua, dahuaOnly],
+    audio: [isDahua, dahuaOnly],
+    maint: [isDahua, dahuaOnly],
+    video: [canEncode, `Chưa hỗ trợ đọc/ghi cấu hình mã hoá cho ${cam.vendor}.`],
+    network: [canNetwork, `Chưa hỗ trợ đọc/ghi cấu hình mạng cho ${cam.vendor}.`],
   };
-  const toggleStatic = () => { document.getElementById('ce-net-static').style.display = document.getElementById('ce-net-dhcp').checked ? 'none' : ''; };
-  document.getElementById('ce-net-dhcp').addEventListener('change', toggleStatic);
-  const ifaceSel = document.getElementById('ce-net-iface');
-  if (ifaceSel.tagName === 'SELECT') ifaceSel.addEventListener('change', () => fill(ifaceSel.value));
-  document.getElementById('ce-net-risk').addEventListener('change', (e) => { document.getElementById('ce-net-save').disabled = !e.target.checked; });
-  fill(def);
-  document.getElementById('ce-net-save').addEventListener('click', async () => {
-    const iface = ifaceSel.value;
-    const dhcp = document.getElementById('ce-net-dhcp').checked;
-    const ok = await showConfirm('Đổi cấu hình mạng?', dhcp ? 'Chuyển sang DHCP.' : `Đặt IP tĩnh ${document.getElementById('ce-net-ip').value}. Có thể mất kết nối nếu sai.`, { danger: true });
-    if (!ok) return;
-    msg.textContent = 'Đang lưu...'; msg.className = 'msg';
-    try {
-      const r = await api('/api/network', { method: 'POST', body: JSON.stringify({
-        id: tile.camId, interface: iface, dhcpEnable: dhcp,
-        ipAddress: document.getElementById('ce-net-ip').value.trim(), subnetMask: document.getElementById('ce-net-mask').value.trim(),
-        gateway: document.getElementById('ce-net-gw').value.trim(),
-        dns: [document.getElementById('ce-net-dns1').value.trim(), document.getElementById('ce-net-dns2').value.trim()].filter(Boolean),
-        timeoutSeconds: timeoutSec(),
-      }) });
-      msg.textContent = r.note || 'Đã lưu cấu hình mạng.'; msg.className = 'msg ok';
-    } catch (e) { msg.textContent = 'Lỗi: ' + e.message; msg.className = 'msg err'; }
+  Object.entries(caps).forEach(([tab, [ok, why]]) => {
+    const btn = document.getElementById('ce-tab-btn-' + tab);
+    if (!btn) return;
+    btn.disabled = !ok;
+    btn.title = ok ? '' : why;
+    btn.classList.toggle('tab-unavailable', !ok);
   });
-  if (wifiIface) {
-    document.getElementById('ce-net-wifi-scan').addEventListener('click', async (ev) => {
-      ev.target.disabled = true; msg.textContent = 'Đang quét...'; msg.className = 'msg';
-      try {
-        const r = await api('/api/wifi-scan', { method: 'POST', body: JSON.stringify({ id: tile.camId, timeoutSeconds: timeoutSec() }) });
-        const list = document.getElementById('ce-net-wifi-list');
-        list.innerHTML = (r.devices || []).map(d => `<button type="button" class="chip" data-ssid="${escapeHtml(d.ssid)}">${escapeHtml(d.ssid)} · ${d.linkQuality || 0}%</button>`).join('') || '<span class="muted">Không thấy mạng.</span>';
-        list.querySelectorAll('[data-ssid]').forEach(c => c.addEventListener('click', () => { document.getElementById('ce-net-wifi-ssid').value = c.dataset.ssid; }));
-        msg.textContent = '';
-      } catch (e) { msg.textContent = 'Lỗi quét: ' + e.message; msg.className = 'msg err'; }
-      finally { ev.target.disabled = false; }
-    });
-    document.getElementById('ce-net-wifi-save').addEventListener('click', async () => {
-      msg.textContent = 'Đang lưu Wi-Fi...'; msg.className = 'msg';
-      try {
-        await api('/api/wifi', { method: 'POST', body: JSON.stringify({ id: tile.camId, interface: wifiIface, ssid: document.getElementById('ce-net-wifi-ssid').value, password: document.getElementById('ce-net-wifi-pass').value, timeoutSeconds: timeoutSec() }) });
-        msg.textContent = 'Đã lưu Wi-Fi.'; msg.className = 'msg ok';
-      } catch (e) { msg.textContent = 'Lỗi: ' + e.message; msg.className = 'msg err'; }
-    });
+}
+
+// populateDetailChannels fills the channel picker. A plain camera has one
+// channel; an NVR's channel list comes from the device itself rather than a
+// guessed 1..32 range.
+// Set by callers that know which channel they want (e.g. the snapshot gallery)
+// before routing to the detail page; consumed once by populateDetailChannels.
+let pendingDetailChannel = 0;
+
+async function populateDetailChannels(cam) {
+  const select = document.getElementById('detail-channel');
+  select.innerHTML = '<option value="0">Kênh 1</option>';
+  if (!cam.isNvr) { select.disabled = true; return; }
+  select.disabled = false;
+  try {
+    const res = await api(`/api/nvr/channels?id=${encodeURIComponent(cam.id)}&timeoutSeconds=${timeoutSec()}`);
+    const chans = (res && res.channels) || [];
+    if (chans.length) {
+      select.innerHTML = chans.map(ch => {
+        const n = ch.channel || 0; // device reports 1-based; tiles are 0-based
+        const label = ch.name ? `Kênh ${n} — ${escapeHtml(ch.name)}` : `Kênh ${n}`;
+        return `<option value="${Math.max(0, n - 1)}">${label}</option>`;
+      }).join('');
+    }
+  } catch (e) {
+    // Channel list is a nicety; a single-channel fallback still works.
+  }
+  if (pendingDetailChannel) {
+    const wanted = String(pendingDetailChannel);
+    if (Array.from(select.options).some(o => o.value === wanted)) {
+      select.value = wanted;
+      channelEditTile.channel = pendingDetailChannel;
+    }
+    pendingDetailChannel = 0;
   }
 }
 
-async function openChannelEdit(tile) {
-  channelEditTile = tile;
-  picturePayload = null;
-  videoPayload = null; audioPayload = null; networkPayload = null;
-  const dlg = document.getElementById('channel-edit-dialog');
+document.getElementById('detail-channel').addEventListener('change', (ev) => {
+  if (!channelEditTile) return;
+  channelEditTile.channel = parseInt(ev.target.value, 10) || 0;
+  // Every per-channel payload is now stale.
+  picturePayload = null; videoPayload = null; audioPayload = null;
+  const wasLive = detailLive.running();
+  detailLive.stop();
+  loadCePreview(channelEditTile, true);
+  loadChannelInfo();
+  switchCeTab(ceActiveTab);
+  if (wasLive) detailLive.start();
+});
+
+// loadChannelInfo fills the Tên & OSD tab for the current channel.
+async function loadChannelInfo() {
+  const tile = channelEditTile;
+  if (!tile) return;
   const msg = document.getElementById('ce-msg');
   const nameInput = document.getElementById('ce-name');
   const osdFields = document.getElementById('ce-osd-fields');
   const osdHint = document.getElementById('ce-osd-hint');
-  document.getElementById('ce-title').textContent = `Sửa tên & OSD — ${tile.camName} K${tile.channel + 1}`;
   nameInput.value = '';
   osdFields.innerHTML = '';
   osdHint.textContent = '';
-  document.getElementById('ce-picture-body').innerHTML = '';
-  document.getElementById('ce-picture-lite-body').innerHTML = '';
-  document.getElementById('ce-picture-msg').textContent = '';
-  switchPictureMode('lite');
-  const cam = cameras.find(x => x.id === tile.camId);
-  const isDahua = !!cam && cam.vendor === 'dahua';
-  const canEncode = !!cam && (cam.vendor === 'dahua' || cam.vendor === 'hikvision' || cam.vendor === 'tiandy');
-  document.getElementById('ce-tab-btn-picture').hidden = !isDahua;
-  document.getElementById('ce-tab-btn-ptz').hidden = !isDahua;
-  document.getElementById('ce-tab-btn-video').hidden = !canEncode;
-  document.getElementById('ce-tab-btn-audio').hidden = !isDahua;
-  // Network works for Dahua (DVRIP), Hikvision (ISAPI) and Tiandy (ONVIF,
-  // read-only IP view).
-  document.getElementById('ce-tab-btn-network').hidden = !cam || (cam.vendor !== 'dahua' && cam.vendor !== 'hikvision' && cam.vendor !== 'tiandy');
-  document.getElementById('ce-ptz-msg').textContent = '';
-  document.getElementById('ce-vid-body').innerHTML = '';
-  document.getElementById('ce-aud-body').innerHTML = '';
-  document.getElementById('ce-net-body').innerHTML = '';
-  switchCeTab('name');
-  loadCePreview(tile, false);
   msg.textContent = 'Đang tải...'; msg.className = 'msg';
-  dlg.showModal();
   try {
     const q = `id=${encodeURIComponent(tile.camId)}&channel=${tile.channel}&timeoutSeconds=${timeoutSec()}`;
     const info = await api('/api/channel-info?' + q);
+    if (channelEditTile !== tile) return; // user moved on while we waited
     nameInput.value = info.name || '';
     if (info.osdSupported) {
       const lines = (info.osdLines && info.osdLines.length ? info.osdLines : ['', '', '', '']);
@@ -1766,10 +2064,10 @@ async function openChannelEdit(tile) {
         const on = i < osdEnabled.length ? osdEnabled[i] : !!line;
         return `
         <div class="field field-sm ce-osd-row">
-          <label>Dòng OSD ${i + 1}</label>
-          <div class="row" style="align-items:center;gap:8px;flex-wrap:nowrap">
-            <input class="ce-osd-line" value="${escapeHtml(line || '')}" style="flex:1 1 auto">
-            <label class="checkbox-row" style="margin:0" title="Hiện trên hình">
+          <label for="ce-osd-line-${i}">Dòng OSD ${i + 1}</label>
+          <div class="ce-osd-controls">
+            <input class="ce-osd-line" id="ce-osd-line-${i}" value="${escapeHtml(line || '')}">
+            <label class="checkbox-row" title="Hiện trên hình">
               <input type="checkbox" class="ce-osd-enable" ${on ? 'checked' : ''}><span class="muted">Hiện</span>
             </label>
           </div>
@@ -1780,16 +2078,11 @@ async function openChannelEdit(tile) {
     }
     msg.textContent = ''; msg.className = 'msg';
   } catch (e) {
+    if (channelEditTile !== tile) return;
     msg.textContent = 'Lỗi tải: ' + e.message;
     msg.className = 'msg err';
   }
 }
-
-document.getElementById('ce-cancel').addEventListener('click', () => document.getElementById('channel-edit-dialog').close());
-document.getElementById('channel-edit-dialog').addEventListener('close', () => {
-  ceObjectURLs.forEach(u => URL.revokeObjectURL(u));
-  ceObjectURLs = [];
-});
 
 document.getElementById('ce-save').addEventListener('click', async () => {
   if (!channelEditTile) return;
@@ -2390,15 +2683,8 @@ document.getElementById('scan-select-all').addEventListener('change', (ev) => {
 
 /* ---------- Thử mật khẩu hàng loạt (Quét mạng) ---------- */
 
-function setScanTryProgress(index, total, label) {
-  const bar = document.getElementById('scan-try-progress');
-  const fill = document.getElementById('scan-try-progress-fill');
-  const text = document.getElementById('scan-try-progress-label');
-  if (index == null) { bar.classList.remove('active'); text.textContent = ''; return; }
-  bar.classList.add('active');
-  fill.style.width = Math.round((index / total) * 100) + '%';
-  text.textContent = label || '';
-}
+const scanTryProgress = progressBar('scan-try-progress');
+const setScanTryProgress = (index, total, label) => scanTryProgress.set(index, total, label);
 
 // scanStatusBadge renders one row's Trạng thái cell: green "OK" on success,
 // red with the error (title tooltip) on failure.
@@ -2558,10 +2844,40 @@ async function init() {
   });
   document.getElementById('drawer-backdrop').addEventListener('click', closeDrawer);
 
+  wireSettingsPopover();
+  renderBulkSummary();
+
   window.addEventListener('hashchange', setRoute);
   setRoute();
 
-  if (appRole !== 'viewer') loadCameras();
+  if (appRole !== 'viewer') await loadCameras();
+  // Boot barrier for e2e: everything the first paint depends on has landed.
+  window.__kspReady = true;
+}
+
+// The per-device timeout is global (every API call reads it), so it lives in a
+// topbar popover rather than buried at the bottom of the bulk-edit card, and
+// persists across reloads.
+function wireSettingsPopover() {
+  const btn = document.getElementById('settings-toggle');
+  const pop = document.getElementById('settings-popover');
+  const input = document.getElementById('g-timeout');
+  const saved = parseInt(localStorage.getItem(TIMEOUT_KEY), 10);
+  if (saved > 0) input.value = saved;
+  input.addEventListener('change', () => {
+    const v = parseInt(input.value, 10);
+    if (v > 0) localStorage.setItem(TIMEOUT_KEY, String(v));
+  });
+  btn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    pop.hidden = !pop.hidden;
+    btn.setAttribute('aria-expanded', pop.hidden ? 'false' : 'true');
+  });
+  document.addEventListener('click', (ev) => {
+    if (pop.hidden || pop.contains(ev.target) || ev.target === btn) return;
+    pop.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+  });
 }
 
 init();

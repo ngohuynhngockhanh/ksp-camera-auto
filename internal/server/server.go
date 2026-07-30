@@ -27,14 +27,15 @@ const sessionCookie = "kspcam_session"
 
 // Server is the HTTP server and its dependencies.
 type Server struct {
-	cfg     config.Config
-	inv     *config.Inventory
-	mux     *http.ServeMux
-	static  fs.FS
-	session *sessionStore
-	limiter *loginLimiter
-	snaps   *snapCache
-	dlKey   []byte // HMAC key for short-lived tokenized playback/download links (QR)
+	cfg      config.Config
+	inv      *config.Inventory
+	mux      *http.ServeMux
+	static   fs.FS
+	session  *sessionStore
+	limiter  *loginLimiter
+	snaps    *snapCache
+	dlKey    []byte // HMAC key for short-lived tokenized playback/download links (QR)
+	nvrWatch *nvrWatchdog
 }
 
 // New builds a Server with routes registered.
@@ -71,7 +72,15 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 		}
 	}
 	s.routes()
+	s.nvrWatch = newNVRWatchdog(s)
 	return s, nil
+}
+
+// Close stops background workers owned by the server.
+func (s *Server) Close() {
+	if s.nvrWatch != nil {
+		s.nvrWatch.stop()
+	}
 }
 
 // Handler returns the root HTTP handler.
@@ -103,6 +112,10 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/live", api(s.handleLive))
 	s.mux.Handle("/api/nvr/scan", api(s.handleNVRScan))
 	s.mux.Handle("/api/nvr/link", api(s.handleNVRLink))
+	s.mux.Handle("/api/nvr/channels", api(s.handleNVRChannels))
+	s.mux.Handle("/api/nvr/health", api(s.handleNVRHealth))
+	s.mux.Handle("/api/nvr/health/check", api(s.handleNVRHealthCheck))
+	s.mux.Handle("/api/nvr/watchdog", api(s.handleNVRWatchdog))
 	s.mux.Handle("/api/channel-names", api(s.handleChannelNames))
 	s.mux.Handle("/api/channel-info", api(s.handleChannelInfo))
 	s.mux.Handle("/api/channel-name", api(s.handleChannelName))
@@ -116,6 +129,7 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/reboot", api(s.handleReboot))
 	s.mux.Handle("/api/storage", api(s.handleStorage))
 	s.mux.Handle("/api/autoreboot", api(s.handleAutoReboot))
+	s.mux.Handle("/api/device-time", api(s.handleDeviceTime))
 	s.mux.Handle("/api/config", api(s.handleConfig))
 	s.mux.Handle("/api/recordings", api(s.handleRecordings))
 	s.mux.Handle("/api/playback-token", api(s.handlePlaybackToken))

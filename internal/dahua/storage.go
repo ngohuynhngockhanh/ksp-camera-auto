@@ -1,9 +1,26 @@
 package dahua
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
 )
+
+// byteCount accepts both JSON integers and firmware variants that serialize
+// byte counts as integral floats (for example 120573657088.0).
+type byteCount int64
+
+func (n *byteCount) UnmarshalJSON(b []byte) error {
+	b = bytes.TrimSpace(b)
+	v, err := strconv.ParseFloat(string(b), 64)
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || v > math.MaxInt64 || math.Trunc(v) != v {
+		return fmt.Errorf("invalid byte count %q", b)
+	}
+	*n = byteCount(int64(v))
+	return nil
+}
 
 // StorageDetail is one partition/mount inside a storage device (a Dahua SD card
 // exposes a single ReadWrite partition mounted at /mnt/sd).
@@ -42,12 +59,12 @@ func (c *Client) GetStorageInfo() ([]StorageDevice, error) {
 			Name   string `json:"Name"`
 			State  string `json:"State"`
 			Detail []struct {
-				Path         string `json:"Path"`
-				Type         string `json:"Type"`
-				TotalBytes   int64  `json:"TotalBytes"`
-				UsedBytes    int64  `json:"UsedBytes"`
-				IsError      bool   `json:"IsError"`
-				IsNeedFormat bool   `json:"IsNeedFormat"`
+				Path         string    `json:"Path"`
+				Type         string    `json:"Type"`
+				TotalBytes   byteCount `json:"TotalBytes"`
+				UsedBytes    byteCount `json:"UsedBytes"`
+				IsError      bool      `json:"IsError"`
+				IsNeedFormat bool      `json:"IsNeedFormat"`
 			} `json:"Detail"`
 		} `json:"info"`
 	}
@@ -61,8 +78,8 @@ func (c *Client) GetStorageInfo() ([]StorageDevice, error) {
 			dev.Details = append(dev.Details, StorageDetail{
 				Path:         dt.Path,
 				Type:         dt.Type,
-				TotalBytes:   dt.TotalBytes,
-				UsedBytes:    dt.UsedBytes,
+				TotalBytes:   int64(dt.TotalBytes),
+				UsedBytes:    int64(dt.UsedBytes),
 				IsError:      dt.IsError,
 				IsNeedFormat: dt.IsNeedFormat,
 			})
