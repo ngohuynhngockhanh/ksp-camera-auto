@@ -26,7 +26,9 @@ camera có trong kho này.
      hình). Bỏ trống thì dùng cổng mặc định theo hãng.
    - **Hãng** — chọn **Dahua / KBVision** hoặc **Hikvision**.
    - **Tài khoản**, **Mật khẩu** — thông tin đăng nhập của chính camera đó.
-3. Bấm **Thêm camera** trong hộp thoại để lưu vào kho.
+3. Bấm **Thêm camera** trong hộp thoại để lưu vào kho. Từ tab [Quét mạng](#scan),
+   nút **Thêm vào kho** lưu thẳng kết quả scan; nếu cùng IP đã có trong kho thì
+   cập nhật bản ghi đó, kể cả khi port thay đổi.
 4. Danh sách bên dưới hiện mỗi camera một dòng. **Bấm vào hàng** (bất kỳ đâu
    ngoài ô tick và các nút) để mở trang chi tiết của camera đó — nơi chỉnh
    tên/OSD, màu, video, âm thanh, mạng, PTZ và bảo trì.

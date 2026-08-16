@@ -30,15 +30,16 @@ trên camera và không tự thêm cam vào kho.
    sai hoặc không kết nối được.
 6. Chạy xong, dòng thông báo hiện tổng số đăng nhập thành công trên tổng số
    đã thử.
-7. Với thiết bị **OK**, bấm **Thêm vào kho** ở bảng phía trên rồi tự nhập lại
-   đúng **Tài khoản**/**Mật khẩu** vừa thử thành công vào form — công cụ
-   không tự điền lại phần này khi thêm vào kho.
+7. Với thiết bị **OK**, bấm **Thêm vào kho** ở bảng phía trên. Công cụ dùng
+   luôn **Tài khoản**/**Mật khẩu** đang nhập và lưu camera trực tiếp; nếu IP
+   đã có trong kho thì cập nhật bản ghi cũ.
 
 ## Lưu ý
 
 - Chạy tuần tự từng thiết bị một, không chạy song song — chọn càng nhiều
   thiết bị thì càng lâu.
-- Chỉ kiểm tra đăng nhập, không sửa cấu hình hay tự thêm cam vào kho.
+- Chỉ kiểm tra đăng nhập, không sửa cấu hình hay tự thêm cam vào kho; thao tác
+  lưu chỉ xảy ra khi bạn bấm **Thêm vào kho** trên từng dòng.
 - Thiết bị quét được nhưng chưa xác định được **Hãng** (Dahua/Hikvision) sẽ
   bị bỏ qua khi thử.
 

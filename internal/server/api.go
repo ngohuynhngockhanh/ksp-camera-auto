@@ -196,6 +196,9 @@ func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
+	req.ID = strings.TrimSpace(req.ID)
+	req.Host = strings.TrimSpace(req.Host)
+	req.Username = strings.TrimSpace(req.Username)
 	if req.Host == "" {
 		writeErr(w, http.StatusBadRequest, "host is required")
 		return
@@ -214,22 +217,39 @@ func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
 			req.Port = s.cfg.Defaults.HikvisionPort
 		}
 	}
+	// A scan submits no ID. Reuse the existing host's stable ID so changing a
+	// discovered port (for example 8888 -> 37777) updates the old row instead
+	// of creating a second inventory entry. Explicit IDs keep edit semantics.
+	matchedByHost := false
+	var existing config.Device
+	existingOK := false
+	if req.ID != "" {
+		existing, existingOK = s.inv.Get(req.ID)
+	} else if existing, existingOK = s.inv.FindByHost(req.Host, req.Port); existingOK {
+		req.ID = existing.ID
+		matchedByHost = true
+	}
 	if req.Username == "" {
-		req.Username = s.cfg.Defaults.Username
+		if existingOK && existing.Username != "" {
+			req.Username = existing.Username
+		} else {
+			req.Username = s.cfg.Defaults.Username
+		}
 	}
 	if req.Password == "" {
 		// Editing an existing camera with a blank password keeps the stored one
 		// (so users can fix the name/username without re-typing the password);
 		// a brand-new camera falls back to the configured default.
-		id := req.ID
-		if id == "" {
-			id = fmt.Sprintf("%s:%d", req.Host, req.Port)
-		}
-		if existing, ok := s.inv.Get(id); ok && existing.Password != "" {
+		if existingOK && existing.Password != "" {
 			req.Password = existing.Password
 		} else {
 			req.Password = s.cfg.Defaults.Password
 		}
+	}
+	if matchedByHost && req.Name == "" {
+		// An absent model/name in a discovery result should not erase the
+		// operator's existing inventory label.
+		req.Name = existing.Name
 	}
 
 	d := config.Device{

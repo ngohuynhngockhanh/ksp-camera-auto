@@ -2708,18 +2708,37 @@ document.getElementById('scan-nmap-btn').addEventListener('click', () => {
   runScan({ method: 'nmap', subnet }, document.getElementById('scan-nmap-btn'));
 });
 
-document.getElementById('scan-tbody').addEventListener('click', (ev) => {
+document.getElementById('scan-tbody').addEventListener('click', async (ev) => {
   const btn = ev.target.closest('button[data-scan-add]');
-  if (btn) {
-    const r = scanResults[parseInt(btn.dataset.scanAdd, 10)];
-    if (!r) return;
-    document.getElementById('f-host').value = r.ip || '';
-    document.getElementById('f-port').value = r.port || '';
-    if (r.vendor === 'dahua' || r.vendor === 'hikvision') document.getElementById('f-vendor').value = r.vendor;
-    document.getElementById('f-name').value = r.model || r.name || '';
-    goto('cameras');
-    document.getElementById('add-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    document.getElementById('f-host').focus();
+  if (!btn) return;
+  const index = parseInt(btn.dataset.scanAdd, 10);
+  const r = scanResults[index];
+  if (!r) return;
+  const status = document.getElementById('scan-status-' + index);
+  const username = document.getElementById('scan-try-user').value.trim();
+  const password = document.getElementById('scan-try-pass').value;
+  setBusy(btn, true, 'Đang lưu...');
+  try {
+    await api('/api/cameras', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: r.model || r.name || '',
+        host: r.ip || '',
+        port: r.port || 0,
+        vendor: r.vendor || '',
+        username,
+        password,
+      }),
+    });
+    if (status) status.innerHTML = '<span class="badge ok">Đã lưu</span>';
+    showToast('Đã thêm/cập nhật camera trong kho.', 'ok');
+    // Refresh the hidden inventory view without leaving the scan workflow.
+    await loadCameras();
+  } catch (e) {
+    if (status) status.innerHTML = `<span class="badge fail">Lỗi: ${escapeHtml(e.message)}</span>`;
+    showToast('Lỗi lưu camera: ' + e.message, 'err');
+  } finally {
+    setBusy(btn, false);
   }
 });
 document.getElementById('scan-tbody').addEventListener('change', (ev) => {

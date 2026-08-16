@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 
 	"gopkg.in/yaml.v3"
@@ -86,6 +87,39 @@ func (i *Inventory) Get(id string) (Device, bool) {
 	defer i.mu.RUnlock()
 	d, ok := i.devices[id]
 	return d, ok
+}
+
+// FindByHost returns one inventory entry for host. An exact port match wins;
+// otherwise the lexicographically smallest ID is selected so legacy duplicate
+// entries are handled deterministically without changing the inventory shape.
+func (i *Inventory) FindByHost(host string, preferredPort int) (Device, bool) {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return Device{}, false
+	}
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+
+	var exact, fallback Device
+	var exactID, fallbackID string
+	for id, d := range i.devices {
+		if !strings.EqualFold(strings.TrimSpace(d.Host), host) {
+			continue
+		}
+		if fallbackID == "" || id < fallbackID {
+			fallback, fallbackID = d, id
+		}
+		if preferredPort > 0 && d.Port == preferredPort && (exactID == "" || id < exactID) {
+			exact, exactID = d, id
+		}
+	}
+	if exactID != "" {
+		return exact, true
+	}
+	if fallbackID != "" {
+		return fallback, true
+	}
+	return Device{}, false
 }
 
 // Upsert adds or replaces a device and persists the inventory.
