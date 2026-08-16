@@ -519,7 +519,10 @@
     if (!wrap || !bar || !txt) return;
     btns.forEach(b => { b.disabled = true; });
     wrap.hidden = false;
-    bar.style.width = '2%';
+    const setProgress = pct => {
+      bar.style.transform = `scaleX(${Math.max(0, Math.min(100, pct)) / 100})`;
+    };
+    setProgress(2);
     txt.textContent = 'Đang kết nối đầu ghi…';
     if (expTimer) clearInterval(expTimer);
     let misses = 0;
@@ -541,16 +544,16 @@
       catch (e) { if (++misses >= 8) finish(null); return; }
       if (st.phase === 'error') { finish('Lỗi tải: ' + (st.error || 'không rõ'), true); return; }
       if (st.phase === 'done') {
-        bar.style.width = '100%';
+        setProgress(100);
         txt.textContent = 'Xong!';
         setTimeout(() => finish('Clip đã tải xong — kiểm tra mục tải xuống của trình duyệt.'), 1200);
         return;
       }
-      if (st.phase === 'concat') { bar.style.width = '92%'; txt.textContent = 'Đang ghép file…'; return; }
-      if (st.phase === 'send') { bar.style.width = '96%'; txt.textContent = 'Đang gửi về trình duyệt… (xem % ở mục tải xuống)'; return; }
+      if (st.phase === 'concat') { setProgress(92); txt.textContent = 'Đang ghép file…'; return; }
+      if (st.phase === 'send') { setProgress(96); txt.textContent = 'Đang gửi về trình duyệt… (xem % ở mục tải xuống)'; return; }
       if (st.total > 0) {
         const pct = Math.round(Math.max(st.done / st.total * 90, estPct()));
-        bar.style.width = Math.max(2, pct) + '%';
+        setProgress(Math.max(2, pct));
         txt.textContent = `Đang lấy dữ liệu từ đầu ghi… ${st.done}/${st.total} đoạn (${pct}%)`;
       }
     }, 1000);

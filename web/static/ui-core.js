@@ -115,13 +115,13 @@ function progressBar(prefix) {
       if (!b) return;
       if (done == null) {
         b.classList.remove('active');
-        if (f) f.style.width = '0%';
+        if (f) f.style.transform = 'scaleX(0)';
         if (l) l.textContent = '';
         return;
       }
       b.classList.add('active');
       const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-      if (f) f.style.width = Math.max(0, Math.min(100, pct)) + '%';
+      if (f) f.style.transform = `scaleX(${Math.max(0, Math.min(100, pct)) / 100})`;
       if (l) l.textContent = text || '';
     },
     reset() { this.set(null); },
@@ -130,7 +130,7 @@ function progressBar(prefix) {
 
 /* ---------- live MJPEG preview ---------- */
 
-// livePreview owns one /api/live <img> session. It used to exist three times
+// livePreview owns one /api/live image session. It used to exist three times
 // over (PTZ / colour / OSD tabs) with a `liveEls` pointer swapping between
 // them; the camera detail page keeps a single instance alive across tabs
 // instead, which is the whole point — you can watch the picture while you
