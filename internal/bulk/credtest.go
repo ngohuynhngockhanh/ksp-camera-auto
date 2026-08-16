@@ -3,6 +3,7 @@ package bulk
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/camera"
@@ -16,7 +17,7 @@ type CredTestTarget struct {
 	Vendor string `json:"vendor"`
 	// Port is 0 when the discovery method that found this device doesn't
 	// report one (UDP discovery — ONVIF/Dahua/SADP); TryPasswords fills it
-	// in from config.Defaults for the target's vendor in that case.
+	// from config.Defaults (or the built-in default when config is partial).
 	Port int `json:"port"`
 	// Label is a human-readable hint (Model/MAC/Name from the scan result)
 	// carried through purely for the caller's own display purposes.
@@ -67,24 +68,15 @@ func TryPasswords(ctx context.Context, targets []CredTestTarget, username, passw
 			continue
 		}
 
-		vendor := config.Vendor(t.Vendor)
-		if vendor != config.VendorDahua && vendor != config.VendorHikvision {
-			res.Err = "không xác định được hãng, bỏ qua"
+		d, err := normalizeCredTestTarget(t, defaults)
+		if err != nil {
+			res.Err = err.Error()
 			results[i] = res
 			emit(res)
 			continue
 		}
-
-		port := t.Port
-		if port == 0 {
-			if vendor == config.VendorDahua {
-				port = defaults.DahuaPort
-			} else {
-				port = defaults.HikvisionPort
-			}
-		}
-
-		d := config.Device{Host: t.IP, Port: port, Vendor: vendor, Username: username, Password: password}
+		d.Username = username
+		d.Password = password
 		if err := tryOne(ctx, d, timeout); err != nil {
 			res.Err = err.Error()
 		} else {
@@ -96,6 +88,55 @@ func TryPasswords(ctx context.Context, targets []CredTestTarget, username, passw
 
 	emit(CredTestEvent{Type: "done", Total: total})
 	return results
+}
+
+// normalizeCredTestTarget converts the small set of vendor aliases emitted by
+// camera discovery into the canonical config vendor and fills in a missing
+// control port. Unknown vendor values remain an explicit error: trying a
+// private protocol against an arbitrary host can trigger lockouts or corrupt
+// a non-camera service, so credential testing must never guess.
+func normalizeCredTestTarget(t CredTestTarget, defaults config.Defaults) (config.Device, error) {
+	vendor, ok := normalizeCredTestVendor(t.Vendor)
+	if !ok {
+		return config.Device{}, fmt.Errorf("không xác định được hãng, bỏ qua")
+	}
+
+	port := t.Port
+	if port == 0 {
+		// Server configuration is normally populated by config.Load. Keep this
+		// helper safe for direct callers and tests that pass a zero Defaults.
+		builtIn := config.Default().Defaults
+		switch vendor {
+		case config.VendorDahua:
+			port = defaults.DahuaPort
+			if port <= 0 {
+				port = builtIn.DahuaPort
+			}
+		case config.VendorHikvision:
+			port = defaults.HikvisionPort
+			if port <= 0 {
+				port = builtIn.HikvisionPort
+			}
+		}
+	}
+	if port <= 0 || port > 65535 {
+		return config.Device{}, fmt.Errorf("cổng không hợp lệ: %d", port)
+	}
+
+	return config.Device{Host: t.IP, Port: port, Vendor: vendor}, nil
+}
+
+// normalizeCredTestVendor accepts canonical names plus the OEM aliases that
+// discovery may report before its result reaches the browser/API boundary.
+func normalizeCredTestVendor(raw string) (config.Vendor, bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "dahua", "kbvision", "lechange", "imou", "lc":
+		return config.VendorDahua, true
+	case "hikvision", "hik":
+		return config.VendorHikvision, true
+	default:
+		return "", false
+	}
 }
 
 // tryOne opens a connection and issues one authenticated Probe call against

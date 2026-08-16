@@ -2594,6 +2594,52 @@ document.getElementById('pw-btn').addEventListener('click', async () => {
 
 /* ---------- network scan ---------- */
 
+// Discovery payloads are intentionally best-effort.  ONVIF devices often
+// omit a vendor/port, and Dahua OEMs such as Lechange are variously reported
+// as "LC", "Lechange", or "Dahua".  Normalize only the aliases we can map
+// safely so the add-to-inventory and credential-test paths receive a vendor
+// the backend understands.
+function scanVendorClass(value) {
+  const text = String(value == null ? '' : value).trim().toLocaleLowerCase();
+  if (!text) return '';
+  if (/(^|[^a-z0-9])(dahua|kbvision|lechange|imou)([^a-z0-9]|$)/.test(text) ||
+      /(^|[^a-z0-9])ipc[-_](?:h|c|f|a|b|k|p|w)[a-z0-9_-]*/.test(text) ||
+      /(^|[^a-z0-9])lc(?:[-_\s]|$)/.test(text)) return 'dahua';
+  if (/(^|[^a-z0-9])hikvision([^a-z0-9]|$)/.test(text) || text === 'hik' || text.startsWith('hik-')) return 'hikvision';
+  if (/(^|[^a-z0-9])tiandy([^a-z0-9]|$)/.test(text)) return 'tiandy';
+  return '';
+}
+
+function scanPortNumber(value) {
+  const n = Number.parseInt(value, 10);
+  return Number.isInteger(n) && n > 0 && n <= 65535 ? n : 0;
+}
+
+function normalizeScanResult(raw) {
+  const result = raw && typeof raw === 'object' ? Object.assign({}, raw) : {};
+  const hints = [result.vendor, result.model, result.name, result.manufacturer, result.deviceType, result.via];
+  let vendor = scanVendorClass(result.vendor);
+  if (!vendor) vendor = scanVendorClass(hints.join(' '));
+  const reportedPort = scanPortNumber(result.port);
+  // A private Dahua/Hik port is a stronger signal than an absent vendor.
+  if (!vendor && [37777, 37778, 8888].includes(reportedPort)) vendor = 'dahua';
+  if (!vendor && reportedPort === 8000) vendor = 'hikvision';
+  if (!vendor) vendor = String(result.vendor == null ? '' : result.vendor).trim();
+  let port = reportedPort;
+  if (!port && vendor === 'dahua') port = 37777;
+  if (!port && vendor === 'hikvision') port = 8000;
+  return Object.assign(result, { vendor, port });
+}
+
+function scanResultList(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== 'object') return [];
+  for (const key of ['devices', 'results', 'data']) {
+    if (Array.isArray(payload[key])) return payload[key];
+  }
+  return [];
+}
+
 function renderScanResults() {
   const tbody = document.getElementById('scan-tbody');
   if (!scanResults.length) {
@@ -2631,7 +2677,8 @@ async function runScan(body, btn) {
   msg.textContent = ''; msg.className = 'msg';
   setBusy(btn, true, 'Đang quét...');
   try {
-    scanResults = await api('/api/scan', { method: 'POST', body: JSON.stringify(body) });
+    const payload = await api('/api/scan', { method: 'POST', body: JSON.stringify(body) });
+    scanResults = scanResultList(payload).map(normalizeScanResult);
     renderScanResults();
     msg.textContent = scanResults.length ? `Tìm thấy ${scanResults.length} thiết bị.` : 'Không tìm thấy thiết bị nào.';
     msg.className = scanResults.length ? 'msg ok' : 'msg';
@@ -2690,7 +2737,10 @@ const setScanTryProgress = (index, total, label) => scanTryProgress.set(index, t
 // red with the error (title tooltip) on failure.
 function scanStatusBadge(ev) {
   if (ev.ok) return '<span class="badge ok">OK</span>';
-  return `<span class="badge fail" title="${escapeHtml(ev.err || '')}">Lỗi</span>`;
+  const err = String((ev && (ev.err || ev.error || ev.message || ev.detail)) || '').trim();
+  const title = err ? ` title="${escapeHtml(err)}"` : '';
+  const detail = err ? `<span class="scan-status-error">: ${escapeHtml(err)}</span>` : '';
+  return `<span class="badge fail"${title}>Lỗi</span>${detail}`;
 }
 
 document.getElementById('scan-try-btn').addEventListener('click', async () => {

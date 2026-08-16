@@ -41,7 +41,7 @@ func vendorForPort(port int) string {
 	switch port {
 	case 8000:
 		return "hikvision"
-	case 37777, 37778:
+	case 37777, 37778, 8888:
 		return "dahua"
 	default:
 		return ""

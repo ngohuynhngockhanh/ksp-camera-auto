@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 )
 
 const onvifMulticastAddr = "239.255.255.250:3702"
@@ -91,9 +92,11 @@ func scanONVIF(ctx context.Context, timeout time.Duration) ([]Result, error) {
 			ip = addr.IP.String()
 		}
 		name, model := scopeNameModel(scopes)
+		vendor := vendorFromText(strings.Join(scopes, " "))
 		results = append(results, Result{
 			IP:     ip,
-			Vendor: vendorFromText(name + " " + model),
+			Port:   onvifPortForVendor(vendor),
+			Vendor: vendor,
 			Model:  model,
 			Name:   name,
 			Via:    "onvif",
@@ -196,13 +199,51 @@ func vendorFromText(s string) string {
 	switch {
 	case strings.Contains(lower, "hikvision") || strings.Contains(lower, "hik "):
 		return "hikvision"
-	case strings.Contains(lower, "dahua"):
-		return "dahua"
-	case strings.Contains(lower, "kbvision"):
+	case strings.Contains(lower, "dahua") ||
+		strings.Contains(lower, "kbvision") ||
+		strings.Contains(lower, "lechange"):
 		return "dahua"
 	case strings.Contains(lower, "tiandy"):
 		return "tiandy"
+	case hasTextToken(lower, "lc") || dahuaIPCModelHint(lower):
+		return "dahua"
 	default:
 		return ""
 	}
+}
+
+// hasTextToken reports whether text contains a whole alphanumeric token. ONVIF
+// model names commonly use separators (for example, "IPC-HFW..."), so token
+// boundaries are any non-letter/non-digit rune rather than whitespace only.
+func hasTextToken(text, want string) bool {
+	for _, token := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	}) {
+		if token == want {
+			return true
+		}
+	}
+	return false
+}
+
+// dahuaIPCModelHint recognizes Dahua's common IPC model families without
+// classifying a generic ONVIF label such as "IPC" or "IP_Camera".
+func dahuaIPCModelHint(text string) bool {
+	for _, prefix := range []string{"ipc-h", "ipc-c", "ipc-f", "ipc-a", "ipc-b", "ipc-k", "ipc-p", "ipc-w"} {
+		if strings.Contains(text, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// onvifPortForVendor returns the default control port to offer when ONVIF
+// identifies a vendor but does not report a transport port. Dahua-compatible
+// devices use DVRIP on 37777 by default; camera.Open handles the 8888 OEM
+// fallback if that port is unreachable.
+func onvifPortForVendor(vendor string) int {
+	if vendor == "dahua" {
+		return 37777
+	}
+	return 0
 }

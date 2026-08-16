@@ -23,6 +23,9 @@ Tự động tìm camera đang có trong mạng LAN thay vì phải gõ tay từ
 3. Xem bảng kết quả với các cột: **IP**, **Cổng**, **Hãng**, **Model**,
    **MAC**, **Nguồn** (phương thức tìm ra dòng này: onvif / dahua /
    hikvision-sadp / nmap), **Trạng thái**.
+   Các thiết bị Dahua OEM như **Lechange/LC** được chuẩn hóa thành Dahua và
+   tự điền cổng DVRIP `37777`; khi thiết bị chỉ nghe `8888`, lần thử đăng nhập
+   sẽ tự fallback sang cổng đó.
 4. Nếu camera ở subnet khác (route được nhưng không cùng LAN với máy chạy
    kspcam): nhập **Subnet (CIDR)**, ví dụ `192.168.1.0/24`, rồi bấm **Quét
    nmap**. Cách này chỉ dò cổng mở (80, 8000, 37777, 37778, 8888) chứ không
