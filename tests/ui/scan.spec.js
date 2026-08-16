@@ -51,3 +51,17 @@ test('accepts the object-shaped scan response used by older fixtures', async ({ 
   await expect(page.locator('#scan-tbody tr')).toHaveCount(1);
   await expect(page.locator('#scan-tbody [data-label="Cổng"]')).toHaveText('37777');
 });
+
+test('normalizes the generic Lechange ONVIF identity used by Dahua OEMs', async ({ page }) => {
+  await openApp(page, {
+    hash: 'scan',
+    overrides: {
+      '/api/scan': [{ ip: '192.168.1.211', model: 'IP_Camera', name: 'General', via: 'onvif' }],
+    },
+  });
+
+  await page.getByRole('button', { name: 'Quét LAN (ONVIF/Dahua/Hik)' }).click();
+  const row = page.locator('#scan-tbody tr').first();
+  await expect(row.locator('[data-label="Hãng"]')).toHaveText('dahua');
+  await expect(row.locator('[data-label="Cổng"]')).toHaveText('37777');
+});

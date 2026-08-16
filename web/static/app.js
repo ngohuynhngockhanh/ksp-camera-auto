@@ -2604,7 +2604,9 @@ function scanVendorClass(value) {
   if (!text) return '';
   if (/(^|[^a-z0-9])(dahua|kbvision|lechange|imou)([^a-z0-9]|$)/.test(text) ||
       /(^|[^a-z0-9])ipc[-_](?:h|c|f|a|b|k|p|w)[a-z0-9_-]*/.test(text) ||
-      /(^|[^a-z0-9])lc(?:[-_\s]|$)/.test(text)) return 'dahua';
+      /(^|[^a-z0-9])lc(?:[-_\s]|$)/.test(text) ||
+      (/(^|[^a-z0-9])ip[_-]?camera([^a-z0-9]|$)/.test(text) &&
+        /(^|[^a-z0-9])general([^a-z0-9]|$)/.test(text))) return 'dahua';
   if (/(^|[^a-z0-9])hikvision([^a-z0-9]|$)/.test(text) || text === 'hik' || text.startsWith('hik-')) return 'hikvision';
   if (/(^|[^a-z0-9])tiandy([^a-z0-9]|$)/.test(text)) return 'tiandy';
   return '';

@@ -205,7 +205,7 @@ func vendorFromText(s string) string {
 		return "dahua"
 	case strings.Contains(lower, "tiandy"):
 		return "tiandy"
-	case hasTextToken(lower, "lc") || dahuaIPCModelHint(lower):
+	case hasTextToken(lower, "lc") || dahuaIPCModelHint(lower) || genericDahuaONVIFHint(lower):
 		return "dahua"
 	default:
 		return ""
@@ -235,6 +235,14 @@ func dahuaIPCModelHint(text string) bool {
 		}
 	}
 	return false
+}
+
+// genericDahuaONVIFHint covers the generic identity emitted by the Lechange
+// firmware family used in our Dahua fleet (hardware=IP_Camera, name=General).
+// It is intentionally narrow: a blank ONVIF identity alone is not enough to
+// guess a private protocol, but this stable pair is how these units answer.
+func genericDahuaONVIFHint(text string) bool {
+	return strings.Contains(text, "ip_camera") && hasTextToken(text, "general")
 }
 
 // onvifPortForVendor returns the default control port to offer when ONVIF

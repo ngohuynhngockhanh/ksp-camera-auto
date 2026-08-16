@@ -141,6 +141,8 @@ func TestVendorFromTextDahuaAliases(t *testing.T) {
 		{text: "LC-HDW2431T", want: "dahua"},
 		{text: "LC", want: "dahua"},
 		{text: "IPC-HFW2431S", want: "dahua"},
+		{text: "IP_Camera General", want: "dahua"},
+		{text: "IP_Camera", want: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.text, func(t *testing.T) {
