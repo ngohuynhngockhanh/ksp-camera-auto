@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/xml"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -130,7 +131,46 @@ func TestParseONVIFProbeMatch(t *testing.T) {
 	}
 }
 
-// sampleNmapOutput is representative nmap stdout for -Pn -sT -p 80,8000,37777,37778 --open.
+func TestVendorFromTextDahuaAliases(t *testing.T) {
+	tests := []struct {
+		text string
+		want string
+	}{
+		{text: "Lechange IPC-K22P", want: "dahua"},
+		{text: "LECHANGE", want: "dahua"},
+		{text: "LC-HDW2431T", want: "dahua"},
+		{text: "LC", want: "dahua"},
+		{text: "IPC-HFW2431S", want: "dahua"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.text, func(t *testing.T) {
+			if got := vendorFromText(tt.text); got != tt.want {
+				t.Errorf("vendorFromText(%q) = %q, want %q", tt.text, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestONVIFPortForVendor(t *testing.T) {
+	tests := []struct {
+		vendor string
+		want   int
+	}{
+		{vendor: "dahua", want: 37777},
+		{vendor: "hikvision", want: 0},
+		{vendor: "tiandy", want: 0},
+		{vendor: "", want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.vendor, func(t *testing.T) {
+			if got := onvifPortForVendor(tt.vendor); got != tt.want {
+				t.Errorf("onvifPortForVendor(%q) = %d, want %d", tt.vendor, got, tt.want)
+			}
+		})
+	}
+}
+
+// sampleNmapOutput is representative nmap stdout for -Pn -sT -p 80,8000,37777,37778,8888 --open.
 const sampleNmapOutput = `Starting Nmap 7.94SVN ( https://nmap.org ) at 2026-07-15 10:00 +07
 Nmap scan report for 192.168.1.10
 Host is up (0.00050s latency).
@@ -172,6 +212,26 @@ func TestParseNmapOutput(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("result[%d] = %+v, want %+v", i, got[i], want[i])
 		}
+	}
+}
+
+func TestVendorForPort(t *testing.T) {
+	tests := []struct {
+		port int
+		want string
+	}{
+		{port: 8000, want: "hikvision"},
+		{port: 37777, want: "dahua"},
+		{port: 37778, want: "dahua"},
+		{port: 8888, want: "dahua"},
+		{port: 80, want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(strconv.Itoa(tt.port), func(t *testing.T) {
+			if got := vendorForPort(tt.port); got != tt.want {
+				t.Errorf("vendorForPort(%d) = %q, want %q", tt.port, got, tt.want)
+			}
+		})
 	}
 }
 

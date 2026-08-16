@@ -2,11 +2,55 @@ package bulk
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 )
+
+func TestNormalizeCredTestTargetDahuaAliasAndMissingPort(t *testing.T) {
+	d, err := normalizeCredTestTarget(CredTestTarget{
+		IP:     "192.0.2.10",
+		Vendor: "Lechange",
+	}, config.Defaults{})
+	if err != nil {
+		t.Fatalf("normalizeCredTestTarget: %v", err)
+	}
+	if d.Vendor != config.VendorDahua {
+		t.Fatalf("vendor = %q, want %q", d.Vendor, config.VendorDahua)
+	}
+	if d.Port != config.Default().Defaults.DahuaPort {
+		t.Fatalf("port = %d, want default %d", d.Port, config.Default().Defaults.DahuaPort)
+	}
+}
+
+func TestNormalizeCredTestTargetRejectsUnknownVendorExplicitly(t *testing.T) {
+	_, err := normalizeCredTestTarget(CredTestTarget{IP: "192.0.2.11", Port: 0}, config.Defaults{})
+	if err == nil {
+		t.Fatal("expected an explicit unknown-vendor error")
+	}
+	if !strings.Contains(err.Error(), "không xác định được hãng") {
+		t.Fatalf("error = %q, want unknown-vendor detail", err)
+	}
+}
+
+func TestTryPasswordsNormalizesDahuaAliasBeforeDialing(t *testing.T) {
+	results := TryPasswords(context.Background(), []CredTestTarget{{
+		IP:     "127.0.0.1",
+		Vendor: "LC",
+		Port:   0,
+	}}, "admin", "pass", config.Defaults{DahuaPort: 1}, time.Second, nil)
+	if len(results) != 1 {
+		t.Fatalf("want one result, got %d", len(results))
+	}
+	if strings.Contains(results[0].Err, "không xác định được hãng") {
+		t.Fatalf("alias was rejected as unknown vendor: %q", results[0].Err)
+	}
+	if strings.Contains(results[0].Err, "cổng không hợp lệ") {
+		t.Fatalf("missing port was not normalized: %q", results[0].Err)
+	}
+}
 
 func TestTryPasswordsSkipsUnknownVendor(t *testing.T) {
 	targets := []CredTestTarget{{IP: "127.0.0.1", Vendor: "", Port: 1}}
