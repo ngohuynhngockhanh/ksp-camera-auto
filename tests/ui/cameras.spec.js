@@ -90,7 +90,7 @@ test('confirming bulk delete posts once and removes the selected cameras', async
   });
 
   await page.locator('.cam-cb').nth(0).check();
-  await page.locator('.cam-cb').nth(2).check();
+  await page.locator('.cam-cb').nth(1).check();
   await page.getByTestId('bulk-delete-cameras').click();
   await expect(page.locator('#confirm-dialog')).toBeVisible();
   await page.locator('#confirm-ok').click();

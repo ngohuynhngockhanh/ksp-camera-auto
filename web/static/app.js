@@ -660,6 +660,18 @@ function renderBulkSelection() {
   const ids = selectedCameraIds();
   const countEl = document.getElementById('bulk-selected-count');
   const chipsEl = document.getElementById('bulk-selected-chips');
+  const deleteBtn = document.getElementById('bulk-delete-cameras-btn');
+  if (deleteBtn) {
+    deleteBtn.disabled = ids.length === 0;
+    deleteBtn.textContent = ids.length ? `Xóa các cam đã chọn (${ids.length})` : 'Xóa các cam đã chọn';
+  }
+  const selectAll = document.getElementById('select-all');
+  const visibleChecks = Array.from(document.querySelectorAll('.cam-cb'));
+  const selectedVisible = visibleChecks.filter(cb => cb.checked).length;
+  if (selectAll) {
+    selectAll.checked = visibleChecks.length > 0 && selectedVisible === visibleChecks.length;
+    selectAll.indeterminate = selectedVisible > 0 && selectedVisible < visibleChecks.length;
+  }
   document.getElementById('apply-count').textContent = ids.length ? ids.length + ' camera đã chọn' : '';
   if (!ids.length) {
     countEl.textContent = 'Chưa chọn camera nào.';
@@ -835,6 +847,45 @@ document.getElementById('bulk-camera-picker').addEventListener('change', ev => {
 document.getElementById('bulk-selected-chips').addEventListener('click', ev => {
   const btn = ev.target.closest('[data-unselect-camera]');
   if (btn) setCameraSelected(btn.dataset.unselectCamera, false);
+});
+
+document.getElementById('bulk-delete-cameras-btn').addEventListener('click', async () => {
+  const ids = selectedCameraIds();
+  if (!ids.length) return;
+  const labels = ids.map(id => {
+    const c = cameras.find(x => x.id === id);
+    return c ? (c.name || c.host || id) : id;
+  });
+  const preview = labels.slice(0, 5).join(', ') + (labels.length > 5 ? ` và ${labels.length - 5} camera khác` : '');
+  const ok = await showConfirm(
+    'Xóa camera hàng loạt',
+    `Xóa ${ids.length} camera khỏi kho?\n${preview}`,
+    { danger: true, okLabel: 'Xóa tất cả' },
+  );
+  if (!ok) return;
+
+  const btn = document.getElementById('bulk-delete-cameras-btn');
+  setBusy(btn, true, 'Đang xóa...');
+  try {
+    const result = await api('/api/cameras/delete-bulk', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
+    for (const id of ids) {
+      selectedCameraSet.delete(id);
+      delete probeCache[id];
+    }
+    const deleted = Number.isFinite(result && result.deleted) ? result.deleted : ids.length;
+    const skipped = Number.isFinite(result && result.skipped) ? result.skipped : 0;
+    const suffix = skipped ? `, bỏ qua ${skipped} camera không còn trong kho` : '';
+    showToast(`Đã xóa ${deleted} camera khỏi kho${suffix}.`, 'ok');
+    await loadCameras();
+  } catch (e) {
+    showToast('Lỗi xóa: ' + e.message, 'err');
+  } finally {
+    setBusy(btn, false);
+    renderBulkSelection();
+  }
 });
 
 /* ---------- Mạng (Dahua/KBVision): static IP + Wi-Fi, device-level ---------- */
