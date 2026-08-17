@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { openApp } = require('./fixtures');
+const { openApp, CAMERAS } = require('./fixtures');
 
 test.beforeEach(async ({ page }) => { await openApp(page, { hash: 'cameras/list' }); });
 
@@ -44,6 +44,79 @@ test('the row checkbox selects without opening the detail page', async ({ page }
   await page.locator('.cam-cb').first().check();
   await expect(page.getByTestId('camera-detail')).toBeHidden();
   await expect(page.locator('#bulk-selected-count')).toContainText('1 camera');
+});
+
+test('bulk delete is disabled until at least one camera is selected', async ({ page }) => {
+  const button = page.getByTestId('bulk-delete-cameras');
+  await expect(button).toBeDisabled();
+  await page.locator('.cam-cb').first().check();
+  await expect(button).toBeEnabled();
+  await expect(button).toContainText('1');
+});
+
+test('canceling bulk delete keeps the selected cameras', async ({ page }) => {
+  const posted = [];
+  await page.route('**/api/cameras/delete-bulk', route => {
+    posted.push(JSON.parse(route.request().postData() || '{}'));
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, deleted: 1, skipped: 0 }) });
+  });
+
+  await page.locator('.cam-cb').nth(0).check();
+  await page.locator('.cam-cb').nth(1).check();
+  await page.getByTestId('bulk-delete-cameras').click();
+  await expect(page.locator('#confirm-dialog')).toBeVisible();
+  await page.locator('#confirm-cancel').click();
+
+  await expect(page.getByTestId('camera-row')).toHaveCount(3);
+  await expect(page.locator('.cam-cb:checked')).toHaveCount(2);
+  await expect(page.getByTestId('bulk-delete-cameras')).toBeEnabled();
+  expect(posted).toHaveLength(0);
+});
+
+test('confirming bulk delete posts once and removes the selected cameras', async ({ page }) => {
+  const posted = [];
+  let remaining = CAMERAS.slice();
+  await page.route('**/api/cameras', route => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify(remaining) });
+    }
+    return route.fallback();
+  });
+  await page.route('**/api/cameras/delete-bulk', route => {
+    const body = JSON.parse(route.request().postData() || '{}');
+    posted.push(body);
+    remaining = remaining.filter(c => !body.ids.includes(c.id));
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, deleted: body.ids.length, skipped: 0 }) });
+  });
+
+  await page.locator('.cam-cb').nth(0).check();
+  await page.locator('.cam-cb').nth(2).check();
+  await page.getByTestId('bulk-delete-cameras').click();
+  await expect(page.locator('#confirm-dialog')).toBeVisible();
+  await page.locator('#confirm-ok').click();
+
+  await expect(page.getByTestId('camera-row')).toHaveCount(1);
+  await expect(page.getByTestId('camera-row').first()).toContainText('Kho hàng');
+  expect(posted).toEqual([{ ids: ['cam-1', 'nvr-1'] }]);
+  await expect(page.getByTestId('bulk-delete-cameras')).toBeDisabled();
+});
+
+test('bulk delete API failure preserves rows and selection', async ({ page }) => {
+  await page.route('**/api/cameras/delete-bulk', route => route.fulfill({
+    status: 500,
+    contentType: 'application/json',
+    body: JSON.stringify({ error: 'không thể lưu kho' }),
+  }));
+
+  await page.locator('.cam-cb').first().check();
+  await page.getByTestId('bulk-delete-cameras').click();
+  await expect(page.locator('#confirm-dialog')).toBeVisible();
+  await page.locator('#confirm-ok').click();
+
+  await expect(page.getByTestId('camera-row')).toHaveCount(3);
+  await expect(page.locator('.cam-cb:checked')).toHaveCount(1);
+  await expect(page.getByTestId('bulk-delete-cameras')).toBeEnabled();
+  await expect(page.locator('.toast.err')).toContainText('không thể lưu kho');
 });
 
 test('add dialog posts a new camera', async ({ page }) => {
