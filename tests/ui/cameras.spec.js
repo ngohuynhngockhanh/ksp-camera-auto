@@ -54,6 +54,24 @@ test('bulk delete is disabled until at least one camera is selected', async ({ p
   await expect(button).toContainText('1');
 });
 
+test('bulk delete keeps selected cameras when a filter hides their rows', async ({ page }) => {
+  const posted = [];
+  await page.route('**/api/cameras/delete-bulk', route => {
+    posted.push(JSON.parse(route.request().postData() || '{}'));
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, deleted: 1, skipped: 0 }) });
+  });
+
+  await page.locator('.cam-cb').first().check();
+  await page.getByTestId('camera-search').fill('Kho hàng');
+  await expect(page.getByTestId('camera-row')).toHaveCount(1);
+  await expect(page.getByTestId('bulk-delete-cameras')).toBeEnabled();
+  await page.getByTestId('bulk-delete-cameras').click();
+  await page.locator('#confirm-ok').click();
+
+  expect(posted).toEqual([{ ids: ['cam-1'] }]);
+  await expect(page.getByTestId('bulk-delete-cameras')).toBeDisabled();
+});
+
 test('canceling bulk delete keeps the selected cameras', async ({ page }) => {
   const posted = [];
   await page.route('**/api/cameras/delete-bulk', route => {
