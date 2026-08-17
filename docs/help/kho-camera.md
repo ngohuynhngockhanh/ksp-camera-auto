@@ -5,7 +5,7 @@ section: cameras
 order: 10
 keywords: [kho camera, thêm cam, thêm camera, sửa camera, xóa camera, đổi tên, host, IP, cổng, port, dahua, kbvision, hikvision, tài khoản, mật khẩu, mã hóa, danh sách camera]
 ui: "#cameras/list"
-covers: ["/api/cameras", "/api/cameras/delete", "/api/nvr/scan", "/api/nvr/link", "/api/nvr/channels"]
+covers: ["/api/cameras", "/api/cameras/delete", "/api/cameras/delete-bulk", "/api/nvr/scan", "/api/nvr/link", "/api/nvr/channels"]
 related: [gioi-thieu, doc-cau-hinh, anh-chup, chinh-hang-loat]
 ---
 ## Mục đích
@@ -47,7 +47,10 @@ camera có trong kho này.
    **Host** và **Cổng** bị khoá sẵn (xem Lưu ý bên dưới); bấm **Đổi địa chỉ**
    nếu thực sự muốn sửa. Chỉnh xong bấm **Lưu thay đổi**.
 6. Tick chọn ô ở đầu mỗi dòng (hoặc ô **Chọn tất cả** trên tiêu đề bảng), rồi
-   chuyển sang **Chỉnh hàng loạt**. Lựa chọn được giữ khi đổi tab.
+   chuyển sang **Chỉnh hàng loạt**. Lựa chọn được giữ khi đổi tab. Nút
+   **Xóa các cam đã chọn** trong thanh công cụ sẽ gỡ nhiều camera khỏi kho sau
+   khi bạn xác nhận; nếu một camera đã bị xóa ở phiên khác, camera đó được bỏ
+   qua và các camera còn lại vẫn được xử lý.
 7. Dùng ô **Tìm camera** và bộ lọc **Hãng** để thu gọn danh sách; mật khẩu
    được che mặc định và chỉ hiện khi bấm **Hiện**.
 
