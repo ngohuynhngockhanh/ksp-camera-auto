@@ -69,10 +69,10 @@ func TestHandleCamerasDeleteBulkRejectsEmptyIDsAndWrongMethod(t *testing.T) {
 	defer srv.Close()
 
 	for _, tc := range []struct {
-		name string
+		name   string
 		method string
-		body string
-		want int
+		body   string
+		want   int
 	}{
 		{name: "empty", method: http.MethodPost, body: `{"ids":[]}`, want: http.StatusBadRequest},
 		{name: "invalid json", method: http.MethodPost, body: `{`, want: http.StatusBadRequest},

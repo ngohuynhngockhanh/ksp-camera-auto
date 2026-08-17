@@ -144,6 +144,47 @@ func (i *Inventory) Delete(id string) error {
 	return i.save()
 }
 
+// DeleteMany removes each unique, non-empty device ID and persists the
+// inventory once. IDs that are not present are reported as skipped so callers
+// can safely retry a stale selection.
+func (i *Inventory) DeleteMany(ids []string) (deleted, skipped int, err error) {
+	unique := make([]string, 0, len(ids))
+	seen := make(map[string]struct{}, len(ids))
+	for _, raw := range ids {
+		id := strings.TrimSpace(raw)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		unique = append(unique, id)
+	}
+	if len(unique) == 0 {
+		return 0, 0, fmt.Errorf("ids is required")
+	}
+
+	i.mu.Lock()
+	for _, id := range unique {
+		if _, ok := i.devices[id]; !ok {
+			skipped++
+			continue
+		}
+		delete(i.devices, id)
+		deleted++
+	}
+	i.mu.Unlock()
+
+	if deleted == 0 {
+		return deleted, skipped, nil
+	}
+	if err := i.save(); err != nil {
+		return deleted, skipped, err
+	}
+	return deleted, skipped, nil
+}
+
 func (i *Inventory) save() error {
 	if i.path == "" {
 		return nil

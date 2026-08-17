@@ -452,6 +452,31 @@ func (s *Server) handleCamerasDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
+type idsReq struct {
+	IDs []string `json:"ids"`
+}
+
+// handleCamerasDeleteBulk handles POST /api/cameras/delete-bulk.
+func (s *Server) handleCamerasDeleteBulk(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req idsReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	deleted, skipped, err := s.inv.DeleteMany(req.IDs)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true, "deleted": deleted, "skipped": skipped,
+	})
+}
+
 type probeView struct {
 	Streams      []camera.StreamInfo `json:"streams"`
 	SerialNumber string              `json:"serialNumber,omitempty"`

@@ -102,6 +102,7 @@ func (s *Server) routes() {
 	}
 	s.mux.Handle("/api/cameras", api(s.handleCameras))
 	s.mux.Handle("/api/cameras/delete", api(s.handleCamerasDelete))
+	s.mux.Handle("/api/cameras/delete-bulk", api(s.handleCamerasDeleteBulk))
 	s.mux.Handle("/api/probe", api(s.handleProbe))
 	s.mux.Handle("/api/fps-capability", api(s.handleFPSCapability))
 	s.mux.Handle("/api/apply", api(s.handleApply))
