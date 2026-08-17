@@ -11,6 +11,7 @@
 - `Inventory.DeleteMany` deduplicates IDs, reports deleted/skipped counts, and persists remaining inventory.
 - `POST /api/cameras/delete-bulk` validates the request and returns `{ok, deleted, skipped}`.
 - The Kho camera toolbar confirms, posts once, clears deleted selections/cache, reloads rows, and preserves state on failure.
+- The UI regression suite also verifies a selected camera remains eligible for deletion after search/filter hides its row.
 
 ## Coverage
 
