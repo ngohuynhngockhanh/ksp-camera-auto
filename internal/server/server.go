@@ -20,6 +20,8 @@ import (
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/camera"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mcp"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/shinobi"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/web"
 )
 
@@ -29,6 +31,8 @@ const sessionCookie = "kspcam_session"
 type Server struct {
 	cfg      config.Config
 	inv      *config.Inventory
+	shinobi  *shinobi.Client
+	mcp      *mcp.Server
 	mux      *http.ServeMux
 	static   fs.FS
 	session  *sessionStore
@@ -54,6 +58,10 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 		snaps:   newSnapCache(),
 		dlKey:   make([]byte, 32),
 	}
+	if cfg.Shinobi.APIURL != "" && cfg.Shinobi.APIKey != "" {
+		s.shinobi = shinobi.NewClient(cfg.Shinobi.APIURL, cfg.Shinobi.APIKey, cfg.Shinobi.GroupKey)
+	}
+	s.mcp = mcp.NewServer(&cfg, inv, s.shinobi)
 	if _, err := rand.Read(s.dlKey); err != nil {
 		return nil, fmt.Errorf("gen download key: %w", err)
 	}
@@ -95,6 +103,12 @@ func (s *Server) routes() {
 		_, _ = w.Write([]byte("ok"))
 	})
 
+	// MCP (Model Context Protocol) Server endpoints.
+	mcpHandler := s.mcp.HTTPHandler()
+	s.mux.Handle("/mcp", mcpHandler)
+	s.mux.Handle("/mcp/", mcpHandler)
+	s.mux.Handle("/mcp/messages", mcpHandler)
+
 	// Authenticated JSON API. api() gates on the session and caps the request
 	// body (DoS guard on constrained boxes).
 	api := func(h http.HandlerFunc) http.Handler {
@@ -135,6 +149,11 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/recordings", api(s.handleRecordings))
 	s.mux.Handle("/api/playback-token", api(s.handlePlaybackToken))
 	s.mux.Handle("/api/export-progress", api(s.handleExportProgress))
+	s.mux.Handle("/api/shinobi/status", api(s.handleShinobiStatus))
+	s.mux.Handle("/api/shinobi/monitors", api(s.handleShinobiMonitors))
+	s.mux.Handle("/api/shinobi/sync-to-shinobi", api(s.handleShinobiSyncToShinobi))
+	s.mux.Handle("/api/shinobi/sync-from-shinobi", api(s.handleShinobiSyncFromShinobi))
+	s.mux.Handle("/api/shinobi/videos", api(s.handleShinobiVideos))
 	// /api/playback accepts EITHER a session OR a valid signed token (so a phone
 	// scanning the QR download link, with no session cookie, can still fetch it).
 	s.mux.Handle("/api/playback", limitBody(8<<20, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

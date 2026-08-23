@@ -59,11 +59,27 @@ type Defaults struct {
 	MaxReviewHours int `yaml:"max_review_hours"`
 }
 
+// ShinobiConfig holds connection parameters for the Shinobi NVR REST API.
+type ShinobiConfig struct {
+	APIURL   string `yaml:"api_url"`   // Base URL e.g. "http://127.0.0.1:8080"
+	APIKey   string `yaml:"api_key"`   // 30-character API key
+	GroupKey string `yaml:"group_key"` // Shinobi Group Key (ke)
+}
+
+// MCPConfig holds configuration for the embedded Model Context Protocol (MCP) server.
+type MCPConfig struct {
+	Enabled                      bool   `yaml:"enabled"`
+	APIKey                       string `yaml:"api_key"`
+	AllowUnauthenticatedLoopback bool   `yaml:"allow_unauthenticated_loopback"`
+}
+
 // Config is the top-level configuration document.
 type Config struct {
-	Server      Server   `yaml:"server"`
-	CamerasFile string   `yaml:"cameras_file"`
-	Defaults    Defaults `yaml:"defaults"`
+	Server      Server        `yaml:"server"`
+	CamerasFile string        `yaml:"cameras_file"`
+	Defaults    Defaults      `yaml:"defaults"`
+	Shinobi     ShinobiConfig `yaml:"shinobi"`
+	MCP         MCPConfig     `yaml:"mcp"`
 }
 
 // Default returns a Config populated with built-in defaults.
@@ -86,6 +102,13 @@ func Default() Config {
 			TimeoutSeconds: 30,
 			NewPassword:    "smarthome12345",
 			MaxReviewHours: 72,
+		},
+		Shinobi: ShinobiConfig{
+			APIURL: "http://127.0.0.1:8080",
+		},
+		MCP: MCPConfig{
+			Enabled:                      true,
+			AllowUnauthenticatedLoopback: true,
 		},
 	}
 }
@@ -152,5 +175,8 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Defaults.Password == "" {
 		c.Defaults.Password = d.Defaults.Password
+	}
+	if c.Shinobi.APIURL == "" {
+		c.Shinobi.APIURL = d.Shinobi.APIURL
 	}
 }

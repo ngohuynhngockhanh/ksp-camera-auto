@@ -1,0 +1,181 @@
+---
+# Automated Shinobi NVR Provisioning & API Key Configuration
+# Verifies Shinobi service, probes/provisions user account via Super Admin if missing,
+# provisions a dedicated 127.0.0.1 API key with full capabilities, and exports facts.
+
+- name: Shinobi Provisioning Block
+  block:
+    - name: Probe Shinobi service liveness on port 8080
+      wait_for:
+        host: "127.0.0.1"
+        port: 8080
+        state: started
+        timeout: 5
+      register: ksp_shinobi_live_probe
+      ignore_errors: true
+
+    - name: Check Shinobi liveness flag
+      set_fact:
+        ksp_shinobi_is_running: "{{ not (ksp_shinobi_live_probe.failed | default(false)) }}"
+
+    - name: Proceed with Shinobi user and API key provisioning
+      when: ksp_shinobi_is_running
+      block:
+        - name: Probe existing Shinobi user login
+          uri:
+            url: "{{ shinobi_api_url }}/?json=true"
+            method: POST
+            body_format: json
+            body:
+              function: "dash"
+              mail: "{{ shinobi_mail }}"
+              pass: "{{ shinobi_pass }}"
+              machineID: "ksp-bida-{{ inventory_hostname }}"
+            status_code: [200, 401, 403, 500]
+            return_content: true
+          register: ksp_user_login_probe
+          ignore_errors: true
+
+        - name: Determine if user login succeeded
+          set_fact:
+            ksp_user_authenticated: >-
+              {{ (ksp_user_login_probe.status | default(0)) == 200 and
+                 (ksp_user_login_probe.json is defined) and
+                 ((ksp_user_login_probe.json.ok | default(false)) == true) and
+                 (ksp_user_login_probe.json['$user'] is defined) }}
+
+        - name: Super Admin provisioning workflow (if regular user login failed)
+          when: not ksp_user_authenticated
+          block:
+            - name: Authenticate Super Admin via /super/?json=true
+              uri:
+                url: "{{ shinobi_api_url }}/super/?json=true"
+                method: POST
+                body_format: json
+                body:
+                  function: "super"
+                  mail: "{{ shinobi_super_mail }}"
+                  pass: "{{ shinobi_super_pass }}"
+                status_code: [200, 401, 403]
+                return_content: true
+              register: ksp_super_login
+              ignore_errors: true
+
+            - name: Ensure super token present in /home/Shinobi/super.json
+              shell: |
+                python3 -c '
+                import json, os
+                p = "/home/Shinobi/super.json"
+                if os.path.exists(p):
+                    try:
+                        with open(p, "r") as f:
+                            data = json.load(f)
+                        if isinstance(data, list):
+                            for u in data:
+                                tokens = u.get("tokens", [])
+                                if not isinstance(tokens, list):
+                                    tokens = [tokens] if tokens else []
+                                if "{{ shinobi_super_token }}" not in tokens:
+                                    tokens.append("{{ shinobi_super_token }}")
+                                u["tokens"] = tokens
+                        elif isinstance(data, dict):
+                            tokens = data.get("tokens", [])
+                            if not isinstance(tokens, list):
+                                tokens = [tokens] if tokens else []
+                            if "{{ shinobi_super_token }}" not in tokens:
+                                tokens.append("{{ shinobi_super_token }}")
+                            data["tokens"] = tokens
+                        with open(p, "w") as f:
+                            json.dump(data, f, indent=2)
+                    except Exception as e:
+                        print("Error updating super.json:", e)
+                '
+              changed_when: false
+              ignore_errors: true
+
+            - name: Register Shinobi admin account via Super Admin API
+              uri:
+                url: "{{ shinobi_api_url }}/super/{{ shinobi_super_token }}/accounts/registerAdmin"
+                method: POST
+                body_format: form-urlencoded
+                body:
+                  data: "{{ {'mail': shinobi_mail, 'pass': shinobi_pass, 'password_again': shinobi_pass, 'ke': '', 'details': {'allmonitors': '1'}} | to_json }}"
+                status_code: [200, 201]
+                return_content: true
+              register: ksp_reg_res
+              ignore_errors: true
+
+            - name: Re-login as regular user after provisioning
+              uri:
+                url: "{{ shinobi_api_url }}/?json=true"
+                method: POST
+                body_format: json
+                body:
+                  function: "dash"
+                  mail: "{{ shinobi_mail }}"
+                  pass: "{{ shinobi_pass }}"
+                  machineID: "ksp-bida-{{ inventory_hostname }}"
+                status_code: 200
+                return_content: true
+              register: ksp_user_login_post_prov
+
+            - name: Set post-provisioning login response
+              set_fact:
+                ksp_user_login_probe: "{{ ksp_user_login_post_prov }}"
+
+        - name: Extract user auth token and group key
+          set_fact:
+            ksp_shinobi_token: "{{ ksp_user_login_probe.json['$user'].auth_token | default(ksp_user_login_probe.json.auth_token, true) }}"
+            ksp_shinobi_gk: "{{ ksp_user_login_probe.json['$user'].ke | default(ksp_user_login_probe.json.ke, true) }}"
+            ksp_shinobi_uid: "{{ ksp_user_login_probe.json['$user'].uid | default(ksp_user_login_probe.json.uid, true) }}"
+
+        - name: Query existing Shinobi API keys
+          uri:
+            url: "{{ shinobi_api_url }}/{{ ksp_shinobi_token }}/api/{{ ksp_shinobi_gk }}/list"
+            method: GET
+            return_content: true
+          register: ksp_existing_keys_res
+
+        - name: Find existing full-capability 127.0.0.1 API key
+          set_fact:
+            ksp_shinobi_api_key: >-
+              {{ (ksp_existing_keys_res.json['keys'] | default([]) |
+                  selectattr('ip', 'defined') |
+                  selectattr('ip', 'equalto', '127.0.0.1') |
+                  map(attribute='code') | list | first) | default('', true) }}
+
+        - name: Create new full-access 127.0.0.1 API key if none exists
+          uri:
+            url: "{{ shinobi_api_url }}/{{ ksp_shinobi_token }}/api/{{ ksp_shinobi_gk }}/add"
+            method: POST
+            body_format: form-urlencoded
+            body:
+              data: "{{ {'ip': '127.0.0.1', 'details': {'auth_socket': '1', 'get_monitors': '1', 'control_monitors': '1', 'get_logs': '1', 'watch_stream': '1', 'watch_snapshot': '1', 'watch_videos': '1', 'delete_videos': '1'}} | to_json }}"
+            status_code: 200
+            return_content: true
+          register: ksp_create_key_res
+          when: (ksp_shinobi_api_key | default('')) | length == 0
+
+        - name: Set created API key fact
+          set_fact:
+            ksp_shinobi_api_key: "{{ ksp_create_key_res.json.api.code }}"
+          when: >-
+            ((ksp_shinobi_api_key | default('')) | length == 0) and
+            (ksp_create_key_res.json is defined) and
+            (ksp_create_key_res.json.api is defined)
+
+        - name: Persist Shinobi group key to legacy system path
+          copy:
+            dest: /root/ota-mqtt/change_ok/shinobi_camera_id
+            content: "{{ ksp_shinobi_gk }}"
+            mode: '0644'
+          ignore_errors: true
+
+        - name: Report Shinobi provisioning status
+          debug:
+            msg: "Shinobi provisioned: GroupKey={{ ksp_shinobi_gk }}, APIKey={{ (ksp_shinobi_api_key | default(''))[:6] }}... (length {{ (ksp_shinobi_api_key | default('')) | length }})"
+
+  rescue:
+    - name: Shinobi provisioning rescue notice
+      debug:
+        msg: "Shinobi provisioning skipped or encountered error; proceeding with standalone kspcam deployment."

@@ -540,6 +540,189 @@
           </dialog>
         </section>
 
+        <!-- Shinobi NVR -->
+        <section class="view" id="view-shinobi" data-view="shinobi">
+          <div class="page-heading">
+            <h2 class="page-title">Quản lý Shinobi NVR</h2>
+            <div class="page-actions">
+              <button class="btn btn-secondary" id="shinobi-refresh-btn" type="button">🔄 Tải lại</button>
+            </div>
+          </div>
+
+          <!-- Card 1: Trạng thái kết nối & API -->
+          <div class="card">
+            <div class="card-title">Trạng thái kết nối Shinobi NVR</div>
+            <div class="shinobi-status-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1rem;">
+              <div class="stat-card">
+                <div class="stat-label">Kết nối REST API</div>
+                <div class="stat-value" id="shinobi-stat-conn" style="font-size:1.1rem;display:flex;align-items:center;gap:0.5rem;">
+                  <span class="badge" id="shinobi-stat-badge">Đang kiểm tra…</span>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Địa chỉ Shinobi API</div>
+                <div class="stat-value" id="shinobi-stat-url" style="font-size:0.95rem;word-break:break-all;">–</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Group Key (ke)</div>
+                <div class="stat-value" id="shinobi-stat-group" style="font-size:1.1rem;">–</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Tổng Monitor trên Shinobi</div>
+                <div class="stat-value" id="shinobi-stat-count" style="font-size:1.3rem;">–</div>
+              </div>
+            </div>
+            <div class="row">
+              <button class="btn btn-sm btn-secondary" id="shinobi-check-conn-btn" type="button">Kiểm tra kết nối</button>
+              <a class="btn btn-sm btn-secondary" id="shinobi-open-dashboard" href="#" target="_blank" rel="noopener">Mở Shinobi Web Dashboard ↗</a>
+            </div>
+            <div class="msg" id="shinobi-status-msg"></div>
+          </div>
+
+          <!-- Card 2: Đồng bộ dữ liệu 2 chiều (Manual Trigger Sync) -->
+          <div class="card">
+            <div class="card-title">Đồng bộ dữ liệu (Bi-directional Manual Sync)</div>
+            <p class="card-sub">Thao tác thủ công theo yêu cầu (không chạy ngầm tự động). Chọn chiều đồng bộ tương ứng bên dưới:</p>
+            <div class="sync-actions-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-top:0.75rem;">
+              <div style="padding:1rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-subtle,rgba(0,0,0,0.02));">
+                <div style="font-weight:600;margin-bottom:0.35rem;display:flex;align-items:center;gap:0.4rem;">
+                  <span>⬆ Đồng bộ từ KSP-Cam sang Shinobi</span>
+                </div>
+                <p class="muted" style="font-size:0.85rem;margin-bottom:0.75rem;">Đẩy toàn bộ danh sách camera từ <code>cameras.yaml</code> lên Shinobi monitors với URL RTSP chuẩn hóa và codec <code>copy</code> (0% CPU transcoding).</p>
+                <button class="btn btn-primary" id="shinobi-sync-to-btn" type="button">Đồng bộ từ KSP-Cam sang Shinobi</button>
+              </div>
+              <div style="padding:1rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-subtle,rgba(0,0,0,0.02));">
+                <div style="font-weight:600;margin-bottom:0.35rem;display:flex;align-items:center;gap:0.4rem;">
+                  <span>⬇ Đồng bộ từ Shinobi về KSP-Cam</span>
+                </div>
+                <p class="muted" style="font-size:0.85rem;margin-bottom:0.75rem;">Kéo danh sách monitors từ Shinobi NVR về nạp vào kho <code>cameras.yaml</code>, tự động bóc tách IP, tài khoản, hãng và kênh NVR.</p>
+                <button class="btn btn-secondary" id="shinobi-sync-from-btn" type="button">Đồng bộ từ Shinobi về KSP-Cam</button>
+              </div>
+            </div>
+            <div class="msg" id="shinobi-sync-msg" style="margin-top:1rem;"></div>
+          </div>
+
+          <!-- Card 3: Danh sách & Quản lý Monitors trên Shinobi -->
+          <div class="card">
+            <div class="page-heading" style="margin-bottom:0.5rem;">
+              <div class="card-title" style="margin-bottom:0;">Danh sách Monitor trên Shinobi</div>
+              <button class="btn btn-sm btn-primary" id="shinobi-add-btn" type="button">+ Thêm Monitor mới</button>
+            </div>
+            <div class="table-wrap section-gap">
+              <table class="reflow" id="shinobi-table">
+                <thead><tr>
+                  <th>ID (mid)</th>
+                  <th>Tên</th>
+                  <th>Host / IP</th>
+                  <th>Cổng RTSP</th>
+                  <th>Chế độ (Mode)</th>
+                  <th>Codec</th>
+                  <th>Trạng thái</th>
+                  <th style="text-align:right;">Thao tác</th>
+                </tr></thead>
+                <tbody id="shinobi-tbody">
+                  <tr><td colspan="8" class="empty-hint">Đang tải danh sách monitor…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Modal Thêm / Sửa Monitor -->
+          <dialog id="shinobi-edit-modal" class="modal" style="max-width:550px;">
+            <div class="modal-header">
+              <h3 id="shinobi-edit-title">Thêm Monitor mới</h3>
+              <button class="btn-icon" id="shinobi-edit-close" type="button">✕</button>
+            </div>
+            <form id="shinobi-edit-form" class="modal-body" style="display:flex;flex-direction:column;gap:0.75rem;">
+              <div class="field field-sm">
+                <label for="mon-preset">Tự điền nhanh từ camera có sẵn trong kho:</label>
+                <select id="mon-preset"><option value="">-- Chọn camera trong kho --</option></select>
+              </div>
+              <div class="row">
+                <div class="field field-sm">
+                  <label for="mon-mid">Monitor ID (mid) *</label>
+                  <input id="mon-mid" required placeholder="cam_192_168_1_10_37777">
+                </div>
+                <div class="field field-sm">
+                  <label for="mon-name">Tên hiển thị *</label>
+                  <input id="mon-name" required placeholder="Bàn 1">
+                </div>
+              </div>
+              <div class="row">
+                <div class="field field-sm">
+                  <label for="mon-host">Camera IP / Host *</label>
+                  <input id="mon-host" required placeholder="192.168.1.10">
+                </div>
+                <div class="field field-sm">
+                  <label for="mon-port">Cổng RTSP</label>
+                  <input id="mon-port" value="554">
+                </div>
+              </div>
+              <div class="field field-sm">
+                <label for="mon-path">RTSP Path</label>
+                <input id="mon-path" placeholder="/cam/realmonitor?channel=1&subtype=0">
+              </div>
+              <div class="row">
+                <div class="field field-sm">
+                  <label for="mon-user">Tài khoản RTSP</label>
+                  <input id="mon-user" placeholder="admin">
+                </div>
+                <div class="field field-sm">
+                  <label for="mon-pass">Mật khẩu RTSP</label>
+                  <input id="mon-pass" type="password" placeholder="••••••">
+                </div>
+              </div>
+              <div class="row">
+                <div class="field field-sm">
+                  <label for="mon-mode">Chế độ hoạt động</label>
+                  <select id="mon-mode">
+                    <option value="record" selected>Ghi hình (Record)</option>
+                    <option value="start">Xem trực tiếp (Watch/Start)</option>
+                    <option value="idle">Nghỉ (Idle)</option>
+                    <option value="stop">Tắt (Stop)</option>
+                  </select>
+                </div>
+                <div class="field field-sm">
+                  <label for="mon-vcodec">Video Codec</label>
+                  <select id="mon-vcodec">
+                    <option value="copy" selected>copy (0% CPU Transcode)</option>
+                    <option value="h264">h264</option>
+                  </select>
+                </div>
+              </div>
+              <div class="msg" id="shinobi-modal-msg"></div>
+              <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.5rem;">
+                <button class="btn btn-secondary" type="button" id="shinobi-modal-cancel">Hủy</button>
+                <button class="btn btn-primary" type="submit" id="shinobi-modal-submit">Lưu Monitor</button>
+              </div>
+            </form>
+          </dialog>
+
+          <!-- Modal Danh sách Video Recordings của Monitor -->
+          <dialog id="shinobi-videos-modal" class="modal" style="max-width:700px;">
+            <div class="modal-header">
+              <h3 id="shinobi-videos-title">Video đã ghi hình</h3>
+              <button class="btn-icon" id="shinobi-videos-close" type="button">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="table-wrap">
+                <table class="reflow" id="shinobi-videos-table">
+                  <thead><tr>
+                    <th>Tên file</th>
+                    <th>Thời gian</th>
+                    <th>Thời lượng / Kết thúc</th>
+                    <th>Dung lượng</th>
+                    <th>Thao tác</th>
+                  </tr></thead>
+                  <tbody id="shinobi-videos-tbody">
+                    <tr><td colspan="5" class="empty-hint">Đang tải video…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </dialog>
+        </section>
+
         <!-- Nhập từ Shinobi -->
         <section class="view" id="view-import" data-view="import">
           <h2 class="page-title">Nhập từ Shinobi</h2>

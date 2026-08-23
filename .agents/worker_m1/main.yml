@@ -1,0 +1,120 @@
+---
+# app_ksp_bida: deploy the ksp-camera-auto web tool (kspcam) on :2028 and expose
+# it through frp (type http, subdomain). Arch-aware like inut-simple.
+
+- name: Compute arch suffix + frp subdomain (dashes, not underscores)
+  set_fact:
+    ksp_bin_suffix: "{{ '-armhf' if ((ansible_architecture | default('')) is search('^armv')) else '' }}"
+    ksp_subdomain: "ksp-cam-{{ inventory_hostname | regex_replace('_', '-') }}"
+
+- name: Ensure /opt/ksp-cam exists
+  file: { path: /opt/ksp-cam, state: directory, mode: '0755' }
+
+- name: Deploy kspcam binary (arch-matched)
+  copy:
+    src: "{{ playbook_dir }}/roles/app_ksp_bida/files/kspcam{{ ksp_bin_suffix }}"
+    dest: /opt/ksp-cam/kspcam
+    mode: '0755'
+
+- name: Automated Shinobi NVR Provisioning
+  include_tasks: shinobi_provision.yml
+
+- name: Lay down config.yaml
+  copy:
+    dest: /opt/ksp-cam/config.yaml
+    force: true
+    mode: '0640'
+    content: |
+      server:
+        addr: ":2028"
+        username: "admin"
+        password: "smarthome12345"
+      cameras_file: "/opt/ksp-cam/cameras.yaml"
+      defaults:
+        hikvision_port: 8000
+        dahua_port: 37777
+        username: "admin"
+        password: "smarthome12345"
+        timeout_seconds: 30
+        new_password: "smarthome12345"
+      {% if (ksp_shinobi_api_key | default('')) | length > 0 %}
+      shinobi:
+        api_url: "{{ shinobi_api_url }}"
+        api_key: "{{ ksp_shinobi_api_key }}"
+        group_key: "{{ ksp_shinobi_gk }}"
+      {% endif %}
+      mcp:
+        enabled: true
+        allow_unauthenticated_loopback: true
+
+- name: Install kspcam systemd unit
+  copy:
+    dest: /etc/systemd/system/kspcam.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=ksp-camera-auto (bulk camera config UI on :2028)
+      After=network-online.target
+      Wants=network-online.target
+      [Service]
+      WorkingDirectory=/opt/ksp-cam
+      Environment=KSPCAM_KEY_FILE=/opt/ksp-cam/.kspcam.key
+      ExecStart=/opt/ksp-cam/kspcam --addr 0.0.0.0:2028 --config /opt/ksp-cam/config.yaml
+      Restart=always
+      RestartSec=5
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Auto-seed cameras from Shinobi (best-effort)
+  when: (ksp_shinobi_api_key | default('')) | length > 0
+  block:
+    - name: Fetch monitors
+      uri:
+        url: "{{ shinobi_api_url }}/{{ ksp_shinobi_api_key }}/monitor/{{ ksp_shinobi_gk }}"
+        method: GET
+        return_content: true
+        validate_certs: false
+      register: ksp_monitors
+    - name: Save monitors JSON on box (0600)
+      copy:
+        content: "{{ ksp_monitors.content }}"
+        dest: /opt/ksp-cam/shinobi_monitors.json
+        mode: '0600'
+    - name: Seed cameras.yaml via kspcam --import-shinobi
+      command: /opt/ksp-cam/kspcam --config /opt/ksp-cam/config.yaml --import-shinobi /opt/ksp-cam/shinobi_monitors.json
+      environment:
+        KSPCAM_KEY_FILE: /opt/ksp-cam/.kspcam.key
+      register: ksp_seed
+      changed_when: true
+    - name: Seed result
+      debug: { msg: "{{ ksp_seed.stderr | default(ksp_seed.stdout) | default('seeded') }}" }
+  rescue:
+    - debug: { msg: "Bỏ qua seed Shinobi (không có Shinobi / fetch lỗi) — deploy tiếp bình thường." }
+
+- name: Enable + (re)start kspcam
+  systemd: { name: kspcam, enabled: true, state: restarted, daemon_reload: true }
+
+- name: Ensure frpc config dir exists
+  file: { path: /root/ota-mqtt/change_ok, state: directory, mode: '0755' }
+
+- name: Ensure frpc_config file exists (create empty if missing)
+  copy: { dest: /root/ota-mqtt/change_ok/frpc_config, content: "", force: false, mode: '0644' }
+
+- name: Copy frpc updater script (avoids Jinja-in-heredoc parsing issues)
+  copy:
+    src: "{{ playbook_dir }}/roles/app_ksp_bida/files/frpc_add.py"
+    dest: /tmp/ksp_frpc_add.py
+    mode: '0755'
+
+- name: frpc — ensure [common] (only if missing) + add ksp-cam http proxy
+  command: python3 /tmp/ksp_frpc_add.py "{{ ksp_subdomain }}"
+  changed_when: true
+
+- name: Restart frpc so the new proxy takes effect (best-effort; service name varies)
+  shell: >
+    systemctl restart frpc 2>/dev/null
+    || (HOME=/root pm2 restart frpc 2>/dev/null)
+    || systemctl restart inut-media-svc 2>/dev/null
+    || pkill -HUP -x frpc 2>/dev/null
+    || true
+  changed_when: false

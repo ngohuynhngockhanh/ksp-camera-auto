@@ -32,5 +32,18 @@ defaults:
   # Default new password when bulk-changing a camera's password.
   new_password: "smarthome12345"
 
+# Shinobi NVR REST API integration (for monitor management and stream status).
+shinobi:
+  api_url: "http://127.0.0.1:8080" # Shinobi server endpoint
+  api_key: ""                      # 30-character API key generated in Shinobi
+  group_key: ""                    # Shinobi Group Key (ke)
+
+# Embedded Model Context Protocol (MCP) server for AI assistants.
+mcp:
+  enabled: true                    # Enable MCP server (Stdio and SSE endpoints)
+  api_key: ""                      # Optional API key for remote SSE access (/mcp)
+  allow_unauthenticated_loopback: true # Allow 127.0.0.1 without API key
+
 # Camera passwords are stored AES-encrypted in cameras.yaml. The key lives at
 # ~/.kspcam.key (auto-generated, 0600) or KSPCAM_KEY / KSPCAM_KEY_FILE env.
+

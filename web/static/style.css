@@ -375,10 +375,11 @@ td.actions-cell .btn { margin: 0 4px 5px 0; padding-inline: 10px; }
 /* ---------- badges / chips ---------- */
 
 .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: .74rem; font-weight: 600; white-space: nowrap; }
-.badge.ok { background: var(--success-bg); color: var(--success); }
-.badge.fail { background: var(--danger-bg); color: var(--danger); }
+.badge.ok, .badge-ok { background: var(--success-bg); color: var(--success); }
+.badge.fail, .badge-err { background: var(--danger-bg); color: var(--danger); }
+.badge.warn, .badge-warn { background: rgba(234, 179, 8, 0.15); color: #eab308; }
 .scan-status-error { color: var(--danger); font-size: .76rem; white-space: normal; overflow-wrap: anywhere; }
-.badge.info { background: var(--surface-2); color: var(--text-2); }
+.badge.info, .badge-info { background: var(--surface-2); color: var(--text-2); }
 
 .chip-list { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
 .chip {

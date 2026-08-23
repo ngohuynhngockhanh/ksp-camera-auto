@@ -19,7 +19,9 @@ import (
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/importer"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mcp"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/server"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/shinobi"
 )
 
 // version is set at build time via -ldflags.
@@ -33,10 +35,36 @@ func main() {
 	importShinobi := flag.String("import-shinobi", "", "import cameras from a Shinobi monitors JSON file into the cameras file, then exit")
 	importHikPort := flag.Int("import-hik-port", 80, "config port assigned to imported Hikvision cameras (LAN ISAPI = 80)")
 	importDahuaPort := flag.Int("import-dahua-port", 37777, "config port assigned to imported Dahua cameras")
+	mcpMode := flag.Bool("mcp", false, "Start MCP (Model Context Protocol) server over Stdio")
 	flag.Parse()
 
 	if *showVersion {
 		log.Printf("kspcam %s", version)
+		return
+	}
+	if *mcpMode {
+		log.SetOutput(os.Stderr)
+		cfg, err := config.Load(*configPath)
+		if err != nil {
+			log.Fatalf("config: %v", err)
+		}
+		inv, err := config.LoadInventory(cfg.CamerasFile)
+		if err != nil {
+			log.Fatalf("inventory: %v", err)
+		}
+
+		var sc *shinobi.Client
+		if cfg.Shinobi.APIURL != "" && cfg.Shinobi.APIKey != "" {
+			sc = shinobi.NewClient(cfg.Shinobi.APIURL, cfg.Shinobi.APIKey, cfg.Shinobi.GroupKey)
+		}
+
+		mcpServer := mcp.NewServer(&cfg, inv, sc)
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+
+		if err := mcpServer.RunStdio(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			log.Fatalf("mcp stdio: %v", err)
+		}
 		return
 	}
 	if *hashPassword != "" {

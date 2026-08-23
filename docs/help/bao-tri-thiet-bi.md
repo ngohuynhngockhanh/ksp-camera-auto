@@ -5,7 +5,7 @@ section: cameras
 order: 40
 keywords: [thiết bị, bảo trì, mạng, khởi động lại, reboot, thẻ nhớ, lưu trữ, format, tự khởi động]
 ui: "#cameras"
-covers: ["/api/reboot", "/api/storage", "/api/autoreboot", "/api/device-time"]
+covers: ["/api/reboot", "/api/storage", "/api/autoreboot", "/api/device-time", "/api/nvr/health", "/api/nvr/health/check", "/api/nvr/watchdog"]
 related: [kho-camera, mang-ip-tinh, wifi, xem-lai]
 ---
 ## Mục đích

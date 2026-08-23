@@ -14,6 +14,7 @@ const ICONS = {
   edit: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
   reload: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>',
   help: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5.1.8c0 1.6-2.6 2.2-2.6 3.5"/><path d="M12 17h.01"/></svg>',
+  video: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>',
 };
 
 // Nav config shared by sidebar / bottom-nav / drawer. Kho camera / Chỉnh
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { hash: 'scan', label: 'Quét mạng', short: 'Quét', icon: ICONS.radar, bottom: true },
   { hash: 'cameras', label: 'Kho camera', short: 'Camera', icon: ICONS.camera, bottom: true },
   { hash: 'review', label: 'Xem lại', short: 'Xem lại', icon: ICONS.radar, bottom: true },
+  { hash: 'shinobi', label: 'Shinobi NVR', short: 'Shinobi', icon: ICONS.video, bottom: false },
   // bottom: false — mobile bottom nav stays at 4 items + Menu so it doesn't
   // get crowded; import (an occasional setup action, unlike the other four
   // which are used every visit) is reachable from the sidebar and the drawer.
@@ -271,6 +273,7 @@ function setRoute() {
   closeDrawer();
   if (hash === 'cameras') renderCameraTask();
   if (hash === 'dashboard') renderDashboard();
+  if (hash === 'shinobi') renderShinobiView();
   if (hash === 'review') {
     // reviewOnShow may not exist yet if review.js is still loading (a viewer is
     // forced here during init, before the later <script> runs) — retry on load.
@@ -2942,6 +2945,414 @@ document.getElementById('imp-btn').addEventListener('click', async () => {
   }
 });
 
+/* ---------- Shinobi NVR Management ---------- */
+
+let shinobiStatusCache = null;
+let shinobiMonitorsCache = [];
+
+async function renderShinobiView() {
+  await Promise.all([loadShinobiStatus(), loadShinobiMonitors()]);
+  populateShinobiPresetDropdown();
+}
+
+async function loadShinobiStatus() {
+  const statBadge = document.getElementById('shinobi-stat-badge');
+  const statUrl = document.getElementById('shinobi-stat-url');
+  const statGroup = document.getElementById('shinobi-stat-group');
+  const statCount = document.getElementById('shinobi-stat-count');
+  const dashLink = document.getElementById('shinobi-open-dashboard');
+  const msg = document.getElementById('shinobi-status-msg');
+
+  if (!statBadge) return;
+  statBadge.className = 'badge';
+  statBadge.textContent = 'Đang kiểm tra…';
+  if (msg) { msg.textContent = ''; msg.className = 'msg'; }
+
+  try {
+    const st = await api('/api/shinobi/status');
+    shinobiStatusCache = st;
+    if (!st.configured) {
+      statBadge.className = 'badge badge-warn';
+      statBadge.textContent = 'Chưa cấu hình';
+      statUrl.textContent = '(trống trong config.yaml)';
+      statGroup.textContent = '–';
+      statCount.textContent = '0';
+      dashLink.style.display = 'none';
+      if (msg) {
+        msg.className = 'msg info';
+        msg.textContent = 'Shinobi chưa được cấu hình API URL / API Key trong file config.yaml.';
+      }
+    } else if (st.connected) {
+      statBadge.className = 'badge badge-ok';
+      statBadge.textContent = 'Đã kết nối ●';
+      statUrl.textContent = st.apiUrl || '–';
+      statGroup.textContent = st.groupKey || '–';
+      statCount.textContent = String(st.monitorCount || 0);
+      dashLink.style.display = 'inline-block';
+      dashLink.href = st.apiUrl || '#';
+    } else {
+      statBadge.className = 'badge badge-err';
+      statBadge.textContent = 'Mất kết nối ●';
+      statUrl.textContent = st.apiUrl || '–';
+      statGroup.textContent = st.groupKey || '–';
+      statCount.textContent = '–';
+      dashLink.style.display = 'inline-block';
+      dashLink.href = st.apiUrl || '#';
+      if (msg && st.error) {
+        msg.className = 'msg err';
+        msg.textContent = 'Không kết nối được tới Shinobi API: ' + st.error;
+      }
+    }
+  } catch (err) {
+    statBadge.className = 'badge badge-err';
+    statBadge.textContent = 'Lỗi kết nối';
+    if (msg) {
+      msg.className = 'msg err';
+      msg.textContent = 'Lỗi truy vấn trạng thái: ' + err.message;
+    }
+  }
+}
+
+async function loadShinobiMonitors() {
+  const tbody = document.getElementById('shinobi-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">Đang tải danh sách monitor…</td></tr>';
+
+  try {
+    const mons = await api('/api/shinobi/monitors');
+    shinobiMonitorsCache = Array.isArray(mons) ? mons : [];
+    renderShinobiMonitorsTable(shinobiMonitorsCache);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-hint" style="color:var(--err);">Lỗi tải monitors: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+function renderShinobiMonitorsTable(mons) {
+  const tbody = document.getElementById('shinobi-tbody');
+  if (!tbody) return;
+  if (!mons || mons.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">Chưa có monitor nào trên Shinobi. Bấm "+ Thêm Monitor mới" hoặc "Đồng bộ từ KSP-Cam sang Shinobi".</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = mons.map(m => {
+    const mode = m.mode || 'idle';
+    let modeBadge = '<span class="badge">' + escapeHtml(mode) + '</span>';
+    if (mode === 'record') modeBadge = '<span class="badge badge-ok">Ghi hình (record)</span>';
+    else if (mode === 'start') modeBadge = '<span class="badge badge-ok">Xem (start)</span>';
+    else if (mode === 'stop') modeBadge = '<span class="badge badge-warn">Tắt (stop)</span>';
+
+    const vcodec = (m.details && m.details.vcodec) || 'copy';
+    const host = m.host || (m.details && m.details.auto_host ? m.details.auto_host.split('@')[1] || m.details.auto_host : '–');
+    const port = m.port || (m.details && m.details.port) || '554';
+
+    return `<tr>
+      <td><code>${escapeHtml(m.mid)}</code></td>
+      <td><strong>${escapeHtml(m.name || m.mid)}</strong></td>
+      <td>${escapeHtml(host)}</td>
+      <td>${escapeHtml(port)}</td>
+      <td>${modeBadge}</td>
+      <td><code>${escapeHtml(vcodec)}</code></td>
+      <td><span class="muted">${escapeHtml(m.type || 'h264')}</span></td>
+      <td style="text-align:right;">
+        <div class="row" style="justify-content:flex-end;gap:0.35rem;">
+          <button class="btn btn-xs btn-secondary" onclick="shinobiSetState('${escapeHtml(m.mid)}', 'record')" title="Bật ghi hình">Ghi</button>
+          <button class="btn btn-xs btn-secondary" onclick="shinobiSetState('${escapeHtml(m.mid)}', 'start')" title="Xem luồng">Xem</button>
+          <button class="btn btn-xs btn-secondary" onclick="shinobiSetState('${escapeHtml(m.mid)}', 'stop')" title="Dừng stream">Tắt</button>
+          <button class="btn btn-xs btn-secondary" onclick="openShinobiVideosModal('${escapeHtml(m.mid)}')" title="Xem video đã lưu">Video</button>
+          <button class="btn btn-xs btn-secondary" onclick="openShinobiEditModal('${escapeHtml(m.mid)}')" title="Chỉnh sửa">${ICONS.edit || 'Sửa'}</button>
+          <button class="btn btn-xs btn-danger" onclick="shinobiDeleteMonitor('${escapeHtml(m.mid)}')" title="Xóa monitor">✕</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function shinobiSetState(mid, state) {
+  try {
+    await api('/api/shinobi/monitors', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'state', monitorId: mid, state: state }),
+    });
+    showToast(`Đã chuyển monitor ${mid} sang chế độ ${state}`, 'ok');
+    await loadShinobiMonitors();
+    await loadShinobiStatus();
+  } catch (err) {
+    showToast(`Lỗi đổi trạng thái: ${err.message}`, 'err');
+  }
+}
+
+async function shinobiDeleteMonitor(mid) {
+  const confirmed = await showConfirm('Xóa Monitor Shinobi', `Bạn có chắc muốn xóa monitor "${mid}" khỏi Shinobi?`, { danger: true, okLabel: 'Xóa Monitor' });
+  if (!confirmed) return;
+  try {
+    await api('/api/shinobi/monitors', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'delete', monitorId: mid }),
+    });
+    showToast(`Đã xóa monitor ${mid}`, 'ok');
+    await loadShinobiMonitors();
+    await loadShinobiStatus();
+  } catch (err) {
+    showToast(`Lỗi xóa monitor: ${err.message}`, 'err');
+  }
+}
+
+function populateShinobiPresetDropdown() {
+  const select = document.getElementById('mon-preset');
+  if (!select) return;
+  select.innerHTML = '<option value="">-- Chọn camera trong kho để tự điền --</option>' +
+    cameras.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name || c.id)} (${escapeHtml(c.host)} - ${escapeHtml(c.vendor)})</option>`).join('');
+
+  select.onchange = () => {
+    const dev = cameras.find(c => c.id === select.value);
+    if (!dev) return;
+    const sanitizedHost = dev.host.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const mid = dev.nvrChannel > 0 ? `cam_${sanitizedHost}_c${dev.nvrChannel}` : `cam_${sanitizedHost}_${dev.port || 37777}`;
+    let path = `/cam/realmonitor?channel=${dev.nvrChannel || 1}&subtype=0`;
+    if (dev.vendor === 'hikvision') {
+      path = `/Streaming/Channels/${(dev.nvrChannel || 1) * 100 + 1}`;
+    }
+
+    document.getElementById('mon-mid').value = mid;
+    document.getElementById('mon-name').value = dev.name || dev.id;
+    document.getElementById('mon-host').value = dev.host;
+    document.getElementById('mon-port').value = '554';
+    document.getElementById('mon-path').value = path;
+    document.getElementById('mon-user').value = dev.username || 'admin';
+    document.getElementById('mon-pass').value = dev.password || '';
+    document.getElementById('mon-mode').value = 'record';
+    document.getElementById('mon-vcodec').value = 'copy';
+  };
+}
+
+function openShinobiEditModal(mid) {
+  const dlg = document.getElementById('shinobi-edit-modal');
+  const title = document.getElementById('shinobi-edit-title');
+  const form = document.getElementById('shinobi-edit-form');
+  const msg = document.getElementById('shinobi-modal-msg');
+  if (msg) { msg.textContent = ''; msg.className = 'msg'; }
+
+  populateShinobiPresetDropdown();
+
+  if (mid) {
+    title.textContent = `Chỉnh sửa Monitor: ${mid}`;
+    const m = shinobiMonitorsCache.find(x => x.mid === mid);
+    if (m) {
+      document.getElementById('mon-mid').value = m.mid;
+      document.getElementById('mon-mid').readOnly = true;
+      document.getElementById('mon-name').value = m.name || m.mid;
+      document.getElementById('mon-host').value = m.host || '';
+      document.getElementById('mon-port').value = m.port || (m.details && m.details.port) || '554';
+      document.getElementById('mon-path').value = m.path || '';
+      document.getElementById('mon-user').value = (m.details && m.details.muser) || '';
+      document.getElementById('mon-pass').value = (m.details && m.details.mpass) || '';
+      document.getElementById('mon-mode').value = m.mode || 'record';
+      document.getElementById('mon-vcodec').value = (m.details && m.details.vcodec) || 'copy';
+    }
+  } else {
+    title.textContent = 'Thêm Monitor mới';
+    form.reset();
+    document.getElementById('mon-mid').readOnly = false;
+    document.getElementById('mon-port').value = '554';
+    document.getElementById('mon-mode').value = 'record';
+    document.getElementById('mon-vcodec').value = 'copy';
+  }
+
+  openDialog(dlg);
+}
+
+async function openShinobiVideosModal(mid) {
+  const dlg = document.getElementById('shinobi-videos-modal');
+  const title = document.getElementById('shinobi-videos-title');
+  const tbody = document.getElementById('shinobi-videos-tbody');
+  title.textContent = `Video đã ghi hình: ${mid}`;
+  tbody.innerHTML = '<tr><td colspan="5" class="empty-hint">Đang tải danh sách video…</td></tr>';
+  openDialog(dlg);
+
+  try {
+    const videos = await api(`/api/shinobi/videos?mid=${encodeURIComponent(mid)}&limit=50`);
+    if (!videos || videos.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-hint">Chưa có video bản ghi nào được lưu trên Shinobi.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = videos.map(v => {
+      const timeStr = v.time ? new Date(v.time).toLocaleString('vi-VN') : '–';
+      const endStr = v.end ? new Date(v.end).toLocaleTimeString('vi-VN') : '–';
+      const sizeMB = v.size > 0 ? (v.size / (1024 * 1024)).toFixed(1) + ' MB' : '–';
+      const href = v.href || (shinobiStatusCache && shinobiStatusCache.apiUrl ? `${shinobiStatusCache.apiUrl}${v.href}` : '#');
+
+      return `<tr>
+        <td><code>${escapeHtml(v.filename || v.mid)}</code></td>
+        <td>${escapeHtml(timeStr)}</td>
+        <td>${escapeHtml(endStr)}</td>
+        <td>${escapeHtml(sizeMB)}</td>
+        <td>
+          <a class="btn btn-xs btn-secondary" href="${escapeHtml(href)}" target="_blank" rel="noopener">Tải video ↗</a>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-hint" style="color:var(--err);">Lỗi tải video: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+function wireShinobiTabEvents() {
+  const refreshBtn = document.getElementById('shinobi-refresh-btn');
+  if (refreshBtn) refreshBtn.addEventListener('click', renderShinobiView);
+
+  const checkBtn = document.getElementById('shinobi-check-conn-btn');
+  if (checkBtn) checkBtn.addEventListener('click', loadShinobiStatus);
+
+  const addBtn = document.getElementById('shinobi-add-btn');
+  if (addBtn) addBtn.addEventListener('click', () => openShinobiEditModal(null));
+
+  const editClose = document.getElementById('shinobi-edit-close');
+  if (editClose) editClose.addEventListener('click', () => closeDialog(document.getElementById('shinobi-edit-modal')));
+
+  const editCancel = document.getElementById('shinobi-modal-cancel');
+  if (editCancel) editCancel.addEventListener('click', () => closeDialog(document.getElementById('shinobi-edit-modal')));
+
+  const vidsClose = document.getElementById('shinobi-videos-close');
+  if (vidsClose) vidsClose.addEventListener('click', () => closeDialog(document.getElementById('shinobi-videos-modal')));
+
+  // Manual Trigger 1: Push Sync (cameras.yaml -> Shinobi)
+  const syncToBtn = document.getElementById('shinobi-sync-to-btn');
+  if (syncToBtn) {
+    syncToBtn.addEventListener('click', async () => {
+      const msg = document.getElementById('shinobi-sync-msg');
+      setBusy(syncToBtn, true, 'Đang đồng bộ sang Shinobi…');
+      if (msg) { msg.textContent = ''; msg.className = 'msg'; }
+      try {
+        const report = await api('/api/shinobi/sync-to-shinobi', { method: 'POST' });
+        const errCount = (report.errors && report.errors.length) || 0;
+        let txt = `Đồng bộ sang Shinobi thành công: Tạo mới ${report.created || 0}, Cập nhật ${report.updated || 0}, Giữ nguyên ${report.unchanged || 0}.`;
+        if (errCount > 0) txt += ` (Gặp ${errCount} lỗi: ${report.errors.join('; ')})`;
+        if (msg) {
+          msg.className = errCount > 0 ? 'msg warn' : 'msg ok';
+          msg.textContent = txt;
+        }
+        showToast(txt, errCount > 0 ? 'warn' : 'ok');
+        await renderShinobiView();
+      } catch (err) {
+        if (msg) {
+          msg.className = 'msg err';
+          msg.textContent = 'Lỗi đồng bộ sang Shinobi: ' + err.message;
+        }
+        showToast('Lỗi đồng bộ: ' + err.message, 'err');
+      } finally {
+        setBusy(syncToBtn, false);
+      }
+    });
+  }
+
+  // Manual Trigger 2: Pull Sync (Shinobi -> cameras.yaml)
+  const syncFromBtn = document.getElementById('shinobi-sync-from-btn');
+  if (syncFromBtn) {
+    syncFromBtn.addEventListener('click', async () => {
+      const msg = document.getElementById('shinobi-sync-msg');
+      setBusy(syncFromBtn, true, 'Đang đồng bộ về KSP-Cam…');
+      if (msg) { msg.textContent = ''; msg.className = 'msg'; }
+      try {
+        const report = await api('/api/shinobi/sync-from-shinobi', { method: 'POST' });
+        const errCount = (report.errors && report.errors.length) || 0;
+        let txt = `Đồng bộ từ Shinobi về KSP-Cam thành công: Thêm mới ${report.added || 0}, Đã có/Bỏ qua ${report.skipped || 0}.`;
+        if (errCount > 0) txt += ` (Gặp ${errCount} lỗi: ${report.errors.join('; ')})`;
+        if (msg) {
+          msg.className = errCount > 0 ? 'msg warn' : 'msg ok';
+          msg.textContent = txt;
+        }
+        showToast(txt, errCount > 0 ? 'warn' : 'ok');
+        await loadCameras();
+        await renderShinobiView();
+      } catch (err) {
+        if (msg) {
+          msg.className = 'msg err';
+          msg.textContent = 'Lỗi đồng bộ từ Shinobi: ' + err.message;
+        }
+        showToast('Lỗi đồng bộ: ' + err.message, 'err');
+      } finally {
+        setBusy(syncFromBtn, false);
+      }
+    });
+  }
+
+  // Form Submit Add/Edit
+  const editForm = document.getElementById('shinobi-edit-form');
+  if (editForm) {
+    editForm.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const modalMsg = document.getElementById('shinobi-modal-msg');
+      const submitBtn = document.getElementById('shinobi-modal-submit');
+      if (modalMsg) { modalMsg.textContent = ''; modalMsg.className = 'msg'; }
+
+      const mid = document.getElementById('mon-mid').value.trim();
+      const name = document.getElementById('mon-name').value.trim();
+      const host = document.getElementById('mon-host').value.trim();
+      const port = document.getElementById('mon-port').value.trim() || '554';
+      const path = document.getElementById('mon-path').value.trim();
+      const user = document.getElementById('mon-user').value.trim();
+      const pass = document.getElementById('mon-pass').value.trim();
+      const mode = document.getElementById('mon-mode').value;
+      const vcodec = document.getElementById('mon-vcodec').value;
+
+      let autoHost = `rtsp://${host}:${port}${path}`;
+      if (user && pass) {
+        autoHost = `rtsp://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${host}:${port}${path}`;
+      } else if (user) {
+        autoHost = `rtsp://${encodeURIComponent(user)}@${host}:${port}${path}`;
+      }
+
+      const mon = {
+        mid: mid,
+        name: name,
+        type: 'h264',
+        mode: mode,
+        host: host,
+        port: port,
+        protocol: 'rtsp',
+        path: path,
+        ext: 'mp4',
+        details: {
+          auto_host: autoHost,
+          muser: user,
+          mpass: pass,
+          port: port,
+          protocol: 'rtsp',
+          stream_type: 'mp4',
+          stream_flv_type: 'ws',
+          vcodec: vcodec,
+          acodec: 'copy',
+          record_vcodec: vcodec,
+          record_acodec: 'aac',
+        },
+      };
+
+      const isEdit = document.getElementById('mon-mid').readOnly;
+      const action = isEdit ? 'edit' : 'add';
+
+      setBusy(submitBtn, true);
+      try {
+        await api('/api/shinobi/monitors', {
+          method: 'POST',
+          body: JSON.stringify({ action: action, monitorId: mid, monitor: mon }),
+        });
+        showToast(isEdit ? `Đã cập nhật monitor ${mid}` : `Đã thêm monitor ${mid}`, 'ok');
+        closeDialog(document.getElementById('shinobi-edit-modal'));
+        await renderShinobiView();
+      } catch (err) {
+        if (modalMsg) {
+          modalMsg.className = 'msg err';
+          modalMsg.textContent = 'Lỗi: ' + err.message;
+        }
+      } finally {
+        setBusy(submitBtn, false);
+      }
+    });
+  }
+}
+
 /* ---------- init ---------- */
 
 async function init() {
@@ -2952,6 +3363,7 @@ async function init() {
     if (currentHash() !== 'review') location.hash = '#review';
   }
   buildNav();
+  wireShinobiTabEvents();
 
   const themeBtn = document.getElementById('theme-toggle');
   themeBtn.innerHTML = `<span class="icon-sun">${ICONS.sun}</span><span class="icon-moon">${ICONS.moon}</span>`;
