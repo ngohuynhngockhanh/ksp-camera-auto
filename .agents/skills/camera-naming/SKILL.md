@@ -26,6 +26,7 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 | **Redbida `ui_tabs_links`** | Chuẩn INI 20 section `[C01]` .. `[C20]` (4 dòng/section) | Xem chi tiết Section 4 bên dưới | Dòng 3 `vid_play_label` = `<ui_title>` (Tên quán). |
 | **Redbida `video_config`** | Chuỗi cấu hình video playback | `range=72` | Giới hạn tra cứu lịch sử highlight/video 72 giờ. |
 | **Redbida `logo_livestream`** | URL logo hiển thị góc livestream | `http://127.0.0.1:2028/logo.png` | Upload qua `/api/upload-logo` hoặc phục vụ từ KSP-Cam. |
+| **Redbida `custom_hashtags`** | Chuỗi hashtag định dạng chuẩn | `#<UITitleNoSpaces> #BILLIARDSlive #INUTlive #highlightsports` | Tên quán không dấu không cách + 3 hashtag chuẩn. |
 
 ---
 
