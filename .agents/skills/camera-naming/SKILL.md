@@ -127,5 +127,9 @@ list_refresh_label=Cập nhật highlight
   3. Lắng nghe phản hồi xác nhận từ topic `/private/i_sets/ack`.
   4. Đọc lại (read-back) qua topic `/private/i_gets` và đối chiếu kết quả trả về trên `/private/i_gets/ack`.
   5. `ota-mqtt` và Node-RED sẽ tự động nhận diện thay đổi, lưu trữ nhất quán và đồng bộ hai chiều với cloud.
+- **Quản lý FRP / Subdomain qua key `frpc_config`**:
+  - Tuyệt đối **KHÔNG** thao tác trực tiếp vào `/tmp/frpc.ini` hoặc tự restart process frpc thủ công.
+  - Khi cần bổ sung proxy/subdomain, chỉ cần cập nhật nội dung vào key **`frpc_config`** của Redbida qua MQTT `/private/i_sets`. Hệ thống sẽ tự động xử lý và duy trì kết nối frpc an toàn.
+
 
 
