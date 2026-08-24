@@ -1,25 +1,31 @@
-# Sentinel Final Handoff Report
+# Handoff Report — Sentinel
 
 ## Observation
-All requirements for upgrading the `#redbida` interface, integrating the System Knowledge Hub & Onboarding Workflow, expanding backend MQTT catalog metadata, and executing comprehensive test suites have been fulfilled.
-Independent Victory Audit conducted by `teamwork_preview_victory_auditor` verified all deliverables with a final verdict of **VICTORY CONFIRMED**.
+- Original user request recorded in `ORIGINAL_REQUEST.md`.
+- Project routed to `teamwork_preview_orchestrator` (General execution path).
+- Orchestrator dispatched subagents across 3 phases (Scoping -> Implementation M1 & Registration M2 -> Unit tests, Multi-arch build, Remote deployment M3).
+- Orchestrator claimed victory with handoff at `.agents/orchestrator/handoff.md`.
+- Independent `teamwork_preview_victory_auditor` was dispatched to verify the claims independently.
+- Victory Auditor returned `VERDICT: VICTORY CONFIRMED` after executing 3-phase audit (Timeline & provenance PASS, Integrity & anti-cheat PASS, Independent test execution PASS).
+- Background crons and subagents have been cleanly terminated.
 
 ## Logic Chain
-1. Dispatched General path orchestrator (`teamwork_preview_orchestrator`).
-2. Maintained progress and liveness monitoring crons across 4 iterations.
-3. Orchestrator completed 4 milestones (Backend Catalog, Glassmorphism UI, Knowledge Hub/Preset Generator, and Testing/Packaging).
-4. Victory claimed by Orchestrator -> Spawned independent Victory Auditor.
-5. Independent Victory Auditor verified 19 Go packages (100% pass), multi-arch static builds, Playwright UI suites (113 passed), and zero regressions.
-6. Cancelled monitoring crons and cleanly terminated subagents.
+1. User requested full MCP expansion for RedBida / Bida Onboarding suite.
+2. Verified all 6 `redbida_*` tools implemented, registered into `internal/mcp/server.go` (31 total tools), and verified across both Stdio mode and HTTP/SSE mode.
+3. Verified pure Go diacritics removal (`removeVietnameseTones`), 15 Golden Template onboarding parameters calculation, read-back verification, and sensitive key masking.
+4. Independent test suite passed 100% with no cache (`go test -count=1 ./...`), documentation validated via `make docs-check` (25 articles), static binaries built for amd64, arm64, armv7 (`make build-all`), deployed to `inut_204_164` and `inut_204_163`, and committed to git (`f696ad6`).
 
 ## Caveats
-None. All components adhere to the project's static binary (`CGO_ENABLED=0`) and strict MQTT wire format (`/private/i_sets`, `/private/i_gets`) protocols.
+- Production nodes communicate with local `ota-mqtt` broker on `127.0.0.1:12369`. When testing on machines without a running broker, MQTT calls return structured, descriptive errors without crashing or blocking.
+- High-risk configuration keys require `confirm: true` parameter in `redbida_set_keys`.
 
 ## Conclusion
-Project is 100% complete and ready for final user handoff.
+- All requirements R1, R2, and R3 are 100% complete and verified.
+- Victory confirmed by independent auditor.
 
 ## Verification Method
-- Independent Victory Auditor Report at `.agents/victory_auditor_1/handoff.md`.
-- Uncached Go test execution: `go test -count=1 ./...` (100% pass).
-- Multi-architecture static builds: `make build-all` (All binary artifacts successfully built).
-- Playwright E2E UI testing: `npx playwright test` (113 passed).
+- Independent `go test -count=1 ./...`
+- Independent `make docs-check`
+- Independent `make build-all`
+- Stdio JSON-RPC 2.0 CLI test: `kspcam --mcp`
+- Live remote edge node query on `inut_204_164` and `inut_204_163` via MCP HTTP endpoint.

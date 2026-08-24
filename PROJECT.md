@@ -50,7 +50,7 @@
 |---|------|-------|-------------|--------|
 | M1 | RedBida & Onboarding MCP Tools Suite | Implement `internal/mcp/tools_redbida.go` with F1-F6: `redbida_list_catalog`, `redbida_get_keys`, `redbida_set_keys`, `redbida_apply_onboarding_preset` (all 15 parameters, 20-tab INI, accent stripping, trailing semicolon removal), `redbida_trigger_go2rtc`, and `redbida_get_time_status`. | none | DONE |
 | M2 | MCP Server Integration & Documentation | Integrate new tools in `internal/mcp/server.go` (F7), wire `redbida.Service` into `NewServer`, verify Stdio/SSE modes, and update documentation in `docs/` and `GEMINI.md`/`AGENTS.md` (F8). | M1 | DONE |
-| M3 | Testing, Multi-Arch Build, Remote Deployment & Live Verification | Implement unit tests (F9), execute `make build-all` (F10), deploy to `inut_204_164` and `inut_204_163` (F11), execute live MCP tests, and push git commit (F12). | M2 | IN_PROGRESS |
+| M3 | Testing, Multi-Arch Build, Remote Deployment & Live Verification | Implement unit tests (F9), execute `make build-all` (F10), deploy to `inut_204_164` and `inut_204_163` (F11), execute live MCP tests, and push git commit (F12). | M2 | DONE |
 
 ## Interface Contracts
 
