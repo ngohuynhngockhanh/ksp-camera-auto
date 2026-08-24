@@ -42,7 +42,7 @@ const HASH_ALIASES = {
   results: 'cameras/results',
   'cameras/devices': 'cameras/nvr',
 };
-const CAMERA_TASKS = ['list', 'bulk', 'nvr', 'anti-a', 'results'];
+const CAMERA_TASKS = ['list', 'bulk', 'nvr', 'anti-a', 'traffic', 'results'];
 // Tabs of the camera detail page (#cameras/cam/<encodedId>/<tab>).
 const DETAIL_TABS = ['osd', 'picture', 'video', 'audio', 'network', 'ptz', 'maint'];
 
@@ -256,15 +256,17 @@ function renderCameraTask() {
     else el.removeAttribute('aria-current');
   });
   if (detail) { openCameraDetail(detail); return; }
-  closeCameraDetail();
   if (task === 'bulk') renderBulkSelection();
   if (task === 'nvr') renderNvrList();
   if (task === 'anti-a') renderAntiAPanel();
+  if (task === 'traffic') renderTrafficPanel();
+  else if (typeof stopTrafficStream === 'function') stopTrafficStream();
 }
 
 function setRoute() {
   if (resolveLegacyHash()) return;
   let hash = currentHash();
+  if (hash !== 'cameras' && typeof stopTrafficStream === 'function') stopTrafficStream();
   // A viewer is locked to the review view — bounce any other route back.
   if (appRole === 'viewer' && hash !== 'review') { location.hash = '#review'; return; }
   if (!appRedbidaEnabled && hash === 'redbida') { location.hash = '#dashboard'; return; }
@@ -3869,6 +3871,7 @@ async function init() {
   wireSettingsPopover();
   renderBulkSummary();
   wireAntiAGuardian();
+  wireTrafficInspector();
 
   window.addEventListener('hashchange', setRoute);
   setRoute();
@@ -4074,6 +4077,253 @@ function wireSettingsPopover() {
     if (pop.hidden || pop.contains(ev.target) || ev.target === btn) return;
     pop.hidden = true;
     btn.setAttribute('aria-expanded', 'false');
+  });
+// ---------- Network Traffic Inspector (iftop) Logic ----------
+
+let trafficEventSource = null;
+let trafficIsLive = false;
+let trafficLatestSnapshot = null;
+
+function formatBps(bps) {
+  if (!bps || bps <= 0) return '0.0 Kbps';
+  if (bps >= 1000000) {
+    return (bps / 1000000).toFixed(2) + ' Mbps';
+  }
+  return (bps / 1000).toFixed(1) + ' Kbps';
+}
+
+async function renderTrafficPanel() {
+  await loadTrafficInterfaces();
+  if (!trafficIsLive) {
+    // If not live, fetch a point-in-time snapshot to show initial data
+    fetchTrafficSnapshot();
+  }
+}
+
+async function loadTrafficInterfaces() {
+  const select = document.getElementById('traffic-iface-select');
+  if (!select) return;
+
+  try {
+    const res = await fetch('/api/network/traffic/interfaces');
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    const ifaces = data.interfaces || [];
+    const def = data.default || (ifaces.length > 0 ? ifaces[0] : 'eth0');
+
+    const currentVal = select.value;
+    select.innerHTML = ifaces.map(ifi => {
+      const isDef = ifi === def ? ' (Mặc định)' : '';
+      return `<option value="${escapeHtml(ifi)}">${escapeHtml(ifi)}${isDef}</option>`;
+    }).join('');
+
+    if (currentVal && ifaces.includes(currentVal)) {
+      select.value = currentVal;
+    } else if (def) {
+      select.value = def;
+    }
+  } catch (err) {
+    console.error('Failed to load interfaces:', err);
+  }
+}
+
+async function fetchTrafficSnapshot() {
+  const select = document.getElementById('traffic-iface-select');
+  const iface = select ? select.value : '';
+
+  try {
+    const res = await fetch('/api/network/traffic/snapshot?iface=' + encodeURIComponent(iface));
+    if (!res.ok) throw new Error(await res.text());
+    const snap = await res.json();
+    trafficLatestSnapshot = snap;
+    renderTrafficSnapshot(snap);
+  } catch (err) {
+    console.error('Failed to fetch snapshot:', err);
+  }
+}
+
+function startTrafficStream() {
+  stopTrafficStream();
+
+  const select = document.getElementById('traffic-iface-select');
+  const iface = select ? select.value : '';
+  const toggleBtn = document.getElementById('traffic-toggle-btn');
+  const badge = document.getElementById('traffic-status-badge');
+
+  trafficIsLive = true;
+  if (toggleBtn) {
+    toggleBtn.textContent = '⏹️ Dừng Giám Sát';
+    toggleBtn.className = 'btn btn-danger';
+  }
+  if (badge) {
+    badge.textContent = '🟢 Đang chạy Live';
+    badge.className = 'badge success';
+  }
+
+  const url = '/api/network/traffic/stream?iface=' + encodeURIComponent(iface);
+  trafficEventSource = new EventSource(url);
+
+  trafficEventSource.onmessage = (ev) => {
+    try {
+      const snap = JSON.parse(ev.data);
+      trafficLatestSnapshot = snap;
+      renderTrafficSnapshot(snap);
+    } catch (err) {
+      console.error('Error parsing traffic SSE data:', err);
+    }
+  };
+
+  trafficEventSource.onerror = (err) => {
+    console.warn('Traffic SSE connection error/closed:', err);
+    if (trafficIsLive) {
+      if (badge) {
+        badge.textContent = '🟡 Đang kết nối lại...';
+        badge.className = 'badge warn';
+      }
+    }
+  };
+}
+
+function stopTrafficStream() {
+  if (trafficEventSource) {
+    trafficEventSource.close();
+    trafficEventSource = null;
+  }
+  trafficIsLive = false;
+
+  const toggleBtn = document.getElementById('traffic-toggle-btn');
+  const badge = document.getElementById('traffic-status-badge');
+  if (toggleBtn) {
+    toggleBtn.textContent = '🟢 Bật Giám Sát';
+    toggleBtn.className = 'btn btn-primary';
+  }
+  if (badge) {
+    badge.textContent = '⚪ Đã dừng';
+    badge.className = 'badge';
+  }
+}
+
+function renderTrafficSnapshot(snap) {
+  if (!snap) return;
+
+  const rxEl = document.getElementById('traffic-stat-rx');
+  const txEl = document.getElementById('traffic-stat-tx');
+  const peakEl = document.getElementById('traffic-stat-peak');
+  const flowsEl = document.getElementById('traffic-stat-flows');
+  const tbody = document.getElementById('traffic-tbody');
+  const searchInput = document.getElementById('traffic-search-input');
+  const onlyCamsCheck = document.getElementById('traffic-only-cams');
+
+  if (rxEl) rxEl.textContent = formatBps(snap.stats?.rxRate2sBps);
+  if (txEl) txEl.textContent = formatBps(snap.stats?.txRate2sBps);
+  if (peakEl) peakEl.textContent = formatBps(snap.stats?.peakRateBps);
+
+  const searchFilter = (searchInput?.value || '').trim().toLowerCase();
+  const onlyCams = onlyCamsCheck?.checked === true;
+
+  let flows = snap.flows || [];
+  if (onlyCams) {
+    flows = flows.filter(f => f.isCamera);
+  }
+  if (searchFilter) {
+    flows = flows.filter(f => {
+      const target = `${f.srcHost}:${f.srcPort} ${f.dstHost}:${f.dstPort} ${f.service} ${f.cameraName || ''}`.toLowerCase();
+      return target.includes(searchFilter);
+    });
+  }
+
+  if (flowsEl) {
+    flowsEl.textContent = `${flows.length} / ${snap.stats?.activeFlows || flows.length} luồng`;
+  }
+
+  if (!tbody) return;
+
+  if (flows.length === 0) {
+    if (!trafficIsLive) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Bấm "Bật Giám Sát" để bắt đầu theo dõi lưu lượng mạng thời gian thực.</td></tr>';
+    } else {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Chưa có luồng dữ liệu nào khớp với bộ lọc trên card mạng này.</td></tr>';
+    }
+    return;
+  }
+
+  // Calculate max rate for percentage bar
+  let maxRate = 1000;
+  for (const f of flows) {
+    if (f.rate2sBps > maxRate) maxRate = f.rate2sBps;
+  }
+
+  tbody.innerHTML = flows.map(f => {
+    const pct = Math.min(100, Math.max(2, (f.rate2sBps / maxRate) * 100));
+    const camBadge = f.isCamera ? `<span class="iftop-tag-camera">📷 ${escapeHtml(f.cameraName || 'Camera')}</span>` : '';
+    
+    return `<tr>
+      <td data-label="Luồng Kết Nối">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div>${camBadge}<strong>${escapeHtml(f.srcHost)}:${f.srcPort}</strong></div>
+          <div style="font-size: 0.8rem; color: var(--muted, #94a3b8);">⇄ ${escapeHtml(f.dstHost)}:${f.dstPort}</div>
+        </div>
+      </td>
+      <td data-label="Dịch vụ">
+        <span class="badge ${f.service.includes('RTSP') ? 'success' : ''}">${escapeHtml(f.service)}</span>
+      </td>
+      <td data-label="2s Rate" class="rate-cell" style="text-align: right; color: var(--text);">${formatBps(f.rate2sBps)}</td>
+      <td data-label="10s Rate" class="rate-cell" style="text-align: right; color: var(--muted);">${formatBps(f.rate10sBps)}</td>
+      <td data-label="40s Rate" class="rate-cell" style="text-align: right; color: var(--muted);">${formatBps(f.rate40sBps)}</td>
+      <td data-label="Tổng Byte" class="rate-cell" style="text-align: right;">${formatBytes(f.totalBytes)}</td>
+      <td data-label="Tỷ lệ Băng Thông">
+        <div class="iftop-bar-wrap">
+          <div class="iftop-bar-meter">
+            <div class="iftop-bar-fill" style="width: ${pct}%;"></div>
+          </div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function wireTrafficInspector() {
+  document.getElementById('traffic-toggle-btn')?.addEventListener('click', () => {
+    if (trafficIsLive) {
+      stopTrafficStream();
+    } else {
+      startTrafficStream();
+    }
+  });
+
+  document.getElementById('traffic-iface-select')?.addEventListener('change', () => {
+    if (trafficIsLive) {
+      startTrafficStream();
+    } else {
+      fetchTrafficSnapshot();
+    }
+  });
+
+  document.getElementById('traffic-search-input')?.addEventListener('input', () => {
+    if (trafficLatestSnapshot) {
+      renderTrafficSnapshot(trafficLatestSnapshot);
+    }
+  });
+
+  document.getElementById('traffic-only-cams')?.addEventListener('change', () => {
+    if (trafficLatestSnapshot) {
+      renderTrafficSnapshot(trafficLatestSnapshot);
+    }
+  });
+
+  document.getElementById('detail-traffic-shortcut-btn')?.addEventListener('click', () => {
+    const detail = currentDetail();
+    let searchIP = '';
+    if (detail && detail.id) {
+      const dev = findCamera(detail.id);
+      if (dev && dev.host) searchIP = dev.host;
+    }
+    location.hash = '#cameras/traffic';
+    const searchInput = document.getElementById('traffic-search-input');
+    if (searchInput && searchIP) {
+      searchInput.value = searchIP;
+    }
+    startTrafficStream();
   });
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mcp"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/redbida"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/shinobi"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/traffic"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/web"
 )
 
@@ -44,6 +45,7 @@ type Server struct {
 	nvrWatch *nvrWatchdog
 	antiA    *antiAGuardian
 	redbida  *redbida.Service
+	traffic  *traffic.Manager
 }
 
 // New builds a Server with routes registered.
@@ -92,6 +94,7 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 			log.Printf("dahua %s: save fallback port: %v", id, err)
 		}
 	}
+	s.traffic = traffic.NewManager(inv)
 	s.antiA = newAntiAGuardian(s, inv, "config.yaml", cfg.AntiA)
 	s.antiA.start(context.Background())
 	s.routes()
@@ -174,6 +177,9 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/shinobi/videos", api(s.handleShinobiVideos))
 	s.mux.Handle("/api/anti-a", api(s.handleAntiA))
 	s.mux.Handle("/api/anti-a/trigger", api(s.handleAntiATrigger))
+	s.mux.Handle("/api/network/traffic/interfaces", api(s.handleTrafficInterfaces))
+	s.mux.Handle("/api/network/traffic/snapshot", api(s.handleTrafficSnapshot))
+	s.mux.Handle("/api/network/traffic/stream", api(s.handleTrafficStream))
 	s.mux.HandleFunc("/logo.png", s.handleLogoFile)
 	s.mux.Handle("/api/upload-logo", api(s.handleUploadLogo))
 	if s.redbida != nil {
@@ -227,6 +233,8 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 func viewerAllowed(path, method string) bool {
 	switch path {
 	case "/api/config", "/api/cameras", "/api/recordings", "/api/live", "/api/snapshot":
+		return method == http.MethodGet
+	case "/api/network/traffic/interfaces", "/api/network/traffic/snapshot", "/api/network/traffic/stream":
 		return method == http.MethodGet
 	case "/api/redbida/catalog", "/api/redbida/time-status":
 		return method == http.MethodGet

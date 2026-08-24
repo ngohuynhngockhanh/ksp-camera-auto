@@ -140,6 +140,7 @@ func TestServer_ToolsList(t *testing.T) {
 		"kspcam_get_anti_a_status",
 		"kspcam_set_anti_a_config",
 		"kspcam_trigger_anti_a",
+		"kspcam_get_network_traffic",
 	}
 
 	if len(toolsList.Tools) != len(expectedTools) {

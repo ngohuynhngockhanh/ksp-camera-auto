@@ -129,6 +129,7 @@
             <a href="#cameras/bulk" data-camera-task="bulk" data-testid="task-tab-bulk">Chỉnh hàng loạt</a>
             <a href="#cameras/nvr" data-camera-task="nvr" data-testid="task-tab-nvr">Đầu ghi</a>
             <a href="#cameras/anti-a" data-camera-task="anti-a" data-testid="task-tab-anti-a">🛡️ Anti-A Guardian</a>
+            <a href="#cameras/traffic" data-camera-task="traffic" data-testid="task-tab-traffic">🌐 Lưu Lượng (iftop)</a>
             <a href="#cameras/results" data-camera-task="results" data-testid="task-tab-results">Kết quả</a>
           </div>
 
@@ -210,7 +211,10 @@
                 </div>
 
                 <div class="card detail-panel" id="ce-panel-network" hidden>
-                  <p class="card-sub">Đọc/ghi qua cổng cấu hình DVRIP đang dùng. Quét Wi-Fi cần thêm cổng HTTP (80) của camera.</p>
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 6px;">
+                    <p class="card-sub" style="margin: 0;">Đọc/ghi qua cổng cấu hình DVRIP đang dùng. Quét Wi-Fi cần thêm cổng HTTP (80) của camera.</p>
+                    <button class="btn btn-sm btn-secondary" type="button" id="detail-traffic-shortcut-btn">🌐 Soi Lưu Lượng (iftop)</button>
+                  </div>
                   <div class="msg" id="net-msg"></div>
                   <div id="net-body" data-testid="detail-network-body"></div>
                 </div>
@@ -570,6 +574,78 @@
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+
+          <!-- Traffic Inspector (iftop) Panel -->
+          <div class="card" data-camera-panel="traffic" id="camera-panel-traffic">
+            <div class="card-head-row">
+              <div>
+                <div class="card-title">🌐 Lưu Lượng Mạng Thời Gian Thực (iftop Live Inspector)</div>
+                <p class="card-sub">Giám sát tốc độ truyền dữ liệu socket và lưu lượng từng luồng camera trên card mạng Ethernet (đã loại trừ wlan0). Tự động ngắt bắt gói khi không mở tab để đảm bảo 0% CPU.</p>
+              </div>
+              <span class="badge" id="traffic-status-badge">⚪ Đã dừng</span>
+            </div>
+
+            <!-- Stats Overview Grid -->
+            <div class="iftop-stats-grid section-gap">
+              <div class="iftop-stat-card">
+                <span class="iftop-stat-title">Tải về (RX Rate 2s)</span>
+                <span class="iftop-stat-val" id="traffic-stat-rx" style="color: var(--success, #10b981);">0.0 Kbps</span>
+              </div>
+              <div class="iftop-stat-card">
+                <span class="iftop-stat-title">Gửi đi (TX Rate 2s)</span>
+                <span class="iftop-stat-val" id="traffic-stat-tx" style="color: var(--accent, #3b82f6);">0.0 Kbps</span>
+              </div>
+              <div class="iftop-stat-card">
+                <span class="iftop-stat-title">Băng thông Đỉnh (Peak)</span>
+                <span class="iftop-stat-val" id="traffic-stat-peak">0.0 Kbps</span>
+              </div>
+              <div class="iftop-stat-card">
+                <span class="iftop-stat-title">Số Luồng Socket</span>
+                <span class="iftop-stat-val" id="traffic-stat-flows">0 luồng</span>
+              </div>
+            </div>
+
+            <!-- Toolbar Filters -->
+            <div class="iftop-toolbar section-gap">
+              <div class="row" style="align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                <button class="btn btn-primary" type="button" id="traffic-toggle-btn">🟢 Bật Giám Sát</button>
+                <div class="field field-sm">
+                  <label for="traffic-iface-select" style="margin-bottom: 2px;">Card Mạng</label>
+                  <select id="traffic-iface-select" style="min-width: 140px;">
+                    <option value="">Đang tải...</option>
+                  </select>
+                </div>
+                <div class="field field-sm" style="flex: 1; min-width: 180px;">
+                  <label for="traffic-search-input" style="margin-bottom: 2px;">Tìm kiếm IP / Port / Camera</label>
+                  <input id="traffic-search-input" type="search" placeholder="Gõ IP, camera hoặc cổng...">
+                </div>
+                <label class="iftop-checkbox-label" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; user-select: none;">
+                  <input type="checkbox" id="traffic-only-cams">
+                  <span>📷 Chỉ hiện Camera IP</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Live iftop Flow Table -->
+            <div class="table-wrap section-gap" style="max-height: 480px; overflow-y: auto;">
+              <table class="reflow iftop-table" id="traffic-table">
+                <thead>
+                  <tr>
+                    <th style="min-width: 240px;">Luồng Kết Nối (Nguồn ⇄ Đích)</th>
+                    <th style="min-width: 120px;">Dịch vụ</th>
+                    <th style="text-align: right;">2s Rate</th>
+                    <th style="text-align: right;">10s Rate</th>
+                    <th style="text-align: right;">40s Rate</th>
+                    <th style="text-align: right;">Tổng Byte</th>
+                    <th style="min-width: 130px;">Tỷ lệ Băng Thông</th>
+                  </tr>
+                </thead>
+                <tbody id="traffic-tbody">
+                  <tr><td colspan="7" class="empty-hint">Bấm "Bật Giám Sát" để bắt đầu theo dõi lưu lượng mạng thời gian thực.</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </section>

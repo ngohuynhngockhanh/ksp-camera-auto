@@ -38,9 +38,11 @@ ksp-camera-auto/
 │   ├── config/                 # Quản lý YAML config, crypto AES-256-GCM, quản lý kho Inventory (thread-safe RWMutex)
 │   ├── camera/                 # Lớp trừu tượng hóa Camera interface, factory Open(), capability interfaces
 │   ├── bulk/                   # Bộ điều phối thực thi tuần tự (bulk apply), credtest brute-force kiểm tra tài khoản
-│   ├── server/                 # Web server HTTP, session auth, rate limiter, snapshot cache, SSE streaming, NVR watchdog, Shinobi & MCP routes
+│   ├── server/                 # Web server HTTP, session auth, rate limiter, snapshot cache, SSE streaming, NVR watchdog, Anti-A, Traffic & MCP routes
 │   ├── shinobi/                # Pure Go client cho Shinobi NVR REST API: CRUD monitor, stream states, videos, manual trigger 2-way sync
-│   ├── mcp/                    # Embedded Model Context Protocol (MCP) Server: JSON-RPC 2.0, Stdio & SSE transports, 31+ tools
+│   ├── mcp/                    # Embedded Model Context Protocol (MCP) Server: JSON-RPC 2.0, Stdio & SSE transports, 35+ tools
+│   ├── traffic/                # Pure Go AF_PACKET raw socket network sniffer (iftop-style), EWMA rate engine, on-demand streaming (0% idle CPU)
+│   ├── redbida/                # Module giao tiếp MQTT / Node-RED cho hệ thống bàn bida (catalog, on-demand preset)
 │   ├── dahua/                  # Protocol client Dahua/KBVision DVRIP (TCP 37777/8888): framing nhị phân, 2-step MD5, JSON-RPC
 │   ├── isapi/                  # Protocol client Hikvision ISAPI: HTTP Digest Auth (RFC 2617), GET-modify-PUT XML engine
 │   ├── hik/                    # Adapter Hikvision bọc isapi.Client, chuẩn hóa kênh (0-based -> 101/201), native IMKH download
@@ -181,7 +183,11 @@ graph TD
 | `/api/shinobi/monitors/state` | `POST` | Admin | `{mid, state}` (`start`/`stop`/`record`) | `{ok: true}` | Thay đổi trạng thái luồng video monitor |
 | `/api/shinobi/sync-to-shinobi` | `POST` | Admin | None | `SyncReport` | Đồng bộ thủ công: Xuất `cameras.yaml` -> Shinobi |
 | `/api/shinobi/sync-from-shinobi` | `POST` | Admin | None | `SyncReport` | Đồng bộ thủ công: Kéo monitors Shinobi -> `cameras.yaml` |
-| `/api/shinobi/videos` | `GET` | Viewer/Admin | Query: `mid, limit` | `[]shinobi.Video` | Lấy danh sách video clip đã ghi hình trên Shinobi |
+| `/api/anti-a` | `GET`, `POST` | GET: Viewer/Admin, POST: Admin | GET: None / POST: `antiAConfigReq` | `antiAStatusView` | Giám sát & cấu hình Anti-A Guardian (H.265 Auto-Lock) |
+| `/api/anti-a/trigger` | `POST` | Admin | `{}` | `{ok: true, enforced: int, status}` | Kích hoạt quét & khóa toàn bộ camera về H.265/SmartCodec/AAC |
+| `/api/network/traffic/interfaces` | `GET` | Viewer/Admin | None | `{interfaces: []string, default: string}` | Danh sách card mạng ethernet hợp lệ (loại trừ wlan0, lo) |
+| `/api/network/traffic/snapshot` | `GET` | Viewer/Admin | Query: `iface` | `traffic.Snapshot` | Lấy ảnh chụp lưu lượng mạng và socket tức thời |
+| `/api/network/traffic/stream` | `GET` | Viewer/Admin | Query: `iface` | `text/event-stream` (`traffic.Snapshot`) | Luồng SSE giám sát iftop thời gian thực (0% idle CPU) |
 | `/mcp` | `GET` | Auth/Loopback | Header/Query: API Key | `text/event-stream` | Mở luồng SSE nhận sự kiện JSON-RPC MCP Server |
 | `/mcp` | `POST` | Auth/Loopback | `JSONRPCRequest` (JSON) | `JSONRPCResponse` | Gọi phương thức MCP trực tiếp (Stateless HTTP) |
 | `/mcp/messages` | `POST` | Auth/Loopback | Query: `sessionId`, Body: JSON-RPC | `202 Accepted` / JSON | Gửi thông điệp JSON-RPC MCP qua phiên SSE |

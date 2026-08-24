@@ -118,7 +118,7 @@ func TestAdversarialChallenge_RedbidaJSONRPC_AllTools(t *testing.T) {
 		}
 	})
 
-	t.Run("2. tools/list contains all 6 redbida tools and total 34 tools", func(t *testing.T) {
+	t.Run("2. tools/list contains all 6 redbida tools and total 35 tools", func(t *testing.T) {
 		req := JSONRPCRequest{
 			JSONRPC: "2.0",
 			ID:      2,
@@ -132,8 +132,8 @@ func TestAdversarialChallenge_RedbidaJSONRPC_AllTools(t *testing.T) {
 		if !ok {
 			t.Fatalf("invalid result type: %T", resp.Result)
 		}
-		if len(listRes.Tools) != 34 {
-			t.Errorf("expected 34 tools, got %d", len(listRes.Tools))
+		if len(listRes.Tools) != 35 {
+			t.Errorf("expected 35 tools, got %d", len(listRes.Tools))
 		}
 
 		expectedRedbida := []string{
