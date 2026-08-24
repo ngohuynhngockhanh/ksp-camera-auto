@@ -10,7 +10,7 @@ import (
 
 var sensitiveKeyRe = regexp.MustCompile(`(?i)(password|token|secret|username|mqtt_|shinobi_|sapo_url|md5_node_id|node_info|blacklist_keys|hidden_keys|config_no_use|frpc_config|gortc_default_config|apiRecentInput_string|ggcode|api_key|access_key|private_key|credential|cookie|s3-storage)`)
 var protectedKeyRe = regexp.MustCompile(`(?i)(^|_)(ip|route|gateway|dns|frpc|broker|port|virtual_ip|static_|wifi_|valid_license|inut_id)`)
-var runtimeKeyRe = regexp.MustCompile(`(?i)(^api(_model)?_count$|^download_count$|^packed_count$|^view_count$|^node_config_|^test_button$)`)
+var runtimeKeyRe = regexp.MustCompile(`(?i)(^download_count$|^packed_count$|^view_count$|^node_config_|^test_button$)`)
 var validKeyRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 // These keys were observed on inut_204_63. Directory discovery remains the
@@ -52,7 +52,7 @@ wlan0_static_route_gw wlan0_virtual_ip
 
 var fallbackKeySet = keySet(strings.Join(fallbackKeys, " "))
 var editableKeySet = keySet(`
-app_background app_hide_inut app_hotline app_website banner_top camera_count
+api_count api_model_count app_background app_hide_inut app_hotline app_website banner_top camera_count
 company_name custom_hashtags db_check_range db_check_rmlm db_check_size_lm
 default_delay_camera default_delay_go2rtc default_live_description
 default_tiso_1_color default_tiso_2_color default_tiso_3_color
@@ -89,7 +89,7 @@ stop_camera_03h30 stop_camera_22h30 stop_camera_23h00 stop_camera_23h30
 ui_scoreboard
 `)
 var numberKeySet = keySet(`
-camera_count db_check_range db_check_rmlm db_check_size_lm default_delay_camera
+api_count api_model_count camera_count db_check_range db_check_rmlm db_check_size_lm default_delay_camera
 default_delay_go2rtc default_tiso_type fps_default livestream_default_bitrate
 max_free_ram_force_reboot max_free_ram_force_restart_camera
 max_free_ram_restart_camera max_shared_ram_camera toolbar_show_count
@@ -98,6 +98,8 @@ var jsonKeySet = keySet(``)
 
 func init() {
 	numericRules["toolbar_show_count"] = numericRule{min: 0, max: 4096, integer: true}
+	numericRules["api_count"] = numericRule{min: 0, max: 1000000, integer: true}
+	numericRules["api_model_count"] = numericRule{min: 0, max: 1000000, integer: true}
 }
 
 type Catalog struct {

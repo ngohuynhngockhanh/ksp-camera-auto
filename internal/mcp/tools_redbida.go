@@ -287,6 +287,8 @@ func registerRedbidaTools(r *Registry, cfg *config.Config, redbidaSvc *redbida.S
 			"logo_header":                   "https://vnmap-backend.inut.vn/uploads/bidalive_efd101c4e6.png",
 			"logo_header_text":              "Billiard Live - Tải clip bàn bida và livestream",
 			"button_generate_go2rtc_stream": true,
+			"api_count":                     0,
+			"api_model_count":               0,
 		}
 
 		if strings.TrimSpace(req.GroupKey) != "" {

@@ -905,9 +905,66 @@
           <div class="msg" id="redbida-msg"></div>
 
           <div class="card">
+            <div class="card-head-row" style="margin-bottom:0.75rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+              <div>
+                <div class="card-title" style="font-size:0.95rem;font-weight:600;">📊 Danh Mục Toàn Bộ Key OTA-MQTT</div>
+                <div class="card-sub" id="redbida-table-meta-summary" style="font-size:0.8rem;">Click vào tiêu đề cột để sắp xếp (Sort). Sử dụng ô lọc từng cột hoặc bộ tìm kiếm nhanh.</div>
+              </div>
+              <div style="display:flex;gap:0.5rem;align-items:center;">
+                <button class="btn btn-secondary btn-sm" id="redbida-reset-filters-btn" type="button" style="font-size:0.75rem;">🔄 Xóa tất cả bộ lọc</button>
+              </div>
+            </div>
             <div class="table-wrap">
               <table class="reflow redbida-table" id="redbida-table">
-                <thead><tr><th>Nhóm</th><th>Key</th><th>Risk</th><th>Giá trị hiện tại</th><th>Giá trị mới</th><th>Trạng thái</th></tr></thead>
+                <thead>
+                  <tr class="redbida-th-sort-row">
+                    <th class="sortable" data-sort-col="group" title="Click để sắp xếp theo Nhóm">Nhóm <span class="sort-icon" id="redbida-sort-icon-group">▲</span></th>
+                    <th class="sortable" data-sort-col="key" title="Click để sắp xếp theo Key">Key & Nhãn <span class="sort-icon" id="redbida-sort-icon-key">↕</span></th>
+                    <th class="sortable" data-sort-col="risk" title="Click để sắp xếp theo Mức rủi ro">Risk <span class="sort-icon" id="redbida-sort-icon-risk">↕</span></th>
+                    <th class="sortable" data-sort-col="current" title="Click để sắp xếp theo Giá trị hiện tại">Giá trị hiện tại <span class="sort-icon" id="redbida-sort-icon-current">↕</span></th>
+                    <th class="sortable" data-sort-col="draft" title="Click để sắp xếp theo Giá trị mới">Giá trị mới <span class="sort-icon" id="redbida-sort-icon-draft">↕</span></th>
+                    <th class="sortable" data-sort-col="status" title="Click để sắp xếp theo Trạng thái">Trạng thái <span class="sort-icon" id="redbida-sort-icon-status">↕</span></th>
+                  </tr>
+                  <tr class="redbida-th-filter-row">
+                    <th>
+                      <select id="redbida-col-filter-group" class="redbida-col-filter" aria-label="Lọc theo nhóm">
+                        <option value="">Tất cả nhóm</option>
+                      </select>
+                    </th>
+                    <th>
+                      <input type="search" id="redbida-col-filter-key" class="redbida-col-filter" placeholder="Lọc key..." aria-label="Lọc key">
+                    </th>
+                    <th>
+                      <select id="redbida-col-filter-risk" class="redbida-col-filter" aria-label="Lọc mức rủi ro">
+                        <option value="">Tất cả risk</option>
+                        <option value="editable">editable</option>
+                        <option value="confirm-required">confirm-req</option>
+                        <option value="read-only-protected">read-only</option>
+                        <option value="secret">secret</option>
+                      </select>
+                    </th>
+                    <th>
+                      <input type="search" id="redbida-col-filter-current" class="redbida-col-filter" placeholder="Lọc giá trị..." aria-label="Lọc giá trị hiện tại">
+                    </th>
+                    <th>
+                      <select id="redbida-col-filter-draft" class="redbida-col-filter" aria-label="Lọc giá trị mới">
+                        <option value="">Tất cả</option>
+                        <option value="dirty">Chỉ thay đổi</option>
+                        <option value="clean">Chưa thay đổi</option>
+                      </select>
+                    </th>
+                    <th>
+                      <select id="redbida-col-filter-status" class="redbida-col-filter" aria-label="Lọc trạng thái">
+                        <option value="">Tất cả</option>
+                        <option value="Đã sửa">Đã sửa</option>
+                        <option value="Đã đọc">Đã đọc</option>
+                        <option value="Chưa có">Chưa có</option>
+                        <option value="Đã xác minh">Đã xác minh</option>
+                        <option value="Lỗi">Lỗi</option>
+                      </select>
+                    </th>
+                  </tr>
+                </thead>
                 <tbody id="redbida-tbody"><tr><td colspan="6" class="empty-hint">Bấm “Đọc lại từ OTA”.</td></tr></tbody>
               </table>
             </div>

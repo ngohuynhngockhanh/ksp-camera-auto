@@ -199,7 +199,7 @@ function serialize20TabsIni(tabs) {
   ).join('\n\n');
 }
 
-// 15 Golden Standard Rules Specification
+// 17 Golden Standard Rules Specification
 const GOLDEN_STANDARD_RULES = [
   {
     key: 'ui_title',
@@ -215,18 +215,10 @@ const GOLDEN_STANDARD_RULES = [
   {
     key: 'company_name',
     label: 'Tên Công Ty (company_name)',
-    desc: 'Phải khớp chính xác với ui_title',
+    desc: 'Tên công ty / thương hiệu (có thể trùng hoặc khác ui_title)',
     group: 'Branding / Logo',
-    check: (val) => {
-      const title = getEffectiveValue('ui_title');
-      if (typeof title === 'string' && title.trim().length > 0) {
-        return val === title;
-      }
-      return typeof val === 'string' && val.trim().length > 0;
-    },
-    fix: () => {
-      return getEffectiveValue('ui_title') || 'CX King Luxury';
-    },
+    check: () => true,
+    fix: () => getEffectiveValue('ui_title') || 'CX King Luxury',
   },
   {
     key: 'ui_bg',
@@ -329,9 +321,9 @@ const GOLDEN_STANDARD_RULES = [
   {
     key: 'ui_scoreboard',
     label: 'Bảng Điểm Bida (ui_scoreboard)',
-    desc: 'Kích hoạt widget bảng điểm trận đấu',
+    desc: 'Widget bảng điểm trận đấu (/live hoặc bật/tắt)',
     group: 'UI / Display',
-    check: (val) => val === true,
+    check: () => true,
     fix: () => true,
   },
   {
@@ -353,10 +345,26 @@ const GOLDEN_STANDARD_RULES = [
   {
     key: 'button_generate_go2rtc_stream',
     label: 'Trigger Go2RTC (button_generate_go2rtc_stream)',
-    desc: 'Cờ kích hoạt sinh luồng Go2RTC (true)',
+    desc: 'Cờ kích hoạt sinh luồng Go2RTC (tự động reset sau khi sinh)',
     group: 'Livestream',
-    check: (val) => val === true,
+    check: () => true,
     fix: () => true,
+  },
+  {
+    key: 'api_count',
+    label: 'API Count (api_count)',
+    desc: 'Bộ đếm API (mặc định = 0 khi onboarding)',
+    group: 'Livestream',
+    check: (val) => val === 0 || typeof val === 'number' || typeof val === 'string',
+    fix: () => 0,
+  },
+  {
+    key: 'api_model_count',
+    label: 'API Model Count (api_model_count)',
+    desc: 'Bộ đếm API Model (mặc định = 0 khi onboarding)',
+    group: 'Livestream',
+    check: (val) => val === 0 || typeof val === 'number' || typeof val === 'string',
+    fix: () => 0,
   },
 ];
 
@@ -557,28 +565,234 @@ function redbidaDiscardAllDrafts() {
   redbidaSetMessage('Đã hủy toàn bộ thay đổi chưa lưu.', '');
 }
 
+const redbidaTableState = {
+  sortCol: 'group', // 'group', 'key', 'risk', 'current', 'draft', 'status'
+  sortDir: 'asc', // 'asc', 'desc', 'none'
+  colFilters: {
+    group: '',
+    key: '',
+    risk: '',
+    current: '',
+    draft: '',
+    status: '',
+  },
+};
+
 function redbidaGroups() {
   return Array.from(new Set(redbidaState.metas.map(m => m.group))).sort((a, b) => a.localeCompare(b, 'vi'));
 }
 
 function redbidaRenderGroups() {
   const select = document.getElementById('redbida-group');
-  if (!select) return;
-  const selected = select.value;
-  select.innerHTML = '<option value="">Tất cả nhóm</option>' + redbidaGroups().map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-  select.value = selected;
+  const colSelect = document.getElementById('redbida-col-filter-group');
+  const groups = redbidaGroups();
+
+  if (select) {
+    const selected = select.value;
+    select.innerHTML = '<option value="">Tất cả nhóm</option>' + groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+    select.value = selected;
+  }
+  if (colSelect) {
+    const selected = colSelect.value;
+    colSelect.innerHTML = '<option value="">Tất cả nhóm</option>' + groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+    colSelect.value = selected;
+  }
+}
+
+function redbidaSortMetas(metas) {
+  if (redbidaTableState.sortDir === 'none' || !redbidaTableState.sortCol) {
+    return metas;
+  }
+  const dir = redbidaTableState.sortDir === 'desc' ? -1 : 1;
+  const col = redbidaTableState.sortCol;
+
+  return [...metas].sort((a, b) => {
+    if (col === 'group') {
+      const diff = (a.group || '').localeCompare(b.group || '', 'vi');
+      return diff !== 0 ? diff * dir : a.key.localeCompare(b.key, 'vi');
+    }
+
+    if (col === 'key') {
+      return a.key.localeCompare(b.key, 'vi') * dir;
+    }
+
+    if (col === 'risk') {
+      const riskOrder = { 'editable': 1, 'confirm-required': 2, 'read-only-protected': 3, 'secret': 4, 'unknown': 5 };
+      const rA = riskOrder[a.risk] || 99;
+      const rB = riskOrder[b.risk] || 99;
+      if (rA !== rB) return (rA - rB) * dir;
+      return a.key.localeCompare(b.key, 'vi');
+    }
+
+    if (col === 'current') {
+      const curA = redbidaState.values.get(a.key)?.value;
+      const curB = redbidaState.values.get(b.key)?.value;
+      const textA = redbidaValueText(curA);
+      const textB = redbidaValueText(curB);
+      if (curA === undefined && curB !== undefined) return 1 * dir;
+      if (curA !== undefined && curB === undefined) return -1 * dir;
+      const diff = textA.localeCompare(textB, 'vi', { numeric: true });
+      return diff !== 0 ? diff * dir : a.key.localeCompare(b.key, 'vi');
+    }
+
+    if (col === 'draft') {
+      const isDirtyA = redbidaState.drafts.has(a.key);
+      const isDirtyB = redbidaState.drafts.has(b.key);
+      if (isDirtyA !== isDirtyB) {
+        return (isDirtyA ? -1 : 1) * dir;
+      }
+      const textA = String(redbidaState.drafts.get(a.key) ?? '');
+      const textB = String(redbidaState.drafts.get(b.key) ?? '');
+      const diff = textA.localeCompare(textB, 'vi', { numeric: true });
+      return diff !== 0 ? diff * dir : a.key.localeCompare(b.key, 'vi');
+    }
+
+    if (col === 'status') {
+      const getStatusRank = (meta) => {
+        const item = redbidaState.values.get(meta.key);
+        const dirty = redbidaState.drafts.has(meta.key);
+        const result = redbidaState.results.get(meta.key);
+        if (result?.error) return 1;
+        if (dirty) return 2;
+        if (result?.applied) return 3;
+        if (item && item.exists) return 4;
+        return 5;
+      };
+      const rA = getStatusRank(a);
+      const rB = getStatusRank(b);
+      if (rA !== rB) return (rA - rB) * dir;
+      return a.key.localeCompare(b.key, 'vi');
+    }
+
+    return 0;
+  });
 }
 
 function redbidaFilteredMetas() {
-  const q = (document.getElementById('redbida-search')?.value || '').trim().toLocaleLowerCase('vi');
-  const group = document.getElementById('redbida-group')?.value || '';
-  const dirtyOnly = document.getElementById('redbida-dirty-only')?.checked;
-  return redbidaState.metas.filter(meta => {
-    if (group && meta.group !== group) return false;
-    if (q && !(meta.key + ' ' + meta.label + ' ' + meta.group).toLocaleLowerCase('vi').includes(q)) return false;
-    if (dirtyOnly && !redbidaState.drafts.has(meta.key)) return false;
+  const globalSearch = (document.getElementById('redbida-search')?.value || '').trim().toLocaleLowerCase('vi');
+  const globalGroup = document.getElementById('redbida-group')?.value || '';
+  const globalDirtyOnly = document.getElementById('redbida-dirty-only')?.checked;
+
+  const fGroup = (document.getElementById('redbida-col-filter-group')?.value || redbidaTableState.colFilters.group || '').trim();
+  const fKey = (document.getElementById('redbida-col-filter-key')?.value || redbidaTableState.colFilters.key || '').trim().toLocaleLowerCase('vi');
+  const fRisk = (document.getElementById('redbida-col-filter-risk')?.value || redbidaTableState.colFilters.risk || '').trim();
+  const fCurrent = (document.getElementById('redbida-col-filter-current')?.value || redbidaTableState.colFilters.current || '').trim().toLocaleLowerCase('vi');
+  const fDraft = (document.getElementById('redbida-col-filter-draft')?.value || redbidaTableState.colFilters.draft || '').trim();
+  const fStatus = (document.getElementById('redbida-col-filter-status')?.value || redbidaTableState.colFilters.status || '').trim();
+
+  const filtered = redbidaState.metas.filter(meta => {
+    if (globalGroup && meta.group !== globalGroup) return false;
+    if (globalSearch && !(meta.key + ' ' + meta.label + ' ' + meta.group).toLocaleLowerCase('vi').includes(globalSearch)) return false;
+    if (globalDirtyOnly && !redbidaState.drafts.has(meta.key)) return false;
+
+    if (fGroup && meta.group !== fGroup) return false;
+    if (fKey && !(meta.key + ' ' + meta.label).toLocaleLowerCase('vi').includes(fKey)) return false;
+    if (fRisk && meta.risk !== fRisk) return false;
+
+    const item = redbidaState.values.get(meta.key);
+    const value = item ? item.value : undefined;
+    const curText = redbidaValueText(value).toLocaleLowerCase('vi');
+    if (fCurrent && !curText.includes(fCurrent)) return false;
+
+    const isDirty = redbidaState.drafts.has(meta.key);
+    if (fDraft === 'dirty' && !isDirty) return false;
+    if (fDraft === 'clean' && isDirty) return false;
+
+    if (fStatus) {
+      const result = redbidaState.results.get(meta.key);
+      let status = item && item.exists ? 'Đã đọc' : 'Chưa có';
+      if (result?.error) status = 'Lỗi';
+      else if (isDirty) status = 'Đã sửa';
+      else if (result?.applied) status = result.verified === false ? 'Đã ghi' : 'Đã xác minh';
+
+      if (!status.includes(fStatus)) return false;
+    }
+
     return true;
   });
+
+  return redbidaSortMetas(filtered);
+}
+
+function redbidaHandleSortClick(colName) {
+  if (redbidaTableState.sortCol === colName) {
+    if (redbidaTableState.sortDir === 'asc') {
+      redbidaTableState.sortDir = 'desc';
+    } else if (redbidaTableState.sortDir === 'desc') {
+      redbidaTableState.sortDir = 'none';
+      redbidaTableState.sortCol = '';
+    } else {
+      redbidaTableState.sortDir = 'asc';
+    }
+  } else {
+    redbidaTableState.sortCol = colName;
+    redbidaTableState.sortDir = 'asc';
+  }
+
+  redbidaUpdateSortIcons();
+  redbidaRender();
+}
+
+function redbidaUpdateSortIcons() {
+  const cols = ['group', 'key', 'risk', 'current', 'draft', 'status'];
+  cols.forEach(col => {
+    const iconEl = document.getElementById(`redbida-sort-icon-${col}`);
+    const thEl = document.querySelector(`.redbida-th-sort-row th[data-sort-col="${col}"]`);
+    if (!iconEl) return;
+    if (redbidaTableState.sortCol === col) {
+      if (redbidaTableState.sortDir === 'asc') {
+        iconEl.textContent = '▲';
+        thEl?.classList.add('sort-active');
+      } else if (redbidaTableState.sortDir === 'desc') {
+        iconEl.textContent = '▼';
+        thEl?.classList.add('sort-active');
+      } else {
+        iconEl.textContent = '↕';
+        thEl?.classList.remove('sort-active');
+      }
+    } else {
+      iconEl.textContent = '↕';
+      thEl?.classList.remove('sort-active');
+    }
+  });
+}
+
+function redbidaResetAllFilters() {
+  const searchInput = document.getElementById('redbida-search');
+  if (searchInput) searchInput.value = '';
+  const groupSelect = document.getElementById('redbida-group');
+  if (groupSelect) groupSelect.value = '';
+  const dirtyCheckbox = document.getElementById('redbida-dirty-only');
+  if (dirtyCheckbox) dirtyCheckbox.checked = false;
+
+  document.querySelectorAll('#redbida-group-pills button').forEach(p => {
+    p.classList.toggle('active', p.dataset.pillGroup === '');
+  });
+
+  const colGroup = document.getElementById('redbida-col-filter-group');
+  if (colGroup) colGroup.value = '';
+  const colKey = document.getElementById('redbida-col-filter-key');
+  if (colKey) colKey.value = '';
+  const colRisk = document.getElementById('redbida-col-filter-risk');
+  if (colRisk) colRisk.value = '';
+  const colCur = document.getElementById('redbida-col-filter-current');
+  if (colCur) colCur.value = '';
+  const colDraft = document.getElementById('redbida-col-filter-draft');
+  if (colDraft) colDraft.value = '';
+  const colStatus = document.getElementById('redbida-col-filter-status');
+  if (colStatus) colStatus.value = '';
+
+  redbidaTableState.colFilters = {
+    group: '',
+    key: '',
+    risk: '',
+    current: '',
+    draft: '',
+    status: '',
+  };
+
+  redbidaRender();
+  redbidaSetMessage('Đã đặt lại toàn bộ bộ lọc bảng key.', '');
 }
 
 function redbidaEditor(meta, value) {
@@ -618,8 +832,14 @@ function redbidaRender() {
   const tbody = document.getElementById('redbida-tbody');
   if (!tbody) return;
   const metas = redbidaFilteredMetas();
+
+  const summaryEl = document.getElementById('redbida-table-meta-summary');
+  if (summaryEl) {
+    summaryEl.textContent = `Hiển thị ${metas.length}/${redbidaState.metas.length} key OTA-MQTT. Click tiêu đề cột để sắp xếp.`;
+  }
+
   if (!metas.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty-hint">Không có key khớp bộ lọc.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-hint">Không có key khớp bộ lọc. Bấm "Xóa tất cả bộ lọc" để xem toàn bộ.</td></tr>';
     redbidaUpdateMetrics();
     return;
   }
@@ -867,6 +1087,8 @@ function redbidaGeneratePreset() {
     logo_header: 'https://vnmap-backend.inut.vn/uploads/bidalive_efd101c4e6.png',
     logo_header_text: 'Billiard Live - Tải clip bàn bida và livestream',
     button_generate_go2rtc_stream: true,
+    api_count: 0,
+    api_model_count: 0,
   };
 
   // Set values into redbidaState.drafts
@@ -1349,6 +1571,9 @@ window.redbidaAutoFixKey = redbidaAutoFixKey;
 window.redbidaAutoFixAll = redbidaAutoFixAll;
 window.redbidaUpdateFloatingBar = redbidaUpdateFloatingBar;
 window.redbidaDiscardAllDrafts = redbidaDiscardAllDrafts;
+window.redbidaTableState = redbidaTableState;
+window.redbidaHandleSortClick = redbidaHandleSortClick;
+window.redbidaResetAllFilters = redbidaResetAllFilters;
 window.redbidaState = redbidaState;
 window.REDBIDA_GRADIENT_PALETTE = REDBIDA_GRADIENT_PALETTE;
 
@@ -1373,6 +1598,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('redbida-floating-apply')?.addEventListener('click', () => redbidaApply().catch(err => redbidaSetMessage(err.message, 'err')));
   document.getElementById('redbida-floating-discard')?.addEventListener('click', redbidaDiscardAllDrafts);
+
+  document.getElementById('redbida-reset-filters-btn')?.addEventListener('click', redbidaResetAllFilters);
+
+  // Column Sort Header Handlers
+  document.querySelectorAll('.redbida-th-sort-row th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sortCol;
+      if (col) redbidaHandleSortClick(col);
+    });
+  });
+
+  // Column Filter Input Handlers
+  ['group', 'key', 'risk', 'current', 'draft', 'status'].forEach(col => {
+    const el = document.getElementById(`redbida-col-filter-${col}`);
+    if (el) {
+      el.addEventListener('input', () => {
+        redbidaTableState.colFilters[col] = el.value;
+        redbidaRender();
+      });
+      el.addEventListener('change', () => {
+        redbidaTableState.colFilters[col] = el.value;
+        redbidaRender();
+      });
+    }
+  });
 
   redbidaInitSwatches();
   redbidaInitPresetInputs();

@@ -946,6 +946,58 @@ button { font-family: inherit; }
   font-size: 0.82rem;
 }
 
+/* RedBida Table Sorting & Column Filtering */
+.redbida-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.redbida-table th.sortable:hover {
+  background: var(--glass-bg-accent, rgba(59, 130, 246, 0.12));
+  color: var(--accent);
+}
+
+.redbida-table .sort-icon {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 0.75rem;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.redbida-table th.sortable:hover .sort-icon,
+.redbida-table th.sort-active .sort-icon {
+  opacity: 1;
+  color: var(--accent);
+  font-weight: bold;
+}
+
+.redbida-th-filter-row th {
+  padding: 6px 8px !important;
+  background: var(--surface-2, rgba(255, 255, 255, 0.03)) !important;
+  border-bottom: 2px solid var(--border) !important;
+}
+
+.redbida-col-filter {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font-size: 0.75rem !important;
+  padding: 4px 6px !important;
+  border-radius: 6px !important;
+  border: 1px solid var(--border) !important;
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  height: 28px !important;
+}
+
+.redbida-col-filter:focus {
+  border-color: var(--accent) !important;
+  outline: none !important;
+}
+
 /* ---------- RedBida Floating Action Bar ---------- */
 .redbida-floating-bar {
   position: fixed;
