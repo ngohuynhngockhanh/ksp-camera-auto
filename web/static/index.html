@@ -128,6 +128,7 @@
             <a href="#cameras/list" data-camera-task="list" data-testid="task-tab-list">Danh sách</a>
             <a href="#cameras/bulk" data-camera-task="bulk" data-testid="task-tab-bulk">Chỉnh hàng loạt</a>
             <a href="#cameras/nvr" data-camera-task="nvr" data-testid="task-tab-nvr">Đầu ghi</a>
+            <a href="#cameras/anti-a" data-camera-task="anti-a" data-testid="task-tab-anti-a">🛡️ Anti-A Guardian</a>
             <a href="#cameras/results" data-camera-task="results" data-testid="task-tab-results">Kết quả</a>
           </div>
 
@@ -484,6 +485,91 @@
                 <thead><tr><th>Camera</th><th>Host</th><th>Trạng thái</th><th>Chi tiết</th></tr></thead>
                 <tbody id="result-tbody" data-testid="result-list"><tr><td colspan="4" class="empty-hint">Chưa có kết quả.</td></tr></tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- Anti-A Guardian Panel -->
+          <div class="card" data-camera-panel="anti-a" id="camera-panel-anti-a">
+            <div class="card-head-row">
+              <div>
+                <div class="card-title">🛡️ Anti-A Guardian (Bảo Vệ Khóa H.265 & Smart Codec)</div>
+                <p class="card-sub">Tự động giám sát và khóa toàn bộ camera về H.265 (HEVC), Smart Codec (H.265+) và Audio AAC. Ngăn chặn triệt để bên ngoài hoặc phần mềm đối thủ (Arena) cố tình đổi về H.264 để bú ké luồng.</p>
+              </div>
+              <span class="badge" id="anti-a-status-badge">Đang tải...</span>
+            </div>
+
+            <!-- Stats & Status Overview Grid -->
+            <div class="anti-a-stats-grid section-gap">
+              <div class="anti-a-stat-card">
+                <span class="anti-a-stat-title">Trạng thái bảo vệ</span>
+                <span class="anti-a-stat-val" id="anti-a-running-text">—</span>
+              </div>
+              <div class="anti-a-stat-card">
+                <span class="anti-a-stat-title">Lần quét gần nhất</span>
+                <span class="anti-a-stat-val" id="anti-a-last-check">—</span>
+              </div>
+              <div class="anti-a-stat-card">
+                <span class="anti-a-stat-title">Lần quét kế tiếp</span>
+                <span class="anti-a-stat-val" id="anti-a-next-check">—</span>
+              </div>
+              <div class="anti-a-stat-card">
+                <span class="anti-a-stat-title">Số lần vi phạm đã chặn</span>
+                <span class="anti-a-stat-val anti-a-stat-alert" id="anti-a-infractions-count">0</span>
+              </div>
+            </div>
+
+            <div class="msg" id="anti-a-msg"></div>
+
+            <!-- Config & Actions Form -->
+            <div class="anti-a-config-box section-gap">
+              <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem;">⚙️ Cấu hình Giám sát</h4>
+              <div class="row" style="align-items: flex-end; gap: 1rem; flex-wrap: wrap;">
+                <div class="field field-sm">
+                  <label for="anti-a-enabled-toggle">Chế độ bảo vệ</label>
+                  <select id="anti-a-enabled-toggle">
+                    <option value="true">🟢 Bật bảo vệ (Active)</option>
+                    <option value="false">⚪ Tạm dừng (Disabled)</option>
+                  </select>
+                </div>
+                <div class="field field-sm">
+                  <label for="anti-a-interval-input">Chu kỳ kiểm tra (phút)</label>
+                  <input id="anti-a-interval-input" type="number" min="1" max="1440" value="30" style="width: 130px;">
+                </div>
+                <div class="field field-sm">
+                  <label for="anti-a-mode-select">Chiến lược phát hiện</label>
+                  <select id="anti-a-mode-select">
+                    <option value="random">🎲 Random Sample (1 cam ngẫu nhiên, phát hiện vi phạm thì khóa all)</option>
+                    <option value="full">🔄 Full Fleet (Quét tuần tự toàn bộ camera mỗi chu kỳ)</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary" type="button" id="anti-a-save-btn">Lưu cấu hình</button>
+                <button class="btn btn-danger" type="button" id="anti-a-trigger-btn" style="margin-left: auto;">⚡ Quét & Khóa Toàn Bộ Ngay</button>
+              </div>
+            </div>
+
+            <!-- Recent Infractions & Activity Logs -->
+            <div class="section-gap">
+              <div class="card-head-row">
+                <h4 style="margin: 0; font-size: 0.95rem;">📋 Nhật ký Phát hiện & Khóa Camera Gần Nhất</h4>
+                <button class="btn btn-sm btn-secondary" type="button" id="anti-a-refresh-logs-btn">Làm mới log</button>
+              </div>
+              <div class="table-wrap section-gap" style="max-height: 280px; overflow-y: auto;">
+                <table class="reflow" id="anti-a-logs-table">
+                  <thead>
+                    <tr>
+                      <th>Thời gian</th>
+                      <th>Camera</th>
+                      <th>Host / IP</th>
+                      <th>Codec phát hiện</th>
+                      <th>Hành động</th>
+                      <th>Kết quả</th>
+                    </tr>
+                  </thead>
+                  <tbody id="anti-a-logs-tbody">
+                    <tr><td colspan="6" class="empty-hint">Chưa có vi phạm nào được ghi nhận. Hệ thống đang bảo vệ an toàn.</td></tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </section>

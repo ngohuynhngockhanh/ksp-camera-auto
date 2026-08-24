@@ -143,6 +143,13 @@ func (r *RedbidaConfig) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// AntiAConfig configures the Anti-A Guardian watchdog that locks cameras to H.265, Smart Codec and Audio AAC.
+type AntiAConfig struct {
+	Enabled         bool   `yaml:"enabled"`
+	IntervalMinutes int    `yaml:"interval_minutes"` // Default 30
+	Mode            string `yaml:"mode"`             // "random" (default) or "full"
+}
+
 // Config is the top-level configuration document.
 type Config struct {
 	Server      Server        `yaml:"server"`
@@ -151,6 +158,7 @@ type Config struct {
 	Shinobi     ShinobiConfig `yaml:"shinobi"`
 	MCP         MCPConfig     `yaml:"mcp"`
 	Redbida     RedbidaConfig `yaml:"redbida"`
+	AntiA       AntiAConfig   `yaml:"anti_a"`
 }
 
 // Default returns a Config populated with built-in defaults.
@@ -193,7 +201,24 @@ func Default() Config {
 			TimeoutSeconds: 10,
 			MaxBatchKeys:   200,
 		},
+		AntiA: AntiAConfig{
+			Enabled:         false,
+			IntervalMinutes: 30,
+			Mode:            "random",
+		},
 	}
+}
+
+// Save writes the Config to path as YAML.
+func (c *Config) Save(path string) error {
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0640); err != nil {
+		return fmt.Errorf("write config %s: %w", path, err)
+	}
+	return nil
 }
 
 // Load reads config from path, filling any unset field with its default. A
@@ -288,5 +313,11 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Redbida.MaxBatchKeys == 0 {
 		c.Redbida.MaxBatchKeys = d.Redbida.MaxBatchKeys
+	}
+	if c.AntiA.IntervalMinutes <= 0 {
+		c.AntiA.IntervalMinutes = d.AntiA.IntervalMinutes
+	}
+	if c.AntiA.Mode == "" {
+		c.AntiA.Mode = d.AntiA.Mode
 	}
 }

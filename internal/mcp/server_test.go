@@ -137,6 +137,9 @@ func TestServer_ToolsList(t *testing.T) {
 		"redbida_apply_onboarding_preset",
 		"redbida_trigger_go2rtc",
 		"redbida_get_time_status",
+		"kspcam_get_anti_a_status",
+		"kspcam_set_anti_a_config",
+		"kspcam_trigger_anti_a",
 	}
 
 	if len(toolsList.Tools) != len(expectedTools) {

@@ -2061,3 +2061,48 @@ details.danger-zone[open] > summary::before { content: '▾ '; }
 .wifi-signal-bar.active-med { background: var(--warning); }
 .wifi-signal-bar.active-low { background: var(--danger); }
 
+/* ---------- Anti-A Guardian Panel Styles ---------- */
+.anti-a-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 1rem;
+}
+
+.anti-a-stat-card {
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.anti-a-stat-title {
+  font-size: 0.75rem;
+  color: var(--muted, #94a3b8);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.anti-a-stat-val {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text, #f8fafc);
+  font-family: var(--font-mono, monospace);
+}
+
+.anti-a-stat-alert {
+  color: var(--warning, #f59e0b);
+}
+
+.anti-a-config-box {
+  background: var(--surface-2, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent, #3b82f6);
+  border-radius: 10px;
+  padding: 14px 18px;
+}
+

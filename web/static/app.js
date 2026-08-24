@@ -42,7 +42,7 @@ const HASH_ALIASES = {
   results: 'cameras/results',
   'cameras/devices': 'cameras/nvr',
 };
-const CAMERA_TASKS = ['list', 'bulk', 'nvr', 'results'];
+const CAMERA_TASKS = ['list', 'bulk', 'nvr', 'anti-a', 'results'];
 // Tabs of the camera detail page (#cameras/cam/<encodedId>/<tab>).
 const DETAIL_TABS = ['osd', 'picture', 'video', 'audio', 'network', 'ptz', 'maint'];
 
@@ -259,6 +259,7 @@ function renderCameraTask() {
   closeCameraDetail();
   if (task === 'bulk') renderBulkSelection();
   if (task === 'nvr') renderNvrList();
+  if (task === 'anti-a') renderAntiAPanel();
 }
 
 function setRoute() {
@@ -3867,6 +3868,7 @@ async function init() {
 
   wireSettingsPopover();
   renderBulkSummary();
+  wireAntiAGuardian();
 
   window.addEventListener('hashchange', setRoute);
   setRoute();
@@ -3874,6 +3876,162 @@ async function init() {
   if (appRole !== 'viewer') await loadCameras();
   // Boot barrier for e2e: everything the first paint depends on has landed.
   window.__kspReady = true;
+}
+
+// ---------- Anti-A Guardian Panel Logic ----------
+
+async function renderAntiAPanel() {
+  const badge = document.getElementById('anti-a-status-badge');
+  const runningText = document.getElementById('anti-a-running-text');
+  const lastCheck = document.getElementById('anti-a-last-check');
+  const nextCheck = document.getElementById('anti-a-next-check');
+  const infractionsCount = document.getElementById('anti-a-infractions-count');
+  const msgEl = document.getElementById('anti-a-msg');
+  const enableToggle = document.getElementById('anti-a-enabled-toggle');
+  const intervalInput = document.getElementById('anti-a-interval-input');
+  const modeSelect = document.getElementById('anti-a-mode-select');
+  const tbody = document.getElementById('anti-a-logs-tbody');
+
+  try {
+    const res = await fetch('/api/anti-a');
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+
+    if (badge) {
+      badge.textContent = data.running ? '🟢 Đang bảo vệ' : '⚪ Đã tắt';
+      badge.className = data.running ? 'badge success' : 'badge';
+    }
+    if (runningText) {
+      runningText.textContent = data.running ? 'Hoạt động (Active)' : 'Đã tạm dừng (Disabled)';
+      runningText.style.color = data.running ? 'var(--success, #10b981)' : 'var(--muted, #94a3b8)';
+    }
+    if (lastCheck) {
+      lastCheck.textContent = data.lastCheck ? formatDateTime(data.lastCheck) : 'Chưa quét';
+    }
+    if (nextCheck) {
+      nextCheck.textContent = data.nextCheck ? formatDateTime(data.nextCheck) : '—';
+    }
+    if (infractionsCount) {
+      infractionsCount.textContent = `${data.infractionsCount} lần`;
+      infractionsCount.style.color = data.infractionsCount > 0 ? 'var(--danger, #ef4444)' : 'var(--success, #10b981)';
+    }
+    if (msgEl && data.statusMessage) {
+      msgEl.textContent = data.statusMessage;
+      msgEl.className = data.infractionsCount > 0 ? 'msg warn' : 'msg info';
+    }
+
+    if (enableToggle) enableToggle.value = data.enabled ? 'true' : 'false';
+    if (intervalInput) intervalInput.value = data.intervalMinutes || 30;
+    if (modeSelect) modeSelect.value = data.mode || 'random';
+
+    if (tbody) {
+      const logs = data.recentLogs || [];
+      if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-hint">Chưa có vi phạm nào được ghi nhận. Hệ thống đang bảo vệ an toàn.</td></tr>';
+      } else {
+        tbody.innerHTML = logs.map(log => {
+          const statusClass = log.success ? 'badge success' : 'badge danger';
+          const statusText = log.success ? 'Thành công' : 'Thất bại';
+          return `<tr>
+            <td data-label="Thời gian">${escapeHtml(formatDateTime(log.timestamp))}</td>
+            <td data-label="Camera"><strong>${escapeHtml(log.cameraName || log.cameraId)}</strong></td>
+            <td data-label="Host">${escapeHtml(log.host || '—')}</td>
+            <td data-label="Codec">${escapeHtml(log.detectedCodec || '—')} ${log.smartCodec ? '(SmartCodec)' : '(Tắt Smart)'}</td>
+            <td data-label="Hành động">${escapeHtml(log.actionTaken || '—')}</td>
+            <td data-label="Kết quả"><span class="${statusClass}">${statusText}</span> ${log.error ? `<br><small class="muted">${escapeHtml(log.error)}</small>` : ''}</td>
+          </tr>`;
+        }).join('');
+      }
+    }
+  } catch (err) {
+    if (msgEl) {
+      msgEl.textContent = 'Lỗi tải trạng thái Anti-A: ' + err.message;
+      msgEl.className = 'msg err';
+    }
+  }
+}
+
+async function saveAntiAConfig() {
+  const enableToggle = document.getElementById('anti-a-enabled-toggle');
+  const intervalInput = document.getElementById('anti-a-interval-input');
+  const modeSelect = document.getElementById('anti-a-mode-select');
+  const msgEl = document.getElementById('anti-a-msg');
+
+  const enabled = enableToggle?.value === 'true';
+  const intervalMinutes = parseInt(intervalInput?.value, 10) || 30;
+  const mode = modeSelect?.value || 'random';
+
+  try {
+    if (msgEl) {
+      msgEl.textContent = 'Đang lưu cấu hình...';
+      msgEl.className = 'msg info';
+    }
+    const res = await fetch('/api/anti-a', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        enabled: enabled,
+        intervalMinutes: intervalMinutes,
+        mode: mode,
+      }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    if (msgEl) {
+      msgEl.textContent = 'Đã lưu cấu hình Anti-A Guardian thành công!';
+      msgEl.className = 'msg success';
+    }
+    await renderAntiAPanel();
+  } catch (err) {
+    if (msgEl) {
+      msgEl.textContent = 'Lỗi lưu cấu hình: ' + err.message;
+      msgEl.className = 'msg err';
+    }
+  }
+}
+
+async function triggerAntiANow() {
+  const btn = document.getElementById('anti-a-trigger-btn');
+  const msgEl = document.getElementById('anti-a-msg');
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Đang quét & khóa...';
+  }
+
+  try {
+    if (msgEl) {
+      msgEl.textContent = 'Đang kích hoạt quét và khóa toàn bộ camera về H.265+ / AAC...';
+      msgEl.className = 'msg info';
+    }
+    const res = await fetch('/api/anti-a/trigger', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    if (msgEl) {
+      msgEl.textContent = `⚡ Hoàn tất: Đã kiểm tra và khóa ${data.enforced} camera về H.265 + Smart Codec + Audio AAC!`;
+      msgEl.className = 'msg success';
+    }
+    await renderAntiAPanel();
+  } catch (err) {
+    if (msgEl) {
+      msgEl.textContent = 'Lỗi kích hoạt Anti-A: ' + err.message;
+      msgEl.className = 'msg err';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '⚡ Quét & Khóa Toàn Bộ Ngay';
+    }
+  }
+}
+
+function wireAntiAGuardian() {
+  document.getElementById('anti-a-save-btn')?.addEventListener('click', saveAntiAConfig);
+  document.getElementById('anti-a-trigger-btn')?.addEventListener('click', triggerAntiANow);
+  document.getElementById('anti-a-refresh-logs-btn')?.addEventListener('click', renderAntiAPanel);
 }
 
 // The per-device timeout is global (every API call reads it), so it lives in a

@@ -51,6 +51,7 @@ func NewServer(cfg *config.Config, inv *config.Inventory, shinobiClient *shinobi
 	registerDiscoveryDiagnosisTools(registry, cfg, inv)
 	registerShinobiTools(registry, cfg, inv, shinobiClient)
 	registerRedbidaTools(registry, cfg, rSvc)
+	registerAntiATools(registry, cfg, inv)
 
 	return &Server{
 		cfg:      cfg,

@@ -1,0 +1,43 @@
+server:
+    addr: :2028
+    username: admin
+    password: smarthome12345
+    password_hash: ""
+    viewer_username: ""
+    viewer_password: ""
+    login_max_attempts: 5
+    login_lockout_minutes: 30
+cameras_file: cameras.yaml
+defaults:
+    hikvision_port: 8000
+    dahua_port: 37777
+    tiandy_port: 554
+    username: admin
+    password: smarthome12345
+    timeout_seconds: 30
+    new_password: smarthome12345
+    max_review_hours: 72
+shinobi:
+    enabled: false
+    api_url: http://127.0.0.1:8080
+    api_key: ""
+    group_key: ""
+mcp:
+    enabled: true
+    api_key: ""
+    allow_unauthenticated_loopback: true
+redbida:
+    enabled: false
+    broker_host: 127.0.0.1
+    broker_port: 12369
+    read_topic: /private/i_gets
+    read_ack_topic: /private/i_gets/ack
+    write_topic: /private/i_sets
+    write_ack_topic: /private/i_sets/ack
+    key_dir: /root/ota-mqtt/change_ok
+    timeout_seconds: 10
+    max_batch_keys: 200
+anti_a:
+    enabled: false
+    interval_minutes: 45
+    mode: random

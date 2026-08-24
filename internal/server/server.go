@@ -3,6 +3,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -41,6 +42,7 @@ type Server struct {
 	snaps    *snapCache
 	dlKey    []byte // HMAC key for short-lived tokenized playback/download links (QR)
 	nvrWatch *nvrWatchdog
+	antiA    *antiAGuardian
 	redbida  *redbida.Service
 }
 
@@ -90,6 +92,8 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 			log.Printf("dahua %s: save fallback port: %v", id, err)
 		}
 	}
+	s.antiA = newAntiAGuardian(s, inv, "config.yaml", cfg.AntiA)
+	s.antiA.start(context.Background())
 	s.routes()
 	s.nvrWatch = newNVRWatchdog(s)
 	return s, nil
@@ -99,6 +103,9 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 func (s *Server) Close() {
 	if s.nvrWatch != nil {
 		s.nvrWatch.stop()
+	}
+	if s.antiA != nil {
+		s.antiA.stop()
 	}
 }
 
@@ -165,6 +172,8 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/shinobi/sync-to-shinobi", api(s.handleShinobiSyncToShinobi))
 	s.mux.Handle("/api/shinobi/sync-from-shinobi", api(s.handleShinobiSyncFromShinobi))
 	s.mux.Handle("/api/shinobi/videos", api(s.handleShinobiVideos))
+	s.mux.Handle("/api/anti-a", api(s.handleAntiA))
+	s.mux.Handle("/api/anti-a/trigger", api(s.handleAntiATrigger))
 	s.mux.HandleFunc("/logo.png", s.handleLogoFile)
 	s.mux.Handle("/api/upload-logo", api(s.handleUploadLogo))
 	if s.redbida != nil {
