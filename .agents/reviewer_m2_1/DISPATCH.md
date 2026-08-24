@@ -1,17 +1,25 @@
-## 2026-08-24T13:40:57Z
+## 2026-08-24T15:24:49Z
+You are Reviewer 1 for Milestone 2 (M2: Full Overhaul of `/#redbida`) in `ksp-camera-auto`.
+Your working directory is: /home/ksp/ksp-camera-auto/.agents/reviewer_m2_1
 
-You are teamwork_preview_reviewer reviewing Milestone 2 for the ksp-camera-auto project.
-Your working directory is `/home/ksp/ksp-camera-auto/.agents/reviewer_m2_1`.
-Read `/home/ksp/ksp-camera-auto/ORIGINAL_REQUEST.md`, `/home/ksp/ksp-camera-auto/PROJECT.md`, and `/home/ksp/ksp-camera-auto/.agents/reviewer_m2_1/DISPATCH.md`.
+Read the following files before starting:
+- `/home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md` (Specifically R2: `/#redbida` Overhaul)
+- `/home/ksp/ksp-camera-auto/PROJECT.md`
+- `/home/ksp/ksp-camera-auto/.agents/worker_redbida_m2/handoff.md`
 
-Review Milestone 2 changes:
-1. `internal/mcp/server.go`: Tool registration, `NewServer` backward compatibility, 31 tools total.
-2. `internal/server/server.go` and `cmd/kspcam/main.go`: `redbida.Service` wiring.
-3. Documentation updates in `docs/help/mcp-server.md`, `docs/help/redbida.md`, `docs/CODEBASE-KNOWLEDGE.md`, `GEMINI.md`, `AGENTS.md`.
-4. Docgen tool verification: `go run ./tools/docgen -check`.
-5. Run tests with Go at `/home/ksp/go-sdk/bin/go`.
-6. Issue verdict: APPROVE or REQUEST_CHANGES.
+Examine the implementation in:
+- `web/static/index.html` (specifically `#view-redbida`)
+- `web/static/redbida.js`
+- `web/static/style.css`
+- `tests/ui/redbida_m2_overhaul.spec.js` and existing tests
 
-Write your report and verdict to `/home/ksp/ksp-camera-auto/.agents/reviewer_m2_1/handoff.md`.
-Update `progress.md` with your status.
-When done, call `send_message` to your parent with a concise summary, verdict, and path to your handoff file.
+Review Criteria:
+1. Golden Standard Inspector & 1-Click Auto-Fix: Audit of 15 configuration keys, % Chuẩn Bida calculation, per-key auto-fix, and auto-fix all.
+2. Curated 8 CSS Gradient Palette: 8 gradient presets, no trailing semicolons `;` in `ui_bg`, Live Canvas Preview with logo, title, slogan, hashtag badges, and 20-tab simulator.
+3. Visual 20-Tab INI Editor `[C01]`..`[C20]`: 20-tab matrix grid, per-table form, 1-click sync venue name, quick copy URL, bidirectional synchronization with raw INI text.
+4. Smart Hashtag Generator: dynamic Unicode normalization (NFC/NFD) stripping Vietnamese diacritics on typing venue name.
+5. Key Management table & glassmorphism styling.
+6. Run tests: Go unit tests (`go test ./...`) and Playwright tests (`npx playwright test`).
+
+Write your structured review report and explicit verdict (APPROVE or REQUEST_CHANGES) to `/home/ksp/ksp-camera-auto/.agents/reviewer_m2_1/handoff.md`.
+Send a message to your parent when complete.

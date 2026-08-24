@@ -1,19 +1,19 @@
-# BRIEFING — 2026-08-24T13:20:00Z
+# BRIEFING — 2026-08-24T14:38:00Z
 
 ## Mission
-Lead and orchestrate the full completion of the RedBida & Onboarding MCP tools suite in `ksp-camera-auto`, including implementation, registration, documentation, test suite, multi-arch build, node deployment, and live verification.
+Orchestrate the comprehensive overhaul of `/#cameras` (Grid/Table view, Quick Actions toolbar, 7-tab detail workspace, Smart bulk wizard with Golden Template 1-click, NVR diagnostics & sub-channel scanning) and `/#redbida` (Golden Standard Inspector & 1-Click Auto-Fix with % progress, Curated 8 CSS Gradient Palette with Live Canvas Preview, Visual 20-Tab INI Editor [C01]..[C20], Smart Hashtag Generator, Enhanced Key Management), ensuring 100% Go unit & Playwright test coverage, multi-arch static build, deployment to edge nodes `inut_204_164` and `inut_204_163`, and git main push.
 
 ## 🔒 My Identity
 - Archetype: orchestrator
 - Roles: [orchestrator, user_liaison, human_reporter, successor]
 - Working directory: /home/ksp/ksp-camera-auto/.agents/orchestrator
 - Original parent: top-level
-- Original parent conversation ID: e0640542-ae93-47e0-9c1c-c5807d737f3e
+- Original parent conversation ID: 9124d40d-c4ac-422d-af43-883d284b3be0
 
 ## 🔒 My Workflow
 - **Pattern**: Project Orchestration Pattern (Dual Track: Implementation + Testing)
 - **Scope document**: /home/ksp/ksp-camera-auto/PROJECT.md
-1. **Decompose**: Survey codebase with 3 parallel Explorers -> create `PROJECT.md` with Feature Inventory and 3 Milestones (M1: RedBida MCP tools, M2: Server integration & Docs, M3: Testing, Multi-Arch Build & Deployment).
+1. **Decompose**: Survey codebase with 3 parallel Explorers -> create `PROJECT.md` with Feature Inventory and Milestones (M1: `/#cameras` Overhaul, M2: `/#redbida` Overhaul, M3: Testing, Multi-Arch Build & Deployment).
 2. **Dispatch & Execute**:
    - Implementation Track (M1, M2, M3) via Explorer -> Worker -> Reviewer -> Challenger -> Auditor iteration loop.
    - Testing Track in parallel.
@@ -21,62 +21,73 @@ Lead and orchestrate the full completion of the RedBida & Onboarding MCP tools s
 4. **Succession**: At 16 spawns, write handoff.md, spawn successor.
 - **Work items**:
   1. Survey & Architecture Specification [in-progress]
-  2. M1: RedBida & Onboarding MCP Tools Suite [pending]
-  3. M2: Server Integration, Stdio/SSE verification & Documentation [pending]
-  4. M3: Unit Testing, Multi-Arch Build, Node Deployment & Live Verification [pending]
-- **Current phase**: 1 (Survey & Planning)
-- **Current focus**: Survey codebase with 3 parallel Explorers
+  2. M1: Full Overhaul of `/#cameras` [pending]
+  3. M2: Full Overhaul of `/#redbida` [pending]
+  4. M3: Comprehensive Testing, Multi-Arch Build, Edge Node Deployment & Git Push [pending]
+- **Current phase**: 0 (Survey & Planning)
+- **Current focus**: Survey codebase with 3 parallel Explorers (Cameras UI/UX, RedBida UI/UX, Infra/Testing/Deployment)
 
 ## 🔒 Key Constraints
 - NEVER write or modify source code files directly as orchestrator.
-- NEVER run build/test commands directly.
+- NEVER run build/test commands directly — delegate to subagents.
 - Ensure 100% genuine implementation (Zero Tolerance for cheating/facades).
-- Read-back verification and strict parameter formatting for all 15 Onboarding parameters.
-- Pass 100% unit tests, multi-arch compilation, and deployment to `inut_204_164` and `inut_204_163`.
+- Read-back verification and strict parameter formatting for all configurations.
+- Pass 100% unit tests & Playwright UI tests, multi-arch static compilation (`amd64`, `arm64`, `armv7`), and deployment to `inut_204_164` and `inut_204_163`.
 
 ## Current Parent
-- Conversation ID: e0640542-ae93-47e0-9c1c-c5807d737f3e
-- Updated: 2026-08-24T13:20:00Z
+- Conversation ID: 9124d40d-c4ac-422d-af43-883d284b3be0
+- Updated: 2026-08-24T14:38:00Z
 
 ## Key Decisions Made
-- Project classified as Greenfield/Feature SWE project with multi-arch and remote node deployment requirements.
+- Project classified as Greenfield/Feature SWE UI & Backend project.
 - Survey phase dispatched with 3 specialized Explorers.
 
 ## Team Roster
 | Agent | Type | Work Item | Status | Conv ID |
 |-------|------|-----------|--------|---------|
-| explorer_mcp_core | teamwork_preview_explorer | Survey MCP Core Architecture | completed | ab56d09d-5dff-4c08-9420-1640d6c8d117 |
-| explorer_redbida_spec | teamwork_preview_explorer | Survey RedBida MQTT & Onboarding Spec | completed | c837a967-b611-4735-9919-69c6d3eed846 |
-| explorer_deploy_infra | teamwork_preview_explorer | Survey Deployment & Testing Infra | completed | a7d9e984-8f45-4fbb-ae8a-638c96dc1524 |
-| worker_m1 | teamwork_preview_worker | Implement tools_redbida.go (M1) | completed | 944e52a1-111a-4e24-8732-bf9b39a93e25 |
-| reviewer_m1_1 | teamwork_preview_reviewer | Review tools_redbida.go (M1) | completed | 714fcfb3-5ef6-4a5b-a8f3-5a4d58fac3a4 |
-| reviewer_m1_2 | teamwork_preview_reviewer | Review tools_redbida.go (M1) | completed | afe2cdde-053a-4c73-8a68-8e2872250a1c |
-| challenger_m1_1 | teamwork_preview_challenger | Stress test tools_redbida.go (M1) | completed | f1fff7a2-0c2f-4491-b4dd-e5a7325f6ca9 |
-| challenger_m1_2 | teamwork_preview_challenger | Concurrency/Broker test (M1) | completed | 23f902e2-1057-47c2-9986-89156d9d0fab |
-| auditor_m1 | teamwork_preview_auditor | Forensic Integrity Audit (M1) | completed | e7f771df-2cec-4224-9fa2-14b04d5845df |
-| worker_m2 | teamwork_preview_worker | Server Integration & Docs (M2) | completed | e882581d-4ed4-478d-8d44-de7d3ae1b76b |
-| reviewer_m2_1 | teamwork_preview_reviewer | Review M2 Integration & Docs | completed | 3c7bcc46-746a-4ca7-a7f2-b750f22ae809 |
-| reviewer_m2_2 | teamwork_preview_reviewer | Review M2 Integration & Docs | completed | 3d4defef-a38f-404b-ade5-f1686080327e |
-| challenger_m2_1 | teamwork_preview_challenger | Challenge M2 JSON-RPC & Docs | completed | a64f34e3-881a-480b-8ab8-1481f3c6424a |
-| challenger_m2_2 | teamwork_preview_challenger | Challenge M2 SSE/Stdio & Registry | completed | 6ba0ceae-5a8e-482b-b74d-ddf1449c61fe |
-| auditor_m2 | teamwork_preview_auditor | Forensic Integrity Audit (M2) | completed | 73f47e7e-5d22-4616-b8bf-dbbc3efb45ab |
-| worker_m3 | teamwork_preview_worker | Build, Deploy, Test & Git (M3) | completed | 1e011961-8ede-4e0c-b7b3-f96852dc442e |
+| explorer_survey_cameras | teamwork_preview_explorer | Survey Cameras UI/UX & backend | completed | 4f4c164e-2eb7-492e-b4ea-faf1c2ff2a30 |
+| explorer_survey_redbida | teamwork_preview_explorer | Survey RedBida UI/UX & backend | completed | 1fe2e7a2-f814-4d8a-90ea-6d2ddda4fafe |
+| explorer_survey_infra | teamwork_preview_explorer | Survey Infra, Testing & Deploy | completed | 2e9a88e9-2fec-4ddd-8fff-7c7dbd101d61 |
+| worker_camera_m1 | teamwork_preview_worker | Implement M1 (/#cameras overhaul) | completed | 424686fb-6e41-4624-a18b-3ed6a510832a |
+| reviewer_m1_1 | teamwork_preview_reviewer | Review M1 Cameras Overhaul | in-progress | 331e8840-dc01-49b8-aa2f-d0aa80fdbf33 |
+| reviewer_m1_2 | teamwork_preview_reviewer | Review M1 Cameras Overhaul | in-progress | 980fc2ea-41f9-443d-b9fa-9da5e9de83ac |
+| challenger_m1_1 | teamwork_preview_challenger | Stress test M1 Grid/QuickActions | in-progress | a31405da-611e-407d-9eb6-5e696be2682c |
+| challenger_m1_2 | teamwork_preview_challenger | Stress test M1 PTZ/Detail/NVR | in-progress | eb263bab-37f8-4faa-aedb-f2ea57baca58 |
+| auditor_m1 | teamwork_preview_auditor | Forensic Integrity Audit M1 | completed | 9e244230-5aa7-4570-b720-56633ede52ea |
+| worker_camera_m1_fix | teamwork_preview_worker | Fix M1 grid events & select-all | completed | 3d52a5f4-9571-443b-a815-6bd50fbb17b6 |
+| worker_redbida_m2 | teamwork_preview_worker | Implement M2 (/#redbida overhaul) | completed | f879ceff-f967-4fa7-ba3b-2ccb764e5d00 |
+| reviewer_m2_1 | teamwork_preview_reviewer | Review M2 RedBida Overhaul | in-progress | afac48e1-e3c1-4d21-8c4f-5cdcffd8723a |
+| reviewer_m2_2 | teamwork_preview_reviewer | Review M2 RedBida Overhaul | in-progress | 7c2b6e98-b665-42d3-b3f5-1f1a5d113ed1 |
+| challenger_m2_1 | teamwork_preview_challenger | Stress test M2 Inspector & Palette | in-progress | 92375041-4c5b-4026-b1f8-cfeda2ea8e28 |
+| challenger_m2_2 | teamwork_preview_challenger | Stress test M2 20-Tab INI & Hashtags | in-progress | 767fb034-0db9-4e4c-bcc0-250517edabc6 |
+| auditor_m2 | teamwork_preview_auditor | Forensic Integrity Audit M2 | completed | 22edc9b0-4fcf-4cd7-bb5e-800dcdcb3a7f |
+| worker_redbida_m2_fix | teamwork_preview_worker | Remediate M2 regex & fallbacks | completed | 09eb71be-a775-4fad-b366-384a10626f14 |
+| auditor_m3 | teamwork_preview_auditor | Forensic Integrity Audit Project Final | completed | 2e24b9d3-fbe6-49ef-ae83-4bfa465e74f4 |
 
 ## Succession Status
 - Succession required: no
-- Spawn count: 16 / 16
+- Spawn count: 19 / 32
 - Pending subagents: none
 - Predecessor: none
-- Successor: not required (project complete)
+- Successor: none (Project Fully Completed)
 
 ## Active Timers
-- Heartbeat cron: terminated (task-15)
+- Heartbeat cron: terminated
 - Safety timer: none
 
 ## Artifact Index
-- `/home/ksp/ksp-camera-auto/ORIGINAL_REQUEST.md` — Authoritative user requirements
+- `/home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md` — Authoritative user requirements
+- `/home/ksp/ksp-camera-auto/.agents/orchestrator/DISPATCH.md` — Dispatch log
+- `/home/ksp/ksp-camera-auto/.agents/orchestrator/BRIEFING.md` — Working memory
+- `/home/ksp/ksp-camera-auto/.agents/orchestrator/progress.md` — Status checklist
+- `/home/ksp/ksp-camera-auto/.agents/orchestrator/plan.md` — Detailed orchestration plan
+- `/home/ksp/ksp-camera-auto/.agents/orchestrator/GATE_STATUS.md` — Gate verdicts
+- `/home/ksp/ksp-camera-auto/PROJECT.md` — Global architecture & feature inventory
+
+## Artifact Index
+- `/home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md` — Authoritative user requirements
 - `/home/ksp/ksp-camera-auto/.agents/orchestrator/DISPATCH.md` — Dispatch log
 - `/home/ksp/ksp-camera-auto/.agents/orchestrator/BRIEFING.md` — Working memory
 - `/home/ksp/ksp-camera-auto/.agents/orchestrator/progress.md` — Liveness & status checklist
 - `/home/ksp/ksp-camera-auto/.agents/orchestrator/plan.md` — Detailed orchestration plan
-- `/home/ksp/ksp-camera-auto/PROJECT.md` — Global architecture & feature inventory (to be generated)
+- `/home/ksp/ksp-camera-auto/PROJECT.md` — Global architecture & feature inventory

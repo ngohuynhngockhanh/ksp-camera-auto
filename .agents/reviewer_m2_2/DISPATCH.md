@@ -1,17 +1,25 @@
-# Task Assignment: Reviewer 2 for Milestone 2
+## 2026-08-24T15:24:49Z
 
-## 2026-08-24T13:40:57Z
-You are teamwork_preview_reviewer reviewing Milestone 2 for the ksp-camera-auto project.
-Your working directory is `/home/ksp/ksp-camera-auto/.agents/reviewer_m2_2`.
-Read `/home/ksp/ksp-camera-auto/ORIGINAL_REQUEST.md`, `/home/ksp/ksp-camera-auto/PROJECT.md`, and `/home/ksp/ksp-camera-auto/.agents/reviewer_m2_2/DISPATCH.md`.
+You are Reviewer 2 for Milestone 2 (M2: Full Overhaul of `/#redbida`) in `ksp-camera-auto`.
+Your working directory is: /home/ksp/ksp-camera-auto/.agents/reviewer_m2_2
 
-Independently review Milestone 2 changes:
-1. Review `internal/mcp/server_test.go` and `internal/mcp/server.go`.
-2. Verify both Stdio mode and HTTP/SSE JSON-RPC 2.0 dispatch mechanisms.
-3. Review documentation accuracy in `docs/` and `GEMINI.md` / `AGENTS.md`.
-4. Run tests with Go at `/home/ksp/go-sdk/bin/go`.
-5. Issue verdict: APPROVE or REQUEST_CHANGES.
+Read the following files before starting:
+- `/home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md` (Specifically R2: `/#redbida` Overhaul)
+- `/home/ksp/ksp-camera-auto/PROJECT.md`
+- `/home/ksp/ksp-camera-auto/.agents/worker_redbida_m2/handoff.md`
 
-Write your report and verdict to `/home/ksp/ksp-camera-auto/.agents/reviewer_m2_2/handoff.md`.
-Update `progress.md` with your status.
-When done, call `send_message` to your parent with a concise summary, verdict, and path to your handoff file.
+Examine the implementation in:
+- `web/static/index.html`
+- `web/static/redbida.js`
+- `web/static/style.css`
+- `tests/ui/` test suites
+
+Review Criteria:
+1. Glassmorphism aesthetic quality and micro-interactions across `#view-redbida`.
+2. Ergonomic UX of the 20-tab matrix editor and inspector checklist.
+3. Correctness of preset parameter generation and read-back diff rendering.
+4. Backward compatibility: verify all existing selectors (`[data-testid="redbida-refresh"]`, `[data-testid="redbida-apply"]`, `[data-red-row="..."]`, etc.) are intact.
+5. Run tests: Go unit tests (`go test ./...`) and Playwright tests (`npx playwright test`).
+
+Write your structured review report and explicit verdict (APPROVE or REQUEST_CHANGES) to `/home/ksp/ksp-camera-auto/.agents/reviewer_m2_2/handoff.md`.
+Send a message to your parent when complete.

@@ -1,102 +1,97 @@
-# Handoff Report — Milestone 1 Review: RedBida & Onboarding MCP Tools Suite
+# Review & Critic Handoff Report — Milestone 1 (M1: Full Overhaul of `/#cameras`)
+
+**Reviewer Role**: Reviewer 2 & Adversarial Critic  
+**Review Verdict**: **APPROVE**  
+**Integrity Status**: **CLEAN (Zero Integrity Violations)**  
+**Target Milestone**: M1 (Full Overhaul of `/#cameras`)  
+**Date**: 2026-08-24T22:03:40+07:00  
+
+---
 
 ## 1. Observation
 
-Direct inspection of files and command executions:
+### A. Direct Codebase & Interface Observations
+1. **Glassmorphism Design & CSS Tokens (`web/static/style.css:1385-1710`)**:
+   - Implemented CSS variables and classes for Modern Glassmorphism: `.cam-grid`, `.cam-card`, `.cam-card-thumb-wrap`, `.cam-card-badge-overlay`, `.cam-spec-tag`, `.cam-card-actions`, `.row-quick-actions`, `.bulk-golden-bar`, `.bulk-safety-alert`, `.dialog-quick-ptz`, `.wifi-rssi-meter`.
+   - Grid layout uses responsive autofill: `grid-template-columns: repeat(auto-fill, minmax(290px, 1fr))` with 16px gap.
+   - Hover micro-interactions: Smooth translation (`transform: translateY(-3px)`), accent border illumination, and subtle thumbnail scaling (`transform: scale(1.03)`).
+   - Vendor badges styled with backdrop-filter blur and distinct color branding: Dahua/KBVision (`.vendor-dahua`: `#38bdf8`), Hikvision (`.vendor-hikvision`: `#f87171`), Tiandy (`.vendor-tiandy`: `#34d399`).
+   - Fullscreen styling for MJPEG canvas with `:fullscreen` / `:-webkit-full-screen` black background container.
 
-### A. Inspected Files
-1. `internal/mcp/tools_redbida.go` (484 lines):
-   - `removeVietnameseTones` (lines 387-434): Pure Go implementation filtering combining diacritical marks (`U+0300`..`U+036F` for NFD) and converting all precomposed Vietnamese NFC characters (`à`..`ỹ`, `đ`, `Đ`, uppercase & lowercase) to ASCII equivalents.
-   - `sanitizeCleanTitle` (lines 436-446): Uses `removeVietnameseTones` and filters for alphanumeric characters `[A-Za-z0-9]`, producing safe hashtag identifiers.
-   - `sanitizeCSSGradient` (lines 458-467): Trims trailing semicolons and trailing whitespace in a loop (`strings.HasSuffix(bg, ";")`), falling back to default radial gradient if empty.
-   - `generate20TabINITabs` (lines 448-455): Formats exactly 20 sections `[C01]` through `[C20]` (`[C%02d]`) with 4 required INI keys: `stream_label`, `vid_list_label`, `vid_play_label` (set to venue title), and `list_refresh_label`.
-   - `queryNTPSynchronized` (lines 470-483): Executes `timedatectl show -p NTPSynchronized --value` with a 2-second timeout context.
-   - `registerRedbidaTools` (lines 16-385): Implements and registers all 6 RedBida tools:
-     - `redbida_list_catalog`: metadata catalog with group & editableOnly filters.
-     - `redbida_get_keys`: reads keys with secret masking (`********`) and `all` flag.
-     - `redbida_set_keys`: applies key changes with read-back verification.
-     - `redbida_apply_onboarding_preset`: synthesizes 15 parameters, supports `dryRun` and live application with read-back verification.
-     - `redbida_trigger_go2rtc`: publishes `button_generate_go2rtc_stream: true`.
-     - `redbida_get_time_status`: checks host system time and NTP synchronization status.
-     - Nil-service safety: `checkService()` checks `redbidaSvc != nil` and returns informative errors on disabled service.
-2. `internal/mcp/tools_redbida_test.go` (617 lines):
-   - Complete unit and integration test suite with `mockRedbidaBroker`:
-     - `TestRemoveVietnameseTones`: 19 sub-cases testing NFC/NFD, all vowels, upper/lower cases, complex multi-word strings.
-     - `TestSanitizeCleanTitle`: 5 sub-cases testing special characters, hyphens, and numbers.
-     - `TestSanitizeCSSGradient`: 4 sub-cases testing semicolon removal, empty default fallback.
-     - `TestGenerate20TabINITabs`: checks 20 sections, section headers `[C01]`..`[C20]`, line contents.
-     - `TestRedbidaTools_ListCatalog`: catalog listing and filtering.
-     - `TestRedbidaTools_GetKeys`: key retrieval and secret masking.
-     - `TestRedbidaTools_SetKeys`: key writing and verification.
-     - `TestRedbidaTools_ApplyOnboardingPreset_DryRun`: validates dry-run parameter synthesis and ensures no broker writes occur.
-     - `TestRedbidaTools_ApplyOnboardingPreset_Live`: validates live write and read-back verification.
-     - `TestRedbidaTools_ApplyOnboardingPreset_Validations`: validates boundary conditions (`title == ""`, `cameraCount < 1`, `cameraCount > 20`).
-     - `TestRedbidaTools_TriggerGo2RTC`: validates go2rtc trigger flag.
-     - `TestRedbidaTools_GetTimeStatus`: validates host time querying and threshold.
-     - `TestRedbidaTools_DisabledServiceGracefulHandling`: validates graceful handling when `redbidaSvc` is nil across all tools.
+2. **DOM Architecture & Controls (`web/static/index.html:136-385, 1148-1191`)**:
+   - Added `#cam-view-toggle` with `#cam-view-table-btn` and `#cam-view-grid-btn` to camera list header.
+   - Added `#cam-grid` (`data-testid="camera-grid"`) and kept existing `#cam-table` and `#cam-tbody` for 100% backward compatibility.
+   - Added `#cd-live-fullscreen` button to Camera Detail left column.
+   - Added `#bulk-golden-template-btn` (`data-testid="bulk-golden-template"`) and `#bulk-safety-alert` in bulk panel.
+   - Added Quick PTZ Dialog (`#quick-ptz-dialog`) with snapshot/MJPEG preview, 8-directional pad (`.qptz-btn`), speed slider (1–8), and zoom/focus buttons.
 
-### B. Test Execution Results
-- `internal/mcp` test suite:
-  ```bash
-  /home/ksp/go-sdk/bin/go test -count=1 -v ./internal/mcp/...
-  ```
-  Result: **PASS** (18/18 test suites passed in 0.446s).
-- Full workspace test suite:
-  ```bash
-  /home/ksp/go-sdk/bin/go test -count=1 ./...
-  ```
-  Result: **PASS** (all packages passed without regressions).
+3. **Controller Logic & Event Handling (`web/static/app.js:400-545, 889-1005, 1475-1508, 1600-1696, 2030-2220`)**:
+   - `setCameraViewMode(mode)`: Persists preference in `localStorage.getItem('kspcam_cam_view_mode')` and toggles `.active` states between table and grid views.
+   - `renderCameras()`: Renders synchronized data to `#cam-tbody` and `#cam-grid` with stream specs, vendor tags, QR serials, and fallback thumbnail placeholders (`onerror`).
+   - `handleCameraAction(action, id, btn)`: Dispatches `quick-live`, `quick-snap`, `quick-ptz`, `quick-reboot`, `quick-sync-time`, `rename-inline`, `reveal-pass`, `detail`, `view`, `probe`, and `delete`.
+   - `applyGoldenTemplate()`: Automatically configures H.264 Main, 1080p (1920x1080), GOP 50, Bitrate 2048 CBR, and AAC Audio (`#p-audio-enable`).
+   - `checkBulkSafety()`: Actively checks for high bitrate (> 8192 Kbps), 4K with insufficient bitrate (< 2048 Kbps), and excessive GOP (> 200) with amber warning display.
+   - `initQuickPtzDialog()` & Keyboard handler: Press-and-hold PTZ pointer capture, plus global Arrow keys & WASD navigation when PTZ is active.
+   - `scanWiFi()`: Renders 4-bar dynamic color-coded RSSI % meters (`.wifi-rssi-meter`).
+
+### B. Verification Run Outputs
+- **Go Unit Tests**:
+  - Command: `/home/ksp/inut-rk3528-browswer/wpebuild/godl/go/bin/go test -count=1 ./...`
+  - Output: `ok internal/bulk (0.030s)`, `ok internal/camera (0.035s)`, `ok internal/config (0.022s)`, `ok internal/dahua (0.035s)`, `ok internal/discovery (0.010s)`, `ok internal/hik (0.015s)`, `ok internal/importer (0.010s)`, `ok internal/isapi (0.079s)`, `ok internal/mcp (6.710s)`, `ok internal/nvrhealth (0.010s)`, `ok internal/redbida (4.681s)`, `ok internal/server (0.481s)`, `ok internal/shinobi (0.033s)`, `ok internal/tiandy (0.023s)`, `ok web (0.010s)`. (100% Passed, 0 Failures).
+- **Playwright M1 E2E Test Suite**:
+  - Command: `PATH=/home/ksp/.nvm/versions/node/v24.18.1/bin:$PATH npx playwright test tests/ui/cameras.spec.js tests/ui/bulk.spec.js tests/ui/detail.spec.js`
+  - Output: `59 passed, 1 skipped, 0 failures (1.2m)`.
 
 ---
 
 ## 2. Logic Chain
 
-1. **R1.1 - R1.6 Requirements Compliance**:
-   - `redbida_list_catalog`, `redbida_get_keys`, `redbida_set_keys`, `redbida_apply_onboarding_preset`, `redbida_trigger_go2rtc`, `redbida_get_time_status` are fully implemented according to `PROJECT.md` and `ORIGINAL_REQUEST.md`.
-2. **Vietnamese Tone Removal (`removeVietnameseTones`)**:
-   - Supports NFC precomposed characters (exhaustive table matching all 67 Vietnamese accented characters).
-   - Supports NFD decomposed characters (combining diacritical marks in range `U+0300`..`U+036F` are skipped while base runes are preserved).
-   - `sanitizeCleanTitle` strips non-alphanumerics, generating clean hashtags without diacritics.
-3. **CSS Gradient Sanitization (`sanitizeCSSGradient`)**:
-   - Strips trailing semicolons iteratively (preventing syntax errors when embedded in UI styling).
-   - Fallback to standard luxury gradient when input is empty.
-4. **20-Tab INI Synthesis (`generate20TabINITabs`)**:
-   - Produces exactly 20 sections `[C01]` to `[C20]`.
-   - Every section contains 4 lines with `vid_play_label` dynamically bound to `title`.
-5. **Onboarding Preset Synthesis (`redbida_apply_onboarding_preset`)**:
-   - Synthesizes all 15 parameters (`ui_title`, `company_name`, `ui_bg`, `custom_hashtags`, `ui_tabs_links`, `camera_count`, `toolbar_show_count`, `video_config`, `hls_using_go2rtc`, `button_generate_go2rtc_stream`, `logo_header`, `logo_header_text`, `shinobi_camera_id`, `shinobi_group_key`, `ui_scoreboard`) plus optional tokens (`ggcode`, `shinobi_token`, `shinobi_monitor_token`).
-   - Boundary checks enforce `cameraCount` between 1 and 20, and `title` non-empty.
-   - `dryRun` returns the parameter map safely without MQTT mutations.
-   - Live execution delegates to `redbida.Service.Apply` which enforces full read-back verification against the local broker.
-6. **Adversarial & Integrity Checks**:
-   - Zero hardcoded test fixtures or facade shortcuts found in production code.
-   - Real system commands (`timedatectl`) and real MQTT client calls are used with bounded context timeouts.
-   - Zero regressions across the workspace.
+1. **Requirement R1 Mapping**:
+   - *Grid / Table View Switcher*: Implemented in `index.html` + `style.css` + `app.js` with auto thumbnail rendering, badge overlays, and `localStorage` persistence (`kspcam_cam_view_mode`). Verified in `tests/ui/cameras.spec.js:238`.
+   - *Quick Actions Toolbar*: 1-Click buttons for Live Stream, Snapshot Lightbox, PTZ modal, Device Reboot, and NTP sync implemented in `app.js:handleCameraAction`. Verified in `tests/ui/cameras.spec.js:267`.
+   - *Detail Workspace Polish*: Left column MJPEG preview with fullscreen button (`#cd-live-fullscreen`), PTZ keyboard navigation (WASD / Arrows), Wi-Fi RSSI signal meter gauges (`.wifi-rssi-meter`).
+   - *Smart Bulk Wizard & Golden Template*: 1-Click "Áp dụng Chuẩn Bida (Golden Template)" populates H.264 Main, 1080p, GOP 50, Bitrate 2048 CBR, and AAC audio. Verified in `tests/ui/bulk.spec.js:64`.
+   - *Hardware Safety Limits*: `checkBulkSafety()` validates parameters against device stress thresholds and displays proactive warnings.
+
+2. **Adversarial Stress-Testing & Integrity Assessment**:
+   - *Integrity Check*: No hardcoded mock values or bypasses embedded in production code. Real DOM elements, event listeners, and API endpoints are wired properly.
+   - *Event Bubble Isolation*: Click events on card checkboxes (`.cam-card-check`) and card actions (`.cam-card-actions`) include `event.stopPropagation()` to prevent unwanted navigation to the camera detail workspace while selecting or triggering quick actions.
+   - *PTZ Runaway Motion Prevention*: PTZ motions are guarded by `pointerup`, `pointercancel`, `pointerleave`, and `window.hashchange` events, ensuring cameras never get stuck continuously panning if a user navigates away or moves the cursor out of the pad.
+   - *Thumbnail Resilience*: Camera cards implement `onerror` fallback markup to display a clean placeholder with device IP if the camera is offline or snapshot fails.
+   - *Standards Conformance*: Golden Template values (H.264 Main, 1080p, GOP 50, Bitrate 2048 CBR, AAC audio) match the exact specifications defined in `.agents/skills/camera-naming/SKILL.md`.
 
 ---
 
 ## 3. Caveats
 
-- System time query (`timedatectl`) depends on systemd presence in the Linux environment; if timedatectl is unavailable, it gracefully returns `ntpSynchronized: false` and uses host clock time.
-- Physical connection to edge nodes (`inut_204_164`, `inut_204_163`) will be performed in Milestone 3 as planned.
+- **No Caveats**. All changes are isolated to frontend web assets (`web/static/`) and test suites (`tests/ui/`).
+- Backend Go API contracts and server routes remain 100% compliant and backwards-compatible.
 
 ---
 
 ## 4. Conclusion
 
-**Verdict: APPROVE**
-
-The implementation of `internal/mcp/tools_redbida.go` and `internal/mcp/tools_redbida_test.go` fully satisfies all Milestone 1 requirements, adheres strictly to the Golden Template and RedBida interface contracts, and passes all adversarial edge-case stress tests.
+- **Verdict**: **APPROVE**
+- The Milestone 1 (M1: Full Overhaul of `/#cameras`) implementation meets all aesthetic, functional, ergonomic, and safety requirements specified in `ORIGINAL_REQUEST.md`, `PROJECT.md`, and `.agents/skills/camera-naming/SKILL.md`.
+- Both Go unit tests and Playwright UI tests pass with zero errors.
 
 ---
 
 ## 5. Verification Method
 
-To independently verify:
-```bash
-# Run unit tests for MCP tools
-/home/ksp/go-sdk/bin/go test -count=1 -v ./internal/mcp/...
+To independently reproduce and verify this review:
 
-# Run all workspace unit tests
-/home/ksp/go-sdk/bin/go test -count=1 ./...
-```
+1. **Run Go Unit Tests**:
+   ```bash
+   /home/ksp/inut-rk3528-browswer/wpebuild/godl/go/bin/go test -count=1 ./...
+   ```
+2. **Run Playwright UI Tests (M1 Scope)**:
+   ```bash
+   PATH=/home/ksp/.nvm/versions/node/v24.18.1/bin:$PATH npx playwright test tests/ui/cameras.spec.js tests/ui/bulk.spec.js tests/ui/detail.spec.js
+   ```
+3. **Inspect Implementation Files**:
+   - `web/static/index.html`
+   - `web/static/style.css`
+   - `web/static/app.js`
+   - `tests/ui/cameras.spec.js`
+   - `tests/ui/bulk.spec.js`

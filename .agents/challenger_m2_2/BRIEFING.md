@@ -1,52 +1,57 @@
-# BRIEFING — 2026-08-24T20:46:15+07:00
+# BRIEFING — 2026-08-24T15:37:30Z
 
 ## Mission
-Empirical stress-testing and adversarial challenge of Milestone 2 deliverables: MCP Server integration, 31 tools registration/sorting/schemas, HTTP/SSE concurrent sessions & routing, loopback vs API key authentication, and CGO_ENABLED=0 static compilation.
+Adversarially challenge and stress-test Milestone 2 (`/#redbida` Full Overhaul) including 20-Tab INI Editor [C01]..[C20], 1-click sync, quick copy, visual/raw INI roundtrip, key management table, group filters, search input, inline logo preview, DOM resilience, Go tests, and Playwright E2E suite.
 
 ## 🔒 My Identity
-- Archetype: challenger
+- Archetype: empirical-challenger
 - Roles: critic, specialist
 - Working directory: /home/ksp/ksp-camera-auto/.agents/challenger_m2_2
-- Original parent: 6a8fb107-278e-456d-910f-dfb3bd7838d2
-- Milestone: Milestone 2 (MCP Server Integration & Dual Transports)
+- Original parent: d0a95b30-795a-486d-a88c-9c086b9f99b0
+- Milestone: M2: Full Overhaul of /#redbida
 - Instance: 2 of 2
 
 ## 🔒 Key Constraints
 - Review-only — do NOT modify implementation code
-- Write only to .agents/challenger_m2_2/ directory (no tests/source inside .agents/)
-- Empirical Challenger: MUST run verification code and tests directly (no unverified claims)
+- Empirical verification mandatory — write and run tests, don't trust claims
+- Self-contained handoff.md with 5 components (Observation, Logic Chain, Caveats, Conclusion, Verification Method)
 
 ## Current Parent
-- Conversation ID: 6a8fb107-278e-456d-910f-dfb3bd7838d2
-- Updated: 2026-08-24T20:46:15+07:00
+- Conversation ID: d0a95b30-795a-486d-a88c-9c086b9f99b0
+- Updated: 2026-08-24T15:37:30Z
 
 ## Review Scope
-- **Files to review**: `internal/mcp/*`, `internal/server/*`, `cmd/kspcam/*`, `docs/*`, `GEMINI.md`, `AGENTS.md`
-- **Interface contracts**: `ORIGINAL_REQUEST.md`, `PROJECT.md`
-- **Review criteria**:
-  1. Concurrent session creation, SSE stream handling, session message routing, loopback bypass vs API key enforcement.
-  2. `tools/list` on MCP server returns exactly 31 sorted tools with complete input schemas.
-  3. Static compilation with `CGO_ENABLED=0 go build ./cmd/kspcam`.
-  4. Accuracy of documentation updates.
+- **Files to review**:
+  - `web/static/app.js`, `web/static/index.html`, `web/static/style.css`, `web/static/redbida.js`
+  - `tests/ui/redbida_m2_overhaul.spec.js`, `tests/ui/redbida_m2_challenger_deep.spec.js`, `tests/ui/redbida_m2_adversarial.spec.js`
+- **Interface contracts**: `PROJECT.md`, `ORIGINAL_REQUEST.md`
+- **Review criteria**: correctness, stress resilience, visual/raw INI parity, DOM zero-error policy, end-to-end functionality
 
 ## Attack Surface
 - **Hypotheses tested**:
-  - Hypothesis 1: Concurrent SSE session creation or message routing races on session maps or deadlocks on mutexes. -> REJECTED (50 concurrent SSE sessions connected simultaneously with 100% unique 32-char hex session IDs; 50 concurrent JSON-RPC requests routed with 0 cross-talk or loss).
-  - Hypothesis 2: Loopback IP detection can be bypassed or misclassifies remote client IPs as loopback. -> REJECTED (Remote IPs without key are strictly rejected with 401 Unauthorized; supported all 4 auth methods: X-MCP-Key, Bearer, ?key=, ?apiKey=; loopback disables bypass when configured).
-  - Hypothesis 3: `tools/list` does not contain exactly 31 tools, is not alphabetically sorted, or contains invalid JSON schema structures. -> REJECTED (Exactly 31 tools returned, strictly sorted alphabetically by name, 100% valid JSON schemas with complete properties).
-  - Hypothesis 4: Static compilation fails with CGO_ENABLED=0 or requires dynamic C libraries. -> REJECTED (Static compilation verified on AMD64, ARM64, and ARMv7; ELF binaries confirmed `statically linked` with `not a dynamic executable`).
-- **Vulnerabilities found**: None.
-- **Untested angles**: Live remote edge node deployment on `inut_204_164` / `inut_204_163` (Milestone 3).
+  1. 20-Tab INI Editor matrix buttons C01..C20 selection and per-tab form population. -> PASSED.
+  2. 1-Click Sync Venue Name propagates effective title across all 20 tabs. -> PASSED.
+  3. Quick Copy URL generates valid RTSP URLs (`rtsp://<host>:554/cam/realmonitor?channel=<N>&subtype=0`). -> PASSED.
+  4. 2-way Visual vs Raw INI roundtrip preserves custom labels and parses correctly. -> PASSED.
+  5. Key Management Table group pills and search input work accurately. -> PASSED.
+  6. Inline checkerboard logo preview and gradient swatch preview render accurately. -> PASSED.
+  7. Zero uncaught JS runtime exceptions under rapid user interaction. -> PASSED.
+  8. Auto-Fix for `ui_bg` with multiple trailing semicolons (e.g. `;;;`). -> FAILED (Bug found: regex `/;\s*$/` only strips 1 semicolon).
+- **Vulnerabilities found**:
+  - `web/static/redbida.js` lines 236, 694, 802, 947 use `.replace(/;\s*$/, '')` which removes only the single last semicolon instead of all trailing semicolons (`/[;\s]+$/` or `/;+\s*$/`). When input has multiple semicolons (e.g. `;;;`), trailing semicolons remain after Auto-Fix, failing `check()`.
+- **Untested angles**: None.
 
 ## Loaded Skills
-- **Source**: `/home/ksp/ksp-camera-auto/.agents/skills/camera-naming/SKILL.md`
-- **Core methodology**: Camera naming, Shinobi Golden Template, 20-tab INI format, RedBida keys specification.
+- **Source**: /home/ksp/ksp-camera-auto/.agents/skills/camera-naming/SKILL.md
+- **Core methodology**: Quy tắc chuẩn hóa đặt tên Camera, Monitor ID, Device ID và Golden Template từ Camera01
 
 ## Key Decisions Made
-- Issue Verdict: **APPROVE**.
-- All 36 empirical challenge tests passed across SSE concurrency, routing isolation, authentication matrix, 31 tool catalog, schema integrity, and static compilation.
+- Executed `go test ./...` -> 100% PASS.
+- Created `tests/ui/redbida_m2_challenger_deep.spec.js` covering all 20 tabs, roundtrip sync, group pills, search, previews, and error capture -> 100% PASS.
+- Executed full Playwright suite (92 tests) -> 86 passed, 5 skipped, 1 failed (`redbida_m2_adversarial.spec.js:6:3`).
+- Issued verdict: `REQUEST_CHANGES` to fix the `ui_bg` trailing semicolon regex.
 
 ## Artifact Index
-- `handoff.md` — Final challenger evaluation and verdict report
-- `progress.md` — Liveness heartbeat and progress tracking
-- `DISPATCH.md` — Task assignment log
+- `.agents/challenger_m2_2/BRIEFING.md` — Agent working state & memory
+- `.agents/challenger_m2_2/progress.md` — Execution progress and liveness heartbeat
+- `.agents/challenger_m2_2/handoff.md` — Final adversarial evaluation report

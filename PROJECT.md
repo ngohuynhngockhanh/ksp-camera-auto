@@ -29,7 +29,7 @@
 |---|------|-------|-------------|--------|
 | M1 | Full Overhaul of `/#cameras` | `web/static/index.html`, `web/static/app.js`, `web/static/ui-core.js`, `web/static/style.css` (Grid/Table, Quick Actions, Detail 7 Tabs, Smart Bulk Golden Template, NVR Diagnostics) | None | DONE |
 | M2 | Full Overhaul of `/#redbida` | `web/static/index.html`, `web/static/redbida.js`, `web/static/style.css` (Inspector 15 keys, 8 Gradient Palette, 20-Tab INI Editor, Smart Hashtags, Key Management) | M1 | DONE |
-| M3 | Comprehensive Testing, Multi-Arch Build, Edge Node Deployment & Git Push | `tests/ui/`, Playwright specs, Go unit tests, `Makefile`, Ansible deployment, target nodes `inut_204_164` / `inut_204_163`, Git push | M1, M2 | IN_PROGRESS |
+| M3 | Comprehensive Testing, Multi-Arch Build, Edge Node Deployment & Git Push | `tests/ui/`, Playwright specs, Go unit tests, `Makefile`, Ansible deployment, target nodes `inut_204_164` / `inut_204_163`, Git push | M1, M2 | DONE |
 
 ## Interface Contracts
 ### Web UI ↔ REST API (`internal/server`)

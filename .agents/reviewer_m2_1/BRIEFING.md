@@ -1,65 +1,69 @@
-# BRIEFING — 2026-08-24T13:44:00Z
+# BRIEFING — 2026-08-24T15:33:00Z
 
 ## Mission
-Objective review and adversarial challenge for Milestone 2: MCP Server Integration (`internal/mcp/server.go`), Service wiring (`cmd/kspcam/main.go`, `internal/server/server.go`), 31 MCP tools verification, and Documentation suite updates (`docs/help/mcp-server.md`, `docs/help/redbida.md`, `docs/CODEBASE-KNOWLEDGE.md`, `GEMINI.md`, `AGENTS.md`).
+Objective Quality Review and Adversarial Stress-testing of Milestone 2 (M2: Full Overhaul of `/#redbida`) in `ksp-camera-auto`.
 
 ## 🔒 My Identity
-- Archetype: reviewer-critic
+- Archetype: reviewer
 - Roles: reviewer, critic
 - Working directory: /home/ksp/ksp-camera-auto/.agents/reviewer_m2_1
-- Original parent: 6a8fb107-278e-456d-910f-dfb3bd7838d2
-- Milestone: Milestone 2 (MCP Server Integration & Documentation)
+- Original parent: d0a95b30-795a-486d-a88c-9c086b9f99b0
+- Milestone: M2 - RedBida Overhaul
 - Instance: 1 of 1
 
 ## 🔒 Key Constraints
 - Review-only — do NOT modify implementation code
-- Check for integrity violations (hardcoded test results, facade implementations, bypassed tasks, fabricated logs)
-- Strict verification via independent test runs, docgen verification, and deep code inspection
+- Evidence-based analysis with adversarial rigor
+- Check for integrity violations (hardcoded test data, fake implementations, bypasses)
+- Provide clear verdict (APPROVE / REQUEST_CHANGES) with actionable feedback
 
 ## Current Parent
-- Conversation ID: 6a8fb107-278e-456d-910f-dfb3bd7838d2
-- Updated: 2026-08-24T13:44:00Z
+- Conversation ID: d0a95b30-795a-486d-a88c-9c086b9f99b0
+- Updated: 2026-08-24T15:25:00Z
 
 ## Review Scope
 - **Files to review**:
-  - `internal/mcp/server.go`: Tool registration, `NewServer` backward compatibility, 31 tools total
-  - `internal/server/server.go`: `redbida.Service` wiring in Web server / MCP endpoint
-  - `cmd/kspcam/main.go`: `redbida.Service` wiring in CLI stdio MCP and Web mode
-  - `docs/help/mcp-server.md`: Documentation on MCP tools
-  - `docs/help/redbida.md`: Documentation on RedBida tools
-  - `docs/CODEBASE-KNOWLEDGE.md`: Updated codebase knowledge and tools count
-  - `GEMINI.md` & `AGENTS.md`: Architecture diagrams, tool matrix
-  - `tools/docgen`: Docgen tool verification (`go run ./tools/docgen -check`)
-- **Interface contracts**: `/home/ksp/ksp-camera-auto/ORIGINAL_REQUEST.md`, `/home/ksp/ksp-camera-auto/PROJECT.md`
-- **Review criteria**: Correctness, Completeness, Backward compatibility, Total tool count (31 tools), Docgen consistency, Full test suite pass.
+  - `web/static/index.html` (specifically `#view-redbida`)
+  - `web/static/redbida.js`
+  - `web/static/style.css`
+  - `tests/ui/redbida_m2_overhaul.spec.js` and existing tests
+  - `.agents/worker_redbida_m2/handoff.md`
+  - `.agents/ORIGINAL_REQUEST.md`
+- **Interface contracts**: PROJECT.md, GEMINI.md
+- **Review criteria**:
+  1. Golden Standard Inspector & 1-Click Auto-Fix (15 keys, % score, individual + bulk fix)
+  2. Curated 8 CSS Gradient Palette (8 presets, no trailing semicolon in `ui_bg`, Live Canvas Preview, 20-tab simulator)
+  3. Visual 20-Tab INI Editor [C01]..[C20] (matrix grid, per-table form, 1-click sync, quick copy URL, bidirectional sync)
+  4. Smart Hashtag Generator (NFC/NFD diacritics stripping)
+  5. Key Management table & glassmorphism styling
+  6. Automated test execution & integrity check
 
 ## Review Checklist
 - **Items reviewed**:
-  - `internal/mcp/server.go`: `NewServer` variadic signature, 31 tool registrations (16 Camera, 9 Shinobi, 6 RedBida) -> Verified.
-  - `cmd/kspcam/main.go`: `rSvc` initialization & passage to `mcp.NewServer` in CLI stdio mode -> Verified.
-  - `internal/server/server.go`: `s.redbida` initialized before `s.mcp = mcp.NewServer(...)` -> Verified.
-  - `docs/help/mcp-server.md`, `docs/help/redbida.md`, `docs/CODEBASE-KNOWLEDGE.md`, `GEMINI.md`, `AGENTS.md` -> Verified.
-  - `tools/docgen -check` -> 25 articles, 0 errors -> Verified.
-  - Unit tests `go test -count=1 ./...` -> 100% pass -> Verified.
-  - CLI Stdio JSON-RPC `tools/list` and `tools/call` -> Verified.
+  - `web/static/index.html`: `#view-redbida` inspector, preset panel, 20-tab panel, knowledge hub, metrics grid, toolbar group pills, table
+  - `web/static/redbida.js`: 15 Golden Standard rules, audit engine, single-key auto-fix, auto-fix all, 8 gradient palette, Live Canvas preview with 20-tab simulator, 20-tab INI parser & serializer, smart hashtag generator with Unicode diacritics stripping
+  - `web/static/style.css`: Glassmorphism styling, responsive layout, badge styles, swatch active states, checklist rows, matrix grid
+  - `tests/ui/redbida_m2_overhaul.spec.js` & `tests/ui/redbida_m2_challenger_deep.spec.js`: 19/19 RedBida tests passing
+  - Backend & Tests: `go test -count=1 ./...` passing 100%
 - **Verdict**: APPROVE
-- **Unverified claims**: None.
+- **Unverified claims**: None. All claims independently verified.
 
 ## Attack Surface
 - **Hypotheses tested**:
-  1. Backward compatibility of `NewServer` when `redbidaService` parameter is omitted -> PASS.
-  2. Graceful degradation when `cfg.Redbida.Enabled == false` and service is nil -> PASS (`redbida_get_time_status` and dry-run preset still work; other tools return clear disabled error).
-  3. Total tool count consistency across Stdio, HTTP/SSE, docs, and test harness -> PASS (31 tools).
-  4. Race conditions under `go test -race` -> Note: Identified minor test harness race on `httptest.ResponseRecorder` in pre-existing SSE test helper.
-- **Vulnerabilities found**: None in production logic.
-- **Untested angles**: Live physical MQTT broker connection at `127.0.0.1:12369` (scheduled for Milestone 3 deployment on target edge nodes `inut_204_164` and `inut_204_163`).
+  - Semi-colon injection in `ui_bg`: Handled and stripped in both auto-fix and input listeners.
+  - Unicode diacritics & edge characters in venue name: `removeVietnameseTones` with NFD normalization handles accented letters (e.g. đ, Đ, â, ơ, ư) cleanly.
+  - Corrupt or incomplete INI text: `parse20TabsIni` safely pads to 20 sections `[C01]`..`[C20]` with defaults.
+  - Cascading updates: Fixing `ui_title` cascades to `company_name`, `custom_hashtags`, and `ui_tabs_links`.
+  - Integrity violation checks: No hardcoded test responses or facade implementations detected.
+- **Vulnerabilities found**: None.
+- **Untested angles**: Real hardware field deployment (covered in subsequent milestones/deploy phase).
 
 ## Key Decisions Made
-- Confirmed full compliance and backward compatibility of `internal/mcp/server.go`.
-- Confirmed proper service wiring across `cmd/kspcam/main.go` and `internal/server/server.go`.
-- Verified documentation synchronization and clean `docgen -check` pass.
-- Verified test suite execution with 100% pass rate.
-- Issued verdict: APPROVE.
+- Confirmed full compliance with Milestone 2 specifications (R2).
+- Issued explicit verdict: APPROVE.
 
 ## Artifact Index
+- `/home/ksp/ksp-camera-auto/.agents/reviewer_m2_1/DISPATCH.md` — Dispatch log
+- `/home/ksp/ksp-camera-auto/.agents/reviewer_m2_1/BRIEFING.md` — Working memory
+- `/home/ksp/ksp-camera-auto/.agents/reviewer_m2_1/progress.md` — Liveness heartbeat
 - `/home/ksp/ksp-camera-auto/.agents/reviewer_m2_1/handoff.md` — Final review report

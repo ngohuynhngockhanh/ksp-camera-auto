@@ -1,19 +1,20 @@
-# Task Assignment: Challenger 1 for Milestone 1
+## 2026-08-24T14:57:28Z
 
-Empirically challenge `internal/mcp/tools_redbida.go` and `internal/mcp/tools_redbida_test.go`.
-Design and execute adversarial stress tests, edge case inputs (invalid camera counts, malformed JSON, strange Unicode characters, extremely long titles, SQL injection / shell injection strings in parameters, concurrent tool invocations).
-Write your report and verdict (APPROVE or REQUEST_CHANGES) to `/home/ksp/ksp-camera-auto/.agents/challenger_m1_1/handoff.md`.
+<USER_REQUEST>
+You are Challenger 1 for Milestone 1 (M1: Full Overhaul of `/#cameras`) in `ksp-camera-auto`.
+Your working directory is: /home/ksp/ksp-camera-auto/.agents/challenger_m1_1
 
-## 2026-08-24T13:29:41Z
-You are teamwork_preview_challenger challenging Milestone 1 for the ksp-camera-auto project.
-Your working directory is `/home/ksp/ksp-camera-auto/.agents/challenger_m1_1`.
-Read `/home/ksp/ksp-camera-auto/ORIGINAL_REQUEST.md`, `/home/ksp/ksp-camera-auto/PROJECT.md`, and `/home/ksp/ksp-camera-auto/.agents/challenger_m1_1/DISPATCH.md`.
+Read the following files:
+- `/home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md` (Specifically R1: `/#cameras` Overhaul)
+- `/home/ksp/ksp-camera-auto/PROJECT.md`
+- `/home/ksp/ksp-camera-auto/.agents/worker_camera_m1/handoff.md`
 
-Adversarially challenge `internal/mcp/tools_redbida.go`:
-1. Test extreme and boundary inputs (invalid cameraCount < 1 or > 20, empty titles, special characters, unicode, trailing semicolons in CSS, invalid JSON arguments).
-2. Execute tests against the code using Go at `/home/ksp/go-sdk/bin/go`.
-3. Provide concrete verdict: APPROVE or REQUEST_CHANGES.
+Adversarially challenge and stress-test:
+1. View Switcher and Card Grid: Test switching back and forth between table and grid view, verify checkbox synchronization between table rows and grid cards, test search/filtering across both views, test empty camera list behavior.
+2. Quick Actions Toolbar: Verify all quick actions trigger the expected modal/API calls without throwing JS errors or breaking UI state.
+3. Smart Bulk Wizard: Test Golden Template 1-click, test Safety Limits with boundary inputs (e.g. 4K with extreme FPS / extreme bitrates), verify warning banner toggling.
+4. Run tests: Execute Playwright test suites and Go test suites.
 
-Write your report and verdict to `/home/ksp/ksp-camera-auto/.agents/challenger_m1_1/handoff.md`.
-Update `progress.md` with your status.
-When done, call `send_message` to your parent with a concise summary, verdict, and path to your handoff file.
+Write your findings and explicit verdict (APPROVE or REQUEST_CHANGES) to `/home/ksp/ksp-camera-auto/.agents/challenger_m1_1/handoff.md`.
+Send a message to your parent when complete.
+</USER_REQUEST>

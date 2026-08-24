@@ -1,60 +1,61 @@
-# BRIEFING — 2026-08-24T13:30:50Z
+# BRIEFING — 2026-08-24T15:06:30Z
 
 ## Mission
-Perform comprehensive forensic integrity audit on Milestone 1 deliverables (`internal/mcp/tools_redbida.go` and `internal/mcp/tools_redbida_test.go`).
+Forensic integrity audit of Milestone 1 (M1: Full Overhaul of `/#cameras`) in `ksp-camera-auto`.
 
 ## 🔒 My Identity
 - Archetype: forensic_auditor
 - Roles: critic, specialist, auditor
 - Working directory: /home/ksp/ksp-camera-auto/.agents/auditor_m1
-- Original parent: 6a8fb107-278e-456d-910f-dfb3bd7838d2
-- Target: milestone 1 (RedBida & Onboarding MCP Tools Suite)
+- Original parent: d0a95b30-795a-486d-a88c-9c086b9f99b0
+- Target: Milestone 1 (M1: Full Overhaul of `/#cameras`)
 
 ## 🔒 Key Constraints
 - Audit-only — do NOT modify implementation code
 - Trust NOTHING — verify everything independently
-- Strict check for hardcoded test passes, dummy implementations, facade logic, or test bypasses
-- ORIGINAL_REQUEST.md constraints take precedence over dispatch prompt
+- Integrity Mode: development (from ORIGINAL_REQUEST.md)
+- Prohibit hardcoded test results, facade implementations, and fabricated verification outputs
 
 ## Current Parent
-- Conversation ID: 6a8fb107-278e-456d-910f-dfb3bd7838d2
-- Updated: 2026-08-24T13:30:50Z
+- Conversation ID: d0a95b30-795a-486d-a88c-9c086b9f99b0
+- Updated: 2026-08-24T15:06:30Z
 
 ## Audit Scope
-- **Work product**: internal/mcp/tools_redbida.go, internal/mcp/tools_redbida_test.go
-- **Profile loaded**: General Project (Integrity Forensics)
-- **Audit type**: forensic integrity check
+- **Work product**: Milestone 1 implementations in `web/static/index.html`, `web/static/app.js`, `web/static/ui-core.js`, `web/static/style.css`, and test suites in `tests/ui/`
+- **Profile loaded**: General Project (development mode)
+- **Audit type**: Forensic Integrity Check & Adversarial Stress Test
 
 ## Audit Progress
-- **Phase**: completed
+- **Phase**: reporting
 - **Checks completed**:
-  * Phase 1: Static code structure & Genuine implementation analysis (No hardcoded responses or dummy shortcuts in production code) -> PASS
-  * Phase 2: Live service & broker interface verification (`redbidaSvc.Refresh`, `redbidaSvc.Apply`, `catalog.List`, `timedatectl`) -> PASS
-  * Phase 3: Pure Go algorithmic verification (tone removal, 20-tab INI, semicolon stripping, gradient sanitization) -> PASS
-  * Phase 4: Behavioral test suite execution (`go test -count=1 -v ./internal/mcp/... -cover`, workspace-wide `go test -count=1 ./...`) -> PASS (100% pass)
-  * Phase 5: Static binary compilation (`go build ./cmd/kspcam`) -> PASS
-- **Checks remaining**: none
-- **Findings so far**: CLEAN — Authentic implementation with rigorous error handling, zero shortcuts, and full test verification.
+  1. Source code integrity analysis (No facades, no hardcoded mock results, no bypassed logic)
+  2. Genuine state and event handler connectivity (Golden Template, Safety Limits, View Switcher, Grid Cards, Quick Actions, PTZ, Wi-Fi RSSI gauges)
+  3. Test assertion authenticity verification in `tests/ui/cameras.spec.js` and `tests/ui/bulk.spec.js`
+  4. Empirical execution of Go test suites (`go test -count=1 ./...` -> 100% PASS) and Playwright UI suites (`cameras.spec.js`, `bulk.spec.js` -> 100% PASS)
+  5. Adversarial stress test & edge case verification (empty states, XSS safety, PTZ keyboard safety, thumbnail fallback)
+- **Checks remaining**: None
+- **Findings so far**: CLEAN — 0 integrity violations detected
+
+## Key Decisions Made
+- Confirmed all M1 implementations are genuine, authentic, and fully functional.
+- Issued verdict: CLEAN.
+
+## Artifact Index
+- `.agents/auditor_m1/DISPATCH.md` — Assignment dispatch
+- `.agents/auditor_m1/BRIEFING.md` — Agent briefing & identity
+- `.agents/auditor_m1/progress.md` — Progress tracker and liveness heartbeat
+- `.agents/auditor_m1/handoff.md` — Final forensic audit report
 
 ## Attack Surface
 - **Hypotheses tested**:
-  * Did worker hardcode test return values or bypass broker calls? (Negative - verified clean)
-  * Are tone removal and clean title sanitizers handling both precomposed/decomposed Vietnamese characters properly? (Verified positive across all 19 test cases)
-  * Does `generate20TabINITabs` create valid 20-section INI from `[C01]` to `[C20]`? (Verified positive)
-  * Does `sanitizeCSSGradient` properly strip multiple trailing semicolons and whitespace? (Verified positive)
-  * Does `redbida_get_time_status` gracefully invoke `timedatectl` and operate even if redbida MQTT service is nil? (Verified positive)
-- **Vulnerabilities found**: None
-- **Untested angles**: Port 2028 HTTP/SSE live network transport on target edge nodes (covered in Milestone 2/3)
+  - H1: Are Golden Template and Safety limits real logic? -> VERIFIED: authentic DOM bindings and boundary checks.
+  - H2: Are Grid cards and Table views rendering live dynamic data? -> VERIFIED: dynamic rendering with probeCache, fallback onerror, and two-way sync.
+  - H3: Are Quick Actions genuinely triggering API calls? -> VERIFIED: dispatches to real endpoints (/api/ptz, /api/snapshot, /api/reboot, /api/device-time).
+  - H4: Do Playwright tests actually verify DOM state? -> VERIFIED: authentic element queries, state assertions, and localStorage checks.
+- **Vulnerabilities found**: None.
+- **Untested angles**: All M1 scope fully tested.
 
 ## Loaded Skills
-- None
-
-## Key Decisions Made
-- Binary verdict rendered as CLEAN.
-- Complete forensic evidence chain documented in handoff.md.
-
-## Artifact Index
-- /home/ksp/ksp-camera-auto/.agents/auditor_m1/DISPATCH.md — Task assignment & instructions
-- /home/ksp/ksp-camera-auto/.agents/auditor_m1/BRIEFING.md — Persistent context & situational awareness
-- /home/ksp/ksp-camera-auto/.agents/auditor_m1/progress.md — Liveness & status tracking
-- /home/ksp/ksp-camera-auto/.agents/auditor_m1/handoff.md — Forensic audit report & verdict
+- **Source**: `/home/ksp/ksp-camera-auto/.agents/skills/camera-naming/SKILL.md`
+- **Local copy**: `.agents/auditor_m1/camera-naming-SKILL.md`
+- **Core methodology**: Rules for Camera naming, Monitor ID, Device ID, and Golden Template inheritance from Camera01

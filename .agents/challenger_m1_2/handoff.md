@@ -1,134 +1,118 @@
-# Empirical Adversarial Challenge Report: Milestone 1 (RedBida & Onboarding MCP Tools Suite)
+# Adversarial Challenge Report — Milestone 1 (M1: Full Overhaul of `/#cameras`)
+
+**Agent**: Challenger 2 (Empirical Challenger: Critic & Specialist)  
+**Target Milestone**: Milestone 1 (Full Overhaul of `/#cameras`)  
+**Verdict**: **`REQUEST_CHANGES`**
+
+---
 
 ## 1. Observation
 
-Direct empirical observations from source inspection and execution of the adversarial test harness using `/home/ksp/go-sdk/bin/go test -v -race`:
+### A. Codebase & Test Suite Executions
+1. **Go Test Suite**: Executed `/home/ksp/inut-rk3528-browswer/wpebuild/godl/go/bin/go test -count=1 ./...`.
+   - Result: 100% PASS across all Go packages (`internal/bulk`, `internal/camera`, `internal/config`, `internal/dahua`, `internal/discovery`, `internal/hik`, `internal/importer`, `internal/isapi`, `internal/mcp`, `internal/nvrhealth`, `internal/redbida`, `internal/server`, `internal/shinobi`, `internal/tiandy`, `web`).
+2. **Empirical Adversarial Test Suite**: Authored and executed dedicated stress harness `tests/ui/m1_challenger2.spec.js` probing edge cases across Camera Detail fullscreen, PTZ keyboard navigation, Quick PTZ modal, Wi-Fi RSSI gauge, NVR diagnostics & watchdog, and Grid card DOM resilience.
+3. **Console & Runtime Stability**: 0 uncaught JavaScript exceptions across all flows.
 
-1. **Target Implementation**:
-   - File: `/home/ksp/ksp-camera-auto/internal/mcp/tools_redbida.go` (484 lines).
-   - Tools Registered:
-     - `redbida_list_catalog` (lines 25-76)
-     - `redbida_get_keys` (lines 78-127)
-     - `redbida_set_keys` (lines 129-176)
-     - `redbida_apply_onboarding_preset` (lines 178-334)
-     - `redbida_trigger_go2rtc` (lines 336-362)
-     - `redbida_get_time_status` (lines 364-385)
-   - Helper Utilities:
-     - `removeVietnameseTones` (lines 387-434): Pure Go NFC/NFD accent stripping.
-     - `sanitizeCleanTitle` (lines 436-446): Strips diacritics and non-alphanumerics for hashtags.
-     - `generate20TabINITabs` (lines 448-455): Generates exactly 20 INI sections `[C01]` to `[C20]` with `vid_play_label=<title>`.
-     - `sanitizeCSSGradient` (lines 457-467): Strips trailing semicolons and whitespace from CSS gradient.
-     - `queryNTPSynchronized` (lines 469-483): Queries `timedatectl` with 2-second context timeout.
-
-2. **Empirical Adversarial Test Execution**:
-   - Test File: `/home/ksp/ksp-camera-auto/internal/mcp/tools_redbida_adversarial_test.go`
-   - Command: `/home/ksp/go-sdk/bin/go test -v -race -run="TestAdversarial|TestRedbida|TestRemoveVietnamese|TestSanitize|TestGenerate" ./internal/mcp/...`
-   - Results:
-     ```
-     === RUN   TestAdversarial_BrokerTimeout_ReadAndWrite
-     --- PASS: TestAdversarial_BrokerTimeout_ReadAndWrite (0.12s)
-     === RUN   TestAdversarial_BrokerAckTimeout_RecoveryAndFailure
-     --- PASS: TestAdversarial_BrokerAckTimeout_RecoveryAndFailure (1.16s)
-     === RUN   TestAdversarial_PartialAcks_And_CorruptedReadBack
-     --- PASS: TestAdversarial_PartialAcks_And_CorruptedReadBack (0.61s)
-     === RUN   TestAdversarial_ConfirmationEnforcement_And_ProtectedKeys
-     --- PASS: TestAdversarial_ConfirmationEnforcement_And_ProtectedKeys (0.28s)
-     === RUN   TestAdversarial_OnboardingPreset_ExtremeInputs
-     --- PASS: TestAdversarial_OnboardingPreset_ExtremeInputs (0.00s)
-     === RUN   TestAdversarial_ConcurrencyStress
-     --- PASS: TestAdversarial_ConcurrencyStress (8.50s)
-     === RUN   TestAdversarial_JSONRPC20_Integration
-     --- PASS: TestAdversarial_JSONRPC20_Integration (0.00s)
-     === RUN   TestRedbidaTools_ListCatalog
-     --- PASS: TestRedbidaTools_ListCatalog (0.12s)
-     === RUN   TestRedbidaTools_GetKeys
-     --- PASS: TestRedbidaTools_GetKeys (4.29s)
-     === RUN   TestRedbidaTools_SetKeys
-     --- PASS: TestRedbidaTools_SetKeys (0.14s)
-     === RUN   TestRedbidaTools_ApplyOnboardingPreset_DryRun
-     --- PASS: TestRedbidaTools_ApplyOnboardingPreset_DryRun (0.00s)
-     === RUN   TestRedbidaTools_ApplyOnboardingPreset_Live
-     --- PASS: TestRedbidaTools_ApplyOnboardingPreset_Live (0.56s)
-     === RUN   TestRedbidaTools_ApplyOnboardingPreset_Validations
-     --- PASS: TestRedbidaTools_ApplyOnboardingPreset_Validations (0.00s)
-     === RUN   TestRedbidaTools_TriggerGo2RTC
-     --- PASS: TestRedbidaTools_TriggerGo2RTC (0.10s)
-     === RUN   TestRedbidaTools_GetTimeStatus
-     --- PASS: TestRedbidaTools_GetTimeStatus (0.01s)
-     === RUN   TestRedbidaTools_DisabledServiceGracefulHandling
-     --- PASS: TestRedbidaTools_DisabledServiceGracefulHandling (0.01s)
-     PASS
-     ok  	github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mcp	16.961s
-     ```
+### B. Confirmed Defect: Grid View Card Checkbox Event Interception
+- **File**: `web/static/app.js`, Line 506 & Line 998:
+  ```javascript
+  // Line 506 in renderCameras():
+  <label class="cam-card-check" title="Chọn camera" onclick="event.stopPropagation()">
+    <input type="checkbox" class="cam-card-cb" value="${escapeHtml(c.id)}" ${isChecked ? 'checked' : ''}>
+  </label>
+  ```
+  ```javascript
+  // Line 990-1008 in #cam-grid event listener:
+  document.getElementById('cam-grid')?.addEventListener('click', async (ev) => {
+    ...
+    const cb = ev.target.closest('.cam-card-cb');
+    if (cb) {
+      ev.stopPropagation();
+      setCameraSelected(cb.value, cb.checked);
+      return;
+    }
+    const card = ev.target.closest('.cam-card[data-id]');
+    if (card) {
+      gotoCameraDetail(card.dataset.id, 'osd');
+    }
+  });
+  ```
+- **Observed Behavior**:
+  - The inline attribute `onclick="event.stopPropagation()"` on `<label class="cam-card-check">` absorbs the click event before it can bubble to `#cam-grid`.
+  - `#cam-grid` does not listen to `change` events, and its `click` listener is completely bypassed when clicking the checkbox or label.
+  - As a result, checking or unchecking a camera's checkbox in Grid Card view never invokes `setCameraSelected(cb.value, cb.checked)`.
+  - The camera is not added to `selectedCameraSet`, `#bulk-selected-count` remains "Chưa chọn camera nào.", and selection is not synchronized with Table view (`.cam-cb`) or Bulk Operations (`.bulk-cam-cb`).
 
 ---
 
 ## 2. Logic Chain
 
-1. **Broker Failure & Timeout Handling**:
-   - *Observation*: In `TestAdversarial_BrokerTimeout_ReadAndWrite`, broker `Read` and `Write` failures returning `context.DeadlineExceeded` and network errors were tested.
-   - *Inference*: Both `redbida_get_keys` and `redbida_set_keys` correctly capture the broker error and return structured `ToolResult` with `IsError=true` without leaking uninitialized state or panicking.
-   - *Observation*: In `TestAdversarial_BrokerAckTimeout_RecoveryAndFailure`, when MQTT write ACK timed out (`redbida.AckTimeoutError`):
-     - If the physical broker received the update, `readBack` confirmed matching state, recovering gracefully (`Applied: true`, `Verified: true`, `ReadBack: true`).
-     - If the broker state did not update (stale state) or `readBack` failed, the operation failed closed (`Applied: false`, `Verified: false`, error clearly reported).
-   - *Inference*: The read-back verification state machine in `Service.Apply` successfully guards against false positives during transient MQTT packet loss.
-
-2. **Partial Write Failure & Corrupted Read-Back**:
-   - *Observation*: In `TestAdversarial_PartialAcks_And_CorruptedReadBack`, a batch write of 3 keys was tested where the broker acked key 1, omitted ack for key 2, and returned stale/corrupted data during readback for key 3.
-   - *Inference*: Key 1 succeeded (`Applied: true`, `Verified: true`), Key 2 failed with `"missing acknowledgement"`, and Key 3 failed with `"read-back mismatch"`. The tool isolates per-key outcomes accurately in the returned `ChangeResult` array.
-
-3. **Confirmation & Risk Policy Enforcement**:
-   - *Observation*: In `TestAdversarial_ConfirmationEnforcement_And_ProtectedKeys`, setting `RiskConfirm` keys (`max_free_ram_restart_camera`, `restart_camera_now`) with `confirmed: false` or omitted was immediately rejected with `"confirmation is required"`, and zero write calls were dispatched to the broker. Setting with `confirmed: true` succeeded. Setting read-only / protected keys (`frpc_config`) was rejected with `"key is read-only"`.
-   - *Inference*: Security boundaries and confirmation policies are enforced at the service level before any broker transmission occurs.
-
-4. **1-Click Onboarding Preset Synthesis**:
-   - *Observation*: In `TestAdversarial_OnboardingPreset_ExtremeInputs`, complex inputs were tested:
-     - Vietnamese venue title `"  CLB Bida Sài Gòn Đệ Nhất - CS3 & CS4 (Phú Nhuận) #2026 !  "` synthesized `#CLBBidaSaiGonDeNhatCS3CS4PhuNhuan2026 #BILLIARDSlive #INUTlive #highlightsports`.
-     - Pure emoji title `"✨⭐🎉🚀"` fell back cleanly to `#BILLIARDSlive #INUTlive #highlightsports`.
-     - CSS gradient trailing semicolons (`"linear-gradient(...); ; ; ; \t\n"`) were cleanly stripped.
-     - 20-tab INI configuration contained exactly sections `[C01]` through `[C20]` with interpolated `vid_play_label`.
-     - `cameraCount` boundaries (-10, 0, 21, 100) were rejected with `"cameraCount must be between 1 and 20"`.
-     - DryRun mode synthesized all 15 parameters without writing to broker.
-   - *Inference*: Onboarding preset synthesis conforms 100% to the Golden Template and RedBida naming skill specifications.
-
-5. **Concurrency & Thread Safety**:
-   - *Observation*: In `TestAdversarial_ConcurrencyStress`, 50 concurrent goroutines executing 500 mixed operations across all 6 RedBida tools ran under `-race` for 8.5 seconds with zero data races, panics, or deadlocks.
-   - *Inference*: The implementation is concurrency-safe.
-
-6. **Nil Service Resilience**:
-   - *Observation*: `TestRedbidaTools_DisabledServiceGracefulHandling` verified that when `redbidaSvc == nil`, all tools return clear disabled messages without nil-pointer panics, while `redbida_get_time_status` continues functioning independently.
+1. **Step 1 — Fullscreen Toggle & Live Stream**:
+   - Tested `#cd-live-fullscreen` clicking when preview is stopped (targeting `#ce-preview-img-wrap`) vs running (targeting `#cd-live`). Verified cross-browser fallbacks (`requestFullscreen` and `webkitRequestFullscreen`). Verified stream persists and does not disconnect. -> **PASS**
+2. **Step 2 — PTZ Keyboard Shortcuts & Quick PTZ Modal**:
+   - Tested Arrow keys & WASD keydown (`start: true`) and keyup (`start: false`). Verified speed value is properly retrieved from input or defaults to 5.
+   - Tested focus guard: Typed text in OSD input fields (`<input class="ce-osd-line">`) and verified 0 PTZ commands were dispatched.
+   - Tested `#quick-ptz-dialog`: Verified 8-direction pad buttons (`.qptz-btn[data-ptz]`), speed slider (1–8), and "Mở cấu hình PTZ đầy đủ" deep-link navigation to `#cameras/cam/<id>/ptz`. -> **PASS**
+3. **Step 3 — Wi-Fi RSSI Gauge Rendering & Edge Cases**:
+   - Tested multi-tier signal strength rendering (>=70% `.active-high`, >=40% `.active-med`, <40% `.active-low`).
+   - Stress-tested XSS injection in SSID (`<script>alert("xss")</script>`); verified clean escaping without DOM script execution.
+   - Verified clicking a Wi-Fi chip populates `#net-wifi-ssid`. -> **PASS**
+4. **Step 4 — NVR Diagnostics, Mapping & Watchdog**:
+   - Verified NVR health timeline view, NVR channel scanning, sub-channel linking via `POST /api/nvr/link`, and watchdog toggle via `POST /api/nvr/watchdog`. -> **PASS**
+5. **Step 5 — Grid View Checkbox Selection**:
+   - In Grid View (`#cam-grid`), clicking the checkbox on `.cam-card` was empirically tested.
+   - Because of `onclick="event.stopPropagation()"` on `<label class="cam-card-check">`, the click event does not reach the `#cam-grid` event listener.
+   - Neither `selectedCameraSet` nor `#bulk-selected-count` is updated.
+   - Direct consequence: Users in Grid View cannot select cameras for bulk deletion, bulk configuration, or bulk password reset. -> **FAIL (Bug Confirmed)**
 
 ---
 
 ## 3. Caveats
 
-1. **Live MQTT Broker**:
-   - Tests were executed against comprehensive in-memory and mock broker implementations (`mockRedbidaBroker`, `flexibleMockBroker`). Live edge testing against actual edge nodes (`inut_204_164`, `inut_204_163`) and Node-RED :2023 will occur in Milestone 3.
-2. **Note on Existing `server_test.go`**:
-   - In `internal/mcp/server_test.go:291` (`TestServer_SSETransport`), `httptest.ResponseRecorder` buffer read in the test occurs concurrently with `ServeHTTP` writing in a goroutine. This is a pre-existing test fixture nuance in `server_test.go` (M2 scope) and does not affect the RedBida tools in `tools_redbida.go`.
+- All backend Go REST endpoints (`/api/cameras`, `/api/probe`, `/api/apply`, `/api/ptz`, `/api/wifi-scan`, `/api/nvr/*`) adhere strictly to interface contracts and pass 100% of unit tests.
+- The defect is strictly isolated to the event handling of the Grid View card checkbox in `web/static/app.js`.
 
 ---
 
-## 4. Conclusion
+## 4. Conclusion & Required Changes
 
-**Verdict: APPROVE**
+**Verdict**: **`REQUEST_CHANGES`**
 
-Milestone 1 (`internal/mcp/tools_redbida.go`) satisfies all requirements of §R1 and Milestone 1 of `PROJECT.md`:
-- All 6 tools (`redbida_list_catalog`, `redbida_get_keys`, `redbida_set_keys`, `redbida_apply_onboarding_preset`, `redbida_trigger_go2rtc`, `redbida_get_time_status`) are correctly implemented and registered.
-- Robust error handling for broker timeouts, partial writes, disconnects, and unconfirmed modifications.
-- High concurrency tested with 50 workers under Go race detector with 0 data races.
-- 100% pass rate on all unit and adversarial stress tests.
+### Required Action for Worker:
+Fix the checkbox event handling on `.cam-card` in `web/static/app.js`:
+1. **Option A (Recommended)**: Add a `change` event listener to `#cam-grid`:
+   ```javascript
+   document.getElementById('cam-grid')?.addEventListener('change', (ev) => {
+     if (ev.target.classList.contains('cam-card-cb')) {
+       setCameraSelected(ev.target.value, ev.target.checked);
+     }
+   });
+   ```
+2. **Option B**: Remove `onclick="event.stopPropagation()"` from `<label class="cam-card-check">` and let `#cam-grid`'s click listener handle it by stopping propagation before card detail navigation:
+   ```javascript
+   if (ev.target.closest('.cam-card-check, .cam-card-cb')) {
+     const cb = ev.target.closest('.cam-card-check')?.querySelector('.cam-card-cb') || ev.target.closest('.cam-card-cb');
+     if (cb) setCameraSelected(cb.value, cb.checked);
+     return;
+   }
+   ```
 
 ---
 
 ## 5. Verification Method
 
-To independently reproduce and verify these empirical results:
-
-```bash
-# Run all RedBida unit and adversarial stress tests with race detection:
-/home/ksp/go-sdk/bin/go test -v -race -run="TestAdversarial|TestRedbida|TestRemoveVietnamese|TestSanitize|TestGenerate" ./internal/mcp/...
-
-# Run RedBida catalog & service tests:
-/home/ksp/go-sdk/bin/go test -v -race ./internal/redbida/...
-```
+To verify the fix:
+1. **Run the Adversarial Playwright Spec**:
+   ```bash
+   PATH=/home/ksp/.nvm/versions/node/v24.18.1/bin:$PATH npx playwright test tests/ui/m1_challenger2.spec.js --workers=1
+   ```
+   *Expected outcome: 12 tests passed across desktop and mobile.*
+2. **Run the Full Playwright Spec for Cameras & Detail**:
+   ```bash
+   PATH=/home/ksp/.nvm/versions/node/v24.18.1/bin:$PATH npx playwright test tests/ui/cameras.spec.js tests/ui/detail.spec.js tests/ui/bulk.spec.js tests/ui/nvr.spec.js --workers=1
+   ```
+3. **Run Go Unit Tests**:
+   ```bash
+   /home/ksp/inut-rk3528-browswer/wpebuild/godl/go/bin/go test -count=1 ./...
+   ```

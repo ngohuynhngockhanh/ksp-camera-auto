@@ -1,59 +1,63 @@
-# BRIEFING — 2026-08-24T13:31:00Z
+# BRIEFING — 2026-08-24T22:08:00+07:00
 
 ## Mission
-Conduct comprehensive quality review and adversarial challenge of Milestone 1 for ksp-camera-auto: RedBida & Onboarding MCP Tools Suite in `internal/mcp/tools_redbida.go` and `internal/mcp/tools_redbida_test.go`.
+Review and adversarial critique of Milestone 1 (M1: Full Overhaul of `/#cameras`) in ksp-camera-auto.
 
 ## 🔒 My Identity
-- Archetype: reviewer-critic
+- Archetype: reviewer_critic
 - Roles: reviewer, critic
 - Working directory: /home/ksp/ksp-camera-auto/.agents/reviewer_m1_1
-- Original parent: 6a8fb107-278e-456d-910f-dfb3bd7838d2
-- Milestone: Milestone 1 (RedBida & Onboarding MCP Tools Suite)
+- Original parent: d0a95b30-795a-486d-a88c-9c086b9f99b0
+- Milestone: M1
 - Instance: 1 of 1
 
 ## 🔒 Key Constraints
 - Review-only — do NOT modify implementation code
-- Objective verification of code, tests, schemas, parameter validation, secret masking, and error handling
-- Check for integrity violations (hardcoded results, facades, shortcuts, fabricated logs)
-- Check build, unit tests, coverage, and stress test edge cases
+- Evidence-based review and adversarial challenge
+- Check for integrity violations (hardcoded test results, facade logic, bypassed tasks, fabricated outputs)
 
 ## Current Parent
-- Conversation ID: 6a8fb107-278e-456d-910f-dfb3bd7838d2
-- Updated: 2026-08-24T13:31:00Z
+- Conversation ID: d0a95b30-795a-486d-a88c-9c086b9f99b0
+- Updated: 2026-08-24T22:08:00+07:00
 
 ## Review Scope
 - **Files to review**:
-  - `internal/mcp/tools_redbida.go`
-  - `internal/mcp/tools_redbida_test.go`
-- **Interface contracts**: `/home/ksp/ksp-camera-auto/PROJECT.md` & `/home/ksp/ksp-camera-auto/ORIGINAL_REQUEST.md`
-- **Review criteria**: Correctness of all 6 MCP tools, schema conformance, parameter validation, secret masking, error handling, read-back verification, static build, test coverage, absence of integrity violations.
+  - web/static/index.html
+  - web/static/app.js
+  - web/static/ui-core.js
+  - web/static/style.css
+  - tests/ui/cameras.spec.js
+  - tests/ui/bulk.spec.js
+- **Interface contracts**: /home/ksp/ksp-camera-auto/PROJECT.md, /home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md
+- **Review criteria**: correctness, style, conformance, resilience, security, integrity
 
 ## Review Checklist
 - **Items reviewed**:
-  - `internal/mcp/tools_redbida.go`: `registerRedbidaTools`, `redbida_list_catalog`, `redbida_get_keys`, `redbida_set_keys`, `redbida_apply_onboarding_preset`, `redbida_trigger_go2rtc`, `redbida_get_time_status`, `removeVietnameseTones`, `sanitizeCleanTitle`, `generate20TabINITabs`, `sanitizeCSSGradient`, `queryNTPSynchronized`.
-  - `internal/mcp/tools_redbida_test.go`: 13 comprehensive test suites covering all tools, helpers, validations, secret masking, dry-run, live apply, and graceful degradation on disabled service.
-- **Verdict**: APPROVE
-- **Unverified claims**: None. All claims independently verified via Go compiler, test runs, static binary builds, and source code audits.
+  - View Switcher (Grid & Table) with localStorage persistence
+  - Quick Actions Toolbar (Live, Snapshot Lightbox, Quick PTZ, Reboot, NTP sync)
+  - Detail 7-Tab Workspace & Fullscreen Preview
+  - Smart Bulk Wizard Golden Template & Safety Limits Inspector
+  - Wi-Fi RSSI Signal Meter
+  - Go unit tests (`go test -count=1 ./...`)
+  - Playwright E2E UI tests
+- **Verdict**: REQUEST_CHANGES
+- **Unverified claims**: none
 
 ## Attack Surface
 - **Hypotheses tested**:
-  - `redbida_apply_onboarding_preset` rejects empty/whitespace title, cameraCount < 1 or > 20.
-  - `redbida_apply_onboarding_preset` sanitizes trailing semicolons from CSS background gradients.
-  - `removeVietnameseTones` handles both NFC and decomposed NFD diacritics, all Vietnamese tones and `đ`/`Đ`.
-  - `generate20TabINITabs` generates exactly 20 sections `[C01]`-`[C20]` in valid INI format.
-  - `redbida_get_keys` redacts sensitive keys as `"********"`.
-  - `redbida_set_keys` rejects empty changes map and enforces confirmation on confirm-required keys.
-  - `checkService()` gracefully errors when `redbida.Service` is nil, while `redbida_get_time_status` works independently.
-  - Thread safety: `tools_redbida_test.go` executed cleanly with `go test -race`.
-- **Vulnerabilities found**: None in Milestone 1 implementation.
-- **Untested angles**: Live MQTT hardware timeout behavior (already handled via `redbida.Service.readBack` retry loop and `AckTimeoutError` fallback).
+  - Event bubbling on Grid Card Quick Actions → Confirmed Critical Bug (swallowed by inline `onclick="event.stopPropagation()"`)
+  - Select-All synchronization between Table and Grid → Confirmed Major Desync Bug
+  - PTZ Keyboard navigation in Quick PTZ modal → Confirmed Working
+  - Wi-Fi RSSI XSS resistance → Confirmed Escaped
+  - Golden Template 1-click & Safety Limits Inspector → Confirmed Working
+- **Vulnerabilities found**:
+  - [Critical] Grid Card action buttons unresponsive due to inline `event.stopPropagation()` on `.cam-card-actions`
+  - [Major] `#select-all` does not update `.cam-card-cb` checkboxes or `.cam-card.selected` styling in Grid view
 
 ## Key Decisions Made
-- Confirmed full compliance of all 6 tools with `ORIGINAL_REQUEST.md` and `PROJECT.md` Milestone 1 interface contracts.
-- Confirmed zero integrity violations, 100% test pass on RedBida suite, and clean static binary build.
-- Issued APPROVE verdict.
+- Issued verdict `REQUEST_CHANGES` with concrete remediation steps for worker_camera_m1.
 
 ## Artifact Index
-- `.agents/reviewer_m1_1/DISPATCH.md` — Dispatch log
-- `.agents/reviewer_m1_1/progress.md` — Liveness & progress tracker
-- `.agents/reviewer_m1_1/handoff.md` — Final review & verdict handoff report
+- handoff.md — Complete 5-component review & challenge report
+- progress.md — Liveness tracker
+- DISPATCH.md — Received messages

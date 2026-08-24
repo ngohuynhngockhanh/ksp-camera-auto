@@ -1,144 +1,117 @@
-# Milestone 1 Quality & Adversarial Review Report
-
-**Target**: `internal/mcp/tools_redbida.go` & `internal/mcp/tools_redbida_test.go`  
-**Reviewer**: Reviewer-Critic (Instance 1)  
-**Milestone**: Milestone 1 (RedBida & Onboarding MCP Tools Suite)  
-**Verdict**: **APPROVE**  
-
----
-
-## Review Summary
-
-**Verdict**: **APPROVE**
-
-All 6 required MCP tool handlers (`redbida_list_catalog`, `redbida_get_keys`, `redbida_set_keys`, `redbida_apply_onboarding_preset`, `redbida_trigger_go2rtc`, `redbida_get_time_status`) and the registration entrypoint `registerRedbidaTools` in `internal/mcp/tools_redbida.go` have been implemented cleanly, correctly, and securely.
-
-The implementation conforms 100% to the interface contracts defined in `PROJECT.md` and `ORIGINAL_REQUEST.md`. Secret masking (`********`), parameter validations (bounds `[1, 20]` for cameraCount, non-empty title, CSS gradient trailing semicolon stripping, Vietnamese diacritic removal for custom hashtags, 20-tab INI synthesis), read-back verification, error propagation, dry-run mode, and graceful degradation for unconfigured service states have all been verified with unit tests and race detection.
-
-No integrity violations were detected.
-
----
+# Review & Adversarial Challenge Report — Milestone 1 (`/#cameras` Overhaul)
 
 ## 1. Observation
 
-Direct observations and evidence collected during code inspection and live test executions:
+### Implementation & Test Status Directly Observed
+- **Go Unit Test Suite**: `go test -count=1 ./...` executed cleanly across all packages:
+  `bulk`, `camera`, `config`, `dahua`, `discovery`, `hik`, `importer`, `isapi`, `mcp`, `nvrhealth`, `redbida`, `server`, `shinobi`, `tiandy`, `web` -> **100% PASS (0 failures)**.
+- **Baseline Playwright UI Tests**: `tests/ui/cameras.spec.js` and `tests/ui/bulk.spec.js` passed 41 of 42 tests (1 skipped, 0 failures).
+- **Codebase Modifications Inspected**:
+  - `web/static/index.html` (lines 150, 270-320, 1145-1190)
+  - `web/static/style.css` (lines 1385-1700)
+  - `web/static/app.js` (lines 397-540, 673-685, 863-980, 1478-1500, 1560-1575, 1598-1710, 2029-2220, 3817-3825)
+  - `tests/ui/cameras.spec.js` & `tests/ui/bulk.spec.js`
 
-### 1.1 Source Code Architecture & Implementations
-1. **`registerRedbidaTools` Entrypoint (`internal/mcp/tools_redbida.go:16-22`)**:
-   ```go
-   func registerRedbidaTools(r *Registry, cfg *config.Config, redbidaSvc *redbida.Service) {
-       checkService := func() error {
-           if redbidaSvc == nil {
-               return fmt.Errorf("redbida integration is disabled or not configured in config.yaml")
-           }
-           return nil
+### Specific Code Findings Observed
+
+1. **[Critical] Grid Card Quick Action Click Events Swallowed by Inline Event Handler**:
+   - In `web/static/app.js:527`:
+     ```html
+     <div class="cam-card-actions" onclick="event.stopPropagation()">
+       <button class="btn-icon" data-action="quick-live" data-id="${escapeHtml(c.id)}" title="Xem Live Stream">👁️</button>
+       <button class="btn-icon" data-action="quick-snap" data-id="${escapeHtml(c.id)}" title="Chụp ảnh tức thời">📷</button>
+       <button class="btn-icon" data-action="quick-ptz" data-id="${escapeHtml(c.id)}" title="Điều khiển PTZ">🎮</button>
+       <button class="btn-icon" data-action="quick-reboot" data-id="${escapeHtml(c.id)}" title="Khởi động lại">🔄</button>
+       <button class="btn-icon" data-action="quick-sync-time" data-id="${escapeHtml(c.id)}" title="Đồng bộ giờ NTP">⏰</button>
+       <button class="btn-icon" data-action="detail" data-id="${escapeHtml(c.id)}" title="Cấu hình chi tiết">⚙</button>
+     </div>
+     ```
+   - In `web/static/app.js:986`:
+     ```javascript
+     document.getElementById('cam-grid')?.addEventListener('click', async (ev) => {
+       const btn = ev.target.closest('button[data-action]');
+       if (btn) {
+         ev.stopPropagation();
+         const id = btn.dataset.id;
+         await handleCameraAction(btn.dataset.action, id, btn);
+         return;
        }
-   ```
-   Correctly defines the registration function and sets up a standard nil-guard helper `checkService()`.
+       ...
+     ```
+   - **Direct Observation**: The click event listener for grid card actions is delegated to `#cam-grid`. Because `.cam-card-actions` has an inline `onclick="event.stopPropagation()"`, any click on quick action buttons inside `.cam-card-actions` triggers the inline handler and halts event propagation *before* reaching `#cam-grid`. As a direct result, clicking any quick action button on a Grid card fails to trigger its action.
 
-2. **Tool 1: `redbida_list_catalog` (`internal/mcp/tools_redbida.go:25-76`)**:
-   - Registers schema with properties `"group"` (string) and `"editableOnly"` (boolean).
-   - Queries `redbidaSvc.Catalog()` and `redbidaSvc.CatalogStatus()`.
-   - Filters metadata case-insensitively using `strings.EqualFold(m.Group, req.Group)` and `m.Editable`.
-   - Returns `{ "keys": filtered, "count": len(filtered), "sourceAvailable": sourceAvailable, "sourceError": sourceError }`.
+2. **[Major] `#select-all` Desynchronization with Grid View**:
+   - In `web/static/app.js:1560-1567`:
+     ```javascript
+     document.getElementById('select-all').addEventListener('change', (ev) => {
+       document.querySelectorAll('.cam-cb').forEach(cb => {
+         cb.checked = ev.target.checked;
+         if (ev.target.checked) selectedCameraSet.add(cb.value);
+         else selectedCameraSet.delete(cb.value);
+       });
+       renderBulkSelection();
+     });
+     ```
+   - **Direct Observation**: When `#select-all` is toggled in the header, only `.cam-cb` (Table checkboxes) are updated. The `.cam-card-cb` checkboxes in `#cam-grid` and the `.selected` CSS class on `.cam-card` elements are not updated. When users toggle "Select All" and switch between Table and Grid, card selections visually desync.
 
-3. **Tool 2: `redbida_get_keys` (`internal/mcp/tools_redbida.go:79-128`)**:
-   - Registers schema with properties `"keys"` (string array) and `"all"` (boolean).
-   - If `req.Keys` is empty, iterates through all catalog keys (`redbidaSvc.Catalog()`).
-   - Delegates fetching to `redbidaSvc.Refresh(ctx, req.Keys)`.
-   - `redbidaSvc.Refresh` enforces secret masking via `redact(meta, value)` -> `"********"`.
+3. **[Minor] Unprobed Stream Tag State in Grid Cards**:
+   - In `web/static/app.js:500-515`: When `probeCache[c.id]` is empty (initial state), Table view shows `<span class="muted">chưa dò</span>`, while Grid cards render an empty container without a placeholder.
 
-4. **Tool 3: `redbida_set_keys` (`internal/mcp/tools_redbida.go:130-176`)**:
-   - Registers schema requiring `"changes"` (object) and optional `"confirmed"` (boolean).
-   - Validates that `len(req.Changes) > 0` (returning `"changes map cannot be empty"` otherwise).
-   - Delegates write and read-back verification to `redbidaSvc.Apply(ctx, req.Changes, req.Confirmed)`.
-
-5. **Tool 4: `redbida_apply_onboarding_preset` (`internal/mcp/tools_redbida.go:179-334`)**:
-   - Registers schema requiring `"title"` (string) and `"cameraCount"` (integer).
-   - Validates bounds: `req.CameraCount < 1 || req.CameraCount > 20` and `strings.TrimSpace(req.Title) == ""`.
-   - Implements pure Go helper functions:
-     - `removeVietnameseTones(str)` (`lines 389-434`): Handles both NFC precomposed characters and NFD decomposed combining diacritical marks (`0x0300` to `0x036F`), all Vietnamese vowels, and `đ`/`Đ`.
-     - `sanitizeCleanTitle(title)` (`lines 437-446`): Strips accents and preserves only alphanumeric `[a-zA-Z0-9]`.
-     - `sanitizeCSSGradient(rawBg)` (`lines 458-467`): Strips trailing semicolons/whitespace, defaults to the standard radial-gradient.
-     - `generate20TabINITabs(title)` (`lines 449-455`): Synthesizes exactly 20 sections `[C01]` to `[C20]` with `stream_label`, `vid_list_label`, `vid_play_label`, and `list_refresh_label`.
-   - Synthesizes all 15 Golden Template parameters: `ui_title`, `company_name`, `ui_bg`, `custom_hashtags`, `ui_tabs_links`, `camera_count`, `toolbar_show_count`, `video_config`, `hls_using_go2rtc`, `hls_using_go2rtc_livestream`, `hls_using_go2rtc_tiktok`, `ui_scoreboard`, `logo_header`, `logo_header_text`, `button_generate_go2rtc_stream`.
-   - Conditionally maps optional fields: `shinobi_camera_id`, `shinobi_group_key`, `ggcode`, `shinobi_token`, `shinobi_monitor_token`.
-   - Supports `dryRun: true` (synthesizes and returns without writing to MQTT).
-   - Executes live apply with read-back verification when `dryRun: false`.
-
-6. **Tool 5: `redbida_trigger_go2rtc` (`internal/mcp/tools_redbida.go:337-362`)**:
-   - Publishes `button_generate_go2rtc_stream: true` via `redbidaSvc.Apply`.
-
-7. **Tool 6: `redbida_get_time_status` (`internal/mcp/tools_redbida.go:365-385`)**:
-   - Calls `queryNTPSynchronized(ctx)` (`lines 470-483`) querying `timedatectl show -p NTPSynchronized --value` with a 2-second timeout and graceful fallback to `false`.
-   - Returns `hostTime`, `hostTimeRFC3339`, `ntpSynchronized`, `driftThresholdSeconds: 60`, `policy`, and `nodeRedReadOnly: true`.
-
-### 1.2 Test Results & Build Commands
-- **Unit test execution**:
-  Command: `/home/ksp/go-sdk/bin/go test -count=1 -v ./internal/mcp/...`
-  Result: **100% PASS** (All 13 test suites in `tools_redbida_test.go` and existing MCP server tests passed).
-- **Race detector test**:
-  Command: `/home/ksp/go-sdk/bin/go test -race -count=1 -run "TestRedbida|TestRemove|TestSanitize|TestGenerate" ./internal/mcp/...`
-  Result: **100% PASS** (0 data races in `tools_redbida.go` and `tools_redbida_test.go`).
-- **All packages test**:
-  Command: `/home/ksp/go-sdk/bin/go test -count=1 ./...`
-  Result: **100% PASS** across all 18 Go packages in the workspace.
-- **Static binary build (`CGO_ENABLED=0`)**:
-  Command: `CGO_ENABLED=0 /home/ksp/go-sdk/bin/go build -o /tmp/kspcam ./cmd/kspcam`
-  Result: **Clean exit code 0**, zero build errors or warnings.
+4. **[Pass] Integrity Verification**:
+   - No hardcoded test responses, fake mock facades, or bypassed protocol logic found in implementation files. Real Go APIs and DOM structures are preserved.
 
 ---
 
 ## 2. Logic Chain
 
-1. **Requirement Mapping**: `ORIGINAL_REQUEST.md` §R1 and `PROJECT.md` Milestone 1 define features F1–F6 (`redbida_list_catalog`, `redbida_get_keys`, `redbida_set_keys`, `redbida_apply_onboarding_preset`, `redbida_trigger_go2rtc`, `redbida_get_time_status`).
-2. **Contract & Schema Compliance**:
-   - Observation 1.1 shows that each of the 6 tools has a defined MCP `Tool` registration with complete JSON Schema (`InputSchema`), required fields, typed properties, and meaningful descriptions.
-   - Return payloads use standard `NewJSONResult` or `NewErrorResult`, returning valid JSON structures matching `PROJECT.md §Interface Contracts`.
-3. **Safety & Robustness**:
-   - `checkService()` prevents nil pointer dereferences if `redbidaSvc` is nil.
-   - `redbida_apply_onboarding_preset` strictly validates `cameraCount` (1..20) and empty title before any write attempt.
-   - Trailing semicolon sanitization in `sanitizeCSSGradient` ensures consistent CSS styling without UI breakage.
-   - Full diacritical tone removal in `removeVietnameseTones` ensures hashtags are ASCII alphanumeric as required by social platforms (`#CXKingLuxury`, `#BidaLacLongQuan`).
-   - SCM credentials and MQTT secrets are masked via `redbida.Service` and validated in `TestRedbidaTools_GetKeys`.
-4. **Independent Verification**:
-   - Unit tests in `tools_redbida_test.go` exercise all boundary conditions (dryRun vs live, missing titles, invalid cameraCount ranges, group filters, editable filters, secret masking, disabled service states).
-   - Clean execution of `go test` and static build confirms interface conformance and absence of regressions.
+1. **Grid Card Quick Actions Defect**:
+   - Quick Actions Toolbar on Grid Cards is an explicit core requirement of R1 (§13).
+   - In JavaScript event bubbling, an inline `onclick="event.stopPropagation()"` on a parent container (`.cam-card-actions`) terminates event dispatch at that parent.
+   - Because the event listener `handleCameraAction` is attached to ancestor `#cam-grid`, it never receives the click event from buttons inside `.cam-card-actions`.
+   - Removing `onclick="event.stopPropagation()"` from `.cam-card-actions` allows the click to reach `#cam-grid`, where line 988 (`if (btn) { ev.stopPropagation(); ... }`) already correctly prevents card navigation while executing the action.
+
+2. **Select-All View Synchronization**:
+   - The user can toggle views freely between Table and Grid.
+   - `selectedCameraSet` is the single source of truth for selected IDs.
+   - When `#select-all` changes, updating all matching checkbox elements (`.cam-cb`, `.cam-card-cb`) and card classes ensures seamless parity across both view representations.
+
+3. **Golden Template & Safety Limits Verification**:
+   - `applyGoldenTemplate()` correctly sets H.264, 1080p, GOP 50, Bitrate 2048 Kbps CBR, and AAC Audio, matching the Golden Standard specified in `camera-naming` SKILL and `ORIGINAL_REQUEST.md`.
+   - `checkBulkSafety()` accurately warns on high bitrates (>8192 Kbps), low bitrate on 4K (<2048 Kbps), and excessive GOP (>200) on realtime input.
 
 ---
 
 ## 3. Caveats
 
-- In `internal/mcp/server.go`, `registerRedbidaTools` is ready to be wired into `NewServer`. As planned in `PROJECT.md`, full integration into `NewServer` and documentation updates are scheduled for Milestone 2.
-- In `internal/mcp/server_test.go` (`TestServer_SSETransport`), a pre-existing HTTP test recorder read during SSE streaming was noted when running `-race` on the whole package; this is unrelated to `tools_redbida.go` (which is race-free) and can be refined in Milestone 2/3.
-- Otherwise, **no caveats**.
+- Backend Go endpoints (`/api/cameras`, `/api/probe`, `/api/apply`, `/api/ptz`, `/api/reboot`, `/api/device-time`) were tested and verified to be 100% compliant with existing contracts.
+- Only the frontend controller logic in `web/static/app.js` requires the two targeted fixes above.
 
 ---
 
-## 4. Conclusion
+## 4. Conclusion & Verdict
 
-The Milestone 1 work product (`internal/mcp/tools_redbida.go` and `internal/mcp/tools_redbida_test.go`) is of high quality, structurally sound, robustly tested, and fully aligned with project goals and safety guidelines.
+**Verdict: REQUEST_CHANGES**
 
-**Verdict**: **APPROVE**. Milestone 2 (MCP Server Integration & Documentation) can proceed immediately.
+### Required Action Items for `worker_camera_m1`:
+1. **Fix Grid Action Event Bubbling (`web/static/app.js`)**:
+   Remove `onclick="event.stopPropagation()"` from the `.cam-card-actions` markup inside `renderCameras()`, allowing `#cam-grid` event delegation to execute `handleCameraAction`.
+2. **Fix Select-All Synchronization (`web/static/app.js`)**:
+   In the `#select-all` change listener, update `.cam-card-cb` elements and toggle `.selected` on `.cam-card` elements in tandem with `.cam-cb`.
 
 ---
 
 ## 5. Verification Method
 
-To independently verify this review:
-1. Run all unit tests for the MCP package:
+To verify the fixes once implemented:
+1. **Go Unit Tests**:
    ```bash
-   /home/ksp/go-sdk/bin/go test -v -count=1 ./internal/mcp/...
+   /home/ksp/inut-rk3528-browswer/wpebuild/godl/go/bin/go test -count=1 ./...
    ```
-2. Run race detector on RedBida tools:
+2. **Playwright E2E UI Tests**:
    ```bash
-   /home/ksp/go-sdk/bin/go test -race -count=1 -run "TestRedbida|TestRemove|TestSanitize|TestGenerate" ./internal/mcp/...
+   PATH=/home/ksp/.nvm/versions/node/v24.18.1/bin:$PATH npx playwright test tests/ui/cameras.spec.js tests/ui/bulk.spec.js tests/ui/m1_challenger.spec.js
    ```
-3. Run project-wide tests:
-   ```bash
-   /home/ksp/go-sdk/bin/go test -count=1 ./...
-   ```
-4. Verify static binary compilation:
-   ```bash
-   CGO_ENABLED=0 /home/ksp/go-sdk/bin/go build -o /tmp/kspcam ./cmd/kspcam
-   ```
+3. **Manual DOM Verification**:
+   - Switch to Grid view (`#cam-view-grid-btn`).
+   - Click Quick PTZ (`[data-action="quick-ptz"]`) on a card -> Verify `#quick-ptz-dialog` opens and camera detail view does not open.
+   - Check `#select-all` -> Verify all cards receive `.selected` styling and `.cam-card-cb:checked`.

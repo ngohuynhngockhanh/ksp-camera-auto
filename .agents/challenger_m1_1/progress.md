@@ -1,12 +1,18 @@
-# Challenger 1 Progress — Milestone 1 (RedBida MCP Tools Suite)
+# Progress Log — Challenger 1 (Milestone 1)
 
-- [x] Initialized workspace and briefing
-- [x] Inspected source code (`internal/mcp/tools_redbida.go`, `internal/mcp/tools_redbida_test.go`, `internal/redbida/`)
-- [x] Ran baseline test suites (`/home/ksp/go-sdk/bin/go test -v ./internal/mcp/...`)
-- [x] Designed & wrote empirical adversarial test suite (`internal/mcp/tools_redbida_adversarial_test.go`)
-- [x] Executed empirical verification harness under race detector (`go test -race`) and high concurrency (50 workers, 1,000 calls)
-- [x] Verified full repository unit tests (`go test -v ./...` - 100% pass)
-- [x] Synthesized findings & verdicts (Verdict: **APPROVE**)
-- [x] Wrote handoff report and notified parent
+Last visited: 2026-08-24T15:05:30Z
 
-Last visited: 2026-08-24T13:33:30Z
+## Status
+- [x] Initialized DISPATCH.md and BRIEFING.md
+- [x] Read project requirements (ORIGINAL_REQUEST.md, PROJECT.md, camera-naming SKILL.md, worker handoff)
+- [x] Inspected source code under `web/static/` (HTML, JS, CSS)
+- [x] Ran Go unit tests (`go test -count=1 ./...` -> 100% pass)
+- [x] Formulated empirical challenge test suite `tests/ui/m1_challenger.spec.js`
+- [x] Executed stress tests for View Switcher, Grid, Checkboxes, Search, Quick Actions, Bulk Golden Template & Safety Limits
+- [x] Empirically confirmed 3 bugs:
+  1. Grid Card Quick Actions are dead due to inline `onclick="event.stopPropagation()"` on `.cam-card-actions`.
+  2. Grid Card Checkboxes do not update selection or bulk count due to inline `onclick="event.stopPropagation()"` on `.cam-card-check`.
+  3. Table `#select-all` does not update `.cam-card-cb` or `.cam-card.selected`.
+- [x] Updated BRIEFING.md
+- [x] Writing handoff report with explicit verdict (`REQUEST_CHANGES`)
+- [ ] Send message to parent

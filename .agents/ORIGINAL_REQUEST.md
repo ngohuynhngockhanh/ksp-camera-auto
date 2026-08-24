@@ -1,45 +1,56 @@
 # Original User Request
 
-## 2026-08-24T13:18:08Z
+## Initial Request — 2026-08-24T14:37:39Z
 
-Mở rộng toàn diện bộ công cụ MCP Server (Model Context Protocol) nhúng trong `ksp-camera-auto` (`kspcam`), bổ sung toàn bộ bộ công cụ RedBida / Bida Onboarding (`redbida_*`), hoàn thiện 100% khả năng tự động hóa và tích hợp cấu hình MCP server để trợ lý AI có thể gọi mọi tool nhanh chóng và chính xác.
+Nâng cấp và tái cấu trúc toàn diện 2 giao diện trung tâm `/#cameras` (Quản lý kho camera & cấu hình hàng loạt) và `/#redbida` (Trung tâm Tri thức & Onboarding Bida) trong `kspcam` (`:2028`): đạt đỉnh cao thẩm mỹ (Modern Glassmorphism, Micro-interactions), cực kỳ thân thiện (Ergonomic UX, trực quan, thao tác nhanh) và thông minh vượt trội (Tự động kiểm tra chuẩn Golden Template, Preset 1-Click, Live Visual Previews, Smart Diagnostics, Bộ chọn bảng màu Gradient).
 
 Working directory: /home/ksp/ksp-camera-auto
 Integrity mode: development
 
 ## Requirements
 
-### R1. Xây dựng Bộ Công cụ MCP RedBida & Onboarding Toàn diện (`internal/mcp/tools_redbida.go`)
-Bổ sung đầy đủ các công cụ MCP chuyên biệt cho RedBida, giao tiếp chuẩn xác qua MQTT `/private/i_sets` và `/private/i_gets`:
-1. `redbida_list_catalog`: Liệt kê danh mục toàn bộ metadata, nhóm chức năng, mức độ rủi ro (risk level), kiểu dữ liệu (json, string, boolean, number) của các key cấu hình Bida.
-2. `redbida_get_keys`: Đọc giá trị của một hoặc nhiều key từ `ota-mqtt` broker cục bộ qua topic `/private/i_gets` (payload `{"info": [...]}`).
-3. `redbida_set_keys`: Ghi giá trị một hoặc nhiều key tới `ota-mqtt` broker qua topic `/private/i_sets` (payload `{"info": {...}}`) kèm cơ chế xác nhận đọc lại (read-back verification).
-4. `redbida_apply_onboarding_preset`: Bộ công cụ Onboarding 1-Click: Tự động tính toán và áp dụng đồng bộ 15 tham số tiêu chuẩn (`ui_title`, `ui_bg` không chấm phẩy, `custom_hashtags` chuẩn hóa không dấu, `ui_tabs_links` 20 tab INI, `camera_count`, `toolbar_show_count`, `hls_using_go2rtc`, `button_generate_go2rtc_stream`, `logo_header`, `logo_header_text`, `shinobi_camera_id`, `shinobi_group_key`, `video_config`, `ui_scoreboard`, `ggcode`).
-5. `redbida_trigger_go2rtc`: Kích hoạt gửi cờ `button_generate_go2rtc_stream: "true"` để Node-RED :2023 sinh `/root/go2rtc.yaml`.
-6. `redbida_get_time_status`: Kiểm tra trạng thái đồng bộ giờ hệ thống và NTP.
+### R1. Nâng Cấp Toàn Diện Giao Diện `/#cameras` Đẹp, Thân Thiện & Khôn Hơn
+- **Chế độ hiển thị linh hoạt (Grid / Table View)**: Cho phép chuyển đổi giữa dạng Danh sách (Table) và dạng Thẻ trực quan (Grid Cards) với ảnh Snapshot thumbnail tự động tải, badge hãng (Dahua/Hikvision/Tiandy/ONVIF), độ phân giải, FPS, Codec và trạng thái kết nối.
+- **Thao tác nhanh 1-Click (Quick Actions Toolbar)**: Xem Live Stream tức thì, Chụp Snapshot, Điều khiển PTZ nhanh, Khởi động lại thiết bị (Reboot), Đồng bộ giờ NTP ngay từ danh sách.
+- **Không gian làm việc Camera Detail chuyên nghiệp**:
+  - Cột trái: Live Stream MJPEG độ trễ thấp + ảnh Snapshot với nút phóng to toàn màn hình (Fullscreen) và nút gia hạn luồng thông minh.
+  - Cột phải: 7 Tab điều khiển mượt mà (OSD/Tên kênh, Chỉnh màu Lite/Full với thanh trượt realtime, Video/Audio encoder, Mạng & quét Wi-Fi với cột sóng tín hiệu, Bàn xoay PTZ hỗ trợ phím tắt bàn phím, Bảo trì & Lịch tự động khởi động).
+- **Bộ điều phối Chỉnh hàng loạt Thông minh (Smart Bulk Wizard)**:
+  - Tự động cảnh báo nếu cấu hình vượt quá giới hạn an toàn của thiết bị (ví dụ: FPS > 25 trên 4K).
+  - Tích hợp sẵn nút 1-click **"Áp dụng Chuẩn Bida (Golden Template)"** (Audio copy/remux, H.264/H.265 baseline, GOP chuẩn).
+- **Chẩn đoán NVR & Quét Kênh Con Tự động**: Báo cáo sức khỏe timeline NVR trực quan, tự động quét và map danh sách camera con từ NVR.
 
-### R2. Tích hợp & Đăng ký MCP Server Hoàn chỉnh (`internal/mcp/`, `cmd/kspcam/`, `docs/`)
-- Đăng ký toàn bộ các tool RedBida mới vào `Registry` của `Server` trong `internal/mcp/server.go`.
-- Đảm bảo hoạt động thông suốt cả 2 phương thức kết nối:
-  - **Stdio Mode**: Chạy trực tiếp qua lệnh CLI `kspcam --mcp --config /opt/ksp-cam/config.yaml`.
-  - **HTTP / SSE Mode**: Kết nối tới endpoint `http://127.0.0.1:2028/mcp` kèm cơ chế xác thực API key và loopback không cần mật khẩu.
-- Cập nhật tài liệu kỹ thuật `docs/` và `GEMINI.md` liệt kê đầy đủ danh mục tất cả công cụ MCP hỗ trợ.
+### R2. Nâng Cấp Toàn Diện Giao Diện `/#redbida` Đẹp, Sang Trọng & Khôn Hơn
+- **Trợ lý Kiểm tra Chuẩn Tự động (Golden Standard Inspector & Auto-Fix)**:
+  - Tự động quét và đối chiếu toàn bộ 15 key cấu hình trên node với quy chuẩn Golden Template.
+  - Hiển thị thanh tiến độ chuẩn hóa (% Chuẩn Bida) và nút **"Sửa nhanh 1-Click"** cho bất kỳ thông số nào lệch chuẩn (như `ui_bg` có dấu `;`, `custom_hashtags` còn dấu tiếng Việt, `camera_count` không khớp).
+- **Bộ sưu tập Bảng màu Gradient Bida Đẳng cấp (Curated CSS Gradient Palette)**:
+  - Tích hợp sẵn 8 mẫu màu Gradient siêu đẹp (Royal Deep Blue Glow, Midnight Emerald Cyber, Cyberpunk Neon, Golden Velvet, Obsidian Carbon, Crimson Elegance, Sapphire Blue, Ruby Luxury) kèm ô chọn màu tùy biến với Live Preview Canvas ngay lập tức.
+- **Trình soạn thảo Tab INI Trực quan (Visual 20-Tab INI Editor)**:
+  - Hiển thị ma trận 20 tab `[C01]` .. `[C20]` dạng lưới trực quan thay vì ô text thô sơ, cho phép chỉnh sửa từng bàn, sao chép URL nhanh, tự động đồng bộ tên quán vào dòng `vid_play_label`.
+- **Trình sinh Hashtag Tự động Thông minh**: Tự động loại bỏ dấu tiếng Việt chuẩn hóa Unicode (NFC/NFD) ngay khi người dùng gõ tên quán.
+- **Bảng Quản trị Key Cao Cấp**: Tìm kiếm tức thì, lọc theo nhóm, phân loại Risk Badge rõ ràng, xem trước hình ảnh logo và màu nền trực tiếp trên từng dòng.
 
-### R3. Kiểm thử Toàn diện & Đóng gói Multi-Arch (Testing & Verification)
-- Viết Unit Tests đầy đủ cho `internal/mcp/tools_redbida.go` và `internal/mcp/server_test.go` (100% pass).
-- Kiểm tra tính tương thích JSON-RPC 2.0 (initialize, tools/list, tools/call) cho toàn bộ các tool mới.
-- Biên dịch đa kiến trúc `make build-all` (`amd64`, `arm64`, `armv7`).
-- Triển khai binary mới lên các node thực tế (`inut_204_164`, `inut_204_163`) và kiểm thử gọi tool qua endpoint `/mcp`.
-- Commit và push git toàn bộ thay đổi.
+### R3. Kiểm Thử Khắt Khe, Đóng Gói Binary Đa Kiến Trúc & Triển Khai Thực Địa
+- Khảo sát sâu toàn bộ luồng DOM, sự kiện JS (`app.js`, `redbida.js`, `ui-core.js`, `style.css`), bảo toàn 100% tính tương thích với backend Go và MQTT protocol.
+- Đảm bảo 100% Go Unit Tests (`go test ./...`) và Playwright UI Tests vượt qua không có lỗi.
+- Đóng gói static binary đa kiến trúc (`linux/amd64`, `linux/arm64`, `linux/armv7`).
+- Triển khai và kiểm thử thực tế trên target node `inut_204_164` và `inut_204_163`.
+- Commit và push git toàn bộ thay đổi lên nhánh `main`.
 
 ## Acceptance Criteria
 
-### MCP Tool Coverage & Protocol Correctness
-- [ ] Lệnh `tools/list` trên MCP Server trả về đầy đủ toàn bộ danh mục công cụ (Camera Inventory, Camera Config, Discovery, Shinobi NVR, RedBida & Onboarding).
-- [ ] Các tool `redbida_get_keys` và `redbida_set_keys` giao tiếp chính xác qua MQTT broker `127.0.0.1:12369` theo đúng cấu trúc `{"info": ...}` và nhận diện đúng các trường hợp lỗi/timeout.
-- [ ] Tool `redbida_apply_onboarding_preset` sinh chính xác 100% định dạng `ui_tabs_links`, `custom_hashtags` không dấu, `ui_bg` không dấu chấm phẩy, `camera_count` và các token Shinobi.
+### Tính Thẩm Mỹ & Trải Nghiệm (UI/UX)
+- [ ] Giao diện `/#cameras` và `/#redbida` khoác lên diện mạo Modern Glassmorphism đồng nhất, bóng bẩy, hiển thị mượt mà trên cả desktop và mobile.
+- [ ] Tính năng Grid/Table view trên `/#cameras` hoạt động mượt mà với snapshot thumbnail và quick actions.
+- [ ] Bảng màu Gradient 8 mẫu và Live Preview Canvas trên `/#redbida` phản hồi tức thì.
+- [ ] Bộ Inspector tự động đối chiếu Golden Standard tính toán % chuẩn xác và hỗ trợ sửa nhanh 1-click.
 
-### Test Suite & Deployment
-- [ ] Tất cả Go unit tests (`go test ./...`) pass 100%.
-- [ ] Build tĩnh binary `make build-all` thành công.
-- [ ] Binary mới được deploy lên `inut_204_164` và `inut_204_163`, kiểm thử gọi MCP tools thành công.
+### Độ Ổn Định & Giao Thức Backend
+- [ ] Toàn bộ API `/api/cameras`, `/api/probe`, `/api/apply`, `/api/redbida/*` và MQTT broker `127.0.0.1:12369` hoạt động ổn định, không lỗi console JS.
+- [ ] MCP Server (31 công cụ) tiếp tục hoạt động hoàn hảo cả Stdio và SSE mode.
+
+### Build & Triển Khai
+- [ ] Tất cả Go test suites pass 100%.
+- [ ] `make build-all` biên dịch thành công.
+- [ ] Đã deploy lên các box thực tế và dịch vụ `kspcam` hoạt động ổn định.

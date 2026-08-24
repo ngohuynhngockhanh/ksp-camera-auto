@@ -1,24 +1,18 @@
-# Task Assignment: Forensic Auditor for Milestone 1
+## 2026-08-24T14:57:28Z
 
-Perform forensic integrity analysis of `internal/mcp/tools_redbida.go` and its unit tests.
-Verify that:
-1. No hardcoded test responses, dummy shortcuts, or fabricated outputs exist.
-2. The implementation of `tools_redbida.go` actually interfaces with `redbida.Service`, `redbida.Catalog`, `timedatectl`, and follows authentic Go patterns.
-3. Parameter calculation (15 parameters, 20-section INI, tone removal, semicolon stripping) is genuine algorithmic logic.
-4. Issue verdict: CLEAN or INTEGRITY VIOLATION.
-Write your report and verdict to `/home/ksp/ksp-camera-auto/.agents/auditor_m1/handoff.md`.
+Audit Milestone 1 (M1: Full Overhaul of `/#cameras`) in `ksp-camera-auto`.
+Working directory: /home/ksp/ksp-camera-auto/.agents/auditor_m1
 
-## 2026-08-24T13:29:41Z
-You are teamwork_preview_auditor conducting forensic integrity audit for Milestone 1 in ksp-camera-auto.
-Your working directory is `/home/ksp/ksp-camera-auto/.agents/auditor_m1`.
-Read `/home/ksp/ksp-camera-auto/ORIGINAL_REQUEST.md`, `/home/ksp/ksp-camera-auto/PROJECT.md`, and `/home/ksp/ksp-camera-auto/.agents/auditor_m1/DISPATCH.md`.
+Read:
+- `/home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md` (Specifically R1: `/#cameras` Overhaul)
+- `/home/ksp/ksp-camera-auto/PROJECT.md`
+- `/home/ksp/ksp-camera-auto/.agents/worker_camera_m1/handoff.md`
 
-Perform forensic integrity analysis of `internal/mcp/tools_redbida.go` and `internal/mcp/tools_redbida_test.go`:
-1. Verify static code structure: genuine implementation vs fake/mock hardcoding in production code.
-2. Check that tools genuinely call `redbidaSvc.Refresh`, `redbidaSvc.Apply`, `catalog.List`, and system `timedatectl`.
-3. Check that tone removal, 20-tab INI, and semicolon stripping are genuine algorithms.
-4. Issue verdict: CLEAN or INTEGRITY VIOLATION.
+Perform strict Forensic Integrity Verification:
+1. Verify that all implementations in `web/static/index.html`, `web/static/app.js`, `web/static/ui-core.js`, `web/static/style.css` are genuine, authentic, and functional.
+2. Check for any dummy / facade implementations, hardcoded mock results, bypassed logic, or cheating attempts.
+3. Verify that the Golden Template 1-click, Safety Limits Inspector, View Switcher, Grid Cards, Quick Actions toolbar, PTZ shortcuts, and Wi-Fi RSSI gauges are genuinely connected to application state and event handlers.
+4. Verify that test assertions in `tests/ui/` are authentic and not artificially satisfied.
 
-Write your full forensic audit report and verdict to `/home/ksp/ksp-camera-auto/.agents/auditor_m1/handoff.md`.
-Update `progress.md` with your status.
-When done, call `send_message` to your parent with a concise summary, verdict, and path to your handoff file.
+Write complete audit report and explicit verdict (CLEAN or INTEGRITY VIOLATION) to `/home/ksp/ksp-camera-auto/.agents/auditor_m1/handoff.md`.
+Send message to parent when complete.

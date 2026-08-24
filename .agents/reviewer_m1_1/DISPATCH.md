@@ -1,21 +1,28 @@
-# Task Assignment: Reviewer 1 for Milestone 1
+## 2026-08-24T14:57:28Z
 
-Review `internal/mcp/tools_redbida.go` and `internal/mcp/tools_redbida_test.go`.
-Verify correctness, completeness, robustness, interface conformance, read-back verification, and error handling.
-Run tests using Go at `/home/ksp/go-sdk/bin/go`.
-Write your report and verdict (APPROVE or REQUEST_CHANGES) to `/home/ksp/ksp-camera-auto/.agents/reviewer_m1_1/handoff.md`.
+You are Reviewer 1 for Milestone 1 (M1: Full Overhaul of `/#cameras`) in `ksp-camera-auto`.
+Your working directory is: /home/ksp/ksp-camera-auto/.agents/reviewer_m1_1
 
-## 2026-08-24T13:29:40Z
-You are teamwork_preview_reviewer reviewing Milestone 1 for the ksp-camera-auto project.
-Your working directory is `/home/ksp/ksp-camera-auto/.agents/reviewer_m1_1`.
-Read `/home/ksp/ksp-camera-auto/ORIGINAL_REQUEST.md`, `/home/ksp/ksp-camera-auto/PROJECT.md`, and `/home/ksp/ksp-camera-auto/.agents/reviewer_m1_1/DISPATCH.md`.
+Read the following files before starting:
+- `/home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md` (Specifically R1: `/#cameras` Overhaul)
+- `/home/ksp/ksp-camera-auto/PROJECT.md`
+- `/home/ksp/ksp-camera-auto/.agents/worker_camera_m1/handoff.md`
 
-Review `internal/mcp/tools_redbida.go` and `internal/mcp/tools_redbida_test.go`:
-1. Check correctness of all 6 MCP tool handlers and `registerRedbidaTools`.
-2. Check schema correctness, error handling, parameter validation, secret masking.
-3. Run tests using Go at `/home/ksp/go-sdk/bin/go`.
-4. Provide concrete verdict: APPROVE or REQUEST_CHANGES.
+Examine the implementation in:
+- `web/static/index.html`
+- `web/static/app.js`
+- `web/static/ui-core.js`
+- `web/static/style.css`
+- `tests/ui/cameras.spec.js`
+- `tests/ui/bulk.spec.js`
 
-Write your report and verdict to `/home/ksp/ksp-camera-auto/.agents/reviewer_m1_1/handoff.md`.
-Update `progress.md` with your status.
-When done, call `send_message` to your parent with a concise summary, verdict, and path to your handoff file.
+Review Criteria:
+1. Correctness and completeness of View Switcher (Grid Cards & Table View), snapshot thumbnail loading, badge styling, and localStorage persistence.
+2. Quick Actions Toolbar: instant Live, Snapshot, PTZ dialog, Reboot modal, NTP sync.
+3. Camera Detail 7-tab workspace polish: Left column live/snapshot preview with fullscreen, 7 tabs functionality, PTZ keyboard shortcuts, Wi-Fi RSSI signal meters.
+4. Smart Bulk Wizard: Golden Template 1-click apply and Safety Limits Inspector.
+5. Strict backward compatibility and DOM `data-testid` preservation.
+6. Run tests: Go unit tests (`go test ./...`) and Playwright tests (`npx playwright test`).
+
+Write your structured review report and explicit verdict (APPROVE or REQUEST_CHANGES) to `/home/ksp/ksp-camera-auto/.agents/reviewer_m1_1/handoff.md`.
+Send a message to your parent when complete.

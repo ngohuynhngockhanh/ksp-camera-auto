@@ -1,65 +1,59 @@
-# BRIEFING — 2026-08-24T13:33:00Z
+# BRIEFING — 2026-08-24T15:05:00Z
 
 ## Mission
-Adversarial empirical challenge of Milestone 1 (RedBida & Onboarding MCP Tools Suite `internal/mcp/tools_redbida.go`): Stress-test extreme boundary inputs (cameraCount < 1 or > 20, empty titles, special characters, unicode, trailing semicolons in CSS, invalid JSON arguments, concurrency, race conditions, broker dropouts) by writing and executing empirical tests in Go.
+Adversarially challenge, stress-test, and find edge cases / bugs in Milestone 1 (M1: Full Overhaul of `/#cameras`) in `ksp-camera-auto`. Produce verification evidence, test harness results, and a definitive verdict report (APPROVE / REQUEST_CHANGES).
 
 ## 🔒 My Identity
-- Archetype: empirical_challenger
+- Archetype: EMPIRICAL CHALLENGER
 - Roles: critic, specialist
 - Working directory: /home/ksp/ksp-camera-auto/.agents/challenger_m1_1
-- Original parent: 6a8fb107-278e-456d-910f-dfb3bd7838d2
-- Milestone: Milestone 1 (RedBida & Onboarding MCP Tools Suite)
+- Original parent: d0a95b30-795a-486d-a88c-9c086b9f99b0
+- Milestone: M1 (Full Overhaul of `/#cameras`)
 - Instance: 1 of 1
 
 ## 🔒 Key Constraints
-- Review-only — do NOT modify implementation code.
-- Must execute tests and write adversarial stress harnesses to verify worker claims empirically.
-- If a bug cannot be reproduced empirically, it does not count.
-- Deliver hard handoff report and message parent with final verdict.
+- Review-only — do NOT modify implementation code directly
+- Must run verification code ourselves (Go tests, Playwright tests, custom test harnesses)
+- Empirical proof required for any claim or bug report
 
 ## Current Parent
-- Conversation ID: 6a8fb107-278e-456d-910f-dfb3bd7838d2
-- Updated: 2026-08-24T13:33:00Z
+- Conversation ID: d0a95b30-795a-486d-a88c-9c086b9f99b0
+- Updated: 2026-08-24T15:05:00Z
 
 ## Review Scope
-- **Files to review**: `internal/mcp/tools_redbida.go`, `internal/mcp/tools_redbida_test.go`
-- **Interface contracts**: PROJECT.md, ORIGINAL_REQUEST.md, camera-naming skill
-- **Review criteria**: Extreme boundary inputs (cameraCount < 1 / > 20, empty/whitespace titles, complex Vietnamese tone removal, CSS gradient trailing semicolons, 20-tab INI format, SQL/Shell/XSS injections, broker timeouts/partial ACKs, race conditions & concurrency under `-race`, JSON-RPC 2.0 integration).
-
-## Key Decisions Made
-- Implemented and executed extensive empirical adversarial test suite in `internal/mcp/tools_redbida_adversarial_test.go`.
-- Verified all 6 RedBida MCP tools (`redbida_list_catalog`, `redbida_get_keys`, `redbida_set_keys`, `redbida_apply_onboarding_preset`, `redbida_trigger_go2rtc`, `redbida_get_time_status`) execute strictly according to specification under high load, adverse broker failures, boundary and malformed inputs.
-- Verified zero race conditions in RedBida tools under 50 concurrent goroutines executing 1,000 mixed MCP tool calls.
-- Full unit test suite passes 100% (`go test -v ./...`).
-- Verdict: **APPROVE**.
-
-## Artifact Index
-- `.agents/challenger_m1_1/DISPATCH.md` — Inbound dispatches
-- `.agents/challenger_m1_1/BRIEFING.md` — Persistent situational awareness
-- `.agents/challenger_m1_1/progress.md` — Liveness heartbeat & step tracking
-- `.agents/challenger_m1_1/handoff.md` — Comprehensive handoff report with verdict
-- `internal/mcp/tools_redbida_adversarial_test.go` — Empirical adversarial test suite
+- **Files to review**: `web/static/index.html`, `web/static/app.js`, `web/static/ui-core.js`, `web/static/style.css`, `tests/ui/*.spec.js`
+- **Interface contracts**: `/home/ksp/ksp-camera-auto/PROJECT.md`, `SKILL.md` (camera-naming), `ORIGINAL_REQUEST.md`
+- **Review criteria**:
+  1. View Switcher & Card Grid (table/grid toggle, checkbox sync, search/filter across both, empty state)
+  2. Quick Actions Toolbar (all quick actions, modal triggers, no JS errors, clean UI state)
+  3. Smart Bulk Wizard (Golden Template 1-click, safety limit boundaries, warning banner)
+  4. Test Suites (Go tests, Playwright tests)
 
 ## Attack Surface
 - **Hypotheses tested**:
-  * `redbida_apply_onboarding_preset`:
-    - `cameraCount` boundaries: Tested [-999999, -1, 0] (rejected), [1, 8, 10, 20] (accepted), [21, 100, 999999] (rejected).
-    - `title` extremes: Empty string, whitespace-only, 5000-char strings, SQL injection (`'; DROP TABLE cameras; --`), shell injection (`id $(rm -rf /)`), XSS tags (`<script>alert('pwned')</script>`), pure symbols (`!@#$%^&*()`).
-    - Vietnamese tone removal: 100% verified across all 67+ vowels (both NFC precomposed and NFD decomposed combining marks), uppercase, lowercase, special characters (`đ`/`Đ`).
-    - `custom_hashtags`: Clean diacritic-free normalization + fallback when no alphanumeric characters present (`#BILLIARDSlive #INUTlive #highlightsports`).
-    - `ui_bg` CSS gradient: Automatic stripping of single/multiple trailing semicolons with whitespace (`;;; \t\n`) and fallback default.
-    - `ui_tabs_links`: Exact 20 sections (`[C01]` to `[C20]`) with 4 standard keys per section and `vid_play_label` matching sanitized title.
-    - All 15 Golden Template parameters + 4 optional tokens synthesized accurately in dryRun and live modes.
-  * `redbida_list_catalog`: Group filtering case-insensitivity, non-existent groups, editableOnly filter, invalid JSON types.
-  * `redbida_get_keys`: Automatic secret masking (`********`) for sensitive credentials (`mqtt_password`, `shinobi_token`, `shinobi_group_key`, `ggcode`), non-existent keys, batch fetching.
-  * `redbida_set_keys`: Read-only key protection (`shinobi_group_key`, `frpc_config`), confirmation enforcement for maintenance keys (`button_generate_go2rtc_stream`), invalid numeric types, oversized payloads (> 2MB).
-  * Broker failure recovery: Timeout handling, network resets, ACK timeout with read-back recovery vs read-back mismatch failure, partial ACKs.
-  * Concurrency & Race: 50 concurrent goroutines executing 1,000 mixed MCP tool calls with 0 data races.
-  * System time: Context cancellation resilience for `redbida_get_time_status`.
-- **Vulnerabilities found**: None in `internal/mcp/tools_redbida.go`.
-- **Untested angles**: None within Milestone 1 scope.
+  - H1: Checkbox selection state gets desynchronized between Table view and Grid view when toggling view or clicking individual checkboxes / select-all. -> **CONFIRMED VULNERABILITY (BUGS 2 & 3)**
+  - H2: Search & filtering on `/#cameras` leaves stale or mismatched items in Grid view vs Table view. -> **PASSED (Robust)**
+  - H3: Quick Actions (live preview, quick snapshot, quick PTZ, quick reboot, quick sync time) trigger JS uncaught exceptions or bad API requests. -> **CONFIRMED VULNERABILITY (BUG 1: Grid card quick action buttons are dead)**
+  - H4: Golden Template 1-click does not adhere strictly to the Golden Template rules in camera-naming SKILL.md. -> **PASSED (Sets H.264, 1080p, GOP 50, Bitrate 2048 CBR, AAC audio)**
+  - H5: Safety Limits alert logic fails on boundary inputs or fails to clear when input is corrected. -> **PASSED (Accurately triggers on >8192kbps, 4K+<2048kbps, GOP>200, and clears dynamically)**
+  - H6: Empty camera list / zero search results causes null pointer errors or broken styling in Grid view. -> **PASSED (Clean empty state hints displayed in both views)**
+- **Vulnerabilities found**:
+  1. `cam-card-actions` has inline `onclick="event.stopPropagation()"`, causing all 6 quick action buttons on grid cards to be dead.
+  2. `cam-card-check` has inline `onclick="event.stopPropagation()"`, causing checkbox clicks on grid cards to be ignored by `#cam-grid` event listener.
+  3. `#select-all` listener in `app.js:1560` queries `.cam-cb` only, completely skipping `.cam-card-cb` and `.cam-card.selected`.
+- **Untested angles**: None.
 
 ## Loaded Skills
 - **Source**: `/home/ksp/ksp-camera-auto/.agents/skills/camera-naming/SKILL.md`
-- **Local copy**: `.agents/skills/camera-naming/SKILL.md`
-- **Core methodology**: Camera/monitor naming standards, Golden Template from Camera01, Redbida 20-tab INI `ui_tabs_links` format, hashtags, and MQTT key specs.
+- **Local copy**: `/home/ksp/ksp-camera-auto/.agents/skills/camera-naming/SKILL.md`
+- **Core methodology**: Camera01 Golden Template rules, 5-min cutoff, H.264/H.265 baseline, AAC audio, naming standards.
+
+## Key Decisions Made
+- Verdict: **REQUEST_CHANGES** due to 3 critical/high UI bugs in Grid Card interaction and checkbox synchronization.
+
+## Artifact Index
+- `.agents/challenger_m1_1/DISPATCH.md` — Incoming dispatch log
+- `.agents/challenger_m1_1/BRIEFING.md` — Active briefing and state
+- `.agents/challenger_m1_1/progress.md` — Execution progress log
+- `.agents/challenger_m1_1/handoff.md` — Final verdict handoff report
+- `tests/ui/m1_challenger.spec.js` — Empirical test harness reproducing bugs and validating fixes

@@ -1,45 +1,33 @@
-# Plan — RedBida MCP Suite Expansion & Deployment
+# Orchestration Plan: kspcam UI/UX & RedBida Overhaul
 
 ## Objectives
-Deliver the complete RedBida & Onboarding MCP tools suite in `ksp-camera-auto`, integrate it into the server, achieve 100% test coverage, compile multi-arch binaries, deploy to live nodes (`inut_204_164`, `inut_204_163`), verify live MCP calls, and push git commit.
+1. **R1: Full Overhaul of `/#cameras`**:
+   - Modern Glassmorphism layout (Grid Card & Table toggle with snapshot thumbnails, vendor badges, status indicators).
+   - Quick Actions Toolbar (Instant Live stream, Snapshot preview, PTZ quick nudge, Reboot, NTP sync).
+   - Professional Camera Detail Workspace: Left col (MJPEG stream + Snapshot with fullscreen/auto-refresh), Right col (7 Tab control center: OSD/Channel Name, Color sliders with live preview, Video/Audio encoder, Network & Wi-Fi scanning with RSSI bars, PTZ pan-tilt with keyboard shortcuts, Storage format/status, Maintenance & Auto-Reboot schedule).
+   - Smart Bulk Wizard with safety clamping alerts, Golden Template 1-click apply, progress bar.
+   - NVR Diagnostics & sub-channel scanning: timeline gap health visualization, automated sub-camera mapping.
+2. **R2: Full Overhaul of `/#redbida`**:
+   - Golden Standard Inspector & 1-Click Auto-Fix with % progress indicator across all 15 parameters.
+   - Curated 8 CSS Gradient Palette with Live Canvas Preview and instant swatch picking.
+   - Visual 20-Tab INI Editor `[C01]`..`[C20]` grid view with table name synchronization to `vid_play_label` and quick copy.
+   - Smart Hashtag Generator with Unicode normalization (removing Vietnamese diacritics dynamically).
+   - Enhanced Key Management table with risk badges, filter/search, inline image/color preview.
+3. **R3: Testing, Multi-Arch Build, Deployment & Git**:
+   - Deep inspection of DOM/JS/CSS/Go backend compatibility.
+   - 100% passing Go unit tests (`go test ./...`) and Playwright UI tests.
+   - Multi-arch static binary build (`linux/amd64`, `linux/arm64`, `linux/armv7`).
+   - Remote deployment to edge nodes `inut_204_164` and `inut_204_163` via SSH/Ansible/SCP.
+   - Commit & push all changes to git `main`.
 
-## Detailed Steps
-
-### Step 0: Survey & Architecture Discovery
-- Explorer 1 (`survey_mcp_core`): Survey `internal/mcp/` architecture, tools registration mechanism, tool handlers, error handling, session/stdio/SSE handling, existing tests.
-- Explorer 2 (`survey_redbida_mqtt`): Survey MQTT topics, port 12369 or localhost config, `internal/` conventions, all 15 parameters format specifications for onboarding (tab format, hashtag normalization, background url, etc.), time sync NTP details.
-- Explorer 3 (`survey_infra_deploy`): Survey `Makefile`, build targets (`make build-all`), remote nodes access / SSH / SCP / MCP testing endpoints (`inut_204_164`, `inut_204_163`), docs structure (`docs/`, `GEMINI.md`).
-
-### Step 1: Synthesize into PROJECT.md
-- Merge survey findings into `/home/ksp/ksp-camera-auto/PROJECT.md` with:
-  - Architecture & Code Layout
-  - Complete Feature Inventory (F1 to F8)
-  - Milestone Definitions (M1, M2, M3)
-  - Interface Contracts & Parameter Formats
-
-### Step 2: Milestone 1 — RedBida & Onboarding MCP Tools Implementation
-- Sub-orchestrator / Worker creates `internal/mcp/tools_redbida.go` containing:
-  - `redbida_list_catalog`: Returns full metadata catalog, functional groups, risk level, data types.
-  - `redbida_get_keys`: Queries MQTT `/private/i_gets` with `{"info": [...]}` and receives response with timeout/error handling.
-  - `redbida_set_keys`: Publishes to `/private/i_sets` with `{"info": {...}}` and performs read-back verification.
-  - `redbida_apply_onboarding_preset`: 1-Click calculation and application of 15 standard parameters (`ui_title`, `ui_bg`, `custom_hashtags`, `ui_tabs_links` 20 tab INI, `camera_count`, `toolbar_show_count`, `hls_using_go2rtc`, `button_generate_go2rtc_stream`, `logo_header`, `logo_header_text`, `shinobi_camera_id`, `shinobi_group_key`, `video_config`, `ui_scoreboard`, `ggcode`).
-  - `redbida_trigger_go2rtc`: Publishes `button_generate_go2rtc_stream: "true"` to trigger Node-RED flow.
-  - `redbida_get_time_status`: Checks system time & NTP sync status.
-- Iteration loop: Explorer -> Worker -> Reviewers (2) -> Challengers (2) -> Auditor.
-
-### Step 3: Milestone 2 — Server Integration, Documentation & Dual Transports
-- Integrate new tools in `internal/mcp/server.go` `registerTools()`.
-- Validate Stdio mode and HTTP/SSE mode on port :2028.
-- Update documentation in `docs/` and `GEMINI.md` detailing new tools.
-- Iteration loop: Explorer -> Worker -> Reviewers (2) -> Challengers (2) -> Auditor.
-
-### Step 4: Milestone 3 — Comprehensive Testing, Multi-Arch Build & Remote Deployment
-- Implement unit tests in `internal/mcp/tools_redbida_test.go` and `internal/mcp/server_test.go` (100% pass).
-- Verify JSON-RPC 2.0 protocol compliance (`initialize`, `tools/list`, `tools/call`).
-- Run `make build-all` to produce `linux/amd64`, `linux/arm64`, `linux/armv7` binaries.
-- Deploy and live-verify on nodes `inut_204_164` and `inut_204_163`.
-- Git commit & push.
-- Review & Final Forensic Integrity Audit.
-
-### Step 5: Final Review & Synthesis
-- Final report to user/caller.
+## Phased Workflow
+- **Phase 0: Architecture & Codebase Survey**
+  - Explorer 1: `/#cameras` frontend & backend interaction analysis (`web/static/app.js`, `web/static/ui-core.js`, `web/static/index.html`, `web/static/style.css`, `/api/cameras`, `/api/probe`, `/api/apply`, `/api/snapshot`, `/api/live`, `/api/ptz`, `/api/reboot`, `/api/storage`, `/api/recordings`, `/api/channel-info`, `/api/osd`, `/api/picture`, `/api/network`, `/api/wifi`, `/api/device-time`, `/api/autoreboot`, `/api/nvr/scan`, `/api/nvr/health`, `/api/nvr/watchdog`, camera-naming Golden Template skill).
+  - Explorer 2: `/#redbida` frontend & backend analysis (`web/static/redbida.js`, `web/static/index.html`, `web/static/style.css`, `internal/redbida/`, Golden Standard Inspector, % progress, Curated 8 CSS Gradient Palette, Live Canvas Preview, Visual 20-Tab INI Editor `[C01]`..`[C20]`, Smart Hashtag Generator, Enhanced Key Management).
+  - Explorer 3: Architecture, Testing & Deployment analysis (`tests/ui/`, Playwright specs, Go unit tests, Makefile / static build scripts, remote nodes `inut_204_164` / `inut_204_163`, systemd services, git repository state).
+- **Phase 1: Milestone 1 — `/#cameras` Overhaul**
+  - Worker -> 2 Reviewers -> 2 Challengers -> Forensic Auditor.
+- **Phase 2: Milestone 2 — `/#redbida` Overhaul**
+  - Worker -> 2 Reviewers -> 2 Challengers -> Forensic Auditor.
+- **Phase 3: Milestone 3 — Comprehensive Testing, Multi-Arch Build, Deployment & Git**
+  - Worker -> 2 Reviewers -> 2 Challengers -> Forensic Auditor.

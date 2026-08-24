@@ -1,109 +1,154 @@
-# Handoff Report — Milestone 2 Empirical Challenge
+# Adversarial Challenge Report: Milestone 2 — RedBida UI Overhaul (`/#redbida`)
 
-- **Agent ID / Archetype**: `teamwork_preview_challenger` (`critic`, `specialist`)
-- **Working Directory**: `/home/ksp/ksp-camera-auto/.agents/challenger_m2_1`
-- **Timestamp**: 2026-08-24T20:45:30+07:00
-- **Handoff Type**: Hard Handoff
-- **Verdict**: **APPROVE**
-
----
-
-## 1. Observation
-
-Direct empirical stress-testing and test harness executions across all Milestone 2 deliverables produced the following verified observations:
-
-### 1.1 JSON-RPC 2.0 Dispatch & Protocol Compliance
-- **Stdio Mode (`kspcam --mcp --config ...`)**:
-  - `initialize` handshake returns `protocolVersion: "2024-11-05"`, `serverInfo: {name: "kspcam", version: "1.0.0"}`, and capability negotiation.
-  - `tools/list` returns all **31 registered tools** deterministically sorted in alphabetical order (16 Camera tools, 9 Shinobi tools, 6 RedBida tools).
-  - `tools/call` successfully dispatches all 6 RedBida tools:
-    1. `redbida_list_catalog`: Returns 63+ catalog keys with groups, risk ratings (`editable`, `confirm-required`, `read-only-protected`, `unknown`), and storage availability status. Group filters (e.g. `"UI / Display"`) and `editableOnly` flags function accurately.
-    2. `redbida_get_keys`: Fetches key batches over MQTT bridge, with automatic redaction of sensitive credentials (`shinobi_token`, `mqtt_password` masked as `"********"`).
-    3. `redbida_set_keys`: Enforces validation, rejects empty change maps, enforces confirmation gating for high-risk keys (`button_reboot`, `max_free_ram_force_reboot`), and verifies read-back matching.
-    4. `redbida_apply_onboarding_preset`: Synthesizes all 15 Golden Template parameters; strips trailing semicolons from `ui_bg` gradients (e.g. `radial-gradient(...);;;` -> `radial-gradient(...)`); strips Vietnamese diacritics and special characters for `custom_hashtags` (e.g. `"CLB Bida Hoàng Gia (Thanh Xuân - Hà Nội)"` -> `"#CLBBidaHoangGiaThanhXuanHaNoi #BILLIARDSlive #INUTlive #highlightsports"`); and generates the 20-tab INI configuration `[C01]`..`[C20]` with `vid_play_label=<Title>`.
-    5. `redbida_trigger_go2rtc`: Dispatches `button_generate_go2rtc_stream: true` through `/private/i_sets`.
-    6. `redbida_get_time_status`: Queries host clock, validates RFC 3339 timestamp parsing, and queries NTP status via `timedatectl`.
-
-### 1.2 HTTP / SSE Transport & Authentication Matrix
-- `POST /mcp` (stateless JSON-RPC) and `GET /mcp` + `POST /mcp/messages?sessionId=...` (stateful SSE):
-  - Loopback requests (`127.0.0.1`, `::1`, `localhost`) bypass authentication when `allow_unauthenticated_loopback: true`.
-  - Remote IP requests without API key return `401 Unauthorized`.
-  - Remote IP requests authenticated via `X-MCP-Key`, `Authorization: Bearer <key>`, or `?key=<key>` succeed with `200 OK`.
-  - Tested 50 concurrent SSE client connections: all 50 sessions received unique 32-character hex tokens and isolated message routing without crosstalk or dropped frames.
-  - Disconnecting an SSE client cleanly unregisters the session; subsequent POSTs to that session ID return `404 Not Found`.
-
-### 1.3 Adversarial Stress & Malformed Request Fuzzing
-- **Malformed JSON Syntax**: Truncated payloads, unquoted keys, and trailing commas trigger JSON-RPC Parse Error `-32700` (`CodeParseError`).
-- **Invalid Protocol Versions**: Requests with `"jsonrpc": "1.0"` or `"3.0"` trigger Invalid Request `-32600` (`CodeInvalidRequest`).
-- **Method Not Found**: Non-existent RPC methods return Method Not Found `-32601` (`CodeMethodNotFound`).
-- **Schema & Argument Fuzzing**:
-  - Missing required fields (e.g. `redbida_apply_onboarding_preset` without `title`) return `isError: true` with clear diagnostic messages.
-  - Boundary violations (`cameraCount: 0`, `-5`, `25`) are rejected as out of range (must be 1-20).
-  - Whitespace-only titles (`title: "   "`) are rejected.
-  - Unconfirmed dangerous keys in `redbida_set_keys` are blocked.
-
-### 1.4 Docgen Coverage Validation
-- Command `go run ./tools/docgen -check` executed and verified:
-  ```
-  docgen: OK — 25 bài, mọi route/tab đều có bài trợ giúp
-  ```
-  Zero documentation drift across all routes and help articles.
-
-### 1.5 Static Multi-Arch Compilation
-- `CGO_ENABLED=0 go build ./cmd/kspcam` builds clean static ELF binaries for `linux/amd64`, `linux/arm64`, and `linux/armv7`.
-- Verified via `file` ("statically linked") and `ldd` ("not a dynamic executable" / 0 shared library dependencies).
+> **Agent:** Empirical Challenger 1 M2 (`challenger_m2_1`)  
+> **Target Recipient:** Orchestrator Parent (`d0a95b30-795a-486d-a88c-9c086b9f99b0`)  
+> **Thời gian:** 2026-08-24T15:31:30Z  
+> **Explicit Verdict:** `REQUEST_CHANGES` (Yêu cầu chỉnh sửa 3 lỗi logic đã xác minh thực nghiệm)
 
 ---
 
-## 2. Logic Chain
+## 1. Observation (Quan Sát Trực Tiếp)
 
-1. **Adversarial Verification of JSON-RPC Architecture**:
-   - The embedded MCP server in `internal/mcp/server.go` implements pure JSON-RPC 2.0 over both Stdio (`RunStdio`) and HTTP/SSE (`HTTPHandler`).
-   - Testing across 50 concurrent client sessions demonstrated robust concurrency handling with thread-safe mutex locking on session maps and clean cancellation lifecycles.
+### A. Kiểm thử nền tảng (Baseline Tests)
+- `PATH=/home/ksp/.goroot/bin:$PATH go test ./...`: 100% PASS (exit code 0).
+- `npx playwright test tests/ui/redbida_m2_overhaul.spec.js`: 5/5 tests PASS (100%).
 
-2. **Schema Correctness & Resilience**:
-   - Every tool registered in `Registry` provides valid JSON-serializable `InputSchema` objects with explicit `properties`, `required`, and description metadata.
-   - The parameter sanitizers for RedBida (`removeVietnameseTones`, `sanitizeCleanTitle`, `sanitizeCSSGradient`, `generate20TabINITabs`) were fuzzed with extreme unicode and emoji inputs and produced compliant outputs adhering to the `camera-naming` skill specification.
+### B. Quan sát qua Adversarial Stress Testing (`tests/ui/redbida_m2_adversarial.spec.js`)
 
-3. **Security & Authentication Gating**:
-   - The authentication layer in `http.go` correctly enforces loopback isolation and header/bearer/query token verification, preventing unauthorized external access.
+1. **Lỗi 1 (High): `ui_bg` Auto-Fix không xóa được nhiều dấu chấm phẩy liên tiếp (`;;;`) và không sửa được giá trị không phải gradient (như `#ffffff`, `red`)**
+   - **Vị trí**: `web/static/redbida.js:234-239`
+   - **Đoạn mã**:
+     ```javascript
+     fix: (cur) => {
+       if (typeof cur === 'string' && cur.trim()) {
+         return cur.replace(/;\s*$/, '').trim();
+       }
+       return 'linear-gradient(135deg, #0b192c 0%, #1e3e62 50%, #000000 100%)';
+     }
+     ```
+   - **Thực nghiệm chứng minh**:
+     ```bash
+     node -e "
+     const cur1 = 'linear-gradient(135deg, #0b192c, #000);;;  ';
+     const fixed1 = cur1.replace(/;\s*$/, '').trim();
+     console.log('fixed1:', fixed1, 'check:', fixed1.includes('gradient') && !/;\s*$/.test(fixed1.trim()));
+
+     const cur2 = '#ffffff';
+     const fixed2 = cur2.replace(/;\s*$/, '').trim();
+     console.log('fixed2:', fixed2, 'check:', fixed2.includes('gradient') && !/;\s*$/.test(fixed2.trim()));
+     "
+     ```
+   - **Kết quả trả về**:
+     ```
+     fixed1: linear-gradient(135deg, #0b192c, #000);; check: false
+     fixed2: #ffffff check: false
+     ```
+   - **Hậu quả**: Khi người dùng nhấn "⚡ Sửa nhanh" trên `ui_bg` hoặc "⚡ 1-Click Sửa Tất Cả", giá trị trả về vẫn chứa dấu `;` hoặc vẫn là mã màu không hợp lệ, khiến hàm `check` tiếp tục trả về `false` (Lệch chuẩn), không thể đạt 100% Golden Standard.
+
+2. **Lỗi 2 (Medium): `custom_hashtags` Golden Standard Check bỏ sót nguyên âm tiếng Việt viết hoa có dấu**
+   - **Vị trí**: `web/static/redbida.js:248`
+   - **Đoạn mã**:
+     ```javascript
+     const hasVN = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđĐ]/.test(val);
+     ```
+   - **Thực nghiệm chứng minh**:
+     ```bash
+     node -e "
+     const val = '#QUÁNBIDA #BILLIARDSlive #INUTlive #highlightsports';
+     const hasVN = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđĐ]/.test(val);
+     console.log('val:', val, 'hasVN:', hasVN, 'check passed:', !hasVN && val.includes('#BILLIARDSlive') && val.includes('#INUTlive') && val.includes('#highlightsports'));
+     "
+     ```
+   - **Kết quả trả về**:
+     ```
+     val: #QUÁNBIDA #BILLIARDSlive #INUTlive #highlightsports hasVN: false check passed: true
+     ```
+   - **Hậu quả**: Regex thiếu các ký tự nguyên âm viết hoa (`ÀÁẢÃẠ...`) và không có cờ `/i`. Chuỗi hashtag còn dấu tiếng Việt in hoa (như `#QUÁNBIDA`) bị đánh giá sai là "✅ Đạt chuẩn".
+
+3. **Lỗi 3 (Medium): `company_name` Check chấp nhận tên công ty rác khi `ui_title` chưa có hoặc rỗng**
+   - **Vị trí**: `web/static/redbida.js:222`
+   - **Đoạn mã**:
+     ```javascript
+     check: (val) => {
+       const title = getEffectiveValue('ui_title');
+       return typeof val === 'string' && val.trim().length > 0 && (!title || val === title);
+     }
+     ```
+   - **Thực nghiệm chứng minh**: Khi `ui_title` là `""` (chưa cấu hình hoặc rỗng), điều kiện `!title` trở thành `true`, khiến bất kỳ chuỗi `company_name` nào (ví dụ `"Wrong Company"`) cũng được coi là "✅ Đạt chuẩn" dù thực tế lệch hoàn toàn với tên quán.
 
 ---
 
-## 3. Caveats
+## 2. Logic Chain (Chuỗi Lập Luận Kỹ Thuật)
 
-- **Physical Node Deployment**: Live hardware execution on remote edge nodes `inut_204_164` and `inut_204_163` via jump host is scheduled for Milestone 3. All Milestone 2 tests were validated empirically in-memory, via hermetic mock brokers, and via CLI binary invocations.
-- **Timedatectl in Containerized Environments**: In environments lacking `systemd-timedated`, `redbida_get_time_status` gracefully falls back to `ntpSynchronized: false` while continuing to return valid host RFC 3339 timestamps.
-
----
-
-## 4. Conclusion
-
-Milestone 2 deliverables satisfy all acceptance criteria and pass extensive empirical stress-testing:
-- Stdio & HTTP/SSE transports dispatch all 31 MCP tools (including all 6 RedBida tools).
-- Malformed inputs, protocol violations, and schema edge cases are handled safely.
-- Docgen validation passes cleanly with 0 drift (`25 articles`).
-- Multi-arch static compilation succeeds.
-
-**Verdict**: **APPROVE**
+1. Từ **Quan sát 1**: Regex `replace(/;\s*$/, '')` chỉ xóa duy nhất 1 ký tự `;` ở cuối. Nếu chuỗi có từ 2 dấu `;` trở lên hoặc có ký tự màu hex thuần (`#fff`), hàm `fix` giữ nguyên chuỗi lỗi. Sau khi `fix` xong, hàm `check` đối chiếu lại thấy chuỗi vẫn vi phạm tiêu chí gradient hợp lệ và không có dấu chấm phẩy, dẫn tới việc nút "⚡ Sửa nhanh" không sửa triệt để được lỗi.
+2. Từ **Quan sát 2**: Tiêu chuẩn R2 và Skill `camera-naming` yêu cầu `custom_hashtags` phải sạch dấu tiếng Việt chuẩn hóa. Việc biểu thức chính quy chỉ liệt kê ký tự thường khiến các chuỗi in hoa có dấu lọt qua bộ kiểm duyệt Golden Standard.
+3. Từ **Quan sát 3**: `company_name` theo quy chuẩn bắt buộc phải đồng nhất với `ui_title`. Việc cho phép `!title` làm điều kiện thoát (escape hatch) tạo ra lỗ hổng false-positive trong bảng Checklist Inspector.
+4. **Các thành phần hoạt động xuất sắc (Robustness Confirmed)**:
+   - Bộ 8 Palette Gradient (`REDBIDA_GRADIENT_PALETTE`): 100% không có trailing semicolon `;`, chuyển đổi class `.active` chuẩn xác, Live Canvas Preview phản hồi mượt mà.
+   - Smart Hashtag Generator (`generateSmartHashtags`): Xử lý hoàn hảo mọi chuỗi tiếng Việt phức tạp (NFC/NFD, compound diacritics, ký tự đặc biệt, rỗng/undefined).
+   - Visual 20-Tab INI Editor: Parse và serialize 2 chiều 20 section `[C01]`..`[C20]` ổn định, đồng bộ tên quán 1-click chính xác.
 
 ---
 
-## 5. Verification Method
+## 3. Caveats (Lưu Ý & Giới Hạn)
 
-To independently reproduce all challenge findings:
+- Không có caveat nào đối với môi trường backend Go (Go tests 100% pass).
+- Các lỗi phát hiện thuần túy nằm ở logic kiểm tra và auto-fix của client-side JS (`web/static/redbida.js`).
 
-```bash
-# 1. Run full adversarial MCP unit and fuzzing tests
-PATH=/home/ksp/go-sdk/bin:$PATH go test -v -count=1 ./internal/mcp -run TestAdversarialChallenge
+---
 
-# 2. Run the 36-test empirical challenger harness
-PATH=/home/ksp/go-sdk/bin:$PATH go run ./tools/challenger2
+## 4. Conclusion & Actionable Recommendations (Kết Luận & Yêu Cầu Chỉnh Sửa)
 
-# 3. Verify docgen documentation coverage
-PATH=/home/ksp/go-sdk/bin:$PATH go run ./tools/docgen -check
+### Explicit Verdict: `REQUEST_CHANGES`
 
-# 4. Verify static binary compilation and stdio CLI execution
-PATH=/home/ksp/go-sdk/bin:$PATH go build -o /tmp/kspcam ./cmd/kspcam
-printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n' | /tmp/kspcam --mcp --config config.example.yaml
-```
+Để Milestone 2 đạt độ hoàn hảo tuyệt đối, yêu cầu Implementation Worker M2 thực hiện 3 chỉnh sửa sau trong `web/static/redbida.js`:
+
+1. **Sửa `ui_bg.fix`** (Line 234-239):
+   ```javascript
+   // THAY THẾ:
+   fix: (cur) => {
+     if (typeof cur === 'string' && cur.includes('gradient')) {
+       return cur.replace(/[;\s]+$/, '').trim();
+     }
+     return 'linear-gradient(135deg, #0b192c 0%, #1e3e62 50%, #000000 100%)';
+   },
+   ```
+
+2. **Sửa `custom_hashtags.check`** (Line 248):
+   ```javascript
+   // THAY THẾ:
+   const hasVN = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(val);
+   ```
+
+3. **Sửa `company_name.check`** (Line 222):
+   ```javascript
+   // THAY THẾ:
+   check: (val) => {
+     const title = getEffectiveValue('ui_title');
+     return typeof val === 'string' && val.trim().length > 0 && typeof title === 'string' && title.trim().length > 0 && val === title;
+   },
+   ```
+
+---
+
+## 5. Verification Method (Phương Pháp Kiểm Tra Lại)
+
+Sau khi Worker sửa xong, chạy các lệnh kiểm tra sau để nghiệm thu:
+
+1. **Chạy Adversarial Stress Suite**:
+   ```bash
+   npx playwright test tests/ui/redbida_m2_adversarial.spec.js
+   ```
+   *(Kỳ vọng: 4/4 passed 100%)*
+
+2. **Chạy Toàn Bộ Test Suite RedBida**:
+   ```bash
+   npx playwright test tests/ui/redbida_m2_overhaul.spec.js tests/ui/redbida_m3_challenger.spec.js tests/ui/redbida.spec.js tests/ui/redbida_m2_adversarial.spec.js
+   ```
+   *(Kỳ vọng: 20/20 passed 100%)*
+
+3. **Chạy Go Unit Tests**:
+   ```bash
+   PATH=/home/ksp/.goroot/bin:$PATH go test ./...
+   ```
+   *(Kỳ vọng: 100% PASS)*

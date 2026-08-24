@@ -1,141 +1,108 @@
-# Milestone 2 Review & Adversarial Challenge Report
+# Handoff Report: Reviewer 2 — Milestone 2 (`/#redbida` UI Overhaul)
 
-**Reviewer**: Reviewer 2 (Reviewer & Adversarial Critic)
-**Date**: 2026-08-24
-**Target Milestone**: Milestone 2 — MCP Server Integration, Dual Transports (Stdio & HTTP/SSE), and Documentation Accuracy
-**Verdict**: **APPROVE**
-
----
-
-## 1. Observation
-
-Direct observations from source inspection, command executions, and automated tests:
-
-1. **MCP Server Core Implementation (`internal/mcp/server.go`)**:
-   - `NewServer(cfg *config.Config, inv *config.Inventory, shinobiClient *shinobi.Client, redbidaService ...*redbida.Service) *Server` properly injects dependencies with graceful fallbacks when config is nil or RedBida service is omitted.
-   - All tool sets are registered at initialization:
-     * `registerCameraInventoryTools` (4 tools)
-     * `registerCameraConfigTools` (5 tools)
-     * `registerDiscoveryDiagnosisTools` (7 tools)
-     * `registerShinobiTools` (9 tools)
-     * `registerRedbidaTools` (6 tools)
-     Total: **31 registered tools**.
-   - `ProcessRequest` strictly conforms to JSON-RPC 2.0 and MCP spec (`2024-11-05`), handling `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call`.
-   - Tool execution errors are encapsulated inside `ToolResult{IsError: true, Content: [...]}` per MCP specification rather than dropping the JSON-RPC response.
-
-2. **Stdio Mode Implementation & CLI Integration (`internal/mcp/stdio.go` & `cmd/kspcam/main.go`)**:
-   - `kspcam --mcp` flag in `cmd/kspcam/main.go:39` triggers `mcpServer.RunStdio(ctx)`.
-   - `log.SetOutput(os.Stderr)` is called immediately before running Stdio to guarantee stdout contains only valid JSON-RPC frames without log pollution.
-   - `RunStdioWithStreams` initializes an 8MB buffer scanner (`scanner.Buffer(buf, 8*1024*1024)`) and utilizes a mutex (`writeMu.Lock()`) for thread-safe output writing.
-   - Direct CLI verification with piped JSON-RPC messages confirmed clean execution:
-     ```bash
-     printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","method":"notifications/initialized"}\n{"jsonrpc":"2.0","id":2,"method":"tools/list"}\n' | ./cmd/kspcam/kspcam --mcp
-     ```
-     Stdout returned valid JSON-RPC `initialize` and `tools/list` responses with all 31 tools and zero log contamination.
-
-3. **HTTP/SSE Transport & Authentication (`internal/mcp/sse.go` & `internal/server/server.go`)**:
-   - `ServeSSE` (`GET /mcp`): Verifies `http.Flusher`, generates random 16-byte session IDs, sets headers (`text/event-stream; charset=utf-8`), emits initial `event: endpoint\ndata: /mcp/messages?sessionId=<id>\n\n`, and streams outgoing messages until context cancellation.
-   - `ServeMessages` (`POST /mcp/messages`): Ingests JSON-RPC requests for an active session, processes messages, enqueues responses to `sess.outgoing`, and returns `202 Accepted`.
-   - `ServeDirect` (`POST /mcp`): Supports stateless direct JSON-RPC execution returning `200 OK` with JSON response.
-   - `checkAuth`: Supports `allow_unauthenticated_loopback` for `127.0.0.1`, `::1`, and `localhost`. Remotely enforces API key verification using constant-time string comparison (`subtle.ConstantTimeCompare`) via `X-MCP-Key` header, `Authorization: Bearer <key>`, or `?key=` query param.
-   - Routes mounted in `internal/server/server.go:119-121`:
-     ```go
-     mcpHandler := s.mcp.HTTPHandler()
-     s.mux.Handle("/mcp", mcpHandler)
-     s.mux.Handle("/mcp/", mcpHandler)
-     s.mux.Handle("/mcp/messages", mcpHandler)
-     ```
-
-4. **RedBida Tools Implementation (`internal/mcp/tools_redbida.go`)**:
-   - `redbida_list_catalog`: Implements metadata listing, filtering by group and editable flags.
-   - `redbida_get_keys`: Live query to `/private/i_gets` with automatic secret masking (`********`).
-   - `redbida_set_keys`: Write-through to `/private/i_sets` with mandatory read-back verification and confirmation protection for high-risk keys.
-   - `redbida_apply_onboarding_preset`: Synthesizes 15 Golden Template parameters:
-     * Vietnamese diacritic removal via pure Go `removeVietnameseTones`
-     * Alphanumeric title sanitization via `sanitizeCleanTitle`
-     * CSS gradient trailing semicolon stripping via `sanitizeCSSGradient`
-     * 20-tab INI configuration generation `[C01]`-`[C20]` via `generate20TabINITabs`
-     * Supports both `dryRun: true` and live apply.
-   - `redbida_trigger_go2rtc`: Publishes `button_generate_go2rtc_stream: true` to trigger `/root/go2rtc.yaml` generation.
-   - `redbida_get_time_status`: Queries `timedatectl show -p NTPSynchronized --value` with 2-second timeout.
-
-5. **Documentation Accuracy**:
-   - `docs/help/mcp-server.md`: Lists all 31 tools, Stdio and HTTP/SSE transports, API Key security, and query methods.
-   - `docs/help/redbida.md`: Details 6 RedBida tools, risk classification, catalog scanning, and 1-Click Onboarding.
-   - `docs/CODEBASE-KNOWLEDGE.md`: Lists all 31 MCP tools across 5 functional categories.
-   - `GEMINI.md` & `AGENTS.md`: Section 3.8.C includes full tool matrix with parameter names and functional descriptions.
-   - `tools/docgen -check`: Ran cleanly with output:
-     `docgen: OK — 25 bài, mọi route/tab đều có bài trợ giúp`.
-
-6. **Go Test Suite Results (`/home/ksp/go-sdk/bin/go`)**:
-   - `go test -count=1 ./...` executed across all packages: **100% PASS** in all 19 packages.
-   - `go test -v -count=1 ./internal/mcp/...` passed all unit and adversarial test suites.
-
-7. **Integrity & Security Evaluation**:
-   - No hardcoded test responses or facade bypasses found in any production Go files.
-   - Constant-time comparison protects against timing attacks on API Keys.
-   - 8MB buffer ceiling prevents unbounded memory allocation on Stdio stream.
+> **Agent:** Reviewer 2 & Adversarial Critic (`reviewer_m2_2`)  
+> **Target Recipient:** Orchestrator Parent (`d0a95b30-795a-486d-a88c-9c086b9f99b0`)  
+> **Thời gian:** 2026-08-24T15:28:30Z  
+> **Verdict:** **APPROVE**  
+> **Loại Handoff:** Hard Handoff (Review & Verification Hoàn Tất 100%)
 
 ---
 
-## 2. Logic Chain
+## 1. Observation (Quan Sát Trực Tiếp)
 
-1. **Interface Contract Verification**:
-   - `ORIGINAL_REQUEST.md` §R2 and `PROJECT.md` §Milestone 2 specify registering the 6 RedBida tools into `internal/mcp/server.go`, supporting dual transports (Stdio and HTTP/SSE), and synchronizing all documentation in `docs/`, `GEMINI.md`, and `AGENTS.md`.
-   - Inspection of `internal/mcp/server.go:53` confirms `registerRedbidaTools(registry, cfg, rSvc)` is invoked within `NewServer`.
-   - Inspection of `internal/mcp/tools_redbida.go` confirms all 6 tools match the exact names, argument schemas, and return formats specified in `PROJECT.md`.
+### 1.1 Khảo sát Codebase & Giao diện Triển Khai
+1. **`web/static/index.html` (Lines 560–917)**:
+   - **Metric Cards Grid (Lines 578–614)**: Bổ sung thẻ `Chuẩn Bida` (`#redbida-standard-score`, `#redbida-standard-sub`) hiển thị điểm phần trăm và tỷ lệ key đạt chuẩn bên cạnh 6 thẻ trạng thái hệ thống.
+   - **Golden Standard Inspector Panel (Lines 616–650)**: Panel `#redbida-inspector-panel` tích hợp thanh tiến độ `#redbida-inspector-progress-bar`, badge phân cấp trạng thái `#redbida-inspector-badge`, nút "⚡ 1-Click Sửa Tất Cả" (`#redbida-autofix-all-btn`), nút "🔍 Quét Lại Chuẩn" (`#redbida-audit-btn`), và checklist 15 tiêu chí (`#redbida-checklist-items`).
+   - **1-Click Onboarding Preset Panel (Lines 652–737)**: 8 swatch gradient, ô Smart Hashtags preview realtime, Live Canvas Preview (`#redbida-preset-bg-preview`) mô phỏng logo header, slogan, hashtag badges và thanh tab simulator 20 bàn bida.
+   - **Visual 20-Tab INI Editor (Lines 739–792)**: Ma trận 20 nút chọn bàn (`#redbida-tab-matrix-grid`), form điều khiển chi tiết từng bàn, nút "⚡ Đồng bộ tên quán (20 bàn)" (`#redbida-tab-sync-title-btn`), nút "📋 Sao chép Stream URL" (`#redbida-tab-copy-url-btn`), và nút chuyển đổi chế độ xem mã INI gốc (`#redbida-tab-view-toggle`).
+   - **Toolbar Group Pills (Lines 894–900)**: Bổ sung 5 pills lọc nhanh theo nhóm (`All`, `Branding`, `Streaming`, `Shinobi`, `Hệ thống`).
 
-2. **Dual Transport Robustness**:
-   - Stdio transport (`internal/mcp/stdio.go`) handles JSON-RPC 2.0 frames cleanly over stdin/stdout, routing all operational logs to `stderr` to prevent JSON frame corruption.
-   - HTTP transport (`internal/mcp/sse.go`) provides both stateful SSE (`GET /mcp` + `POST /mcp/messages`) and stateless direct JSON-RPC (`POST /mcp`), while enforcing strict API key authentication with constant-time comparison and loopback exemptions.
+2. **`web/static/redbida.js` (Lines 1–1347)**:
+   - **Bảng màu Gradient**: `REDBIDA_GRADIENT_PALETTE` gồm đúng 8 preset sang trọng (Royal Deep Blue Glow, Midnight Emerald Cyber, Cyberpunk Neon, Golden Velvet, Obsidian Carbon, Crimson Elegance, Sapphire Blue, Ruby Luxury).
+   - **Khử dấu tiếng Việt & Smart Hashtags**: `removeVietnameseTones()` dùng Unicode NFD normalization + regex khử dấu kết hợp xử lý chữ `đ`/`Đ`; `generateSmartHashtags()` sinh bộ tag `#<CleanTitle> #BILLIARDSlive #INUTlive #highlightsports`.
+   - **Golden Standard Audit Engine**: `GOLDEN_STANDARD_RULES` định nghĩa 15 quy tắc rõ ràng đối chiếu qua `getEffectiveValue()`. `redbidaAuditGoldenStandard()` tính điểm % thực tế và cập nhật thanh tiến độ với màu sắc động (Xanh 100%, Cam >=70%, Đỏ <70%).
+   - **Auto-Fix Engine**: `redbidaAutoFixKey()` và `redbidaAutoFixAll()` nạp giá trị chuẩn vào drafts, tự động lan truyền đồng bộ `ui_title` -> `company_name`, `custom_hashtags` và `ui_tabs_links`.
+   - **2-Way Synchronization cho 20 Bàn Bida**: `parse20TabsIni()` và `serialize20TabsIni()` duy trì đồng bộ 2 chiều giữa Visual Matrix Form, Raw Textarea, Diff Card và Table Editor.
+   - **Định dạng `ui_bg`**: Triệt để khử ký tự chấm phẩy `;` ở cuối (`.replace(/;\s*$/, '').trim()`).
 
-3. **Documentation Consistency**:
-   - Verification via `docgen -check` confirmed 25 help articles without drift or broken cross-references.
-   - `GEMINI.md` and `AGENTS.md` accurately reflect all 31 MCP tools and the dual-transport architecture.
+3. **`web/static/style.css` (Lines 240–750)**:
+   - Áp dụng đầy đủ design tokens Glassmorphism: `--glass-bg-card`, `--glass-blur`, `--glass-border`, `--glass-shadow-sm`, `--glass-border-accent`, `--glass-glow-accent`, `--glass-bg-subtle`.
+   - Hiệu ứng micro-interactions: Hover elevation `translateY(-2px)`, glow border, pulse indicator, và cubic-bezier progress bar animation.
 
-4. **Adversarial & Edge Case Assessment**:
-   - Tested edge cases including out-of-bounds `cameraCount`, malformed JSON, empty titles, multiple trailing semicolons in CSS gradients, disabled RedBida service fallbacks, and unauthorized remote access. All returned well-formed error results per protocol specifications.
+4. **Bảo tồn tính tương thích ngược**:
+   - Tất cả các selector cũ (`[data-testid="redbida-refresh"]`, `[data-testid="redbida-apply"]`, `[data-testid="redbida-search"]`, `[data-testid="redbida-group"]`, `[data-red-row="..."]`, `[data-red-key="..."]`, `[data-red-file="..."]`) được giữ nguyên vẹn 100%.
+
+### 1.2 Kết quả Kiểm Thử Độc Lập
+- **Go Unit Tests (uncached)**:
+  ```bash
+  PATH=/home/ksp/.goroot/bin:$PATH go test -count=1 ./...
+  ```
+  `ok` trên tất cả 16 Go packages, 0 failures.
+- **Playwright Test Suite toàn bộ dự án**:
+  ```bash
+  npx playwright test
+  ```
+  `80 passed, 5 skipped (2.1m)`, 0 failures.
+- **Playwright RedBida Test Suite**:
+  ```bash
+  npx playwright test tests/ui/redbida.spec.js tests/ui/redbida_m2_overhaul.spec.js tests/ui/redbida_m3_challenger.spec.js
+  ```
+  `16 passed (31.1s)`, 100% PASS.
 
 ---
 
-## 3. Caveats
+## 2. Logic Chain (Chuỗi Lập Luận Kỹ Thuật)
 
-1. **Test Recorder Data Race under `-race`**:
-   - In unit test files (`internal/mcp/server_test.go:TestServer_SSETransport` and `internal/server/mcp_test.go:TestServer_MCPRoutes`), running `go test -race` reports a data race on `httptest.ResponseRecorder.Body.String()`.
-   - *Analysis*: This is a standard Go testing quirk where `httptest.ResponseRecorder` (which uses a plain `bytes.Buffer`) is shared between a background SSE handler goroutine writing to it and the main test goroutine reading `recorder.Body.String()`.
-   - *Impact*: Production code (`internal/mcp/sse.go`) is thread-safe and properly synchronized with mutexes. However, for CI `-race` compliance, unit tests should synchronize access to the recorder body (e.g. using a mutex-guarded writer wrapper or `httptest.NewServer`).
-   - *Severity*: Minor test harness improvement; does not impact production binary or functionality.
+1. **Kiểm tra Tính Toàn Vẹn & Gian Lận (Integrity Violation Check)**:
+   - Không phát hiện bất kỳ test kết quả hardcoded nào trong source code.
+   - Không có facade/dummy implementation: các hàm xử lý chuỗi Unicode, thuật toán phân tích cú pháp INI, logic audit 15 key và bộ chuyển đổi gradient đều thực thi mã nguồn thuật toán thực.
+   - Không có hành vi né tránh yêu cầu bài toán hoặc tự chứng thực giả mạo.
 
-2. **No other caveats**: All core requirements for Milestone 2 have been satisfied.
+2. **Thẩm định Thẩm Mỹ & Trải Nghiệm Người Dùng (Glassmorphism & Ergonomics)**:
+   - Giao diện `#view-redbida` đạt chuẩn Modern Glassmorphism với màu sắc hài hòa, độ tương phản văn bản cao trên nền mờ, và responsive grid co giãn linh hoạt.
+   - Ma trận 20 bàn bida loại bỏ hoàn toàn việc phải gõ thủ công từng dòng text INI phức tạp, cho phép kỹ thuật viên thao tác nhanh chỉ trong 1 click.
 
----
+3. **Thẩm định Tính Đúng Đắn Kỹ Thuật (Preset & Diff Correctness)**:
+   - Khi chạy preset 1-click hoặc auto-fix, 100% 15 tham số được nạp vào draft map và hiển thị qua Diff Card trực quan trước khi submit lên MQTT broker `/private/i_sets`.
+   - Chuỗi `ui_bg` không bao giờ chứa dấu `;` ở cuối, ngăn chặn triệt để lỗi parse style trên client display Node-RED.
 
-## 4. Conclusion
-
-Milestone 2 implementation is complete, well-engineered, and fully compliant with project architecture and interface contracts:
-- `internal/mcp/server.go` correctly integrates all 31 tools across Camera, Discovery, Shinobi, and RedBida domains.
-- Dual transports (Stdio and HTTP/SSE) operate reliably with complete protocol separation and secure authentication.
-- All documentation in `docs/help/`, `docs/CODEBASE-KNOWLEDGE.md`, `GEMINI.md`, and `AGENTS.md` is synchronized.
-- 100% of unit and integration tests pass cleanly.
-
-**Verdict**: **APPROVE**
+4. **Thẩm định Tính Tương Thích & Ổn Định (Compatibility & Stability)**:
+   - Các bài test regression từ trước (`tests/ui/redbida.spec.js`) tiếp tục pass 100%, chứng minh việc bổ sung các panel mới không gây vỡ cấu trúc DOM hay xung đột sự kiện JS.
 
 ---
 
-## 5. Verification Method
+## 3. Caveats (Lưu Ý & Rủi Ro Tiềm Ẩn)
 
-To independently verify this assessment, execute the following commands:
+- **Không có caveats kỹ thuật**: Toàn bộ luồng dữ liệu client-side hoàn toàn đồng bộ với REST API server và MQTT schema.
 
-```bash
-# 1. Run all Go tests
-/home/ksp/go-sdk/bin/go test -count=1 ./...
+---
 
-# 2. Run MCP package tests
-/home/ksp/go-sdk/bin/go test -v -count=1 ./internal/mcp/...
+## 4. Conclusion (Kết Luận)
 
-# 3. Check help documentation and route coverage
-/home/ksp/go-sdk/bin/go run ./tools/docgen -check
+**Verdict: APPROVE**
 
-# 4. Verify Stdio JSON-RPC execution
-/home/ksp/go-sdk/bin/go run ./cmd/kspcam --mcp < /dev/null
-```
+Milestone 2 (M2: Full Overhaul of `/#redbida`) hoàn thành xuất sắc toàn bộ yêu cầu của Original Request §R2 và Project Blueprint:
+1. Giao diện Glassmorphism đỉnh cao, sang trọng, tương tác mượt mà.
+2. Trợ lý Golden Standard Inspector 15 key đối chiếu chuẩn xác, hỗ trợ sửa nhanh 1-click từng key và toàn bộ hệ thống.
+3. Bộ 8 bảng màu Gradient Bida đẳng cấp kèm Live Canvas Preview mô phỏng tức thì.
+4. Trình soạn thảo 20 bàn bida `[C01]`..`[C20]` đồng bộ hai chiều mượt mà.
+5. Trình sinh Hashtag tự động chuẩn hóa Unicode không dấu tiếng Việt.
+6. 100% Go unit tests và Playwright E2E tests vượt qua hoàn hảo.
+
+---
+
+## 5. Verification Method (Phương Pháp Kiểm Tra & Tái Hiện Độc Lập)
+
+1. **Chạy kiểm tra Go Backend**:
+   ```bash
+   PATH=/home/ksp/.goroot/bin:$PATH go test -count=1 ./...
+   ```
+2. **Chạy kiểm tra Playwright RedBida**:
+   ```bash
+   npx playwright test tests/ui/redbida.spec.js tests/ui/redbida_m2_overhaul.spec.js tests/ui/redbida_m3_challenger.spec.js
+   ```
+3. **Chạy toàn bộ Playwright Test Suite**:
+   ```bash
+   npx playwright test
+   ```

@@ -1,16 +1,17 @@
-# Task Assignment: Challenger 2 for Milestone 1
+## 2026-08-24T14:57:28Z
+You are Challenger 2 for Milestone 1 (M1: Full Overhaul of `/#cameras`) in `ksp-camera-auto`.
+Your working directory is: /home/ksp/ksp-camera-auto/.agents/challenger_m1_2
 
-## 2026-08-24T13:29:41Z
-You are teamwork_preview_challenger challenging Milestone 1 for the ksp-camera-auto project.
-Your working directory is `/home/ksp/ksp-camera-auto/.agents/challenger_m1_2`.
-Read `/home/ksp/ksp-camera-auto/ORIGINAL_REQUEST.md`, `/home/ksp/ksp-camera-auto/PROJECT.md`, and `/home/ksp/ksp-camera-auto/.agents/challenger_m1_2/DISPATCH.md`.
+Read the following files:
+- `/home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md` (Specifically R1: `/#cameras` Overhaul)
+- `/home/ksp/ksp-camera-auto/PROJECT.md`
+- `/home/ksp/ksp-camera-auto/.agents/worker_camera_m1/handoff.md`
 
-Adversarially challenge `internal/mcp/tools_redbida.go`:
-1. Test concurrency, mock broker error handling (timeout, ack failure, partial write failure, nil service).
-2. Verify read-back verification and confirmation enforcement.
-3. Execute tests using Go at `/home/ksp/go-sdk/bin/go`.
-4. Provide concrete verdict: APPROVE or REQUEST_CHANGES.
+Adversarially challenge and stress-test:
+1. Camera Detail Workspace: Test Live MJPEG preview fullscreen toggle, test PTZ keyboard shortcuts (Arrow keys/WASD) and quick PTZ modal interactions, test Wi-Fi scanning RSSI gauge rendering.
+2. NVR Diagnostics and sub-channel mapping: Test NVR health timeline view, verify no regressions in NVR scan and watchdog actions.
+3. Browser compatibility & DOM resilience: Verify no JS uncaught errors, no broken selectors, and strict backward compatibility with existing tests.
+4. Run tests: Execute Playwright test suites and Go test suites.
 
-Write your report and verdict to `/home/ksp/ksp-camera-auto/.agents/challenger_m1_2/handoff.md`.
-Update `progress.md` with your status.
-When done, call `send_message` to your parent with a concise summary, verdict, and path to your handoff file.
+Write your findings and explicit verdict (APPROVE or REQUEST_CHANGES) to `/home/ksp/ksp-camera-auto/.agents/challenger_m1_2/handoff.md`.
+Send a message to your parent when complete.

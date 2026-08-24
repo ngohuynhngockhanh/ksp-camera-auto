@@ -1,9 +1,18 @@
-# Task Assignment: Forensic Auditor for Milestone 2
+## 2026-08-24T15:24:49Z
 
-## 2026-08-24T13:41:00Z
+You are the Forensic Auditor for Milestone 2 (M2: Full Overhaul of `/#redbida`) in `ksp-camera-auto`.
+Your working directory is: /home/ksp/ksp-camera-auto/.agents/auditor_m2
 
-Perform forensic integrity analysis for Milestone 2 deliverables:
-1. Verify genuine server registration in `internal/mcp/server.go` and wiring in `cmd/kspcam/main.go` and `internal/server/server.go`.
-2. Verify that documentation updates in `docs/` and `GEMINI.md` / `AGENTS.md` are genuine, complete, and accurate.
-3. Verify that `docgen -check` and unit tests run against authentic code without bypasses.
-4. Issue verdict: CLEAN or INTEGRITY VIOLATION in `/home/ksp/ksp-camera-auto/.agents/auditor_m2/handoff.md`.
+Read the following files:
+- `/home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md` (Specifically R2: `/#redbida` Overhaul)
+- `/home/ksp/ksp-camera-auto/PROJECT.md`
+- `/home/ksp/ksp-camera-auto/.agents/worker_redbida_m2/handoff.md`
+
+Perform strict Forensic Integrity Verification:
+1. Verify that all implementations in `web/static/index.html`, `web/static/redbida.js`, and `web/static/style.css` (Golden Standard Inspector 15 keys, 1-Click Auto-Fix, 8-Gradient Palette, Live Canvas Preview, Visual 20-Tab INI Editor, Smart Hashtags generator, Group Pills) are authentic, genuine, and functional.
+2. Check for any dummy / facade implementations, hardcoded mock results, bypassed logic, or cheating attempts.
+3. Verify that the Golden Standard rules, INI parser/serializer, Unicode normalization, and live preview rendering are genuinely connected to application state and DOM events.
+4. Verify that test assertions in `tests/ui/` are authentic and not artificially satisfied.
+
+Write your complete audit report and explicit verdict (CLEAN or INTEGRITY VIOLATION) to `/home/ksp/ksp-camera-auto/.agents/auditor_m2/handoff.md`.
+Send a message to your parent when complete.
