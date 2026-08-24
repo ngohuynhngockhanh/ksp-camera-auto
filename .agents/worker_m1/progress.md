@@ -1,11 +1,10 @@
-# Progress — Milestone M1
+# Progress — Worker M1
 
-Last visited: 2026-08-23T16:48:30Z
+Last visited: 2026-08-24T19:00:30+07:00
 
-- [x] Initial briefing and dispatch review
-- [x] Task 1: Update Go configuration in `internal/config/config.go`, `config.example.yaml`, and add tests in `internal/config/config_test.go`
-- [x] Task 2: Inspect Ansible role on `172.16.5.180` (`/build/armbian-build/ansible/playbook/roles/app_ksp_bida/`)
-- [x] Task 3: Implement Shinobi provisioning tasks (`tasks/shinobi_provision.yml`) and update `vars/main.yml`, `tasks/main.yml`
-- [x] Task 4: Verify Go unit tests `go test -v ./internal/config/...` and `go test ./...` (100% pass)
-- [x] Task 5: Verify Ansible syntax & live deployment on `inut_204_63` via controller `172.16.5.180` (100% pass)
-- [x] Task 6: Write handoff report and notify parent
+- [x] Initialized workspace and briefing.
+- [x] Read ORIGINAL_REQUEST.md, survey reports, and current catalog/test files.
+- [x] Implement catalog changes in `internal/redbida/catalog.go`.
+- [x] Add unit tests in `internal/redbida/redbida_test.go` and `internal/server/api_redbida_test.go`.
+- [x] Run test suites and verify 100% pass (`go test -v ./internal/redbida/... -cover`, `go test -v ./internal/server/...`, `go test ./...`).
+- [x] Generate handoff report and notify parent.

@@ -1,22 +1,26 @@
-# Progress Tracking
+# Progress — orchestrator_1
 
 ## Current Status
-Last visited: 2026-08-24T09:56:50Z
-
-- [x] Milestone 1: Comprehensive Survey & Discovery (inut_204_163 / inut_204_164)
-- [x] Milestone 2: Build & Target Deployment (kspcam.service on :2028 active on both devices)
-- [x] Milestone 3: Redbida, Venue Name, Shinobi 0.0.0.0 Token, Virtual IP & Node-RED Integration
-  - [x] "CX King Luxury" on inut_204_164
-  - [x] "SD Billiards Club - CS2" on inut_204_163
-  - [x] Virtual IP 192.168.1.254/24 bound on eth0 on both hosts
-  - [x] Shinobi API key & token configured with 0.0.0.0 and saved to change_ok/shinobi_monitor_token
-  - [x] /api/redbida/catalog & /api/redbida/refresh verified 200 OK without 500 errors
-- [x] Milestone 4: Dahua NVR Probe & Camera Golden Template Setup
-  - [x] inut_204_164: Dahua NVR 192.168.1.108 (SN: AK0C842PAZ39A81), 5 cameras (Camera01..05) under Golden Template
-  - [x] inut_204_163: 8 cameras (Camera01..08) under Golden Template
-  - [x] 100% Golden Template compliance (remux copy, -tag:v hvc1, empty cust flags, mode record)
-- [x] Milestone 5: E2E Verification & Forensic Integrity Audit (GATE PASS)
+Last visited: 2026-08-24T19:49:50+07:00
+- [x] Initialized workspace metadata (DISPATCH.md, BRIEFING.md, progress.md)
+- [x] Phase 0: Survey codebase & map requirements (3 Explorers completed)
+- [x] Phase 1: Create PROJECT.md (Architecture, Feature Inventory, Milestones)
+- [x] Phase 2: Milestone Execution & Verification Loop
+  - [x] M1: Backend Catalog & Metadata Refinements (GATE PASSED)
+  - [x] M2: Frontend Glassmorphism Design & DOM Structure (GATE PASSED)
+  - [x] M3: Knowledge Hub, Preset Generator & Live Previews (GATE PASSED)
+  - [x] M4: Comprehensive Testing, Static Build & Verification (GATE PASSED)
+- [x] Phase 3: Final E2E Verification & Deployment Check
+- [x] Phase 4: Final Synthesis & Human Reporting
 
 ## Iteration Status
-Current iteration: 1 / 32
-Gate Status: PASS — 100% Verified and Accepted
+Current iteration: 4 / 32 (Complete)
+
+## Milestones Summary
+| Milestone | Description | Status |
+|---|---|---|
+| Survey | Deep exploration of internal/redbida, web/static, internal/server, tests | DONE |
+| M1 | Backend Catalog & API Expansion | DONE |
+| M2 | Frontend Knowledge Hub & Glassmorphism UI | DONE |
+| M3 | One-Click Generator & Live Visual Previews | DONE |
+| M4 | Comprehensive Testing, Build Verification & Git Sync | DONE |

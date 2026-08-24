@@ -2,6 +2,7 @@
 /docs-sdk/
 
 # Build output
+/bin/
 /dist/
 /kspcam
 /kspcam-*

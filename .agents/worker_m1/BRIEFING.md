@@ -1,76 +1,50 @@
-# BRIEFING — 2026-08-23T16:48:30Z
+# BRIEFING — 2026-08-24T19:00:00+07:00
 
 ## Mission
-Implement Milestone M1: Ansible Automated Shinobi Provisioning & Config (Requirement R1) — update Go configuration (`ShinobiConfig`, `MCPConfig`) in `internal/config/config.go` & `config.example.yaml`, and upgrade Ansible role `app_ksp_bida` on `172.16.5.180` to automatically provision Shinobi user & IP-restricted API key and write config.
+Milestone 1: Backend Catalog & Metadata Refinements for Redbida integration.
 
 ## 🔒 My Identity
-- Archetype: implementer, qa, specialist
-- Roles: [implementer, qa, specialist]
+- Archetype: worker
+- Roles: implementer, qa, specialist
 - Working directory: /home/ksp/ksp-camera-auto/.agents/worker_m1
-- Original parent: 9f1b4f13-68d2-4737-bba3-0b3ede306ce1
-- Milestone: M1: Ansible Automated Shinobi Provisioning & Config
+- Original parent: 2459fd81-eea0-41c3-8a5b-e354b9c9f098
+- Milestone: M1 (Backend Catalog & Metadata Refinements)
 
 ## 🔒 Key Constraints
-- Zero hardcoded passwords in Go code.
-- Full genuine implementation — no dummy/mock shortcuts.
-- Keep minimal change principle.
-- Verify tests `go test -v ./internal/config/...` and `go test ./...`.
-- Test Ansible syntax / dry-run or verification.
+- Scope & File Ownership: `internal/redbida/catalog.go`, `internal/redbida/redbida_test.go`, `internal/server/api_redbida_test.go`.
+- Genuine implementation only, no hardcoded cheating.
+- 100% test pass with full coverage for new changes.
 
 ## Current Parent
-- Conversation ID: 9f1b4f13-68d2-4737-bba3-0b3ede306ce1
-- Updated: 2026-08-23T16:48:30Z
+- Conversation ID: 2459fd81-eea0-41c3-8a5b-e354b9c9f098
+- Updated: 2026-08-24T19:00:00+07:00
 
 ## Task Summary
-- **What to build**:
-  1. Go config updates: `ShinobiConfig` and `MCPConfig` structs in `internal/config/config.go`, defaults in `Load()`, and update `config.example.yaml`.
-  2. Ansible role update in `/build/armbian-build/ansible/playbook/roles/app_ksp_bida/` on `172.16.5.180`:
-     - Vars: `shinobi_api_url`, `shinobi_mail`, `shinobi_pass`, `shinobi_super_mail`, `shinobi_super_pass`, `shinobi_super_token`.
-     - Tasks: `tasks/shinobi_provision.yml` included from `tasks/main.yml`.
-     - Update `/opt/ksp-cam/config.yaml` template / generation to include `shinobi` & `mcp` sections.
-  3. Verify Go unit tests and Ansible playbook syntax / functionality.
-- **Success criteria**:
-  - `go test -v ./internal/config/...` passes (Verified PASS).
-  - `go test ./...` passes (Verified PASS).
-  - Ansible role `app_ksp_bida` correctly handles user check, super admin registration fallback, 127.0.0.1 full-permissions API key provisioning, and writes `config.yaml` (Verified live on `inut_204_63`).
-- **Interface contracts**: PROJECT.md § Interface Contracts
-- **Code layout**: PROJECT.md § Code Layout
+- **What to build**: Refined `catalog.go` (`toolbar_show_count`, `custom_hashtags`, `ui_tabs_links`, `shinobi_group_key`, grouping classifications) and associated unit tests in `redbida_test.go` and `api_redbida_test.go`.
+- **Success criteria**: All catalog requirements satisfied, unit tests added and passing 100%, `go test ./...` passing.
+- **Interface contracts**: `internal/redbida/catalog.go` exports `AnalyzeKey`, `IsEditable`, `IsRuntimeOnly`, `ValidateValue`, `IsSensitive`, `FallbackKeys`, `Meta`.
 
 ## Key Decisions Made
-- `ShinobiConfig` has `APIURL`, `APIKey`, `GroupKey`.
-- `MCPConfig` has `Enabled`, `APIKey`, `AllowUnauthenticatedLoopback`.
-- In `internal/config/config.go`, `Config` struct has `Shinobi ShinobiConfig` and `MCP MCPConfig`.
-- Default values: `Shinobi.APIURL = "http://127.0.0.1:8080"`, `MCP.Enabled = true`, `MCP.AllowUnauthenticatedLoopback = true`.
-- Zero credentials stored in Go; all passwords reside strictly in Ansible vars.
-- API key generated with IP 127.0.0.1 restriction and all 8 permission capabilities.
+- Removed `toolbar_show_count` from `runtimeKeyRe`, registered it in `editableKeySet`, `numberKeySet`, and `numericRules` (`[0, 4096]`, `integer: true`).
+- Cleared `jsonKeySet` so `custom_hashtags` and `ui_tabs_links` default to `TypeString`, enabling multiline INI and string hashtag values without JSON parse errors.
+- Added `shinobi_group_key` to `fallbackKeys` with `RiskProtected` and `Secret: true`.
+- Refined `metaForKey` grouping logic for 5 core domain groups: `"Branding / Logo"`, `"Livestream"`, `"UI / Display"`, `"Schedule / Maintenance"`, and `"Security / Credentials"`.
+- Added unit tests in `internal/redbida/redbida_test.go` and `internal/server/api_redbida_test.go`.
 
 ## Artifact Index
-- `/home/ksp/ksp-camera-auto/.agents/worker_m1/DISPATCH.md` — Assignment instructions
-- `/home/ksp/ksp-camera-auto/.agents/worker_m1/BRIEFING.md` — Working memory & state
-- `/home/ksp/ksp-camera-auto/.agents/worker_m1/progress.md` — Liveness & heartbeat
-- `/home/ksp/ksp-camera-auto/.agents/worker_m1/handoff.md` — Final handoff report
-- `internal/config/config.go` — Go struct definitions and defaults
-- `internal/config/config_test.go` — Unit tests for config loading
-- `config.example.yaml` — Updated example configuration
-- `172.16.5.180:/build/armbian-build/ansible/playbook/roles/app_ksp_bida/tasks/shinobi_provision.yml` — Shinobi provisioning task
-- `172.16.5.180:/build/armbian-build/ansible/playbook/roles/app_ksp_bida/tasks/main.yml` — Main role task
-- `172.16.5.180:/build/armbian-build/ansible/playbook/roles/app_ksp_bida/vars/main.yml` — Role variables
+- `internal/redbida/catalog.go` — Catalog metadata, type inference, validation rules, fallback keys.
+- `internal/redbida/redbida_test.go` — Unit tests for catalog metadata, types, validation, and domain grouping.
+- `internal/server/api_redbida_test.go` — HTTP server tests for catalog API and batch preset apply.
 
 ## Change Tracker
 - **Files modified**:
-  - `internal/config/config.go` (added ShinobiConfig, MCPConfig, defaults, applyDefaults)
-  - `internal/config/config_test.go` (new unit tests)
-  - `config.example.yaml` (added shinobi and mcp sample blocks)
-  - `172.16.5.180:/build/armbian-build/ansible/playbook/roles/app_ksp_bida/tasks/shinobi_provision.yml` (new task file)
-  - `172.16.5.180:/build/armbian-build/ansible/playbook/roles/app_ksp_bida/tasks/main.yml` (included provision task & config template)
-  - `172.16.5.180:/build/armbian-build/ansible/playbook/roles/app_ksp_bida/vars/main.yml` (added credentials & API URL)
-- **Build status**: PASS (`go test ./...` and `make docs-check`)
+  - `internal/redbida/catalog.go`: Updated metadata regexes, keysets, fallbackKeys, and grouping rules.
+  - `internal/redbida/redbida_test.go`: Added new unit test suite for catalog rules and domain classifications.
+  - `internal/server/api_redbida_test.go`: Added test cases for catalog endpoint domain metadata and batch preset apply.
+- **Build status**: PASS (`go test ./...` 100% pass)
 - **Pending issues**: None
 
 ## Quality Status
-- **Build/test result**: PASS (all tests pass)
+- **Build/test result**: All 23 tests in `internal/redbida` passed (`82.0%` coverage), all 7 Redbida tests in `internal/server` passed, `go test ./...` passed.
 - **Lint status**: Clean
-- **Tests added/modified**: `internal/config/config_test.go` (4 unit tests)
-
-## Loaded Skills
-None
+- **Tests added/modified**: `TestCatalogToolbarShowCountMetadataAndValidation`, `TestCatalogStringKeysAcceptTextAndMultiline`, `TestCatalogShinobiGroupKeyFallbackAndClassification`, `TestCatalogDomainGroupingClassifications`, `TestCatalogListOrderingAndFallbackCompleteness`, `TestRedbidaCatalogHandlerMetadataAndDomainGroups`, `TestRedbidaApplyBatchPresetChanges`.

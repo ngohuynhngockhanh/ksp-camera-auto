@@ -1,26 +1,29 @@
-# BRIEFING — 2026-08-24T10:01:40Z
+# BRIEFING — 2026-08-24T19:53:25+07:00
 
 ## Mission
-Triển khai và hoàn thiện cấu hình kspcam trên thiết bị đích inut_204_164 (CX King Luxury) và inut_204_163 (SD Billiards Club - CS2): tích hợp Node-RED (:2023, Redbida, MQTT :12369), Shinobi NVR (:8080) với token 0.0.0.0, IP ảo .254, probe NVR AK0C842PAZ39A81 và cấu hình 5 Camera (Camera01-Camera05) Golden Template.
+Coordinate and monitor the complete upgrade of #redbida UI, Knowledge & Onboarding Workflow Hub, MQTT catalog integration, and testing/verification.
 
 ## 🔒 My Identity
 - Archetype: sentinel
 - Working directory: /home/ksp/ksp-camera-auto/.agents/sentinel
-- Orchestrator: 3e2ffce4-d032-4335-b008-9605992163bd (Completed)
-- Victory Auditor: 2098c1f1-1927-4ecf-a894-59aee4449acc (VICTORY CONFIRMED)
+- Orchestrator: 2459fd81-eea0-41c3-8a5b-e354b9c9f098 (retired)
+- Victory Auditor: 7d9f33e7-fe39-48d9-874f-f993bb779391 (retired)
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
 - Victory Audit is MANDATORY before reporting completion
-- Route chosen: General -> teamwork_preview_orchestrator
+- Monitor project progression and manage subagent lifecycle
 
 ## User Context
-- **Last user request**: Triển khai đầy đủ trên inut_204_164 (CX King Luxury) và nghiệm thu đồng bộ cả inut_204_163.
+- **Last user request**: Upgrade #redbida UI, integrate System Knowledge Hub, MQTT catalog metadata, Onboarding preset generator, testing, and packaging.
 - **Pending clarifications**: none
-- **Delivered results**: 100% completed, verified & audited.
+- **Delivered results**: 100% of requirements R1, R2, R3 completed, verified, and audited.
 
 ## Project Status
 - **Phase**: complete
+- **Route**: General (teamwork_preview_orchestrator)
+- **Active Orchestrator ID**: none (completed)
+- **Active Auditor ID**: none (completed)
 
 ## Victory Audit Status
 - **Triggered**: yes
@@ -28,7 +31,6 @@ Triển khai và hoàn thiện cấu hình kspcam trên thiết bị đích inut
 - **Retry count**: 0
 
 ## Artifact Index
-- /home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md — Authoritative user request
-- /home/ksp/ksp-camera-auto/.agents/orchestrator_1/handoff.md — Orchestrator handoff report
-- /home/ksp/ksp-camera-auto/.agents/victory_auditor_1/handoff.md — Victory Auditor verification report
-- /home/ksp/ksp-camera-auto/.agents/sentinel/handoff.md — Sentinel final handoff report
+- /home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md — Authoritative User Request
+- /home/ksp/ksp-camera-auto/.agents/orchestrator_1/handoff.md — Orchestrator Handoff
+- /home/ksp/ksp-camera-auto/.agents/victory_auditor_1/handoff.md — Victory Audit Report

@@ -1,61 +1,55 @@
-# BRIEFING — 2026-08-23T17:00:00Z
+# BRIEFING — 2026-08-24T12:26:30Z
 
 ## Mission
-Implement Milestone M3: Embedded MCP Server in kspcam (Requirement R3) supporting Stdio & SSE transports, full tool registry (24 tools across 4 groups), cmd/kspcam --mcp flag, HTTP routes /mcp & /mcp/messages, and comprehensive unit tests.
+Complete Milestone 3 for Redbida Cloud & Inut Knowledge Hub: Preset Generator, Live Swatch/Logo Previews, 4-Pillar Filter Buttons & Quick Actions in `web/static/redbida.js`.
 
 ## 🔒 My Identity
 - Archetype: worker
 - Roles: implementer, qa, specialist
 - Working directory: /home/ksp/ksp-camera-auto/.agents/worker_m3
-- Original parent: 9f1b4f13-68d2-4737-bba3-0b3ede306ce1
-- Milestone: M3 (Embedded MCP Server)
+- Original parent: 2459fd81-eea0-41c3-8a5b-e354b9c9f098
+- Milestone: Milestone 3 (Knowledge Hub, Preset Generator & Live Previews)
 
 ## 🔒 Key Constraints
-- DO NOT CHEAT. All implementations must be genuine.
-- Sync tools must provide distinct manual triggers:
-  - `shinobi_sync_to_shinobi` (Push / Export cameras.yaml -> Shinobi monitors)
-  - `shinobi_sync_from_shinobi` (Pull / Import Shinobi monitors -> cameras.yaml)
-- Total 24 tools across 4 groups:
-  1. Camera Inventory: `kspcam_list_cameras`, `kspcam_upsert_camera`, `kspcam_delete_camera`, `kspcam_probe_camera`
-  2. Camera Config & Bulk: `kspcam_apply_profile`, `kspcam_set_channel_name`, `kspcam_set_osd`, `kspcam_reboot_camera`, `kspcam_change_password`
-  3. Discovery & Diagnosis: `kspcam_scan_lan`, `kspcam_try_password`, `kspcam_wifi_scan`, `kspcam_get_network`, `kspcam_get_nvr_health`, `kspcam_get_recordings`, `kspcam_get_snapshot`
-  4. Shinobi Management: `shinobi_list_monitors`, `shinobi_add_monitor`, `shinobi_edit_monitor`, `shinobi_delete_monitor`, `shinobi_sync_to_shinobi`, `shinobi_sync_from_shinobi`, `shinobi_sync_inventory`, `shinobi_change_monitor_state`, `shinobi_get_videos`
-- Stdio transport ensures logs go to stderr so stdout is pure JSON-RPC.
-- SSE transport handles GET /mcp and POST /mcp/messages, API Key auth.
+- EXCLUSIVELY own `web/static/redbida.js`.
+- Preserve 100% existing functionality, event handlers, draft staging, read-back verification feedback, and Playwright test selectors.
+- Genuine implementation with no hardcoding or dummy implementations.
+- Verification must pass: `node --check web/static/redbida.js`, `npx playwright test tests/ui/redbida.spec.js`, `go test ./...`.
 
 ## Current Parent
-- Conversation ID: 9f1b4f13-68d2-4737-bba3-0b3ede306ce1
-- Updated: 2026-08-23T17:00:00Z
+- Conversation ID: 2459fd81-eea0-41c3-8a5b-e354b9c9f098
+- Updated: 2026-08-24T12:26:30Z
 
 ## Task Summary
-- **What to build**: Embedded MCP Server (`internal/mcp`), `--mcp` CLI flag (`cmd/kspcam/main.go`), HTTP routes (`internal/server/server.go`), unit & integration tests.
-- **Success criteria**: All MCP tools implemented and tested, stdio & sse transports working, all tests passing, make check / make build-all clean.
-- **Interface contracts**: `/home/ksp/ksp-camera-auto/PROJECT.md` & `/home/ksp/ksp-camera-auto/.agents/teamwork_preview_explorer_survey_mcp/report.md`.
+- **What to build**: Full implementation of Preset / 1-Click Onboarding Generator (`redbidaGeneratePreset`), Gradient Preset Swatches & Live Previews, Logo Live Preview with Checkerboard, 4-Pillar Filter Buttons & Quick Actions in `web/static/redbida.js`.
+- **Success criteria**: All preset generation parameters correctly populated, live preview UI elements working reactively, visual diff preview card rendered, tests passing.
+- **Interface contracts**: `/home/ksp/ksp-camera-auto/.agents/PROJECT.md` & `/home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md`
 
 ## Change Tracker
-- **Files modified/created**:
-  - `internal/mcp/types.go` — JSON-RPC 2.0 and MCP protocol structs and constructors
-  - `internal/mcp/registry.go` — Thread-safe Tool registry, tool lookup, and invocation
-  - `internal/mcp/server.go` — MCP Server core engine, method handlers (`initialize`, `ping`, `tools/list`, `tools/call`)
-  - `internal/mcp/stdio.go` — Stdio transport runner with stderr logging isolation
-  - `internal/mcp/sse.go` — HTTP/SSE transport handler (`/mcp`, `/mcp/messages`) with session and API Key auth
-  - `internal/mcp/tools_camera.go` — Inventory tool handlers (list, upsert, delete, probe)
-  - `internal/mcp/tools_config.go` — Config tool handlers (apply profile, set channel name, set OSD, reboot, change password)
-  - `internal/mcp/tools_discovery.go` — Discovery & Diagnosis tool handlers (scan LAN, try password, wifi scan, get network, get nvr health, get recordings, get snapshot)
-  - `internal/mcp/tools_shinobi.go` — Shinobi tool handlers (list, add, edit, delete monitors, push/pull sync, change state, get videos)
-  - `internal/mcp/server_test.go` — MCP server, Stdio & SSE transport, and Auth tests
-  - `internal/mcp/tools_test.go` — MCP tool execution tests with mock Shinobi server
-  - `cmd/kspcam/main.go` — Added `--mcp` CLI flag and Stdio runner
-  - `internal/server/server.go` — Registered `/mcp` and `/mcp/messages` routes
-  - `internal/server/mcp_test.go` — HTTP route tests for `/mcp` and `/mcp/messages`
-  - `docs/help/mcp-server.md` — Help documentation covering MCP server and routes
-- **Build status**: All tests passing (`go test ./...`), `go vet ./...` clean, `make build-all` clean (amd64, armv7, arm64), `make docs-check` passing.
+- **Files modified**: `web/static/redbida.js` (Implemented Preset Generator, live previews, swatches, 4-pillar filtering, toggles, dynamic metric updates)
+- **Build status**: PASS (Playwright 109/109, Go test 100%)
 - **Pending issues**: None
 
 ## Quality Status
-- **Build/test result**: Pass (100% tests passing across all packages)
-- **Lint status**: Clean (go vet passed)
-- **Tests added/modified**: `internal/mcp/server_test.go`, `internal/mcp/tools_test.go`, `internal/server/mcp_test.go`
+- **Build/test result**: Pass (18/18 RedBida Playwright tests, 109/109 full suite, all Go unit tests)
+- **Lint status**: Zero syntax errors (`node --check web/static/redbida.js` exited 0)
+- **Tests added/modified**: Verified against `tests/ui/redbida.spec.js` and full E2E suite
 
 ## Loaded Skills
-- None
+- **Source**: /home/ksp/ksp-camera-auto/.agents/skills/camera-naming/SKILL.md
+- **Local copy**: None required
+- **Core methodology**: Camera naming standardization and Shinobi/kspcam conventions
+
+## Key Decisions Made
+- Implemented `removeVietnameseTones` and alphanumeric sanitization for standard `#<CleanTitle> #BILLIARDSlive #INUTlive #highlightsports` hashtags.
+- Implemented 20-tab INI generator matching the exact Golden Template schema with `vid_play_label = <ui_title>`.
+- Added reactive preview bindings for `ui_bg` (both in preset card and within table row editors).
+- Implemented checkerboard backdrop for transparent logo previews with 512 KiB upload validation.
+- Implemented robust alias/fuzzy group matching for 4-pillar filter buttons to seamlessly sync with dropdown groups.
+- Bound dynamic metric cards (`#redbida-draft-count`, `#redbida-key-count`, `#redbida-broker-status`) across all lifecycle phases.
+
+## Artifact Index
+- `/home/ksp/ksp-camera-auto/.agents/worker_m3/DISPATCH.md` — Dispatch record
+- `/home/ksp/ksp-camera-auto/.agents/worker_m3/BRIEFING.md` — Working state & identity
+- `/home/ksp/ksp-camera-auto/.agents/worker_m3/progress.md` — Liveness & progress tracking
+- `/home/ksp/ksp-camera-auto/.agents/worker_m3/handoff.md` — Completion handoff report

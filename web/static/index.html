@@ -550,21 +550,211 @@
             <div class="page-actions">
               <button class="btn btn-secondary" id="redbida-refresh" type="button" data-testid="redbida-refresh">Đọc lại từ OTA</button>
               <button class="btn" id="redbida-apply" type="button" data-testid="redbida-apply">Submit thay đổi</button>
+              <button class="btn btn-secondary" id="redbida-toggle-preset" type="button">⚡ 1-Click Preset</button>
+              <button class="btn btn-secondary" id="redbida-toggle-hub" type="button">📚 Knowledge Hub</button>
             </div>
           </div>
+
+          <!-- Glass Metric Cards Grid -->
           <div class="redbida-status-grid">
-            <div class="stat-card"><div class="stat-label">Node-RED</div><div class="stat-value" id="redbida-node-status">Chỉ khảo sát</div></div>
-            <div class="stat-card"><div class="stat-label">Key đã nạp</div><div class="stat-value" id="redbida-key-count">–</div></div>
-            <div class="stat-card"><div class="stat-label">Giờ host</div><div class="stat-value" id="redbida-time-status">–</div></div>
-            <div class="stat-card"><div class="stat-label">NTP host</div><div class="stat-value" id="redbida-ntp-status">–</div></div>
+            <div class="stat-card redbida-metric-card">
+              <div class="stat-label">Node-RED</div>
+              <div class="stat-value" id="redbida-node-status">Chỉ khảo sát</div>
+              <div class="stat-sub">Port 2023 · Read-Only</div>
+            </div>
+            <div class="stat-card redbida-metric-card">
+              <div class="stat-label">Key đã nạp</div>
+              <div class="stat-value" id="redbida-key-count">–</div>
+              <div class="stat-sub">Thư mục ota-mqtt</div>
+            </div>
+            <div class="stat-card redbida-metric-card">
+              <div class="stat-label">Giờ host</div>
+              <div class="stat-value" id="redbida-time-status">–</div>
+              <div class="stat-sub">Linux System Time</div>
+            </div>
+            <div class="stat-card redbida-metric-card">
+              <div class="stat-label">NTP host</div>
+              <div class="stat-value" id="redbida-ntp-status">–</div>
+              <div class="stat-sub">Chrono / NTP Sync</div>
+            </div>
+            <div class="stat-card redbida-metric-card">
+              <div class="stat-label">Kênh MQTT</div>
+              <div class="stat-value" id="redbida-broker-status">127.0.0.1:12369</div>
+              <div class="stat-sub">/private/i_sets · Read-Back</div>
+            </div>
+            <div class="stat-card redbida-metric-card">
+              <div class="stat-label">Chờ ghi</div>
+              <div class="stat-value" id="redbida-draft-count">0</div>
+              <div class="stat-sub">Bản nháp chưa apply</div>
+            </div>
           </div>
+
+          <!-- 1-Click Onboarding Generator Panel -->
+          <div class="card redbida-preset-card" id="redbida-preset-panel">
+            <div class="card-head-row">
+              <div>
+                <div class="card-title">⚡ Bộ Sinh Cấu Hình Onboarding 1-Click (Preset Generator)</div>
+                <div class="card-sub">Nhập thông tin quán để tự động sinh 13+ tham số chuẩn (20-tab INI, hashtags, gradient, Go2RTC, v.v.) và nạp vào bản nháp.</div>
+              </div>
+              <span class="badge badge-accent">1-Click Onboarding</span>
+            </div>
+
+            <div class="redbida-preset-grid">
+              <div class="field">
+                <label for="redbida-preset-title">Tên Quán Bida (<code>ui_title</code>)</label>
+                <input id="redbida-preset-title" type="text" placeholder="CX King Luxury" value="CX King Luxury">
+              </div>
+              <div class="field">
+                <label for="redbida-preset-count">Số Camera / Bàn Bida (<code>camera_count</code>)</label>
+                <input id="redbida-preset-count" type="number" min="1" max="20" placeholder="8" value="8">
+              </div>
+              <div class="field">
+                <label for="redbida-preset-groupkey">Shinobi Group Key (<code>shinobi_group_key</code>)</label>
+                <input id="redbida-preset-groupkey" type="text" placeholder="CX_KING_LUXURY" value="CX_KING_LUXURY">
+              </div>
+              <div class="field">
+                <label for="redbida-preset-ggcode">Mã Google Analytics (<code>ggcode</code>)</label>
+                <input id="redbida-preset-ggcode" type="text" placeholder="G-SFSDZPR95Z" value="G-SFSDZPR95Z">
+              </div>
+              <div class="field field-full">
+                <label for="redbida-preset-bg">Theme Background CSS Gradient (<code>ui_bg</code>)</label>
+                <input id="redbida-preset-bg" type="text" placeholder="radial-gradient( circle farthest-corner at 10% 20%, rgba(2,37,78,1) 0%, rgba(4,4,16,1) 90.1% )" value="radial-gradient( circle farthest-corner at 10% 20%, rgba(2,37,78,1) 0%, rgba(4,4,16,1) 90.1% )">
+              </div>
+            </div>
+
+            <div class="redbida-preset-swatches-wrap">
+              <label>Bộ mẫu Gradient thịnh hành (Click để chọn nhanh):</label>
+              <div class="redbida-preset-swatches" id="redbida-preset-swatches">
+                <button type="button" class="redbida-swatch active" data-bg="radial-gradient( circle farthest-corner at 10% 20%, rgba(2,37,78,1) 0%, rgba(4,4,16,1) 90.1% )"><span class="redbida-swatch-color" style="background: radial-gradient(circle, #02254e 0%, #040410 90%);"></span>Royal Sapphire</button>
+                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #093028 0%, #237a57 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #093028, #237a57);"></span>Cyber Emerald</button>
+                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #0f2027, #2c5364);"></span>Midnight Obsidian</button>
+                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #4b1248 0%, #f0c27b 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #4b1248, #f0c27b);"></span>Luxury Crimson</button>
+                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #20002c 0%, #cbb4d4 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #20002c, #cbb4d4);"></span>Deep Amethyst</button>
+                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #1f1c2c 0%, #928dab 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #1f1c2c, #928dab);"></span>Dark Titanium</button>
+              </div>
+            </div>
+
+            <div class="redbida-gradient-preview-wrap">
+              <div class="redbida-gradient-preview" id="redbida-preset-bg-preview" style="background: radial-gradient( circle farthest-corner at 10% 20%, rgba(2,37,78,1) 0%, rgba(4,4,16,1) 90.1% );">
+                <span class="redbida-preview-title">CX King Luxury</span>
+                <span class="redbida-preview-sub">Billiard Live · Visual Gradient Preview Live</span>
+              </div>
+            </div>
+
+            <div class="redbida-preset-actions">
+              <button class="btn" id="redbida-preset-gen-btn" type="button">⚡ Sinh Bộ Cấu Hình Chuẩn (Generate Preset)</button>
+              <button class="btn btn-secondary" id="redbida-preset-reset-btn" type="button">Đặt lại mặc định</button>
+            </div>
+
+            <div id="redbida-preset-diff" class="redbida-preset-diff" style="display:none;"></div>
+          </div>
+
+          <!-- 4-Pillar Knowledge Hub -->
+          <div class="card redbida-knowledge-hub" id="redbida-knowledge-hub">
+            <div class="card-head-row">
+              <div>
+                <div class="card-title">📚 Trung Tâm Tri Thức Onboarding Chuẩn (4 Trụ Cột)</div>
+                <div class="card-sub">Quy chuẩn kỹ thuật, danh mục key chuẩn hóa và nguyên tắc vận hành hệ thống Bida & Shinobi NVR.</div>
+              </div>
+              <span class="badge badge-info">Golden Standard</span>
+            </div>
+
+            <div class="redbida-pillars-grid">
+              <!-- Pillar 1 -->
+              <div class="redbida-pillar-card pillar-branding">
+                <div class="redbida-pillar-header">
+                  <div class="redbida-pillar-icon">🎨</div>
+                  <div>
+                    <div class="redbida-pillar-num">Trụ cột 1</div>
+                    <h4 class="redbida-pillar-title">Branding & Giao diện Quán</h4>
+                  </div>
+                </div>
+                <p class="redbida-pillar-desc">Định hình nhận diện thương hiệu quán: tiêu đề, logo watermark, màu nền gradient, nhãn 20 bàn bida INI và hashtag chuẩn.</p>
+                <div class="redbida-pillar-keys">
+                  <span class="redbida-pillar-badge">ui_title</span>
+                  <span class="redbida-pillar-badge">ui_bg</span>
+                  <span class="redbida-pillar-badge">logo_header</span>
+                  <span class="redbida-pillar-badge">logo_header_text</span>
+                  <span class="redbida-pillar-badge">logo_livestream</span>
+                  <span class="redbida-pillar-badge">ui_scoreboard</span>
+                  <span class="redbida-pillar-badge">ui_tabs_links</span>
+                  <span class="redbida-pillar-badge">custom_hashtags</span>
+                </div>
+                <button class="btn btn-secondary btn-sm redbida-pillar-btn" data-pillar="Branding / Logo" type="button">Lọc nhóm Branding</button>
+              </div>
+
+              <!-- Pillar 2 -->
+              <div class="redbida-pillar-card pillar-streaming">
+                <div class="redbida-pillar-header">
+                  <div class="redbida-pillar-icon">⚡</div>
+                  <div>
+                    <div class="redbida-pillar-num">Trụ cột 2</div>
+                    <h4 class="redbida-pillar-title">Streaming & Go2RTC Engine</h4>
+                  </div>
+                </div>
+                <p class="redbida-pillar-desc">Phân phối HLS độ trễ thấp &lt;1s qua Go2RTC, passthrough 0% CPU transcoding, tra cứu highlight 72 giờ.</p>
+                <div class="redbida-pillar-keys">
+                  <span class="redbida-pillar-badge">camera_count</span>
+                  <span class="redbida-pillar-badge">toolbar_show_count</span>
+                  <span class="redbida-pillar-badge">video_config (72h)</span>
+                  <span class="redbida-pillar-badge">hls_using_go2rtc</span>
+                  <span class="redbida-pillar-badge">button_generate_go2rtc_stream</span>
+                </div>
+                <button class="btn btn-secondary btn-sm redbida-pillar-btn" data-pillar="Video & Streaming" type="button">Lọc nhóm Streaming</button>
+              </div>
+
+              <!-- Pillar 3 -->
+              <div class="redbida-pillar-card pillar-shinobi">
+                <div class="redbida-pillar-header">
+                  <div class="redbida-pillar-icon">🛡️</div>
+                  <div>
+                    <div class="redbida-pillar-num">Trụ cột 3</div>
+                    <h4 class="redbida-pillar-title">Shinobi NVR & Golden Template</h4>
+                  </div>
+                </div>
+                <p class="redbida-pillar-desc">Đồng bộ Group Key, phân quyền token IP 0.0.0.0, kế thừa chuẩn mẫu Camera01 (cutoff 5p, copy remux, H.265 hvc1, AAC probe).</p>
+                <div class="redbida-pillar-keys">
+                  <span class="redbida-pillar-badge">shinobi_camera_id</span>
+                  <span class="redbida-pillar-badge">shinobi_group_key</span>
+                  <span class="redbida-pillar-badge">shinobi_token</span>
+                  <span class="redbida-pillar-badge">shinobi_monitor_token</span>
+                  <span class="redbida-pillar-badge">cutoff: 5</span>
+                </div>
+                <button class="btn btn-secondary btn-sm redbida-pillar-btn" data-pillar="Security / Credentials" type="button">Lọc nhóm Shinobi</button>
+              </div>
+
+              <!-- Pillar 4 -->
+              <div class="redbida-pillar-card pillar-system">
+                <div class="redbida-pillar-header">
+                  <div class="redbida-pillar-icon">🔒</div>
+                  <div>
+                    <div class="redbida-pillar-num">Trụ cột 4</div>
+                    <h4 class="redbida-pillar-title">Hệ Thống, An Ninh & Tự Phục Hồi</h4>
+                  </div>
+                </div>
+                <p class="redbida-pillar-desc">Đường hầm FRP Cloud Tunnel, Google Analytics, đồng bộ NTP host, RAM Watchdog và lịch bảo trì tự động. Giao tiếp an toàn qua MQTT.</p>
+                <div class="redbida-pillar-keys">
+                  <span class="redbida-pillar-badge">frpc_config</span>
+                  <span class="redbida-pillar-badge">ggcode</span>
+                  <span class="redbida-pillar-badge">NTP Sync</span>
+                  <span class="redbida-pillar-badge">RAM Watchdog</span>
+                  <span class="redbida-pillar-badge">Auto-Reboot</span>
+                </div>
+                <button class="btn btn-secondary btn-sm redbida-pillar-btn" data-pillar="Schedule & Maintenance" type="button">Lọc nhóm Hệ thống</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Toolbar & Filters -->
           <div class="card redbida-toolbar">
             <div class="field field-sm"><label for="redbida-search">Tìm key</label><input id="redbida-search" type="search" placeholder="logo, livestream, schedule…" data-testid="redbida-search"></div>
             <div class="field field-sm"><label for="redbida-group">Nhóm</label><select id="redbida-group" data-testid="redbida-group"><option value="">Tất cả nhóm</option></select></div>
             <label class="checkbox-row compact"><input id="redbida-dirty-only" type="checkbox"> Chỉ thay đổi</label>
             <button class="btn btn-secondary btn-sm" id="redbida-time-refresh" type="button">Cập nhật trạng thái giờ</button>
           </div>
+
           <div class="msg" id="redbida-msg"></div>
+
           <div class="card">
             <div class="table-wrap">
               <table class="reflow redbida-table" id="redbida-table">

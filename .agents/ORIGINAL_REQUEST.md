@@ -1,59 +1,48 @@
 # Original User Request
 
-## 2026-08-24T09:07:07Z
+## Initial Request — 2026-08-24T18:53:11+07:00
 
-Triển khai và hoàn thiện cấu hình `ksp-camera-auto` (`kspcam`) trên thiết bị đích `inut_204_163` (`77.88.204.163`), tích hợp đồng bộ thông suốt với Node-RED (cổng :2023) qua module `redbida` (MQTT/Key files) và Shinobi NVR (:8080) để phục vụ bàn giao cho khách hàng.
+Nâng cấp toàn diện giao diện `#redbida` trong ứng dụng Web KSP-Cam (`:2028`): thiết kế hiện đại, sang trọng, trực quan; tích hợp Trung tâm Tri thức & Quy trình Onboarding chuẩn (Knowledge & Onboarding Workflow Hub) trực tiếp trên giao diện để quản trị viên dễ dàng theo dõi, kiểm soát toàn bộ thông số chuẩn, đối chiếu trạng thái MQTT `/private/i_sets` và cập nhật quy trình trong tương lai.
 
 Working directory: /home/ksp/ksp-camera-auto
 Integrity mode: development
 
 ## Requirements
 
-### R1. Tự động hóa Triển khai lên Thiết bị Khách hàng (`inut_204_163`)
-- Triển khai binary `kspcam` mới nhất kèm cấu hình `/opt/ksp-cam/config.yaml` hỗ trợ đầy đủ: Shinobi NVR (:8080), MCP Server nhúng (:2028), và Redbida/Node-RED integration (:12369 / :2023).
-- Cấp phát và đồng bộ tài khoản/API key Shinobi tự động trên `inut_204_163` (không hardcode trong binary).
+### R1. Thiết kế Giao diện RedBida Sang trọng & Hiện đại (`web/static/` & `#view-redbida`)
+- Nâng cấp layout `#view-redbida` với phong cách thiết kế UI cao cấp (Modern Dark/Light Glassmorphism, Responsive Grid, thẻ thống kê trực quan, typography chuẩn chỉn).
+- Tích hợp **Trung tâm Tri thức Chuẩn (System Knowledge Hub)** hiển thị trực quan 4 trụ cột Onboarding:
+  1. **Branding & Giao diện Quán**: `ui_title`, `ui_bg` (có visual preview gradient live), `logo_header`, `logo_header_text`, `logo_livestream`, `ui_scoreboard`, `ui_tabs_links` (20 tab INI preview/generator), `custom_hashtags` (mẫu chuẩn `#<UITitle> #BILLIARDSlive #INUTlive #highlightsports`).
+  2. **Video Streaming & Go2RTC Engine**: `camera_count`, `toolbar_show_count`, `video_config` (`range=72`), `hls_using_go2rtc` (`true`), nút 1-click kích hoạt `button_generate_go2rtc_stream`.
+  3. **Shinobi NVR Authentication & Group Sync**: `shinobi_camera_id` (Group Key), `shinobi_group_key`, `shinobi_token` (API key 0.0.0.0 Streams/Videos), `shinobi_monitor_token` (API key 0.0.0.0 Monitors), các thông số Golden Template (`cutoff: 5`, `copy` remux).
+  4. **Hệ thống & An ninh**: `frpc_config` (quản lý proxy qua Redbida), `ggcode` (`G-SFSDZPR95Z`), NTP / Time sync, RAM Watchdogs.
+- Bổ sung bộ công cụ **Preset / One-Click Onboarding Generator**: Nhập Tên Quán (`ui_title`), Số Camera (`camera_count`) và Group Key Shinobi -> Tự động sinh đầy đủ toàn bộ bộ tham số chuẩn (`ui_tabs_links`, `custom_hashtags`, `ui_bg`, v.v.) và cho phép 1-click Apply qua MQTT `/private/i_sets`.
 
-### R2. Tích hợp Thông suốt giữa KSP-Cam và Node-RED (:2023 / Redbida)
-- Kích hoạt và cấu hình module `redbida` trên `kspcam` kết nối tới broker MQTT cục bộ `127.0.0.1:12369` (topics `/private/i_gets`, `/private/i_sets`) và thư mục key catalog `/root/ota-mqtt/change_ok`.
-- Đảm bảo giao diện Web KSP-Cam và Node-RED (port 2023) đọc/ghi thông số cấu hình dự án của khách hàng chính xác, nhất quán.
+### R2. Đảm bảo Chuẩn Giao tiếp MQTT & Catalog Backend (`internal/redbida`, `internal/server`)
+- Đảm bảo toàn bộ thao tác ghi/đọc từ Web UI tuân thủ cấu trúc gói tin chuẩn `ota-mqtt`:
+  - Gửi `/private/i_sets`: `{"info": {"<key>": "<val>", ...}}`.
+  - Gửi `/private/i_gets`: `{"info": ["<key1>", "<key2>", ...]}`.
+- Bổ sung định nghĩa meta, nhãn hiển thị, gợi ý quy chuẩn và phân nhóm logic cho toàn bộ các key mới (`logo_header`, `logo_header_text`, `ui_bg`, `camera_count`, `toolbar_show_count`, `hls_using_go2rtc`, `button_generate_go2rtc_stream`, v.v.) trong `internal/redbida/catalog.go`.
+- Hỗ trợ Live Preview trực quan cho `ui_bg` (render background CSS) và `logo_header` / `logo_livestream` (render hình ảnh preview thực tế).
 
-### R3. Thăm dò và Thiết lập Camera / Shinobi trên `inut_204_163`
-- Quét và probe danh sách camera tại hiện trường, áp dụng chuẩn Golden Template (Audio AAC copy / no, `-tag:v hvc1`, empty input/stream flags).
-- Kiểm tra tính ổn định của luồng video, chức năng ghi hình và sức khỏe NVR.
+### R3. Kiểm thử & Đóng gói Toàn diện (Testing & Verification)
+- Viết / cập nhật Unit Test đầy đủ cho `internal/redbida` và `internal/server` (đảm bảo 100% pass).
+- Kiểm tra tính tương thích frontend (`redbida.js`, `index.html`, `style.css`), đảm bảo không có lỗi console JavaScript.
+- Kiểm thử thực tế trên target node qua Ansible / curl / API endpoint `/api/redbida/refresh` và `/api/redbida/apply`.
+- Đồng bộ và commit git toàn bộ thay đổi.
 
 ## Acceptance Criteria
 
-### Deployment & Service Verification
-- [ ] Dịch vụ `kspcam.service` hoạt động ổn định trên `inut_204_163:2028` với trạng thái `active (running)`.
-- [ ] API endpoints `/api/redbida/catalog`, `/api/redbida/refresh`, `/api/shinobi/status` trả về dữ liệu hợp lệ không có lỗi 500.
+### Giao diện & Trải nghiệm Người dùng (UI/UX)
+- [ ] Giao diện `#view-redbida` hiển thị trực quan, phân chia rõ ràng các khối Tri thức Onboarding, Thẻ thống kê trạng thái, Bảng chỉnh sửa Key và Khối Preset Onboarding 1-click.
+- [ ] Visual preview hoạt động mượt mà cho `ui_bg` CSS gradient và `logo_header` / `logo_livestream`.
+- [ ] Bảng cấu hình hỗ trợ lọc theo nhóm, tìm kiếm realtime, lọc "Chỉ thay đổi", hiển thị badge Risk / Secret / Editable rõ ràng.
 
-### Node-RED & MQTT Bridge
-- [ ] Kết nối MQTT broker `127.0.0.1:12369` thông suốt giữa `kspcam` và Node-RED.
-- [ ] Đọc và ghi key cấu hình qua KSP-Cam Web UI / API phản ánh chính xác vào Node-RED project.
+### Backend & MQTT Protocol Integrity
+- [ ] `internal/redbida/catalog.go` khai báo đầy đủ metadata cho toàn bộ danh mục key tiêu chuẩn của hệ sinh thái Bida.
+- [ ] Mọi lệnh apply và refresh từ Web UI giao tiếp chính xác qua MQTT broker `127.0.0.1:12369` theo đúng cấu trúc `{"info": ...}` và xác thực đọc lại (read-back verification).
 
-## Follow-up — 2026-08-24T09:21:39Z
-
-[BỔ SUNG YÊU CẦU QUAN TRỌNG TỪ NGƯỜI DÙNG CHO INUT_204_163]
-
-Sau khi hoàn tất cài đặt, người dùng yêu cầu thực hiện ngay các bước sau trên `inut_204_163`:
-1. Sử dụng MCP Server của kspcam trên `inut_204_163` (nếu thiếu tool nào thì tự động code thêm tool vào internal/mcp).
-2. Quét probe mạng tìm camera/NVR Dahua/KBVision có Serial Number: `AK0C842PAZ39A81` với mật khẩu: `a12345678`.
-3. Mục tiêu: Cài đặt và cấu hình 5 camera từ `Camera01` -> `Camera05` (chuẩn hóa mid `camera01` -> `camera05`, kế thừa chuẩn Golden Template: H.265 `-tag:v hvc1`, stream/input flag trống, audio copy/no).
-4. Tên quán: Thiết lập tên quán là "CX King Luxury" (cập nhật qua redbida / file change_ok / Node-RED).
-5. IP ảo: Kiểm tra ping qua MCP xem dải IP có trống IP .254 không thì add IP ảo .254 vào interface; nếu không được thì thử .253.
-6. Quyền API Key & Token Shinobi:
-   - Tạo / cấu hình Shinobi API Key với IP restriction `0.0.0.0` (quyền xem và tải clip).
-   - Cài đặt `shinobi_monitor_token` (cũng cho phép `0.0.0.0`) và lưu vào `/root/ota-mqtt/change_ok/shinobi_monitor_token` để đồng bộ hoàn toàn cho khách hàng.
-
-## Follow-up — 2026-08-24T09:46:28Z
-
-[ĐIỀU CHỈNH KHẨN CẤP THIẾT BỊ ĐÍCH CHO QUÁN CX KING]
-
-Người dùng vừa xác nhận thiết bị đích chuẩn của quán "CX King Luxury" là `inut_204_164` (IP: `77.88.204.164`) chứ không phải `inut_204_163`.
-
-Hãy chuyển ngay toàn bộ quy trình sang `inut_204_164`:
-1. Triển khai kspcam lên `inut_204_164` (`77.88.204.164`).
-2. Cấu hình Shinobi API key & token `0.0.0.0`, lưu `shinobi_monitor_token` vào `/root/ota-mqtt/change_ok/shinobi_monitor_token`.
-3. Cấu hình tên quán "CX King Luxury" qua Redbida / Node-RED (:2023) / change_ok.
-4. Kiểm tra ping IP ảo trên LAN của `inut_204_164` (thử .254, nếu không được thử .253) và gán IP ảo vào interface.
-5. Dò tìm NVR SN `AK0C842PAZ39A81` (pass: `a12345678`), cấu hình 5 camera `Camera01` -> `Camera05` theo Golden Template.
+### Build & Test Suite
+- [ ] Tất cả Go unit tests (`go test ./...`) pass 100%.
+- [ ] Build tĩnh binary `make build-all` thành công không có lỗi.
+- [ ] Binary mới được deploy và kiểm thử hoạt động trơn tru trên môi trường thực tế.

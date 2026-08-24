@@ -1,64 +1,55 @@
-# BRIEFING — 2026-08-23T17:12:00Z
+# BRIEFING — 2026-08-24T19:39:40+07:00
 
 ## Mission
-Complete Milestone M4: Tests, Documentation, Multi-Arch Build & Remote Validation for Shinobi NVR integration and embedded MCP server.
+Execute comprehensive testing (Go unit/integration tests and Playwright E2E UI test suite), perform multi-arch static binary builds (CGO_ENABLED=0), check repository status, and deliver complete verification handoff for Milestone 4.
 
 ## 🔒 My Identity
-- Archetype: teamwork_preview_worker
+- Archetype: worker_m4
 - Roles: implementer, qa, specialist
-- Working directory: /home/ksp/ksp-camera-auto/.agents/worker_m4/
-- Original parent: 9f1b4f13-68d2-4737-bba3-0b3ede306ce1
-- Milestone: M4: Tests, Documentation, Multi-Arch Build & Remote Validation
+- Working directory: /home/ksp/ksp-camera-auto/.agents/worker_m4
+- Original parent: 2459fd81-eea0-41c3-8a5b-e354b9c9f098
+- Milestone: M4 - Comprehensive Testing, Static Build & Verification
 
 ## 🔒 Key Constraints
-- Genuine implementations only: no dummy/facade implementations, no hardcoded test results.
-- Pure Go & Static Binary (`CGO_ENABLED=0`).
-- Update `GEMINI.md` and `AGENTS.md` covering `internal/shinobi`, `internal/mcp`, Ansible provisioning, updated route matrix.
-- Ensure `make docs` / `make docs-check` passes 100%.
-- Ensure `go test -count=1 -v ./...` passes 100%.
-- Ensure `make vet` / `go vet ./...` passes.
-- Build static binaries for `amd64`, `armv7`, `arm64` into `dist/` via `make build-all`.
-- Live remote validation on `inut_204_63` via Ansible or SSH commands.
+- Pure Go & Static Binary (CGO_ENABLED=0)
+- Do not cheat, no hardcoded test values, no fake test results
+- Run all tests and builds genuinely and inspect outputs
+- Record changes and test metrics accurately
 
 ## Current Parent
-- Conversation ID: 9f1b4f13-68d2-4737-bba3-0b3ede306ce1
-- Updated: 2026-08-23T17:10:19Z
+- Conversation ID: 2459fd81-eea0-41c3-8a5b-e354b9c9f098
+- Updated: 2026-08-24T19:39:40+07:00
 
 ## Task Summary
-- **What to build**: Unit tests (Shinobi & MCP), update documentation (`GEMINI.md`, `AGENTS.md`, `make docs`), static multi-arch builds (`make build-all`), and live remote deployment + validation on `inut_204_63`.
-- **Success criteria**: 100% tests pass, `make docs-check` passes, `dist/` contains valid multi-arch binaries, `inut_204_63` has valid config, active service, responsive Shinobi API, responsive MCP Stdio and SSE endpoints.
-- **Interface contracts**: `/home/ksp/ksp-camera-auto/PROJECT.md`
-- **Code layout**: `/home/ksp/ksp-camera-auto/PROJECT.md § Code Layout`
+- **What to build/verify**: Run all Go tests (redbida, server, root `go test ./...`), run all Playwright UI tests (`tests/ui/redbida.spec.js`, `npx playwright test`), execute static compilation (`make build-all` or cross-compile linux/amd64, linux/armv7, linux/arm64, build `/home/ksp/ksp-camera-auto/kspcam`), check `git status -s`, fix any bugs if found, write `handoff.md`, and notify parent.
+- **Success criteria**: All Go tests pass with 100% success; all Playwright tests pass; static binaries compile cleanly; only intended files modified in git.
+- **Interface contracts**: PROJECT.md § Interface Contracts
+- **Code layout**: PROJECT.md § Code Layout
 
 ## Key Decisions Made
-- Updated `GEMINI.md` and `AGENTS.md` with full documentation for `internal/shinobi`, `internal/mcp`, Ansible role `app_ksp_bida`, updated REST route matrix, and system architecture diagrams.
-- Implemented `FlexibleString` type in `internal/shinobi/types.go` to handle Shinobi API JSON fields (like `port`, `fps`, `width`, `height`) that can be returned as either numbers or strings.
-- Added `TestFlexibleString_UnmarshalNumericAndStringFields` in `internal/shinobi/client_test.go`.
-- Successfully compiled multi-arch static binaries (`kspcam-linux-amd64`, `kspcam-linux-armv7`, `kspcam-linux-arm64`) in `dist/`.
-- Deployed to remote target `inut_204_63` via Ansible on `172.16.5.180` and verified all 5 live validation criteria.
+- All Go unit tests, adversarial integration tests, and Playwright UI tests verified.
+- Static multi-arch compilation (linux/amd64, linux/armv7, linux/arm64) verified.
+- Repository git status audited: only intended codebase files modified.
 
 ## Artifact Index
-- `/home/ksp/ksp-camera-auto/.agents/worker_m4/DISPATCH.md` — User request and assignment
-- `/home/ksp/ksp-camera-auto/.agents/worker_m4/BRIEFING.md` — Persistent working memory
-- `/home/ksp/ksp-camera-auto/.agents/worker_m4/progress.md` — Liveness and step tracking
-- `/home/ksp/ksp-camera-auto/.agents/worker_m4/handoff.md` — Final 5-component handoff report
+- `.agents/worker_m4/DISPATCH.md` — Assignment dispatch
+- `.agents/worker_m4/BRIEFING.md` — Agent briefing & memory
+- `.agents/worker_m4/progress.md` — Liveness & step progress
+- `.agents/worker_m4/handoff.md` — 5-component verification handoff report
+- `dist/kspcam-linux-amd64` — Static binary for linux/amd64
+- `dist/kspcam-linux-armv7` — Static binary for linux/armv7
+- `dist/kspcam-linux-arm64` — Static binary for linux/arm64
+- `/home/ksp/ksp-camera-auto/kspcam` — Local static binary
 
 ## Change Tracker
-- **Files modified**:
-  - `GEMINI.md`: Added Shinobi NVR module, MCP Server, Ansible role documentation, updated architecture diagrams & REST route matrix.
-  - `AGENTS.md`: Synchronized 100% with `GEMINI.md`.
-  - `internal/shinobi/types.go`: Added `FlexibleString` type and updated `Monitor` struct.
-  - `internal/shinobi/client_test.go`: Added `TestFlexibleString_UnmarshalNumericAndStringFields`.
-  - `internal/server/api_shinobi.go`: Adapted to `FlexibleString`.
-  - `internal/mcp/tools_shinobi.go`: Adapted to `FlexibleString`.
-  - `web/static/help/help-index.json`: Regenerated via `make docs`.
-- **Build status**: PASS (all unit tests, vet, docs-check, multi-arch builds).
-- **Pending issues**: none.
+- **Files modified**: `internal/redbida/catalog.go`, `internal/server/api_redbida_test.go`, `web/static/index.html`, `web/static/redbida.js`, `web/static/style.css`
+- **Build status**: PASS (all architectures static CGO_ENABLED=0)
+- **Pending issues**: None
 
 ## Quality Status
-- **Build/test result**: PASS (100% tests pass).
-- **Lint status**: PASS (`make vet` 0 warnings).
-- **Tests added/modified**: `TestFlexibleString_UnmarshalNumericAndStringFields` added and verified.
+- **Build/test result**: PASS (Go tests 100% pass, Playwright 113/124 pass, 11 skipped, 0 failures)
+- **Lint status**: PASS (`go vet ./...` clean, `go fmt ./...` clean)
+- **Tests added/modified**: `internal/redbida/adversarial_challenge_test.go`, `internal/redbida/adversarial_test.go`, `internal/redbida/redbida_test.go`, `internal/server/api_redbida_adversarial_test.go`, `tests/ui/redbida_m3_challenger.spec.js`, `web/embed_test.go`
 
 ## Loaded Skills
-- none
+- None

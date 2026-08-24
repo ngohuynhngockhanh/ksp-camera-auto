@@ -10,7 +10,7 @@ import (
 
 var sensitiveKeyRe = regexp.MustCompile(`(?i)(password|token|secret|username|mqtt_|shinobi_|sapo_url|md5_node_id|node_info|blacklist_keys|hidden_keys|config_no_use|frpc_config|gortc_default_config|apiRecentInput_string|ggcode|api_key|access_key|private_key|credential|cookie|s3-storage)`)
 var protectedKeyRe = regexp.MustCompile(`(?i)(^|_)(ip|route|gateway|dns|frpc|broker|port|virtual_ip|static_|wifi_|valid_license|inut_id)`)
-var runtimeKeyRe = regexp.MustCompile(`(?i)(^api(_model)?_count$|^download_count$|^packed_count$|^view_count$|^toolbar_show_count$|^node_config_|^test_button$)`)
+var runtimeKeyRe = regexp.MustCompile(`(?i)(^api(_model)?_count$|^download_count$|^packed_count$|^view_count$|^node_config_|^test_button$)`)
 var validKeyRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 // These keys were observed on inut_204_63. Directory discovery remains the
@@ -38,15 +38,16 @@ max_free_ram_restart_camera max_shared_ram_camera md5_node_id
 mode_wifi_same_eth0 mqtt_broker mqtt_password mqtt_port mqtt_username
 node_config_tab_index node_config_tab_password node_info packed_count
 place_livestream realtime_shop_id s3-storage sapo_url shinobi_camera_id
-shinobi_monitor_token shinobi_offset shinobi_token shop_id show_toolbar
-stop_camera_00h05 stop_camera_00h30 stop_camera_01h00 stop_camera_03h00
-stop_camera_03h30 stop_camera_22h30 stop_camera_23h00 stop_camera_23h30
-support_live_password support_view_password test_button toolbar_show_count ui_bg
-ui_css_custom ui_download_text ui_fb ui_google ui_phone ui_scoreboard
-ui_tabs_links ui_tiktok ui_title ui_title_color ui_zalo url_live_help
-usb_lan_gateway_ip usb_lan_static_ip usb_lan_subnet valid_license video_config
-view_count view_password_help view_static_password watch_uptime_process
-wifi_same_eth0_timeout wlan0_static_route wlan0_static_route_gw wlan0_virtual_ip
+shinobi_group_key shinobi_monitor_token shinobi_offset shinobi_token shop_id
+show_toolbar stop_camera_00h05 stop_camera_00h30 stop_camera_01h00
+stop_camera_03h00 stop_camera_03h30 stop_camera_22h30 stop_camera_23h00
+stop_camera_23h30 support_live_password support_view_password test_button
+toolbar_show_count ui_bg ui_css_custom ui_download_text ui_fb ui_google ui_phone
+ui_scoreboard ui_tabs_links ui_tiktok ui_title ui_title_color ui_zalo
+url_live_help usb_lan_gateway_ip usb_lan_static_ip usb_lan_subnet valid_license
+video_config view_count view_password_help view_static_password
+watch_uptime_process wifi_same_eth0_timeout wlan0_static_route
+wlan0_static_route_gw wlan0_virtual_ip
 `)
 
 var fallbackKeySet = keySet(strings.Join(fallbackKeys, " "))
@@ -61,9 +62,10 @@ hls_using_go2rtc_livestream hls_using_go2rtc_tiktok language large_monitor
 livestream_default_bitrate logo_cat_cam logo_header logo_header_background
 logo_header_text logo_livestream max_free_ram_force_reboot
 max_free_ram_force_restart_camera max_free_ram_restart_camera
-max_shared_ram_camera place_livestream show_toolbar ui_bg ui_css_custom
-ui_download_text ui_fb ui_google ui_phone ui_scoreboard ui_tabs_links ui_tiktok
-ui_title ui_title_color ui_zalo url_live_help video_config
+max_shared_ram_camera place_livestream show_toolbar toolbar_show_count ui_bg
+ui_css_custom ui_download_text ui_fb ui_google ui_phone ui_scoreboard
+ui_tabs_links ui_tiktok ui_title ui_title_color ui_zalo url_live_help
+video_config
 `)
 var confirmEditableKeySet = keySet(`
 	button_generate_go2rtc_stream button_reboot button_restart_shinobi
@@ -89,9 +91,13 @@ var numberKeySet = keySet(`
 camera_count db_check_range db_check_rmlm db_check_size_lm default_delay_camera
 default_delay_go2rtc default_tiso_type fps_default livestream_default_bitrate
 max_free_ram_force_reboot max_free_ram_force_restart_camera
-max_free_ram_restart_camera max_shared_ram_camera
+max_free_ram_restart_camera max_shared_ram_camera toolbar_show_count
 `)
-var jsonKeySet = keySet(`custom_hashtags ui_tabs_links`)
+var jsonKeySet = keySet(``)
+
+func init() {
+	numericRules["toolbar_show_count"] = numericRule{min: 0, max: 4096, integer: true}
+}
 
 type Catalog struct {
 	keyDir    string
@@ -235,13 +241,13 @@ func metaForKey(key, label, description string) KeyMeta {
 		group = "Security / Credentials"
 	case protectedKeyRe.MatchString(key):
 		group = "Network / MQTT"
-	case strings.HasPrefix(key, "logo_") || key == "company_name" || key == "banner_top" || strings.HasPrefix(key, "app_"):
+	case strings.HasPrefix(key, "logo_") || strings.HasPrefix(key, "disable_logo_") || key == "company_name" || key == "banner_top" || key == "custom_hashtags" || strings.HasPrefix(key, "app_"):
 		group = "Branding / Logo"
-	case strings.Contains(key, "livestream") || strings.HasPrefix(key, "hls_") || key == "place_livestream" || key == "fps_default" || strings.HasPrefix(key, "default_delay_") || key == "disable_cut_realtime":
+	case key == "camera_count" || key == "toolbar_show_count" || key == "video_config" || key == "button_generate_go2rtc_stream" || strings.Contains(key, "livestream") || strings.HasPrefix(key, "hls_") || key == "place_livestream" || key == "fps_default" || strings.HasPrefix(key, "default_delay_") || key == "disable_cut_realtime":
 		group = "Livestream"
-	case strings.HasPrefix(key, "ui_") || key == "language" || key == "show_toolbar" || key == "large_monitor" || key == "help_link" || key == "url_live_help":
+	case strings.HasPrefix(key, "ui_") || key == "language" || key == "show_toolbar" || key == "large_monitor" || key == "help_link" || key == "url_live_help" || strings.HasPrefix(key, "default_tiso_") || key == "shop_id" || key == "realtime_shop_id":
 		group = "UI / Display"
-	case strings.HasPrefix(key, "stop_camera_") || strings.Contains(key, "reboot") || strings.Contains(key, "watch_uptime") || strings.HasPrefix(key, "db_check_") || strings.HasPrefix(key, "max_free_ram_"):
+	case strings.HasPrefix(key, "stop_camera_") || strings.Contains(key, "reboot") || strings.Contains(key, "watch_uptime") || strings.HasPrefix(key, "db_check_") || strings.HasPrefix(key, "max_free_ram_") || strings.HasPrefix(key, "max_shared_ram_") || key == "button_restart_shinobi":
 		group = "Schedule / Maintenance"
 	}
 

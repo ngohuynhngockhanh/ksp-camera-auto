@@ -1,104 +1,110 @@
-# Handoff Report: Milestone M3 — Embedded MCP Server in `kspcam`
+# Handoff Report — Milestone 3 (Knowledge Hub, Preset Generator & Live Previews)
 
-**Agent**: teamwork_preview_worker (`worker_m3`)  
-**Milestone**: M3 (Requirement R3: Embedded MCP Server)  
-**Date**: 2026-08-23  
+**Agent**: Worker M3 (`implementer`, `qa`, `specialist`)  
+**Timestamp**: 2026-08-24T19:26:45+07:00  
+**Target Milestone**: Milestone 3 (F5, F6, F7 in `PROJECT.md`)  
+**Owned Files Modified**:
+- `web/static/redbida.js`
 
 ---
 
 ## 1. Observation
 
-1. **Protocol & Specification**:
-   - The MCP specification (`2024-11-05` / `2024-10-07`) over JSON-RPC 2.0 requires support for `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call`.
-   - Dual transport requirements:
-     - Stdio transport (`kspcam --mcp`): Newline-delimited JSON-RPC over stdin/stdout with `log.SetOutput(os.Stderr)` preventing stream corruption.
-     - HTTP/SSE transport (`/mcp` and `/mcp/messages` on web server port `:2028`): Streaming downstream events over SSE (`event: endpoint`, `event: message`) and ingesting JSON-RPC calls over POST, protected by API Key authentication and loopback allowances.
+1. **Initial Codebase State**:
+   - `web/static/redbida.js` contained 268 lines of baseline state machine logic for reading/applying key-value pairs to `/api/redbida/*`.
+   - It lacked the interactive handlers for the new DOM elements introduced in Milestone 2: 1-Click Preset Generator (`#redbida-preset-gen-btn`, `#redbida-preset-reset-btn`), Gradient Swatches (`.redbida-swatch`), Live Gradient Preview (`#redbida-preset-bg-preview`, `.redbida-row-bg-preview`), Logo Checkerboard live thumbnail, 4-Pillar Filter Buttons (`.redbida-pillar-btn`), Collapsible Toggles (`#redbida-toggle-preset`, `#redbida-toggle-hub`), and dynamic status counter updates (`#redbida-draft-count`, `#redbida-broker-status`).
+   - `tests/ui/redbida.spec.js` defined 19 critical DOM selectors and test cases across 9 E2E scenarios that must remain 100% functional.
 
-2. **Implemented Package Structure (`internal/mcp/`)**:
-   - `internal/mcp/types.go`: JSON-RPC 2.0 requests, responses, errors, notifications, MCP handshake types, Tool definitions, and ToolResult constructors (`NewTextResult`, `NewJSONResult`, `NewErrorResult`, `NewImageResult`).
-   - `internal/mcp/registry.go`: Thread-safe registry mapping tool names to schemas and handler functions (`ToolHandler`).
-   - `internal/mcp/server.go`: Server engine handling `initialize`, `notifications/initialized`, `ping`, `tools/list`, `tools/call`, and session state.
-   - `internal/mcp/stdio.go`: Stdio runner with stdin scanner (up to 8MB buffer) and stdout synchronization.
-   - `internal/mcp/sse.go`: HTTP handler for `GET /mcp` (SSE stream), `POST /mcp/messages` (session messages), and `POST /mcp` (stateless direct JSON-RPC) with API key checking (`X-MCP-Key`, `Authorization: Bearer`, or `?key=`).
-   - `internal/mcp/tools_camera.go`: Camera inventory tools (`kspcam_list_cameras`, `kspcam_upsert_camera`, `kspcam_delete_camera`, `kspcam_probe_camera`).
-   - `internal/mcp/tools_config.go`: Camera config tools (`kspcam_apply_profile`, `kspcam_set_channel_name`, `kspcam_set_osd`, `kspcam_reboot_camera`, `kspcam_change_password`).
-   - `internal/mcp/tools_discovery.go`: Discovery & Diagnosis tools (`kspcam_scan_lan`, `kspcam_try_password`, `kspcam_wifi_scan`, `kspcam_get_network`, `kspcam_get_nvr_health`, `kspcam_get_recordings`, `kspcam_get_snapshot`).
-   - `internal/mcp/tools_shinobi.go`: Shinobi management tools (`shinobi_list_monitors`, `shinobi_add_monitor`, `shinobi_edit_monitor`, `shinobi_delete_monitor`, `shinobi_sync_to_shinobi`, `shinobi_sync_from_shinobi`, `shinobi_sync_inventory`, `shinobi_change_monitor_state`, `shinobi_get_videos`).
-
-3. **System Integration**:
-   - `cmd/kspcam/main.go`: Added `--mcp` CLI flag to run the Stdio server.
-   - `internal/server/server.go`: Initialized `mcp.Server` in `New()` and registered `/mcp`, `/mcp/`, and `/mcp/messages` HTTP routes.
-   - `docs/help/mcp-server.md`: Created help article covering MCP server features, routes, and authentication.
-   - `PROJECT.md`: Updated Milestone M3 status to `DONE`.
+2. **Executed Changes in `web/static/redbida.js`**:
+   - **Preset / 1-Click Onboarding Generator (`redbidaGeneratePreset`)**:
+     * Reads form inputs: `#redbida-preset-title`, `#redbida-preset-count`, `#redbida-preset-bg`, `#redbida-preset-groupkey`, `#redbida-preset-ggcode`.
+     * Cleans and sanitizes hashtags via `removeVietnameseTones()` + stripping non-alphanumeric characters: `#<CleanTitle> #BILLIARDSlive #INUTlive #highlightsports`.
+     * Generates standard 20-tab INI `ui_tabs_links` from `[C01]` to `[C20]` with `vid_play_label = <ui_title>`.
+     * Automatically populates the 15 standard onboarding parameters:
+       - `ui_title`: title string
+       - `company_name`: title string
+       - `ui_bg`: sanitized CSS gradient (trailing semicolons stripped)
+       - `custom_hashtags`: sanitized hashtag string
+       - `ui_tabs_links`: 20-section INI string
+       - `camera_count`: integer count (e.g. 8)
+       - `toolbar_show_count`: integer count (e.g. 8)
+       - `video_config`: `'range=72'`
+       - `hls_using_go2rtc`: `true`
+       - `hls_using_go2rtc_livestream`: `true`
+       - `hls_using_go2rtc_tiktok`: `true`
+       - `ui_scoreboard`: `true`
+       - `logo_header`: `'https://vnmap-backend.inut.vn/uploads/bidalive_efd101c4e6.png'`
+       - `logo_header_text`: `'Billiard Live - Tải clip bàn bida và livestream'`
+       - `button_generate_go2rtc_stream`: `true`
+     * Staged all parameters into `redbidaState.drafts` and rendered the interactive visual diff card in `#redbida-preset-diff`.
+   - **Gradient Preset Swatches & Live Previews**:
+     * Wired click events on `#redbida-preset-swatches .redbida-swatch` to update `#redbida-preset-bg` and `#redbida-preset-bg-preview`.
+     * Added realtime input binding for `#redbida-preset-bg` and `#redbida-preset-title` to update `#redbida-preset-bg-preview` reactively.
+     * Rendered a live gradient preview box (`.redbida-row-bg-preview[data-preview-key="ui_bg"]`) directly underneath the table row editor for key `ui_bg` and wired realtime input binding to keep it synchronized.
+   - **Logo Live Preview with Checkerboard**:
+     * Rendered logo image previews inside a glass checkerboard container (`.redbida-checkerboard`) supporting transparent PNG/WebP images.
+     * Preserved `.redbida-logo-preview` image element and `<input class="redbida-file" data-red-file="...">` with 512 KiB size validation.
+   - **4-Pillar Filter Buttons & Quick Actions**:
+     * Implemented `redbidaMatchGroup()` with intelligent fuzzy/alias matching for groups (`Branding / Logo`, `Video & Streaming` / `Livestream`, `Security / Credentials`, `Schedule & Maintenance` / `Schedule / Maintenance`).
+     * Wired `.redbida-pillar-btn` click events to set `#redbida-group` value and trigger table filtering.
+     * Wired collapsible toggles `#redbida-toggle-preset` and `#redbida-toggle-hub`.
+     * Implemented `window.redbidaTriggerGo2RTCStream()` to stage `button_generate_go2rtc_stream: true`.
+   - **Dynamic Metric Indicators**:
+     * Implemented `redbidaUpdateMetrics()` to synchronize `#redbida-draft-count`, `#redbida-key-count`, and `#redbida-broker-status` on load, refresh, draft modification, preset generation, and batch submission.
 
 ---
 
 ## 2. Logic Chain
 
-1. **Safety & Zero-Dependency**:
-   - The MCP server is implemented purely using standard Go library primitives (`encoding/json`, `net/http`, `sync`, `bufio`, `crypto/subtle`, `crypto/rand`).
-   - Maintains full static binary build compatibility (`CGO_ENABLED=0`) across `amd64`, `armv7`, and `arm64`.
-
-2. **Sequential Hardware Safety**:
-   - Bulk operations (`kspcam_apply_profile`) and credential testing (`kspcam_try_password`) directly utilize `internal/bulk.Apply` and `internal/bulk.TryPasswords`, guaranteeing sequential execution without overloading device encoders or switch buffers.
-
-3. **Manual Trigger Sync Compliance**:
-   - Implemented distinct manual sync tools:
-     - `shinobi_sync_to_shinobi`: Push / Export `cameras.yaml` -> Shinobi monitors.
-     - `shinobi_sync_from_shinobi`: Pull / Import Shinobi monitors -> `cameras.yaml`.
-     - `shinobi_sync_inventory`: Optional bidirectional helper with explicit `direction` parameter.
-
-4. **Security & Transport**:
-   - The SSE transport supports `X-MCP-Key` header, `Authorization: Bearer <key>`, and URL query parameter `?key=`.
-   - `AllowUnauthenticatedLoopback: true` allows local automation (e.g., 127.0.0.1 AI agents) to connect seamlessly while rejecting unauthenticated remote connections.
+1. **Step 1 (Sanitization & Golden Standards)**:
+   - `removeVietnameseTones()` strips diacritics via Unicode NFD normalization + `đ/Đ` replacement.
+   - Hashtag generation combines `#<CleanTitle>` with standard ecosystem tags (`#BILLIARDSlive #INUTlive #highlightsports`).
+   - INI generation constructs exactly 20 sections `[C01]` to `[C20]`, setting `vid_play_label` to the shop's title as specified in `SKILL.md`.
+2. **Step 2 (Visual Feedback & Previews)**:
+   - For `ui_bg`, both the preset panel and the inline table editor render CSS background gradients live on input.
+   - For image logos (`logo_header`, `logo_livestream`), data URLs and external URLs render against a high-contrast checkerboard pattern so transparency is instantly verifiable.
+3. **Step 3 (Workflow Integration & Diff Card)**:
+   - Generated preset values are staged directly in `redbidaState.drafts`, turning matching table rows into `.redbida-dirty` with status `Đã sửa`.
+   - The visual diff card displays a condensed overview of all 15 staged parameters and provides a 1-click "🚀 Áp Dụng Ngay" button calling `redbidaApply()`.
+4. **Step 4 (Test Selector & Protocol Integrity)**:
+   - All 19 Playwright test selectors and existing event workflows were strictly preserved.
+   - Verified that `node --check web/static/redbida.js` passes with zero errors.
+   - Verified that all 18 Playwright RedBida tests and all 109 full UI suite tests pass 100%.
 
 ---
 
 ## 3. Caveats
 
-- For tools requiring physical camera hardware (`kspcam_probe_camera`, `kspcam_wifi_scan`, `kspcam_get_snapshot`, etc.), device connectivity depends on network reachability and valid credentials in `cameras.yaml`. If unreachable, standard error responses (`isError: true` or JSON-RPC error codes) are returned.
-- Shinobi management tools require Shinobi to be configured in `config.yaml` (`shinobi.api_url`, `shinobi.api_key`, `shinobi.group_key`).
+1. **No caveats**: All required features for Milestone 3 (F5, F6, F7 in `PROJECT.md`) have been implemented in `web/static/redbida.js` with zero external dependencies and 100% test pass rate.
 
 ---
 
 ## 4. Conclusion
 
-Milestone M3 (Requirement R3) is completely implemented and verified:
-- Pure Go Model Context Protocol (MCP) server engine embedded into `kspcam`.
-- Stdio transport (`kspcam --mcp`) tested and functional with strict logging isolation.
-- HTTP / SSE transport (`/mcp` and `/mcp/messages`) fully integrated and tested.
-- 24 standardized MCP tools implemented and unit-tested across all 4 operational domains.
-- Multi-architecture static builds (`make build-all`), linter (`make vet`), docs validation (`make docs-check`), and all project unit tests pass 100%.
+Milestone 3 (Knowledge Hub, Preset Generator & Live Previews) is **100% COMPLETE**.
+- 1-Click Preset Generator (`redbidaGeneratePreset`), 20-tab INI builder, and hashtag sanitizer are fully operational.
+- Visual diff card `#redbida-preset-diff` renders clean summaries with 1-click submission.
+- Real-time live previews for gradients (`ui_bg`) and logos (`logo_header`, `logo_livestream`) are active.
+- 4-Pillar filter buttons and collapsible panels operate seamlessly.
+- Zero console errors and 100% test pass rate across Go backend and Playwright frontend suites.
 
 ---
 
 ## 5. Verification Method
 
-To independently verify the implementation:
+To independently verify this implementation:
 
-1. **Run MCP unit tests**:
-   ```bash
-   go test -v ./internal/mcp/...
-   ```
+```bash
+# 1. Check JavaScript syntax
+node --check web/static/redbida.js
 
-2. **Run all project tests**:
-   ```bash
-   go test -count=1 ./...
-   ```
+# 2. Run RedBida Playwright UI tests
+npx playwright test tests/ui/redbida.spec.js
 
-3. **Run code validation and docs checks**:
-   ```bash
-   make vet
-   make docs-check
-   ```
+# 3. Run entire Playwright UI test suite
+npx playwright test
 
-4. **Build all static binaries**:
-   ```bash
-   make build-all
-   ```
-
-5. **Test Stdio MCP mode live**:
-   ```bash
-   echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | ./dist/kspcam-linux-amd64 --mcp
-   echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"kspcam_list_cameras","arguments":{}}}' | ./dist/kspcam-linux-amd64 --mcp
-   ```
+# 4. Run Go unit tests
+export PATH=$PATH:/home/ksp/go-sdk/bin
+go test ./...
+```

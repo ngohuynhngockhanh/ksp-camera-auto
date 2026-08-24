@@ -1,145 +1,99 @@
-# Handoff Report: Milestone M1 — Ansible Automated Shinobi Provisioning & Config (Requirement R1)
+# Milestone 1: Backend Catalog & Metadata Refinements — Handoff Report
 
 ## 1. Observation
 
-### 1.1 Go Configuration Changes
-- **File**: `/home/ksp/ksp-camera-auto/internal/config/config.go`
-  - Added `ShinobiConfig` struct (lines 62-67):
-    ```go
-    type ShinobiConfig struct {
-        APIURL   string `yaml:"api_url"`
-        APIKey   string `yaml:"api_key"`
-        GroupKey string `yaml:"group_key"`
-    }
-    ```
-  - Added `MCPConfig` struct (lines 69-74):
-    ```go
-    type MCPConfig struct {
-        Enabled                      bool   `yaml:"enabled"`
-        APIKey                       string `yaml:"api_key"`
-        AllowUnauthenticatedLoopback bool   `yaml:"allow_unauthenticated_loopback"`
-    }
-    ```
-  - Added `Shinobi ShinobiConfig` and `MCP MCPConfig` fields to `Config` struct (lines 76-83).
-  - Updated `Default()` (lines 85-115) to default `Shinobi.APIURL` to `"http://127.0.0.1:8080"`, `MCP.Enabled` to `true`, `MCP.AllowUnauthenticatedLoopback` to `true`.
-  - Updated `applyDefaults()` (lines 137-183) to backfill `Shinobi.APIURL`.
-- **File**: `/home/ksp/ksp-camera-auto/internal/config/config_test.go`
-  - Created unit tests covering default config, missing file fallback, full YAML unmarshalling (Shinobi + MCP), and syntax error handling.
-- **File**: `/home/ksp/ksp-camera-auto/config.example.yaml`
-  - Added documented sample configuration blocks for `shinobi` and `mcp`.
+Direct observations from codebase inspection and execution:
 
-### 1.2 Ansible Automation Changes
-- **Controller Host**: `root@172.16.5.180`
-- **Role Location**: `/build/armbian-build/ansible/playbook/roles/app_ksp_bida/`
-- **Variables**: `vars/main.yml`
-  ```yaml
-  shinobi_api_url: "http://127.0.0.1:8080"
-  shinobi_mail: "ngohuynhngockhanh@gmail.com"
-  shinobi_pass: "smarthome12345"
-  shinobi_super_mail: "ngohuynhngockhanh@gmail.com"
-  shinobi_super_pass: "KSPHondaCity51F79713@"
-  shinobi_super_token: "ksp_super_token_kspbida_auto"
-  ```
-- **Provisioning Tasks**: `tasks/shinobi_provision.yml`
-  1. Service liveness probe on port `8080`.
-  2. Regular user probe `POST http://127.0.0.1:8080/?json=true` (`ngohuynhngockhanh@gmail.com` / `smarthome12345`).
-  3. Super Admin registration fallback (`POST /super/?json=true`, patch `/home/Shinobi/super.json`, `POST /super/<token>/accounts/registerAdmin`).
-  4. Session token and Group Key extraction (`$user.auth_token`, `$user.ke`).
-  5. API Key provisioning via `POST /:auth/api/:ke/add` with IP `127.0.0.1` and full capabilities (`auth_socket`, `get_monitors`, `control_monitors`, `get_logs`, `watch_stream`, `watch_snapshot`, `watch_videos`, `delete_videos`).
-  6. Legacy key sync to `/root/ota-mqtt/change_ok/shinobi_camera_id`.
-- **Main Deployment Tasks**: `tasks/main.yml`
-  - Includes `shinobi_provision.yml`.
-  - Dynamically writes `/opt/ksp-cam/config.yaml` containing `shinobi` and `mcp` sections.
-  - Auto-seeds monitors using the provisioned API Key and restarts `kspcam.service`.
+### 1.1 Files Modified & Created
+- **`internal/redbida/catalog.go`**:
+  - Line 13: Removed `toolbar_show_count` from `runtimeKeyRe` regex (`(?i)(^api(_model)?_count$|^download_count$|^packed_count$|^view_count$|^node_config_|^test_button$)`).
+  - Lines 37–45: Added `shinobi_group_key` to `fallbackKeys` between `shinobi_camera_id` and `shinobi_monitor_token`.
+  - Line 62: Added `toolbar_show_count` to `editableKeySet`.
+  - Line 89: Added `toolbar_show_count` to `numberKeySet`.
+  - Line 91: Removed `custom_hashtags` and `ui_tabs_links` from `jsonKeySet` (`var jsonKeySet = keySet("")`), allowing them to default to `TypeString`.
+  - Lines 93–95: Added `init()` registering `numericRules["toolbar_show_count"] = numericRule{min: 0, max: 4096, integer: true}`.
+  - Lines 238–253: Refined `metaForKey` grouping logic to classify keys into 5 core domain groups:
+    * `"Branding / Logo"`: `strings.HasPrefix(key, "logo_") || strings.HasPrefix(key, "disable_logo_") || key == "company_name" || key == "banner_top" || key == "custom_hashtags" || strings.HasPrefix(key, "app_")`.
+    * `"Livestream"`: `key == "camera_count" || key == "toolbar_show_count" || key == "video_config" || key == "button_generate_go2rtc_stream" || strings.Contains(key, "livestream") || strings.HasPrefix(key, "hls_") || key == "place_livestream" || key == "fps_default" || strings.HasPrefix(key, "default_delay_") || key == "disable_cut_realtime"`.
+    * `"UI / Display"`: `strings.HasPrefix(key, "ui_") || key == "language" || key == "show_toolbar" || key == "large_monitor" || key == "help_link" || key == "url_live_help" || strings.HasPrefix(key, "default_tiso_") || key == "shop_id" || key == "realtime_shop_id"`.
+    * `"Schedule / Maintenance"`: `strings.HasPrefix(key, "stop_camera_") || strings.Contains(key, "reboot") || strings.Contains(key, "watch_uptime") || strings.HasPrefix(key, "db_check_") || strings.HasPrefix(key, "max_free_ram_") || strings.HasPrefix(key, "max_shared_ram_") || key == "button_restart_shinobi"`.
+    * `"Security / Credentials"`: `sensitiveKeyRe` matches (including `shinobi_*`, `ggcode`, `frpc_config`).
 
-### 1.3 Live Target Execution Result (`inut_204_63`)
-- Command: `ansible-playbook -i /build/armbian-build/ansible/inventories/linux /build/armbian-build/ansible/playbook/ksp-bida.yml -e 'target=inut_204_63'`
-- Result verbatim:
-  ```
-  TASK [app_ksp_bida : Report Shinobi provisioning status] ***********************
-  ok: [inut_204_63] => {
-      "msg": "Shinobi provisioned: GroupKey=pymid463, APIKey=kiwUyr... (length 30)"
-  }
-  ...
-  TASK [app_ksp_bida : Seed result] **********************************************
-  ok: [inut_204_63] => {
-      "msg": "2026/08/23 23:46:45 imported 10 cameras (skipped 0) into /opt/ksp-cam/cameras.yaml"
-  }
-  ...
-  PLAY RECAP *********************************************************************
-  inut_204_63 : ok=26 changed=5 unreachable=0 failed=0 skipped=7 rescued=0 ignored=0
-  ```
-- Target `/opt/ksp-cam/config.yaml` content verified live:
-  ```yaml
-  server:
-    addr: ":2028"
-    username: "admin"
-    password: "smarthome12345"
-  cameras_file: "/opt/ksp-cam/cameras.yaml"
-  defaults:
-    hikvision_port: 8000
-    dahua_port: 37777
-    username: "admin"
-    password: "smarthome12345"
-    timeout_seconds: 30
-    new_password: "smarthome12345"
-  shinobi:
-    api_url: "http://127.0.0.1:8080"
-    api_key: "kiwUyrh1oSSGe1uB4s9kcdWlDJgbAY"
-    group_key: "pymid463"
-  mcp:
-    enabled: true
-    allow_unauthenticated_loopback: true
-  ```
-- Systemd service `kspcam.service` active and running (`PID 17317`).
+- **`internal/redbida/redbida_test.go`**:
+  - Added unit test suite covering:
+    * `TestCatalogToolbarShowCountMetadataAndValidation`: validates `RiskEditable`, `TypeNumber`, `Group == "Livestream"`, valid integers in `[0, 4096]`, invalid bounds (`-1`, `4097`), non-integer (`8.5`), non-number (`"8"`).
+    * `TestCatalogStringKeysAcceptTextAndMultiline`: validates `custom_hashtags` (`TypeString`, `Group == "Branding / Logo"`) and `ui_tabs_links` (`TypeString`, `Group == "UI / Display"` accepting 20-section multiline INI format).
+    * `TestCatalogShinobiGroupKeyFallbackAndClassification`: validates presence in fallback catalog, `RiskProtected`, `Secret == true`, `Group == "Security / Credentials"`.
+    * `TestCatalogDomainGroupingClassifications`: verifies 38+ keys across all 5 domain groups.
+    * `TestCatalogListOrderingAndFallbackCompleteness`: validates sort order by Group then Key, and catalog length >= 50.
+
+- **`internal/server/api_redbida_test.go`**:
+  - Added `TestRedbidaCatalogHandlerMetadataAndDomainGroups`: tests `/api/redbida/catalog` HTTP response contains updated metadata for `toolbar_show_count`, `custom_hashtags`, `ui_tabs_links`, `shinobi_group_key`, and domain groups.
+  - Added `TestRedbidaApplyBatchPresetChanges`: tests `/api/redbida/apply` successfully processes batch changes containing `toolbar_show_count`, `custom_hashtags`, `ui_tabs_links`, `ui_title`, and `camera_count`.
+
+### 1.2 Verification Commands and Outputs
+1. `/home/ksp/go-sdk/bin/go test -v ./internal/redbida/... -cover`:
+   - All 23 tests PASSED. Coverage: `82.0%` of statements.
+2. `/home/ksp/go-sdk/bin/go test -v ./internal/server/...`:
+   - All tests in `internal/server` PASSED (including all 7 Redbida tests).
+3. `/home/ksp/go-sdk/bin/go test ./...`:
+   - 100% PASS across all workspace packages.
+4. Static build verification (`/home/ksp/go-sdk/bin/go build ./cmd/kspcam`):
+   - Zero compilation warnings or errors.
 
 ---
 
 ## 2. Logic Chain
 
-1. **Requirement Mapping**: Requirement R1 dictates automated Shinobi user check and API Key generation via Ansible, persisting connection settings in `/opt/ksp-cam/config.yaml`, and mapping these cleanly into Go struct `ShinobiConfig` without embedding plain-text credentials in the binary.
-2. **Go Architecture**: By defining `ShinobiConfig` (`APIURL`, `APIKey`, `GroupKey`) and `MCPConfig` (`Enabled`, `APIKey`, `AllowUnauthenticatedLoopback`) in `internal/config/config.go`, Go runtime components in future milestones (M2 Shinobi Client & M3 MCP Server) receive strongly typed, validated settings while the Go binary remains completely decoupled from plain-text administrative passwords.
-3. **Ansible Idempotence**: The `shinobi_provision.yml` workflow tests whether the user is already authenticated. If valid, it skips account creation; if missing, it executes Super Admin registration. It then checks for an existing `127.0.0.1` full-permission key before issuing an add request, ensuring idempotent re-runs do not duplicate API keys.
-4. **Validation**: All Go tests (`go test -v ./internal/config/...` and `go test ./...`) pass 100%. The Ansible playbook was executed against remote node `inut_204_63`, successfully provisioning the API key, rendering `config.yaml`, importing 10 cameras, and running `kspcam.service`.
+1. **`toolbar_show_count` Editable Fix**:
+   - `toolbar_show_count` was previously matched by `runtimeKeyRe`, marking it `RiskProtected` / `editable: false`.
+   - By removing it from `runtimeKeyRe` and adding it to `editableKeySet` and `numberKeySet`, it is classified as `RiskEditable` with `ValueType: TypeNumber`.
+   - Adding `numericRules["toolbar_show_count"] = numericRule{min: 0, max: 4096, integer: true}` guarantees input validation strictly checks for integers in `[0, 4096]`.
+
+2. **String Types for `custom_hashtags` and `ui_tabs_links`**:
+   - `custom_hashtags` and `ui_tabs_links` were previously in `jsonKeySet`, causing `validateValue` in `service.go` to require a JSON map or slice, rejecting valid plain strings and multiline INI strings.
+   - Removing them from `jsonKeySet` causes them to resolve to `TypeString`. `validateValue` accepts strings up to 2MB, enabling full 20-section INI configurations for `ui_tabs_links` and hashtag strings without errors.
+
+3. **`shinobi_group_key` Fallback Presence**:
+   - Adding `shinobi_group_key` to `fallbackKeys` ensures that when the physical key directory (`/root/ota-mqtt/change_ok`) is temporarily unavailable, `catalog.List()` and `catalog.Meta("shinobi_group_key")` return valid metadata (`RiskProtected`, `Secret: true`, `Group: "Security / Credentials"`).
+
+4. **Refined Group Mapping**:
+   - `metaForKey` now evaluates specific prefixes and explicit key names to assign keys into intuitive business groups (`Branding / Logo`, `Livestream`, `UI / Display`, `Schedule / Maintenance`, `Security / Credentials`) instead of dumping standard keys into `"Advanced / Unknown"`.
 
 ---
 
 ## 3. Caveats
 
-- **Network Scope**: The generated Shinobi API key is restricted to IP `127.0.0.1`. Remote clients accessing Shinobi directly must route through local loopback or use the `kspcam` reverse proxy/API layer.
-- **Shinobi Super Admin Password**: Super Admin password is stored only in Ansible variables on controller `172.16.5.180` (`vars/main.yml`) and is never baked into the compiled Go binary.
+- **Protected Keys Immutable via `/api/redbida/apply`**: Keys matched by `sensitiveKeyRe` (such as `shinobi_group_key`, `shinobi_camera_id`, `ggcode`, `frpc_config`) remain `RiskProtected` (`editable: false`) by design for security. They cannot be modified via `/api/redbida/apply` directly without administrative override.
+- **Node-RED Read-Only Constraint**: All configuration mutations happen exclusively via MQTT `/private/i_sets` with read-back verification via `/private/i_gets`.
 
 ---
 
 ## 4. Conclusion
 
-Milestone M1 (Requirement R1) is completely implemented, tested, and validated:
-- `internal/config/config.go` provides `ShinobiConfig` and `MCPConfig` with unit tests passing.
-- `config.example.yaml` document sample configurations.
-- Ansible role `app_ksp_bida` on `172.16.5.180` automates Shinobi account verification, super admin registration fallback, IP-restricted API key generation, and `/opt/ksp-cam/config.yaml` writing.
-- Live deployment to `inut_204_63` confirmed 100% success.
+All requirements for Milestone 1 (Backend Catalog & Metadata Refinements) are fully implemented and verified:
+- `toolbar_show_count` is now an editable integer number (`[0, 4096]`).
+- `custom_hashtags` and `ui_tabs_links` accept plain and multiline strings without JSON rejection.
+- `shinobi_group_key` is present in fallback keys and correctly classified.
+- All keys are categorized into clean, intuitive domain groups.
+- Full test coverage added with 100% pass across all unit tests.
 
 ---
 
 ## 5. Verification Method
 
-### 5.1 Run Go Unit Tests
+To independently verify this milestone:
+
 ```bash
-export PATH=/home/ksp/go-sdk/bin:$PATH
-cd /home/ksp/ksp-camera-auto
-go test -v ./internal/config/...
-go test ./...
-go run ./tools/docgen -check
-```
+# 1. Run unit tests for redbida package with coverage
+/home/ksp/go-sdk/bin/go test -v ./internal/redbida/... -cover
 
-### 5.2 Verify Ansible Role & Remote Deployment
-```bash
-# Syntax Check
-ssh root@172.16.5.180 "ansible-playbook -i /build/armbian-build/ansible/inventories/linux /build/armbian-build/ansible/playbook/ksp-bida.yml --syntax-check -e 'target=inut_204_63'"
+# 2. Run unit tests for server package
+/home/ksp/go-sdk/bin/go test -v ./internal/server/...
 
-# Live Deployment Check on inut_204_63
-ssh root@172.16.5.180 "ansible-playbook -i /build/armbian-build/ansible/inventories/linux /build/armbian-build/ansible/playbook/ksp-bida.yml -e 'target=inut_204_63'"
+# 3. Run all unit tests across the entire repository
+/home/ksp/go-sdk/bin/go test ./...
 
-# Verify Remote Target config.yaml & service
-ssh root@172.16.5.180 "ansible -i /build/armbian-build/ansible/inventories/linux inut_204_63 -m shell -a 'cat /opt/ksp-cam/config.yaml; systemctl status kspcam --no-pager'"
+# 4. Verify static compilation
+/home/ksp/go-sdk/bin/go build ./cmd/kspcam
 ```
