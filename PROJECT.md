@@ -1,76 +1,123 @@
-# Project: ksp-camera-auto — Shinobi NVR Management & Embedded MCP Server
-
-Current source-verified architecture snapshot: [docs/CODEBASE-KNOWLEDGE.md](docs/CODEBASE-KNOWLEDGE.md).
+# Project: ksp-camera-auto RedBida & Onboarding MCP Tools Suite
 
 ## Architecture
-`ksp-camera-auto` (`kspcam`) is a Go-based camera automation, bulk configuration, Shinobi NVR management, and embedded AI MCP tool server.
-- **Entrypoint**: `cmd/kspcam/main.go` (supports web server on `:2028`, `--mcp` Stdio mode, `--config`, `--version`)
-- **Configuration & Storage**: `internal/config/` (AES-GCM encrypted YAML store, Shinobi config, MCP config)
-- **Web & API Layer**: `internal/server/` (Cookie auth, REST API, SSE streaming, snapshot cache, Shinobi management REST routes `/api/shinobi/*`, SSE MCP endpoint `/mcp`)
-- **Shinobi Management**: `internal/shinobi/` (Pure Go client for Shinobi NVR REST API, monitors CRUD, stream states, videos, manual trigger 2-way sync engine)
-- **Embedded MCP Server**: `internal/mcp/` (JSON-RPC 2.0 protocol engine, Stdio transport, HTTP/SSE transport with API key auth, 24 tool definitions across Inventory, Config/Bulk, Discovery/Diagnosis, and Shinobi domains)
-- **Core Orchestration**: `internal/bulk/` (Sequential task execution, credential testing)
-- **Camera Abstraction Layer**: `internal/camera/` (Unified `Camera` interface, capability type assertions, Probe -> Apply -> Read-Back verification)
-- **Protocol Implementations**: `internal/dahua/`, `internal/isapi/`, `internal/hik/`, `internal/hiksdk/`, `internal/tiandy/`
-- **Discovery**: `internal/discovery/` (ONVIF 3702, Dahua 37810, SADP 37020, Nmap TCP scan)
-- **Embedded UI**: `web/static/` (Embedded HTML/JS/CSS single-file binary distribution via `go:embed static`, Shinobi management tab with manual sync buttons)
-- **Ansible Automation**: `/build/armbian-build/ansible/playbook/roles/app_ksp_bida/` on controller `172.16.5.180` (automated Shinobi user check, super admin fallback, IP-restricted API key generation, and config writing)
+
+`ksp-camera-auto` features an embedded Model Context Protocol (MCP) server that provides AI assistants with standardized tools over dual transports: Stdio JSON-RPC 2.0 (CLI `--mcp`) and HTTP/SSE (`:2028/mcp`).
+
+### Subsystem Interaction & Data Flow
+
+```
+[AI Assistant / Client]
+       │
+       ├── Stdio (JSON-RPC 2.0 via CLI --mcp)
+       └── HTTP / SSE (:2028/mcp, with Loopback bypass / API Key auth)
+               │
+               ▼
+   [internal/mcp: Server & Registry]
+               │
+       ┌───────┼───────────────────────────┬──────────────────────────┐
+       │       │                           │                          │
+       ▼       ▼                           ▼                          ▼
+ [Camera Tools] [Discovery Tools]    [Shinobi Tools]       [RedBida & Onboarding Tools]
+ (kspcam_*)     (kspcam_scan_*)      (shinobi_*)           (redbida_*)
+                                                                      │
+                                                     ┌────────────────┴────────────────┐
+                                                     ▼                                 ▼
+                                            [MQTT Broker :12369]             [System Time & NTP]
+                                            /private/i_gets & /private/i_sets (timedatectl)
+```
 
 ## Feature Inventory
+
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | R1.1 Ansible Role Upgrade (`app_ksp_bida`) | Automated Shinobi user check, super admin registration, 127.0.0.1 full-capability API Key generation | M1 | ORIGINAL_REQUEST.md §R1 |
-| 2 | R1.2 Config Automation & Go Structs | Write `shinobi` section into `/opt/ksp-cam/config.yaml`, Go struct in `internal/config/config.go` with zero hardcoded passwords | M1 | ORIGINAL_REQUEST.md §R1 |
-| 3 | R2.1 Pure Go Shinobi REST Client | `internal/shinobi` package with `ListMonitors`, `AddMonitor`, `EditMonitor`, `DeleteMonitor`, `ChangeMonitorState`, `GetVideos` | M2 | ORIGINAL_REQUEST.md §R2 |
-| 4 | R2.2 Manual Trigger 2-Way Sync Engine | Push `cameras.yaml` -> Shinobi monitors & Pull Shinobi monitors -> `cameras.yaml` (No automatic background loop) | M2 | ORIGINAL_REQUEST.md §R2, §Follow-up |
-| 5 | R2.3 Shinobi Server REST Endpoints | `/api/shinobi/status`, `/api/shinobi/monitors`, `/api/shinobi/sync-to-shinobi`, `/api/shinobi/sync-from-shinobi`, `/api/shinobi/videos` | M2 | ORIGINAL_REQUEST.md §R2, §Follow-up |
-| 6 | R2.4 Embedded Web UI Shinobi Management | New Shinobi tab in Web UI with monitor status cards, stream toggle, manual push/pull sync buttons | M2 | ORIGINAL_REQUEST.md §R2, §Follow-up |
-| 7 | R3.1 MCP Protocol Engine & Transports | JSON-RPC 2.0 MCP `2024-11-05` server with Stdio (`kspcam --mcp`) and HTTP/SSE (`/mcp` on `:2028`) with API key security | M3 | ORIGINAL_REQUEST.md §R3 |
-| 8 | R3.2 Camera Inventory MCP Tools | `kspcam_list_cameras`, `kspcam_upsert_camera`, `kspcam_delete_camera`, `kspcam_probe_camera` | M3 | ORIGINAL_REQUEST.md §R3 |
-| 9 | R3.3 Camera Config & Bulk MCP Tools | `kspcam_apply_profile`, `kspcam_set_channel_name`, `kspcam_set_osd`, `kspcam_reboot_camera`, `kspcam_change_password` | M3 | ORIGINAL_REQUEST.md §R3 |
-| 10 | R3.4 Discovery & Diagnosis MCP Tools | `kspcam_scan_lan`, `kspcam_try_password`, `kspcam_wifi_scan`, `kspcam_get_network`, `kspcam_get_nvr_health`, `kspcam_get_recordings`, `kspcam_get_snapshot` | M3 | ORIGINAL_REQUEST.md §R3 |
-| 11 | R3.5 Shinobi Management MCP Tools | `shinobi_list_monitors`, `shinobi_add_monitor`, `shinobi_edit_monitor`, `shinobi_delete_monitor`, `shinobi_sync_to_shinobi`, `shinobi_sync_from_shinobi`, `shinobi_change_monitor_state`, `shinobi_get_videos` | M3 | ORIGINAL_REQUEST.md §R3, §Follow-up |
-| 12 | R4.1 Comprehensive Unit Tests | Unit tests for `internal/shinobi` (mock server) and `internal/mcp` (stdio & SSE transports, tool execution) | M4 | ORIGINAL_REQUEST.md §R4 |
-| 13 | R4.2 Documentation & Help Articles | Update `GEMINI.md`, `AGENTS.md`, and generate help documentation via `make docs` | M4 | ORIGINAL_REQUEST.md §R4 |
-| 14 | R4.3 Static Multi-Arch Build & Quality Gates | `make build-all` (amd64, armv7, arm64), `go test ./...`, `make docs-check` pass 100% | M4 | ORIGINAL_REQUEST.md §R4 |
-| 15 | R4.4 Live Remote Deployment Validation | Deploy to `inut_204_63` via Ansible `make ksp-bida` and verify live Shinobi API + MCP Server operations | M4 | ORIGINAL_REQUEST.md §R4 |
+| F1 | `redbida_list_catalog` | Lists all configuration keys in the RedBida / OTA-MQTT catalog with functional groups, risk classifications (editable, confirm-required, protected), data types, and availability. | M1 | ORIGINAL_REQUEST §R1.1 |
+| F2 | `redbida_get_keys` | Reads live key values from local `ota-mqtt` broker (`127.0.0.1:12369`) via topic `/private/i_gets` with `{"info": [...]}` and automatic secret masking (`********`). | M1 | ORIGINAL_REQUEST §R1.2 |
+| F3 | `redbida_set_keys` | Writes key-value changes to `ota-mqtt` via `/private/i_sets` with `{"info": {...}}` and enforces mandatory read-back verification (up to 3 attempts with exponential backoff). | M1 | ORIGINAL_REQUEST §R1.3 |
+| F4 | `redbida_apply_onboarding_preset` | 1-Click Bida Onboarding tool: synthesizes and applies the 15 standard parameters (`ui_title`, `ui_bg` without semicolon, `custom_hashtags` normalized without diacritics, `ui_tabs_links` 20-tab INI, `camera_count`, `toolbar_show_count`, `hls_using_go2rtc`, `button_generate_go2rtc_stream`, `logo_header`, `logo_header_text`, `shinobi_camera_id`, `shinobi_group_key`, `video_config`, `ui_scoreboard`, `ggcode`) with read-back verification. | M1 | ORIGINAL_REQUEST §R1.4 |
+| F5 | `redbida_trigger_go2rtc` | Triggers Node-RED (:2023) to generate `/root/go2rtc.yaml` stream configuration by publishing `button_generate_go2rtc_stream: "true"` over `/private/i_sets`. | M1 | ORIGINAL_REQUEST §R1.5 |
+| F6 | `redbida_get_time_status` | Checks host system time (RFC 3339) and NTP synchronization status via `timedatectl`. | M1 | ORIGINAL_REQUEST §R1.6 |
+| F7 | MCP Server Registration & Dual Transports | Registers all 6 `redbida_*` tools in `internal/mcp/server.go`, wires `redbida.Service` into `NewServer`, ensures smooth operation for both Stdio (`kspcam --mcp`) and HTTP/SSE (`:2028/mcp`) transports. | M2 | ORIGINAL_REQUEST §R2 |
+| F8 | Documentation Updates | Updates technical documentation in `docs/help/mcp-server.md`, `docs/help/redbida.md`, `docs/CODEBASE-KNOWLEDGE.md`, and `GEMINI.md` / `AGENTS.md` to detail all 31 MCP tools. | M2 | ORIGINAL_REQUEST §R2 |
+| F9 | Comprehensive Unit & JSON-RPC Tests | Implements 100% passing unit tests in `internal/mcp/tools_redbida_test.go` and `internal/mcp/server_test.go` verifying JSON-RPC 2.0 compliance (`initialize`, `tools/list`, `tools/call`). | M3 | ORIGINAL_REQUEST §R3 |
+| F10 | Multi-Arch Compilation | Builds static binaries (`CGO_ENABLED=0`) for `linux/amd64`, `linux/arm64`, and `linux/armv7` via `make build-all`. | M3 | ORIGINAL_REQUEST §R3 |
+| F11 | Remote Deployment & Live Verification | Deploys ARM64 binary to live edge nodes `inut_204_164` and `inut_204_163` via jump host `root@172.16.5.180`, restarts services, and verifies live MCP tool calls over HTTP/SSE. | M3 | ORIGINAL_REQUEST §R3 |
+| F12 | Git Commit & Push | Commits and pushes all code, test, and documentation changes to the remote git repository. | M3 | ORIGINAL_REQUEST §R3 |
 
 ## Milestones
+
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| 1 | M1: Ansible Automated Shinobi Provisioning & Config | `app_ksp_bida` on `172.16.5.180`, `internal/config/` (Shinobi & MCP structs) | none | DONE |
-| 2 | M2: Shinobi Go Client & Full Management Engine | `internal/shinobi/`, `internal/server/` Shinobi routes, Web UI Shinobi tab & manual sync buttons | M1 | DONE |
-| 3 | M3: Embedded MCP Server in `kspcam` | `internal/mcp/`, Stdio & SSE transports, 23 tool definitions, `cmd/kspcam/main.go`, `internal/server/` integration | M1, M2 | DONE |
-| 4 | M4: Tests, Documentation, Multi-Arch Build & Remote Validation | `internal/shinobi/*_test.go`, `internal/mcp/*_test.go`, `GEMINI.md`, `AGENTS.md`, `make docs`, `make build-all`, `inut_204_63` deploy test | M1, M2, M3 | DONE |
+| M1 | RedBida & Onboarding MCP Tools Suite | Implement `internal/mcp/tools_redbida.go` with F1-F6: `redbida_list_catalog`, `redbida_get_keys`, `redbida_set_keys`, `redbida_apply_onboarding_preset` (all 15 parameters, 20-tab INI, accent stripping, trailing semicolon removal), `redbida_trigger_go2rtc`, and `redbida_get_time_status`. | none | DONE |
+| M2 | MCP Server Integration & Documentation | Integrate new tools in `internal/mcp/server.go` (F7), wire `redbida.Service` into `NewServer`, verify Stdio/SSE modes, and update documentation in `docs/` and `GEMINI.md`/`AGENTS.md` (F8). | M1 | DONE |
+| M3 | Testing, Multi-Arch Build, Remote Deployment & Live Verification | Implement unit tests (F9), execute `make build-all` (F10), deploy to `inut_204_164` and `inut_204_163` (F11), execute live MCP tests, and push git commit (F12). | M2 | IN_PROGRESS |
 
 ## Interface Contracts
-### `internal/config/config.go`
-- `ShinobiConfig`: `APIURL string (yaml:"api_url")`, `APIKey string (yaml:"api_key")`, `GroupKey string (yaml:"group_key")`
-- `MCPConfig`: `Enabled bool (yaml:"enabled")`, `APIKey string (yaml:"api_key")`, `AllowUnauthenticatedLoopback bool (yaml:"allow_unauthenticated_loopback")`
 
-### `internal/shinobi/client.go`
-- `Client`: `NewClient(apiURL, apiKey, groupKey string) *Client`
-- `ListMonitors(ctx context.Context) ([]Monitor, error)`
-- `AddMonitor(ctx context.Context, mon MonitorConfig) error`
-- `EditMonitor(ctx context.Context, mid string, mon MonitorConfig) error`
-- `DeleteMonitor(ctx context.Context, mid string) error`
-- `ChangeMonitorState(ctx context.Context, mid, state string) error`
-- `GetVideos(ctx context.Context, mid string, limit int) ([]Video, error)`
-- `SyncToShinobi(ctx context.Context, inv *config.Inventory) (*SyncReport, error)`
-- `SyncFromShinobi(ctx context.Context, inv *config.Inventory) (*SyncReport, error)`
+### 1. `redbida_list_catalog`
+- **Arguments**: `{ "group"?: string, "editableOnly"?: boolean }`
+- **Output**: Array of catalog items with `key`, `group`, `risk`, `type`, `description`, `secret`, `source`.
 
-### `internal/mcp/server.go`
-- `Server`: `NewServer(cfg *config.Config, inv *config.Inventory, shinobiClient *shinobi.Client) *Server`
-- `RunStdio(ctx context.Context) error`
-- `HTTPHandler() http.Handler`
+### 2. `redbida_get_keys`
+- **Arguments**: `{ "keys"?: string[], "all"?: boolean }`
+- **Output**: Array of `{ key, value, risk, type, secret, verified }`. Secrets masked as `"********"`.
+
+### 3. `redbida_set_keys`
+- **Arguments**: `{ "changes": { [key: string]: any }, "confirmed"?: boolean }`
+- **Output**: Array of `ChangeResult{ key, meta, oldValue, newValue, changed, acknowledged, readBack, verified, applied, error }`.
+
+### 4. `redbida_apply_onboarding_preset`
+- **Arguments**:
+  ```json
+  {
+    "title": "string (required)",
+    "cameraCount": "integer (required, 1-20)",
+    "bg": "string (optional CSS gradient)",
+    "groupKey": "string (optional Shinobi group key)",
+    "shinobiToken": "string (optional)",
+    "shinobiMonitorToken": "string (optional)",
+    "ggcode": "string (optional Google Analytics)",
+    "customHashtags": "string (optional override)",
+    "dryRun": "boolean (optional)",
+    "confirmed": "boolean (optional, default true)"
+  }
+  ```
+- **Synthesized 15 Golden Template Parameters**:
+  1. `ui_title`: Quán title (e.g. `"CX King Luxury"`)
+  2. `company_name`: Same as `ui_title`
+  3. `ui_bg`: CSS gradient background with trailing semicolon stripped (e.g. `"radial-gradient( circle farthest-corner at 10% 20%, rgba(2,37,78,1) 0%, rgba(4,4,16,1) 90.1% )"`)
+  4. `custom_hashtags`: Normalized no diacritics + `#<CleanTitle> #BILLIARDSlive #INUTlive #highlightsports`
+  5. `ui_tabs_links`: Exactly 20 sections `[C01]` to `[C20]` INI format with `stream_label=Video Trực tiếp\nvid_list_label=Danh sách highlight\nvid_play_label=<ui_title>\nlist_refresh_label=Cập nhật highlight`
+  6. `camera_count`: Integer matching `cameraCount`
+  7. `toolbar_show_count`: Integer matching `cameraCount`
+  8. `hls_using_go2rtc`: `true`
+  9. `button_generate_go2rtc_stream`: `true`
+  10. `logo_header`: `"https://vnmap-backend.inut.vn/uploads/bidalive_efd101c4e6.png"`
+  11. `logo_header_text`: `"Billiard Live - Tải clip bàn bida và livestream"`
+  12. `shinobi_camera_id`: Primary camera identifier (e.g. `"C01"` or provided `groupKey`)
+  13. `shinobi_group_key`: Shinobi group key string (e.g. `"AWU8wJMd2l"`)
+  14. `video_config`: `"range=72"`
+  15. `ui_scoreboard`: `true`
+  16. `ggcode`: Google Analytics measurement code (e.g. `"G-SFSDZPR95Z"`)
+
+### 5. `redbida_trigger_go2rtc`
+- **Arguments**: `{}`
+- **Output**: `{ "ok": true, "message": "Go2RTC generation triggered via MQTT button_generate_go2rtc_stream" }`
+
+### 6. `redbida_get_time_status`
+- **Arguments**: `{}`
+- **Output**: `{ "hostTime": string, "hostTimeRFC3339": string, "ntpSynchronized": boolean, "driftThresholdSeconds": 60, "policy": string }`
 
 ## Code Layout
-- `cmd/kspcam/main.go`: Flags (`--mcp`), Stdio mode initiation, config loader
-- `internal/config/config.go`: `ShinobiConfig`, `MCPConfig` structs and defaults
-- `internal/shinobi/`: Go Shinobi REST client, sync logic, data models
-- `internal/shinobi/client_test.go`: Shinobi mock test suite
-- `internal/mcp/`: Server, JSON-RPC 2.0 engine, stdio/sse transports, tool handlers
-- `internal/mcp/server_test.go`: MCP server and tools test suite
-- `internal/server/`: HTTP route handlers for `/api/shinobi/*` and `/mcp`
-- `web/static/`: Embedded Web UI Shinobi management tab and manual sync buttons
-- `GEMINI.md`, `AGENTS.md`, `docs/help/`: Architecture, protocol, and help articles
+
+- `internal/mcp/types.go` — JSON-RPC 2.0 models & Tool schemas
+- `internal/mcp/registry.go` — Tool registry & invocation dispatcher
+- `internal/mcp/server.go` — Server lifecycle & tool category registrations
+- `internal/mcp/tools_redbida.go` — RedBida & Onboarding MCP tools implementation (NEW)
+- `internal/mcp/tools_redbida_test.go` — Unit tests for RedBida tools (NEW)
+- `internal/mcp/server_test.go` — JSON-RPC 2.0 integration & tool registration tests
+- `internal/redbida/` — Pure Go MQTT client, Catalog, Service, and verification logic
+- `docs/help/mcp-server.md` — Help documentation for MCP server
+- `docs/help/redbida.md` — Help documentation for RedBida
+- `docs/CODEBASE-KNOWLEDGE.md` — Architecture & tools inventory
+- `GEMINI.md` / `AGENTS.md` — Second brain & tools table

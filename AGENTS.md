@@ -40,7 +40,7 @@ ksp-camera-auto/
 │   ├── bulk/                   # Bộ điều phối thực thi tuần tự (bulk apply), credtest brute-force kiểm tra tài khoản
 │   ├── server/                 # Web server HTTP, session auth, rate limiter, snapshot cache, SSE streaming, NVR watchdog, Shinobi & MCP routes
 │   ├── shinobi/                # Pure Go client cho Shinobi NVR REST API: CRUD monitor, stream states, videos, manual trigger 2-way sync
-│   ├── mcp/                    # Embedded Model Context Protocol (MCP) Server: JSON-RPC 2.0, Stdio & SSE transports, 24+ tools
+│   ├── mcp/                    # Embedded Model Context Protocol (MCP) Server: JSON-RPC 2.0, Stdio & SSE transports, 31+ tools
 │   ├── dahua/                  # Protocol client Dahua/KBVision DVRIP (TCP 37777/8888): framing nhị phân, 2-step MD5, JSON-RPC
 │   ├── isapi/                  # Protocol client Hikvision ISAPI: HTTP Digest Auth (RFC 2617), GET-modify-PUT XML engine
 │   ├── hik/                    # Adapter Hikvision bọc isapi.Client, chuẩn hóa kênh (0-based -> 101/201), native IMKH download
@@ -78,11 +78,12 @@ graph TD
     end
 
     subgraph Orchestration & Tool Execution Layer
-        MCPServer -->|24+ Registered Tools| BulkEngine[internal/bulk: Sequential Task Orchestrator]
+        MCPServer -->|31+ Registered Tools| BulkEngine[internal/bulk: Sequential Task Orchestrator]
         MCPServer -->|Tool Handlers| CamInterface[internal/camera: Camera Interface & Capabilities]
         MCPServer -->|Tool Handlers| Inventory
         MCPServer -->|Tool Handlers| Discovery
         MCPServer -->|Shinobi Tools| ShinobiEngine
+        MCPServer -->|RedBida Tools| RedbidaEngine[internal/redbida: MQTT Client & Catalog Engine]
         BulkEngine -->|Device Loop| CamInterface
     end
 
@@ -501,7 +502,7 @@ Package `internal/mcp` nhúng trực tiếp máy chủ giao thức **Model Conte
 - Client từ xa truyền API Key qua header `X-MCP-Key`, `Authorization: Bearer <key>`, hoặc query `?key=<key>`.
 - Mặc định cho phép kết nối nội bộ Loopback (`127.0.0.1`, `::1`, `localhost`) mà không cần API Key khi `allow_unauthenticated_loopback: true`.
 
-#### C. Bảng Danh mục 24+ Công cụ MCP Chuẩn hóa (MCP Tool Catalog)
+#### C. Bảng Danh mục 31+ Công cụ MCP Chuẩn hóa (MCP Tool Catalog)
 
 | Nhóm Công Cụ | Tên Công Cụ (Tool Name) | Tham Số Đầu Vào (Parameters) | Mô Tả Chức Năng |
 |---|---|---|---|
@@ -530,6 +531,12 @@ Package `internal/mcp` nhúng trực tiếp máy chủ giao thức **Model Conte
 | | `shinobi_sync_inventory` | `direction` (`push`/`pull`) | Đồng bộ danh mục 2 chiều theo hướng chỉ định |
 | | `shinobi_change_monitor_state` | `mid, state` (`start`/`stop`/`record`) | Điều khiển trạng thái luồng video monitor |
 | | `shinobi_get_videos` | `mid, limit` | Lấy danh sách video clip đã ghi hình trên Shinobi |
+| **RedBida & Onboarding** | `redbida_list_catalog` | `group, editableOnly` | Liệt kê toàn bộ metadata, nhóm, kiểu dữ liệu và rủi ro cấu hình Bida |
+| | `redbida_get_keys` | `keys, all` | Đọc giá trị live các khóa từ MQTT broker (`/private/i_gets`, tự động ẩn mật khẩu) |
+| | `redbida_set_keys` | `changes, confirmed` | Ghi giá trị các khóa qua MQTT (`/private/i_sets`) kèm xác nhận đọc lại |
+| | `redbida_apply_onboarding_preset` | `title, cameraCount, bg, groupKey, ...` | 1-Click Onboarding: tính toán & áp dụng đồng bộ 15 tham số Golden Template |
+| | `redbida_trigger_go2rtc` | Không | Gửi cờ kích hoạt Node-RED biên dịch cấu hình luồng `/root/go2rtc.yaml` |
+| | `redbida_get_time_status` | Không | Đọc đồng hồ hệ thống RFC 3339 và trạng thái đồng bộ NTP (`timedatectl`) |
 
 ---
 

@@ -1,36 +1,36 @@
-# BRIEFING — 2026-08-24T19:53:25+07:00
+# BRIEFING — 2026-08-24T20:18:25+07:00
 
 ## Mission
-Coordinate and monitor the complete upgrade of #redbida UI, Knowledge & Onboarding Workflow Hub, MQTT catalog integration, and testing/verification.
+Expand embedded MCP Server in ksp-camera-auto with full RedBida / Bida Onboarding suite (`redbida_*`), unit tests, multi-arch build, node deployment, and documentation.
 
 ## 🔒 My Identity
 - Archetype: sentinel
 - Working directory: /home/ksp/ksp-camera-auto/.agents/sentinel
-- Orchestrator: 2459fd81-eea0-41c3-8a5b-e354b9c9f098 (retired)
-- Victory Auditor: 7d9f33e7-fe39-48d9-874f-f993bb779391 (retired)
+- Orchestrator: 6a8fb107-278e-456d-910f-dfb3bd7838d2
+- Victory Auditor: to be spawned on victory claim
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
 - Victory Audit is MANDATORY before reporting completion
-- Monitor project progression and manage subagent lifecycle
+- Must route to teamwork_preview_orchestrator for multi-component SWE development and deployment
 
 ## User Context
-- **Last user request**: Upgrade #redbida UI, integrate System Knowledge Hub, MQTT catalog metadata, Onboarding preset generator, testing, and packaging.
+- **Last user request**: Full MCP server expansion with RedBida & Onboarding tools, registration, tests, multi-arch build, deployment, docs, and git commit.
 - **Pending clarifications**: none
-- **Delivered results**: 100% of requirements R1, R2, R3 completed, verified, and audited.
+- **Delivered results**: none
 
 ## Project Status
-- **Phase**: complete
-- **Route**: General (teamwork_preview_orchestrator)
-- **Active Orchestrator ID**: none (completed)
-- **Active Auditor ID**: none (completed)
+- **Phase**: in progress (Orchestrator active, Phase 0 scoping in progress)
+
+## Routing Decision
+- **Route**: General -> teamwork_preview_orchestrator
+- **Rationale**: Multi-part SWE project covering backend tools, server registry, unit tests, multi-arch builds, remote node deployment, docs, and git.
 
 ## Victory Audit Status
-- **Triggered**: yes
-- **Verdict**: VICTORY CONFIRMED
+- **Triggered**: no
+- **Verdict**: pending
 - **Retry count**: 0
 
 ## Artifact Index
-- /home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md — Authoritative User Request
-- /home/ksp/ksp-camera-auto/.agents/orchestrator_1/handoff.md — Orchestrator Handoff
-- /home/ksp/ksp-camera-auto/.agents/victory_auditor_1/handoff.md — Victory Audit Report
+- /home/ksp/ksp-camera-auto/ORIGINAL_REQUEST.md — Original verbatim user request
+- /home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md — Original request mirror

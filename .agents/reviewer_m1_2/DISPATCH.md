@@ -1,14 +1,21 @@
-## 2026-08-24T12:01:10Z
+# Task Assignment: Reviewer 2 for Milestone 1
 
-You are Reviewer 2 for Milestone 1 (Backend Catalog & Metadata Refinements).
-Your working directory: /home/ksp/ksp-camera-auto/.agents/reviewer_m1_2/
-Authoritative user request: /home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md
-Master project specification: /home/ksp/ksp-camera-auto/.agents/PROJECT.md
-Worker handoff report: /home/ksp/ksp-camera-auto/.agents/worker_m1/handoff.md
+Independently review `internal/mcp/tools_redbida.go` and `internal/mcp/tools_redbida_test.go`.
+Examine edge cases, tone removal correctness (`removeVietnameseTones`), 20-section INI (`generate20TabINITabs`), semicolon removal on `ui_bg`, parameter schemas, secret masking, and nil-service handling.
+Run tests using Go at `/home/ksp/go-sdk/bin/go`.
+Write your report and verdict (APPROVE or REQUEST_CHANGES) to `/home/ksp/ksp-camera-auto/.agents/reviewer_m1_2/handoff.md`.
 
-Your Mission:
-1. Read /home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md and /home/ksp/ksp-camera-auto/.agents/PROJECT.md.
-2. Adversarially challenge the changes in `internal/redbida/catalog.go`, `internal/redbida/redbida_test.go`, and `internal/server/api_redbida_test.go`.
-3. Check for edge cases: what happens with empty values, zero values, special characters in hashtags, 20-tab INI parsing, invalid number types, case sensitivity in regexes.
-4. Execute tests independently: `/home/ksp/go-sdk/bin/go test -v ./internal/redbida/...` and `/home/ksp/go-sdk/bin/go test ./...`.
-5. Write your verdict (APPROVE or REQUEST_CHANGES) with detailed reasoning to `/home/ksp/ksp-camera-auto/.agents/reviewer_m1_2/handoff.md` and send a message back to parent.
+## 2026-08-24T13:29:40Z
+You are teamwork_preview_reviewer reviewing Milestone 1 for the ksp-camera-auto project.
+Your working directory is `/home/ksp/ksp-camera-auto/.agents/reviewer_m1_2`.
+Read `/home/ksp/ksp-camera-auto/ORIGINAL_REQUEST.md`, `/home/ksp/ksp-camera-auto/PROJECT.md`, and `/home/ksp/ksp-camera-auto/.agents/reviewer_m1_2/DISPATCH.md`.
+
+Independently review `internal/mcp/tools_redbida.go` and `internal/mcp/tools_redbida_test.go`:
+1. Verify `removeVietnameseTones` (NFC & NFD), `sanitizeCSSGradient`, and `generate20TabINITabs` (all 20 sections [C01]-[C20]).
+2. Check `redbida_apply_onboarding_preset` synthesis of all 15 parameters, dry-run vs live, and read-back verification.
+3. Run tests using Go at `/home/ksp/go-sdk/bin/go`.
+4. Provide concrete verdict: APPROVE or REQUEST_CHANGES.
+
+Write your report and verdict to `/home/ksp/ksp-camera-auto/.agents/reviewer_m1_2/handoff.md`.
+Update `progress.md` with your status.
+When done, call `send_message` to your parent with a concise summary, verdict, and path to your handoff file.

@@ -128,14 +128,87 @@ func TestServer_ToolsList(t *testing.T) {
 		"shinobi_delete_monitor",
 		"shinobi_sync_to_shinobi",
 		"shinobi_sync_from_shinobi",
+		"shinobi_sync_inventory",
 		"shinobi_change_monitor_state",
 		"shinobi_get_videos",
+		"redbida_list_catalog",
+		"redbida_get_keys",
+		"redbida_set_keys",
+		"redbida_apply_onboarding_preset",
+		"redbida_trigger_go2rtc",
+		"redbida_get_time_status",
+	}
+
+	if len(toolsList.Tools) != len(expectedTools) {
+		t.Errorf("expected %d tools, got %d", len(expectedTools), len(toolsList.Tools))
 	}
 
 	for _, name := range expectedTools {
 		if _, found := toolMap[name]; !found {
 			t.Errorf("missing expected tool in registry: %s", name)
 		}
+	}
+}
+
+func TestServer_ToolsCall_Redbida(t *testing.T) {
+	_, _, srv := newTestSetup(t)
+	ctx := context.Background()
+
+	// 1. Call redbida_get_time_status
+	timeReq := JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      10,
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"redbida_get_time_status","arguments":{}}`),
+	}
+	resp, isNotif := srv.ProcessRequest(ctx, timeReq)
+	if isNotif {
+		t.Fatalf("unexpected notification for tools/call")
+	}
+	if resp.Error != nil {
+		t.Fatalf("redbida_get_time_status error: %v", resp.Error)
+	}
+	tr, ok := resp.Result.(ToolResult)
+	if !ok || len(tr.Content) == 0 {
+		t.Fatalf("expected ToolResult with content, got %#v", resp.Result)
+	}
+	if tr.IsError {
+		t.Fatalf("tool result returned error: %s", tr.Content[0].Text)
+	}
+
+	// 2. Call redbida_list_catalog
+	catReq := JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      11,
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"redbida_list_catalog","arguments":{"group":"UI / Display"}}`),
+	}
+	resp, _ = srv.ProcessRequest(ctx, catReq)
+	if resp.Error != nil {
+		t.Fatalf("redbida_list_catalog error: %v", resp.Error)
+	}
+	tr, ok = resp.Result.(ToolResult)
+	if !ok || len(tr.Content) == 0 {
+		t.Fatalf("expected ToolResult for catalog, got %#v", resp.Result)
+	}
+
+	// 3. Call redbida_apply_onboarding_preset dryRun
+	presetReq := JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      12,
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"redbida_apply_onboarding_preset","arguments":{"title":"Bida Club VIP","cameraCount":10,"dryRun":true}}`),
+	}
+	resp, _ = srv.ProcessRequest(ctx, presetReq)
+	if resp.Error != nil {
+		t.Fatalf("redbida_apply_onboarding_preset error: %v", resp.Error)
+	}
+	tr, ok = resp.Result.(ToolResult)
+	if !ok || len(tr.Content) == 0 {
+		t.Fatalf("expected ToolResult for preset, got %#v", resp.Result)
+	}
+	if !strings.Contains(tr.Content[0].Text, "Bida Club VIP") {
+		t.Errorf("expected synthesized result to contain title, got: %s", tr.Content[0].Text)
 	}
 }
 

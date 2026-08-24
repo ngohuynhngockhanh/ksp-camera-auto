@@ -1,100 +1,102 @@
-# Milestone 1: Backend Catalog & Metadata Refinements — Reviewer 2 Report
-
-**Verdict**: APPROVE  
-**Risk Assessment**: LOW  
-**Integrity Violations**: NONE (0 detected)  
-
----
+# Handoff Report — Milestone 1 Review: RedBida & Onboarding MCP Tools Suite
 
 ## 1. Observation
 
-Direct observations from codebase inspection, adversarial review, and independent test execution:
+Direct inspection of files and command executions:
 
-### 1.1 Source Code Changes in `internal/redbida/catalog.go`
-- **Line 13**: `runtimeKeyRe` updated to `(?i)(^api(_model)?_count$|^download_count$|^packed_count$|^view_count$|^node_config_|^test_button$)`. `toolbar_show_count` was unblocked from being erroneously classified as a runtime/read-only counter.
-- **Lines 37–45**: `shinobi_group_key` added to `fallbackKeys`, ensuring metadata availability during directory discovery outages.
-- **Line 62 & Line 94**: `toolbar_show_count` registered in `editableKeySet` and `numberKeySet`.
-- **Line 96**: `jsonKeySet = keySet("")` emptied. `custom_hashtags` and `ui_tabs_links` now default to `TypeString`.
-- **Lines 98–100**: Registered strict numeric boundary in `init()`:
-  ```go
-  func init() {
-      numericRules["toolbar_show_count"] = numericRule{min: 0, max: 4096, integer: true}
-  }
+### A. Inspected Files
+1. `internal/mcp/tools_redbida.go` (484 lines):
+   - `removeVietnameseTones` (lines 387-434): Pure Go implementation filtering combining diacritical marks (`U+0300`..`U+036F` for NFD) and converting all precomposed Vietnamese NFC characters (`à`..`ỹ`, `đ`, `Đ`, uppercase & lowercase) to ASCII equivalents.
+   - `sanitizeCleanTitle` (lines 436-446): Uses `removeVietnameseTones` and filters for alphanumeric characters `[A-Za-z0-9]`, producing safe hashtag identifiers.
+   - `sanitizeCSSGradient` (lines 458-467): Trims trailing semicolons and trailing whitespace in a loop (`strings.HasSuffix(bg, ";")`), falling back to default radial gradient if empty.
+   - `generate20TabINITabs` (lines 448-455): Formats exactly 20 sections `[C01]` through `[C20]` (`[C%02d]`) with 4 required INI keys: `stream_label`, `vid_list_label`, `vid_play_label` (set to venue title), and `list_refresh_label`.
+   - `queryNTPSynchronized` (lines 470-483): Executes `timedatectl show -p NTPSynchronized --value` with a 2-second timeout context.
+   - `registerRedbidaTools` (lines 16-385): Implements and registers all 6 RedBida tools:
+     - `redbida_list_catalog`: metadata catalog with group & editableOnly filters.
+     - `redbida_get_keys`: reads keys with secret masking (`********`) and `all` flag.
+     - `redbida_set_keys`: applies key changes with read-back verification.
+     - `redbida_apply_onboarding_preset`: synthesizes 15 parameters, supports `dryRun` and live application with read-back verification.
+     - `redbida_trigger_go2rtc`: publishes `button_generate_go2rtc_stream: true`.
+     - `redbida_get_time_status`: checks host system time and NTP synchronization status.
+     - Nil-service safety: `checkService()` checks `redbidaSvc != nil` and returns informative errors on disabled service.
+2. `internal/mcp/tools_redbida_test.go` (617 lines):
+   - Complete unit and integration test suite with `mockRedbidaBroker`:
+     - `TestRemoveVietnameseTones`: 19 sub-cases testing NFC/NFD, all vowels, upper/lower cases, complex multi-word strings.
+     - `TestSanitizeCleanTitle`: 5 sub-cases testing special characters, hyphens, and numbers.
+     - `TestSanitizeCSSGradient`: 4 sub-cases testing semicolon removal, empty default fallback.
+     - `TestGenerate20TabINITabs`: checks 20 sections, section headers `[C01]`..`[C20]`, line contents.
+     - `TestRedbidaTools_ListCatalog`: catalog listing and filtering.
+     - `TestRedbidaTools_GetKeys`: key retrieval and secret masking.
+     - `TestRedbidaTools_SetKeys`: key writing and verification.
+     - `TestRedbidaTools_ApplyOnboardingPreset_DryRun`: validates dry-run parameter synthesis and ensures no broker writes occur.
+     - `TestRedbidaTools_ApplyOnboardingPreset_Live`: validates live write and read-back verification.
+     - `TestRedbidaTools_ApplyOnboardingPreset_Validations`: validates boundary conditions (`title == ""`, `cameraCount < 1`, `cameraCount > 20`).
+     - `TestRedbidaTools_TriggerGo2RTC`: validates go2rtc trigger flag.
+     - `TestRedbidaTools_GetTimeStatus`: validates host time querying and threshold.
+     - `TestRedbidaTools_DisabledServiceGracefulHandling`: validates graceful handling when `redbidaSvc` is nil across all tools.
+
+### B. Test Execution Results
+- `internal/mcp` test suite:
+  ```bash
+  /home/ksp/go-sdk/bin/go test -count=1 -v ./internal/mcp/...
   ```
-- **Lines 238–253**: `metaForKey()` domain groupings updated across 5 business groups (`"Branding / Logo"`, `"Livestream"`, `"UI / Display"`, `"Schedule / Maintenance"`, `"Security / Credentials"`), with precedence given to `sensitiveKeyRe` matches.
-
-### 1.2 Test Enhancements
-- **`internal/redbida/redbida_test.go`**:
-  - `TestCatalogToolbarShowCountMetadataAndValidation`: verifies integer boundaries `[0, 4096]`, rejection of floats (`8.5`), negative numbers (`-1`), oversized integers (`4097`), strings (`"8"`), booleans, and `nil`.
-  - `TestCatalogStringKeysAcceptTextAndMultiline`: validates `custom_hashtags` and `ui_tabs_links` accepting arbitrary strings and multiline INI configs without JSON parsing errors.
-  - `TestCatalogShinobiGroupKeyFallbackAndClassification`: validates `RiskProtected`, `Secret: true`, `Security / Credentials`.
-  - `TestCatalogDomainGroupingClassifications`: verifies 38+ keys mapped to proper domain groups.
-  - `TestCatalogListOrderingAndFallbackCompleteness`: validates sort stability by `Group` then `Key`.
-- **`internal/server/api_redbida_test.go`**:
-  - `TestRedbidaCatalogHandlerMetadataAndDomainGroups`: tests HTTP `GET /api/redbida/catalog` response payload.
-  - `TestRedbidaApplyBatchPresetChanges`: tests HTTP `POST /api/redbida/apply` batch preset change execution.
-
-### 1.3 Execution Results
-- `/home/ksp/go-sdk/bin/go test -v ./internal/redbida/... -cover`:
-  - 23 tests PASSED (100%), coverage: 82.0% of statements.
-- `/home/ksp/go-sdk/bin/go test -count=1 ./internal/redbida/... ./internal/server/...`:
-  - Uncached tests PASSED in 0.624s.
-- `/home/ksp/go-sdk/bin/go test ./...`:
-  - All workspace packages PASSED (100%).
-- `/home/ksp/go-sdk/bin/go build ./cmd/kspcam`:
-  - Static compilation succeeded with exit code 0.
+  Result: **PASS** (18/18 test suites passed in 0.446s).
+- Full workspace test suite:
+  ```bash
+  /home/ksp/go-sdk/bin/go test -count=1 ./...
+  ```
+  Result: **PASS** (all packages passed without regressions).
 
 ---
 
-## 2. Logic Chain & Adversarial Challenge
+## 2. Logic Chain
 
-### 2.1 Adversarial Challenge & Stress-Testing
-
-| Edge Case / Scenario | Stress Test Mechanism | Observed / Analyzed Behavior | Result |
-|---|---|---|---|
-| **Empty Values (`""`, `0`)** | Tested empty string on `custom_hashtags`, `ui_tabs_links`, and zero integer (`0`) on `toolbar_show_count` and `camera_count`. | Empty string passes `TypeString` validation (under 2MB limit). `0` satisfies `0 <= 4096` integer check in `numericRules`. Empty directory files recognized as `empty` and defaulted cleanly in `Refresh`. | **PASS** |
-| **Special Characters in Hashtags** | Tested `#CXKingLuxury #BILLIARDSlive #INUTlive #24/7 #100% #Bi-A_ViệtNam!`. | Because `custom_hashtags` is `TypeString`, `validateValue` accepts UTF-8, punctuation, emojis, and hashtags without restrictive regex rejections. | **PASS** |
-| **20-Tab Multiline INI (`ui_tabs_links`)** | Tested 20-section INI configuration with `[C01]` ... `[C20]` headers, Vietnamese text, newlines, and key-value pairs. | `jsonKeySet` was previously rejecting INI strings as invalid JSON objects. With `TypeString`, multiline INI passes validation, is serialized cleanly to MQTT `/private/i_sets`, and round-tripped with read-back verification. | **PASS** |
-| **Invalid Number Types on `toolbar_show_count`** | Tested float (`8.5`), negative (`-1`), upper overflow (`4097`), string number (`"8"`), boolean (`true`), and `nil`. | `validateValue` correctly invokes `numberValue()` and `numericRules["toolbar_show_count"]`, rejecting all invalid types with specific error messages. | **PASS** |
-| **Case Sensitivity in Regexes** | Tested mixed-case keys against `sensitiveKeyRe`, `protectedKeyRe`, `runtimeKeyRe`. | All regular expressions preserve the `(?i)` flag, ensuring case-insensitive matching across all key names. | **PASS** |
-| **Integrity & Gating** | Attempted modification of protected keys (`shinobi_group_key`, `ggcode`, `frpc_config`) without confirmation. | Properly rejected as `RiskProtected` (`key is read-only`), preventing unauthorized overrides. | **PASS** |
-
-### 2.2 Integrity Violation Audit
-- Checked for hardcoded test responses: **None found**.
-- Checked for dummy / facade implementations: **None found**. Real validation, real regex evaluation, real catalog list generation, real MQTT test broker interaction.
-- Checked for external shortcuts / bypassing: **None found**.
-- Checked for self-certifying / unverified claims: **All claims independently re-tested and confirmed**.
+1. **R1.1 - R1.6 Requirements Compliance**:
+   - `redbida_list_catalog`, `redbida_get_keys`, `redbida_set_keys`, `redbida_apply_onboarding_preset`, `redbida_trigger_go2rtc`, `redbida_get_time_status` are fully implemented according to `PROJECT.md` and `ORIGINAL_REQUEST.md`.
+2. **Vietnamese Tone Removal (`removeVietnameseTones`)**:
+   - Supports NFC precomposed characters (exhaustive table matching all 67 Vietnamese accented characters).
+   - Supports NFD decomposed characters (combining diacritical marks in range `U+0300`..`U+036F` are skipped while base runes are preserved).
+   - `sanitizeCleanTitle` strips non-alphanumerics, generating clean hashtags without diacritics.
+3. **CSS Gradient Sanitization (`sanitizeCSSGradient`)**:
+   - Strips trailing semicolons iteratively (preventing syntax errors when embedded in UI styling).
+   - Fallback to standard luxury gradient when input is empty.
+4. **20-Tab INI Synthesis (`generate20TabINITabs`)**:
+   - Produces exactly 20 sections `[C01]` to `[C20]`.
+   - Every section contains 4 lines with `vid_play_label` dynamically bound to `title`.
+5. **Onboarding Preset Synthesis (`redbida_apply_onboarding_preset`)**:
+   - Synthesizes all 15 parameters (`ui_title`, `company_name`, `ui_bg`, `custom_hashtags`, `ui_tabs_links`, `camera_count`, `toolbar_show_count`, `video_config`, `hls_using_go2rtc`, `button_generate_go2rtc_stream`, `logo_header`, `logo_header_text`, `shinobi_camera_id`, `shinobi_group_key`, `ui_scoreboard`) plus optional tokens (`ggcode`, `shinobi_token`, `shinobi_monitor_token`).
+   - Boundary checks enforce `cameraCount` between 1 and 20, and `title` non-empty.
+   - `dryRun` returns the parameter map safely without MQTT mutations.
+   - Live execution delegates to `redbida.Service.Apply` which enforces full read-back verification against the local broker.
+6. **Adversarial & Integrity Checks**:
+   - Zero hardcoded test fixtures or facade shortcuts found in production code.
+   - Real system commands (`timedatectl`) and real MQTT client calls are used with bounded context timeouts.
+   - Zero regressions across the workspace.
 
 ---
 
 ## 3. Caveats
 
-- **No Caveats**: The scope of Milestone 1 is confined to backend metadata definitions, validation logic, and unit/integration testing in `internal/redbida` and `internal/server`. All changes are fully backward-compatible and introduce zero regressions to existing API contracts.
+- System time query (`timedatectl`) depends on systemd presence in the Linux environment; if timedatectl is unavailable, it gracefully returns `ntpSynchronized: false` and uses host clock time.
+- Physical connection to edge nodes (`inut_204_164`, `inut_204_163`) will be performed in Milestone 3 as planned.
 
 ---
 
 ## 4. Conclusion
 
-- **Verdict: APPROVE**.
-- The implementation in `internal/redbida/catalog.go` and accompanying test suites in `internal/redbida/redbida_test.go` and `internal/server/api_redbida_test.go` completely fulfill the requirements of Milestone 1.
-- All edge cases (empty strings, zero integers, special characters in hashtags, 20-tab INI, type conversions, case-insensitive regexes) behave correctly and robustly.
+**Verdict: APPROVE**
+
+The implementation of `internal/mcp/tools_redbida.go` and `internal/mcp/tools_redbida_test.go` fully satisfies all Milestone 1 requirements, adheres strictly to the Golden Template and RedBida interface contracts, and passes all adversarial edge-case stress tests.
 
 ---
 
 ## 5. Verification Method
 
 To independently verify:
-
 ```bash
-# 1. Verify redbida unit tests and code coverage
-/home/ksp/go-sdk/bin/go test -v ./internal/redbida/... -cover
+# Run unit tests for MCP tools
+/home/ksp/go-sdk/bin/go test -count=1 -v ./internal/mcp/...
 
-# 2. Verify server integration tests
-/home/ksp/go-sdk/bin/go test -v -run "TestRedbida.*" ./internal/server/...
-
-# 3. Verify all workspace tests uncached
+# Run all workspace unit tests
 /home/ksp/go-sdk/bin/go test -count=1 ./...
-
-# 4. Verify static binary compilation
-/home/ksp/go-sdk/bin/go build ./cmd/kspcam
 ```

@@ -1,50 +1,63 @@
-# BRIEFING — 2026-08-24T19:00:00+07:00
+# BRIEFING — 2026-08-24T20:28:40+07:00
 
 ## Mission
-Milestone 1: Backend Catalog & Metadata Refinements for Redbida integration.
+Milestone 1: Implement RedBida & Onboarding MCP Tools Suite in internal/mcp/tools_redbida.go.
 
 ## 🔒 My Identity
 - Archetype: worker
 - Roles: implementer, qa, specialist
 - Working directory: /home/ksp/ksp-camera-auto/.agents/worker_m1
-- Original parent: 2459fd81-eea0-41c3-8a5b-e354b9c9f098
-- Milestone: M1 (Backend Catalog & Metadata Refinements)
+- Original parent: 6a8fb107-278e-456d-910f-dfb3bd7838d2
+- Milestone: M1 (RedBida & Onboarding MCP Tools Suite)
 
 ## 🔒 Key Constraints
-- Scope & File Ownership: `internal/redbida/catalog.go`, `internal/redbida/redbida_test.go`, `internal/server/api_redbida_test.go`.
+- Target file: `internal/mcp/tools_redbida.go`
 - Genuine implementation only, no hardcoded cheating.
 - 100% test pass with full coverage for new changes.
+- Pure Go with CGO_ENABLED=0 compatibility.
 
 ## Current Parent
-- Conversation ID: 2459fd81-eea0-41c3-8a5b-e354b9c9f098
-- Updated: 2026-08-24T19:00:00+07:00
+- Conversation ID: 6a8fb107-278e-456d-910f-dfb3bd7838d2
+- Updated: 2026-08-24T20:28:40+07:00
 
 ## Task Summary
-- **What to build**: Refined `catalog.go` (`toolbar_show_count`, `custom_hashtags`, `ui_tabs_links`, `shinobi_group_key`, grouping classifications) and associated unit tests in `redbida_test.go` and `api_redbida_test.go`.
-- **Success criteria**: All catalog requirements satisfied, unit tests added and passing 100%, `go test ./...` passing.
-- **Interface contracts**: `internal/redbida/catalog.go` exports `AnalyzeKey`, `IsEditable`, `IsRuntimeOnly`, `ValidateValue`, `IsSensitive`, `FallbackKeys`, `Meta`.
+- **What to build**: `internal/mcp/tools_redbida.go` implementing 6 MCP tools:
+  1. `redbida_list_catalog`
+  2. `redbida_get_keys`
+  3. `redbida_set_keys`
+  4. `redbida_apply_onboarding_preset`
+  5. `redbida_trigger_go2rtc`
+  6. `redbida_get_time_status`
+  and helper `registerRedbidaTools(r *Registry, cfg *config.Config, redbidaSvc *redbida.Service)`.
+- **Success criteria**: All tools functional, pure Go removeVietnameseTones, 20-tab INI, trailing semicolon stripping on CSS gradients, full read-back verification, unit tests passing.
+- **Interface contracts**: `PROJECT.md` § Interface Contracts.
+
+## Loaded Skills
+- **Source**: `/home/ksp/ksp-camera-auto/.agents/skills/camera-naming/SKILL.md`
+- **Core methodology**: Camera/monitor naming standard, Golden Template inheritance from Camera01, 20-section INI tabs `[C01]`-`[C20]`, CSS gradient background without trailing semicolon, and hashtag normalization.
 
 ## Key Decisions Made
-- Removed `toolbar_show_count` from `runtimeKeyRe`, registered it in `editableKeySet`, `numberKeySet`, and `numericRules` (`[0, 4096]`, `integer: true`).
-- Cleared `jsonKeySet` so `custom_hashtags` and `ui_tabs_links` default to `TypeString`, enabling multiline INI and string hashtag values without JSON parse errors.
-- Added `shinobi_group_key` to `fallbackKeys` with `RiskProtected` and `Secret: true`.
-- Refined `metaForKey` grouping logic for 5 core domain groups: `"Branding / Logo"`, `"Livestream"`, `"UI / Display"`, `"Schedule / Maintenance"`, and `"Security / Credentials"`.
-- Added unit tests in `internal/redbida/redbida_test.go` and `internal/server/api_redbida_test.go`.
+- Implemented `removeVietnameseTones` in pure Go supporting both NFC (precomposed) and NFD (decomposed) combining diacritical marks (`U+0300`-`U+036F`).
+- Implemented `sanitizeCleanTitle` stripping all punctuation/whitespace for `#<CleanTitle> #BILLIARDSlive #INUTlive #highlightsports`.
+- Implemented `sanitizeCSSGradient` stripping trailing semicolon `;` to ensure valid CSS DOM injection.
+- Implemented `generate20TabINITabs` producing exactly 20 sections `[C01]`-`[C20]` with `vid_play_label = <ui_title>`.
+- Included `button_generate_go2rtc_stream` and `button_restart_shinobi` in `booleanKeySet` in `catalog.go`.
+- Added complete unit test suite in `internal/mcp/tools_redbida_test.go` covering dry-run, live execution, validations, catalog filtering, secret masking, and disabled service fallback.
 
 ## Artifact Index
-- `internal/redbida/catalog.go` — Catalog metadata, type inference, validation rules, fallback keys.
-- `internal/redbida/redbida_test.go` — Unit tests for catalog metadata, types, validation, and domain grouping.
-- `internal/server/api_redbida_test.go` — HTTP server tests for catalog API and batch preset apply.
+- `internal/mcp/tools_redbida.go` — RedBida & Onboarding MCP tools implementation
+- `internal/mcp/tools_redbida_test.go` — Unit tests for RedBida MCP tools
+- `internal/redbida/catalog.go` — Catalog booleanKeySet refinement
 
 ## Change Tracker
 - **Files modified**:
-  - `internal/redbida/catalog.go`: Updated metadata regexes, keysets, fallbackKeys, and grouping rules.
-  - `internal/redbida/redbida_test.go`: Added new unit test suite for catalog rules and domain classifications.
-  - `internal/server/api_redbida_test.go`: Added test cases for catalog endpoint domain metadata and batch preset apply.
+  - `internal/mcp/tools_redbida.go`: Created new MCP tools file.
+  - `internal/mcp/tools_redbida_test.go`: Created comprehensive test suite.
+  - `internal/redbida/catalog.go`: Added `button_generate_go2rtc_stream` and `button_restart_shinobi` to `booleanKeySet`.
 - **Build status**: PASS (`go test ./...` 100% pass)
 - **Pending issues**: None
 
 ## Quality Status
-- **Build/test result**: All 23 tests in `internal/redbida` passed (`82.0%` coverage), all 7 Redbida tests in `internal/server` passed, `go test ./...` passed.
-- **Lint status**: Clean
-- **Tests added/modified**: `TestCatalogToolbarShowCountMetadataAndValidation`, `TestCatalogStringKeysAcceptTextAndMultiline`, `TestCatalogShinobiGroupKeyFallbackAndClassification`, `TestCatalogDomainGroupingClassifications`, `TestCatalogListOrderingAndFallbackCompleteness`, `TestRedbidaCatalogHandlerMetadataAndDomainGroups`, `TestRedbidaApplyBatchPresetChanges`.
+- **Build/test result**: PASS (all unit tests pass across all packages)
+- **Lint status**: Clean (`go vet` passes with 0 issues)
+- **Tests added/modified**: 13 test functions in `internal/mcp/tools_redbida_test.go`

@@ -1,41 +1,32 @@
-## 2026-08-24T12:07:30Z
+# Task Assignment: Milestone 2 — MCP Server Integration & Documentation
 
-You are Worker M2 for Milestone 2 (Frontend Glassmorphism Design & DOM Structure).
-Your working directory is: /home/ksp/ksp-camera-auto/.agents/worker_m2/
-Authoritative user request: /home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md
-Master project specification: /home/ksp/ksp-camera-auto/.agents/PROJECT.md
-Frontend Survey Report: /home/ksp/ksp-camera-auto/.agents/explorer_survey_frontend/handoff.md
-Knowledge Survey Report: /home/ksp/ksp-camera-auto/.agents/explorer_survey_knowledge/handoff.md
+## 2026-08-24T13:34:00Z
 
-MANDATORY INTEGRITY WARNING:
-DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results, create dummy/facade implementations, or circumvent the intended task. A teamwork_preview_auditor will independently verify your work. Integrity violations WILL be detected and your work WILL be rejected.
+Working Directory: `/home/ksp/ksp-camera-auto/.agents/worker_m2`
 
-Scope & File Ownership:
-You EXCLUSIVELY own:
-- `web/static/style.css`
-- `web/static/index.html`
+Read:
+- `/home/ksp/ksp-camera-auto/ORIGINAL_REQUEST.md`
+- `/home/ksp/ksp-camera-auto/PROJECT.md`
+- `/home/ksp/ksp-camera-auto/.agents/explorer_mcp_core/handoff.md`
+- `/home/ksp/ksp-camera-auto/.agents/explorer_deploy_infra/handoff.md`
+- `/home/ksp/ksp-camera-auto/.agents/worker_m1/handoff.md`
+- `/home/ksp/ksp-camera-auto/.agents/worker_m2/DISPATCH.md`
 
-Required Tasks:
-1. Read /home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md, the frontend survey report, and current files.
-2. In `web/static/style.css`:
-   - Define modern Dark/Light Glassmorphism tokens (`--glass-*`: blur, saturate, borders, cards, glow accents, shadows).
-   - Style `#view-redbida` components:
-     * Status metrics grid (`.redbida-status-grid`, `.redbida-metric-card`)
-     * 4-Pillar Knowledge Hub (`.redbida-pillars-grid`, `.redbida-pillar-card`, `.redbida-pillar-badge`, `.redbida-pillar-btn`)
-     * Preset / 1-Click Onboarding Generator (`#redbida-preset-panel`, `.redbida-preset-card`, `.redbida-preset-swatches`, `.redbida-swatch`, `.redbida-diff-card`)
-     * Live Visual Previews (`.redbida-gradient-preview`, `.redbida-checkerboard`, `.redbida-tab-simulator`)
-     * Table styling, risk badges (`.redbida-risk-*`), dirty row styling (`.redbida-dirty`), row status indicators, and responsive media queries.
-3. In `web/static/index.html` (inside `#view-redbida`):
-   - Upgrade the layout:
-     * Header & Quick-Action Bar (`#redbida-refresh`, `#redbida-apply`, plus collapsible toggles for preset & knowledge hub).
-     * Glass metric cards: `#redbida-node-status`, `#redbida-key-count`, `#redbida-time-status`, `#redbida-ntp-status`, `#redbida-broker-status`, `#redbida-draft-count`.
-     * 1-Click Onboarding Generator section: `#redbida-preset-panel` with inputs (`#redbida-preset-title`, `#redbida-preset-count`, `#redbida-preset-groupkey`, `#redbida-preset-bg`, `#redbida-preset-ggcode`), swatches container `#redbida-preset-swatches`, generate button `#redbida-preset-gen-btn`, visual diff container `#redbida-preset-diff`.
-     * 4-Pillar Knowledge Hub: `#redbida-knowledge-hub` with cards for Pillar 1 (Branding & UI), Pillar 2 (Streaming & Go2RTC), Pillar 3 (Shinobi NVR Sync & Golden Template), Pillar 4 (System & Security).
-     * Toolbar with `#redbida-search`, `#redbida-group`, `#redbida-dirty-only`, `#redbida-time-refresh`.
-     * Alert message box `#redbida-msg`.
-     * Table `#redbida-table` with `#redbida-tbody`.
-   - **CRITICAL CONSTRAINT**: You MUST strictly preserve all 19 test selectors from Playwright tests:
-     `#redbida-refresh` (and `data-testid="redbida-refresh"`), `#redbida-apply` (and `data-testid="redbida-apply"`), `#redbida-search`, `#redbida-group`, `#redbida-dirty-only`, `#redbida-key-count`, `#redbida-node-status`, `#redbida-time-status`, `#redbida-ntp-status`, `#redbida-msg`, `#redbida-table`, `#redbida-tbody`, `data-red-row`, `data-red-key`, `data-red-file`, `.redbida-dirty`, `.redbida-row-status`, `.redbida-current`, `.redbida-logo-preview`.
-4. Test and verify HTML & CSS syntax and ensure zero regressions across Go tests (`go test ./...`) and Playwright tests (`npx playwright test tests/ui/redbida.spec.js`).
-5. Write completion report to `/home/ksp/ksp-camera-auto/.agents/worker_m2/handoff.md`.
-6. Send completion message back to parent.
+Tasks for Milestone 2:
+1. Integrate RedBida tools into `internal/mcp/server.go`:
+   - Update `NewServer(cfg *config.Config, inv *config.Inventory, shinobiClient *shinobi.Client, redbidaService ...*redbida.Service) *Server`.
+   - Instantiate/wire `redbida.Service` and call `registerRedbidaTools(registry, cfg, rSvc)`.
+   - Update `internal/server/server.go` and `cmd/kspcam/main.go` so they pass their initialized `redbida.Service` to `mcp.NewServer`.
+   - Update `internal/mcp/server_test.go` to test that `tools/list` returns all 31 tools and that JSON-RPC calls dispatch properly.
+2. Update documentation:
+   - `docs/help/mcp-server.md`: Add RedBida & Onboarding category (6 tools) and update tool count (31 tools).
+   - `docs/help/redbida.md`: Add section detailing the 6 MCP tools and cover upload-logo/logo.png routes.
+   - `docs/CODEBASE-KNOWLEDGE.md`: Update Section 7 MCP Surface and tools list.
+   - `GEMINI.md` and `AGENTS.md`: Update package description (31+ tools), add new tools to the MCP tools table with arguments/types, and update diagrams.
+   - Run `/home/ksp/go-sdk/bin/go run ./tools/docgen -check` to verify doc coverage.
+3. Verify test suite:
+   - Run `/home/ksp/go-sdk/bin/go test -v ./internal/mcp/...`
+   - Run `/home/ksp/go-sdk/bin/go test ./...`
+   - Run `/home/ksp/go-sdk/bin/go build ./cmd/kspcam`
+
+Write completion report to `/home/ksp/ksp-camera-auto/.agents/worker_m2/handoff.md`.

@@ -15,7 +15,7 @@ Chi tiet protocol DaHua/Hikvision va gotcha live van nam trong
 - xem snapshot/live, recording search va playback/export;
 - discovery trong LAN va import monitor tu Shinobi;
 - quan ly monitor Shinobi bang REST;
-- expose 24 MCP tools qua Stdio va HTTP/SSE.
+- expose 31 MCP tools qua Stdio va HTTP/SSE.
 
 Binary mac dinh duoc build voi `CGO_ENABLED=0`, web assets duoc nhung qua
 `web/embed.go`. Build `hiksdk` la ngoai le, dung cgo va HCNetSDK cho Hikvision
@@ -173,22 +173,25 @@ Transports:
 - HTTP stateless `POST /mcp`;
 - HTTP SSE `GET /mcp` plus `POST /mcp/messages?sessionId=...`.
 
-The registry currently exposes 24 tools:
+The registry currently exposes 31 tools:
 
 ```text
 kspcam_list_cameras             kspcam_upsert_camera
 kspcam_delete_camera            kspcam_probe_camera
-kspcam_apply_profile             kspcam_set_channel_name
-kspcam_set_osd                   kspcam_reboot_camera
-kspcam_change_password           kspcam_scan_lan
-kspcam_try_password              kspcam_wifi_scan
-kspcam_get_network               kspcam_get_nvr_health
-kspcam_get_recordings            kspcam_get_snapshot
-shinobi_list_monitors            shinobi_add_monitor
-shinobi_edit_monitor             shinobi_delete_monitor
-shinobi_sync_to_shinobi          shinobi_sync_from_shinobi
-shinobi_sync_inventory           shinobi_change_monitor_state
-shinobi_get_videos
+kspcam_apply_profile            kspcam_set_channel_name
+kspcam_set_osd                  kspcam_reboot_camera
+kspcam_change_password          kspcam_scan_lan
+kspcam_try_password             kspcam_wifi_scan
+kspcam_get_network              kspcam_get_nvr_health
+kspcam_get_recordings           kspcam_get_snapshot
+shinobi_list_monitors           shinobi_add_monitor
+shinobi_edit_monitor            shinobi_delete_monitor
+shinobi_sync_to_shinobi         shinobi_sync_from_shinobi
+shinobi_sync_inventory          shinobi_change_monitor_state
+shinobi_get_videos              redbida_list_catalog
+redbida_get_keys                redbida_set_keys
+redbida_apply_onboarding_preset redbida_trigger_go2rtc
+redbida_get_time_status
 ```
 
 HTTP MCP auth accepts loopback bypass when configured, `X-MCP-Key`, Bearer

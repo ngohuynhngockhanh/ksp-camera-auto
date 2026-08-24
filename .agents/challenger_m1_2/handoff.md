@@ -1,109 +1,134 @@
-# Milestone 1 Challenger 2 Verdict & Empirical Report: Backend Catalog & Metadata Refinements
-
-**Verdict**: **APPROVE**
-
----
+# Empirical Adversarial Challenge Report: Milestone 1 (RedBida & Onboarding MCP Tools Suite)
 
 ## 1. Observation
 
-Direct empirical observations from executing adversarial tests, boundary conditions, race detection, and load harnesses:
+Direct empirical observations from source inspection and execution of the adversarial test harness using `/home/ksp/go-sdk/bin/go test -v -race`:
 
-### 1.1 Test Execution & Empirical Measurements
-1. **`internal/redbida` Unit & Adversarial Test Suite with Race Detector**:
-   Command: `/home/ksp/go-sdk/bin/go test -race -v ./internal/redbida/...`
-   Result:
-   - `=== RUN   TestAdversarialToolbarShowCount` -> `PASS`
-   - `=== RUN   TestAdversarialCustomHashtags` -> `PASS`
-   - `=== RUN   TestAdversarialUiTabsLinks` -> `PASS`
-   - `=== RUN   TestAdversarialShinobiGroupKeySecurity` -> `PASS`
-   - `=== RUN   TestAdversarialDomainGroupingCompleteness` -> `PASS`
-   - `=== RUN   TestAdversarialBatchApplyMixedTransaction` -> `PASS`
-   - `=== RUN   TestAdversarialCatalogConcurrency` -> `PASS (12.58s)`
-   - `=== RUN   TestAdversarial_MultilineINIAndComplexPayloads` -> `PASS (0.01s)`
-   - `=== RUN   TestAdversarial_NumericBoundaries` -> `PASS (0.01s)`
-   - `=== RUN   TestAdversarial_CatalogSortingDeterminism` -> `PASS (5.60s)`
-   - `=== RUN   TestAdversarial_CatalogRWMutexConcurrencyStress` -> `PASS (3.82s)`
-   - `=== RUN   TestAdversarial_ApplyBatchStressAndEdgeCases` -> `PASS (0.66s)`
-   - All 23 baseline unit tests -> `PASS`
-   - Package Result: `ok github.com/ngohuynhngockhanh/ksp-camera-auto/internal/redbida 26.866s` (0 data races, 0 memory leaks, 0 panics).
+1. **Target Implementation**:
+   - File: `/home/ksp/ksp-camera-auto/internal/mcp/tools_redbida.go` (484 lines).
+   - Tools Registered:
+     - `redbida_list_catalog` (lines 25-76)
+     - `redbida_get_keys` (lines 78-127)
+     - `redbida_set_keys` (lines 129-176)
+     - `redbida_apply_onboarding_preset` (lines 178-334)
+     - `redbida_trigger_go2rtc` (lines 336-362)
+     - `redbida_get_time_status` (lines 364-385)
+   - Helper Utilities:
+     - `removeVietnameseTones` (lines 387-434): Pure Go NFC/NFD accent stripping.
+     - `sanitizeCleanTitle` (lines 436-446): Strips diacritics and non-alphanumerics for hashtags.
+     - `generate20TabINITabs` (lines 448-455): Generates exactly 20 INI sections `[C01]` to `[C20]` with `vid_play_label=<title>`.
+     - `sanitizeCSSGradient` (lines 457-467): Strips trailing semicolons and whitespace from CSS gradient.
+     - `queryNTPSynchronized` (lines 469-483): Queries `timedatectl` with 2-second context timeout.
 
-2. **`internal/server` RedBida HTTP Handlers with Race Detector**:
-   Command: `/home/ksp/go-sdk/bin/go test -race -v -run "Redbida|Adversarial" ./internal/server/...`
-   Result:
-   - `TestAdversarialHTTPApplyEndpoints/malformed_json_body` -> `PASS (400 Bad Request)`
-   - `TestAdversarialHTTPApplyEndpoints/empty_changes_map` -> `PASS (502 Bad Gateway)`
-   - `TestAdversarialHTTPApplyEndpoints/toolbar_show_count_out_of_bounds` -> `PASS (Error: between 0 and 4096)`
-   - `TestAdversarialHTTPApplyEndpoints/toolbar_show_count_float` -> `PASS (Error: value must be an integer)`
-   - `TestAdversarialHTTPApplyEndpoints/valid_20_tabs_ini_apply` -> `PASS (Applied: true)`
-   - `TestAdversarialHTTPApplyEndpoints/shinobi_group_key_apply_rejected` -> `PASS (Error: key is read-only)`
-   - All 7 baseline server Redbida tests -> `PASS`
-   - Package Result: `ok github.com/ngohuynhngockhanh/ksp-camera-auto/internal/server 1.795s`.
-
-3. **Full Workspace Build & Test Integrity**:
-   - `/home/ksp/go-sdk/bin/go test ./...`: 100% PASS across all 19 workspace packages.
-   - `/home/ksp/go-sdk/bin/go build ./cmd/kspcam`: Clean compilation with zero warnings or errors.
+2. **Empirical Adversarial Test Execution**:
+   - Test File: `/home/ksp/ksp-camera-auto/internal/mcp/tools_redbida_adversarial_test.go`
+   - Command: `/home/ksp/go-sdk/bin/go test -v -race -run="TestAdversarial|TestRedbida|TestRemoveVietnamese|TestSanitize|TestGenerate" ./internal/mcp/...`
+   - Results:
+     ```
+     === RUN   TestAdversarial_BrokerTimeout_ReadAndWrite
+     --- PASS: TestAdversarial_BrokerTimeout_ReadAndWrite (0.12s)
+     === RUN   TestAdversarial_BrokerAckTimeout_RecoveryAndFailure
+     --- PASS: TestAdversarial_BrokerAckTimeout_RecoveryAndFailure (1.16s)
+     === RUN   TestAdversarial_PartialAcks_And_CorruptedReadBack
+     --- PASS: TestAdversarial_PartialAcks_And_CorruptedReadBack (0.61s)
+     === RUN   TestAdversarial_ConfirmationEnforcement_And_ProtectedKeys
+     --- PASS: TestAdversarial_ConfirmationEnforcement_And_ProtectedKeys (0.28s)
+     === RUN   TestAdversarial_OnboardingPreset_ExtremeInputs
+     --- PASS: TestAdversarial_OnboardingPreset_ExtremeInputs (0.00s)
+     === RUN   TestAdversarial_ConcurrencyStress
+     --- PASS: TestAdversarial_ConcurrencyStress (8.50s)
+     === RUN   TestAdversarial_JSONRPC20_Integration
+     --- PASS: TestAdversarial_JSONRPC20_Integration (0.00s)
+     === RUN   TestRedbidaTools_ListCatalog
+     --- PASS: TestRedbidaTools_ListCatalog (0.12s)
+     === RUN   TestRedbidaTools_GetKeys
+     --- PASS: TestRedbidaTools_GetKeys (4.29s)
+     === RUN   TestRedbidaTools_SetKeys
+     --- PASS: TestRedbidaTools_SetKeys (0.14s)
+     === RUN   TestRedbidaTools_ApplyOnboardingPreset_DryRun
+     --- PASS: TestRedbidaTools_ApplyOnboardingPreset_DryRun (0.00s)
+     === RUN   TestRedbidaTools_ApplyOnboardingPreset_Live
+     --- PASS: TestRedbidaTools_ApplyOnboardingPreset_Live (0.56s)
+     === RUN   TestRedbidaTools_ApplyOnboardingPreset_Validations
+     --- PASS: TestRedbidaTools_ApplyOnboardingPreset_Validations (0.00s)
+     === RUN   TestRedbidaTools_TriggerGo2RTC
+     --- PASS: TestRedbidaTools_TriggerGo2RTC (0.10s)
+     === RUN   TestRedbidaTools_GetTimeStatus
+     --- PASS: TestRedbidaTools_GetTimeStatus (0.01s)
+     === RUN   TestRedbidaTools_DisabledServiceGracefulHandling
+     --- PASS: TestRedbidaTools_DisabledServiceGracefulHandling (0.01s)
+     PASS
+     ok  	github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mcp	16.961s
+     ```
 
 ---
 
 ## 2. Logic Chain
 
-1. **Multiline INI (`ui_tabs_links`) String Verification**:
-   - `catalog.go` lines 91 and 266-277 ensure `ui_tabs_links` resolves to `TypeString`.
-   - `validateValue` in `service.go:304` allows strings up to 2MB.
-   - Empirical tests with full 20-section INI configurations (`[C01]` to `[C20]`), Windows CRLF line endings (`\r\n`), Unix LF (`\n`), and Vietnamese UTF-8 values pass validation and apply successfully. Strings >2MB are rejected with `"value is too large"`. Non-string structured inputs (JSON maps, arrays, bools, ints) are rejected with `"value must be a string"`.
+1. **Broker Failure & Timeout Handling**:
+   - *Observation*: In `TestAdversarial_BrokerTimeout_ReadAndWrite`, broker `Read` and `Write` failures returning `context.DeadlineExceeded` and network errors were tested.
+   - *Inference*: Both `redbida_get_keys` and `redbida_set_keys` correctly capture the broker error and return structured `ToolResult` with `IsError=true` without leaking uninitialized state or panicking.
+   - *Observation*: In `TestAdversarial_BrokerAckTimeout_RecoveryAndFailure`, when MQTT write ACK timed out (`redbida.AckTimeoutError`):
+     - If the physical broker received the update, `readBack` confirmed matching state, recovering gracefully (`Applied: true`, `Verified: true`, `ReadBack: true`).
+     - If the broker state did not update (stale state) or `readBack` failed, the operation failed closed (`Applied: false`, `Verified: false`, error clearly reported).
+   - *Inference*: The read-back verification state machine in `Service.Apply` successfully guards against false positives during transient MQTT packet loss.
 
-2. **Vietnamese Hashtags (`custom_hashtags`) Verification**:
-   - `custom_hashtags` resolves to `TypeString` in `Branding / Logo` group.
-   - Complex hashtag strings including precomposed and composite Vietnamese characters (`#BidaHoàngGia`, `#SàiGònBida`), emojis (`🎱`, `🏆`, `🔥`), and whitespace variations validate and apply cleanly.
+2. **Partial Write Failure & Corrupted Read-Back**:
+   - *Observation*: In `TestAdversarial_PartialAcks_And_CorruptedReadBack`, a batch write of 3 keys was tested where the broker acked key 1, omitted ack for key 2, and returned stale/corrupted data during readback for key 3.
+   - *Inference*: Key 1 succeeded (`Applied: true`, `Verified: true`), Key 2 failed with `"missing acknowledgement"`, and Key 3 failed with `"read-back mismatch"`. The tool isolates per-key outcomes accurately in the returned `ChangeResult` array.
 
-3. **Boundary Number Validation (`toolbar_show_count`)**:
-   - `catalog.go:99` defines `numericRules["toolbar_show_count"] = numericRule{min: 0, max: 4096, integer: true}`.
-   - Boundary tests confirm `0`, `4096`, and valid integers pass; `-1`, `4097`, `8.5`, strings `"8"`, booleans, nils, arrays, and maps are rejected with specific error messages.
+3. **Confirmation & Risk Policy Enforcement**:
+   - *Observation*: In `TestAdversarial_ConfirmationEnforcement_And_ProtectedKeys`, setting `RiskConfirm` keys (`max_free_ram_restart_camera`, `restart_camera_now`) with `confirmed: false` or omitted was immediately rejected with `"confirmation is required"`, and zero write calls were dispatched to the broker. Setting with `confirmed: true` succeeded. Setting read-only / protected keys (`frpc_config`) was rejected with `"key is read-only"`.
+   - *Inference*: Security boundaries and confirmation policies are enforced at the service level before any broker transmission occurs.
 
-4. **Concurrency Safety & Memory Protection**:
-   - `Catalog` utilizes `sync.RWMutex` protecting `c.observed`, `c.live`, `c.empty`, and `c.sourceErr`.
-   - Heavy concurrent read/write/list stress tests with 20–50 parallel goroutines under Go's `-race` detector completed with 0 data races.
-   - Deterministic sorting was tested over 100 iterations: `catalog.List()` consistently returned identical slices sorted by `Group asc`, then `Key asc`.
+4. **1-Click Onboarding Preset Synthesis**:
+   - *Observation*: In `TestAdversarial_OnboardingPreset_ExtremeInputs`, complex inputs were tested:
+     - Vietnamese venue title `"  CLB Bida Sài Gòn Đệ Nhất - CS3 & CS4 (Phú Nhuận) #2026 !  "` synthesized `#CLBBidaSaiGonDeNhatCS3CS4PhuNhuan2026 #BILLIARDSlive #INUTlive #highlightsports`.
+     - Pure emoji title `"✨⭐🎉🚀"` fell back cleanly to `#BILLIARDSlive #INUTlive #highlightsports`.
+     - CSS gradient trailing semicolons (`"linear-gradient(...); ; ; ; \t\n"`) were cleanly stripped.
+     - 20-tab INI configuration contained exactly sections `[C01]` through `[C20]` with interpolated `vid_play_label`.
+     - `cameraCount` boundaries (-10, 0, 21, 100) were rejected with `"cameraCount must be between 1 and 20"`.
+     - DryRun mode synthesized all 15 parameters without writing to broker.
+   - *Inference*: Onboarding preset synthesis conforms 100% to the Golden Template and RedBida naming skill specifications.
 
-5. **Security Gating & Protected Keys (`shinobi_group_key`, `ggcode`, `frpc_config`)**:
-   - `sensitiveKeyRe` in `catalog.go:11` matches `shinobi_group_key`, marking it `Secret: true`, `RiskProtected`, `editable: false`.
-   - In mutations via `/api/redbida/apply` (both unconfirmed and confirmed), mutation attempts on `shinobi_group_key` or `ggcode` are rejected with `"key is read-only"` and are never dispatched to `broker.Write`. In `Refresh`, values are redacted.
+5. **Concurrency & Thread Safety**:
+   - *Observation*: In `TestAdversarial_ConcurrencyStress`, 50 concurrent goroutines executing 500 mixed operations across all 6 RedBida tools ran under `-race` for 8.5 seconds with zero data races, panics, or deadlocks.
+   - *Inference*: The implementation is concurrency-safe.
+
+6. **Nil Service Resilience**:
+   - *Observation*: `TestRedbidaTools_DisabledServiceGracefulHandling` verified that when `redbidaSvc == nil`, all tools return clear disabled messages without nil-pointer panics, while `redbida_get_time_status` continues functioning independently.
 
 ---
 
 ## 3. Caveats
 
-- **Mock Broker during Unit/Adversarial Tests**: Empirical testing of protocol serialization, read-back verification, and error recovery in the Go test suite was performed with real in-memory broker mocks and filesystem directories. Real MQTT broker transport (`127.0.0.1:12369`) is verified in integration / node testing.
-- No other caveats.
+1. **Live MQTT Broker**:
+   - Tests were executed against comprehensive in-memory and mock broker implementations (`mockRedbidaBroker`, `flexibleMockBroker`). Live edge testing against actual edge nodes (`inut_204_164`, `inut_204_163`) and Node-RED :2023 will occur in Milestone 3.
+2. **Note on Existing `server_test.go`**:
+   - In `internal/mcp/server_test.go:291` (`TestServer_SSETransport`), `httptest.ResponseRecorder` buffer read in the test occurs concurrently with `ServeHTTP` writing in a goroutine. This is a pre-existing test fixture nuance in `server_test.go` (M2 scope) and does not affect the RedBida tools in `tools_redbida.go`.
 
 ---
 
 ## 4. Conclusion
 
-**Verdict: APPROVE**.
-The implementation in `internal/redbida` and `internal/server` satisfies all Milestone 1 criteria from `PROJECT.md` and `ORIGINAL_REQUEST.md`:
-- `toolbar_show_count` is an editable integer number in `[0, 4096]`.
-- `ui_tabs_links` and `custom_hashtags` accept plain, multiline, and UTF-8 strings without JSON parsing rejection.
-- `shinobi_group_key` is present in the fallback catalog, classified under `Security / Credentials`, and strictly protected from mutation.
-- Categorization across domain groups is comprehensive and deterministic.
-- Concurrency, memory safety, and race detection are empirically verified.
+**Verdict: APPROVE**
+
+Milestone 1 (`internal/mcp/tools_redbida.go`) satisfies all requirements of §R1 and Milestone 1 of `PROJECT.md`:
+- All 6 tools (`redbida_list_catalog`, `redbida_get_keys`, `redbida_set_keys`, `redbida_apply_onboarding_preset`, `redbida_trigger_go2rtc`, `redbida_get_time_status`) are correctly implemented and registered.
+- Robust error handling for broker timeouts, partial writes, disconnects, and unconfirmed modifications.
+- High concurrency tested with 50 workers under Go race detector with 0 data races.
+- 100% pass rate on all unit and adversarial stress tests.
 
 ---
 
 ## 5. Verification Method
 
-To independently verify these empirical results:
+To independently reproduce and verify these empirical results:
 
 ```bash
-# 1. Run all redbida tests with race detector
-/home/ksp/go-sdk/bin/go test -race -v ./internal/redbida/...
+# Run all RedBida unit and adversarial stress tests with race detection:
+/home/ksp/go-sdk/bin/go test -v -race -run="TestAdversarial|TestRedbida|TestRemoveVietnamese|TestSanitize|TestGenerate" ./internal/mcp/...
 
-# 2. Run all server Redbida tests with race detector
-/home/ksp/go-sdk/bin/go test -race -v -run "Redbida|Adversarial" ./internal/server/...
-
-# 3. Run entire test suite across all packages
-/home/ksp/go-sdk/bin/go test ./...
-
-# 4. Verify static binary build
-/home/ksp/go-sdk/bin/go build ./cmd/kspcam
+# Run RedBida catalog & service tests:
+/home/ksp/go-sdk/bin/go test -v -race ./internal/redbida/...
 ```

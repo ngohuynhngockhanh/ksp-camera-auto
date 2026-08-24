@@ -63,7 +63,6 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 	if cfg.Shinobi.APIURL != "" && cfg.Shinobi.APIKey != "" {
 		s.shinobi = shinobi.NewClient(cfg.Shinobi.APIURL, cfg.Shinobi.APIKey, cfg.Shinobi.GroupKey)
 	}
-	s.mcp = mcp.NewServer(&cfg, inv, s.shinobi)
 	if cfg.Redbida.Enabled {
 		broker := redbida.NewMQTTBroker(redbida.MQTTOptions{
 			Host: cfg.Redbida.BrokerHost, Port: cfg.Redbida.BrokerPort,
@@ -73,6 +72,7 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 		})
 		s.redbida = redbida.NewService(broker, redbida.NewCatalog(cfg.Redbida.KeyDir), cfg.Redbida.MaxBatchKeys)
 	}
+	s.mcp = mcp.NewServer(&cfg, inv, s.shinobi, s.redbida)
 	if _, err := rand.Read(s.dlKey); err != nil {
 		return nil, fmt.Errorf("gen download key: %w", err)
 	}

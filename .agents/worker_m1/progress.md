@@ -1,10 +1,21 @@
-# Progress — Worker M1
+# Progress Log — Milestone 1: RedBida & Onboarding MCP Tools
 
-Last visited: 2026-08-24T19:00:30+07:00
+Last visited: 2026-08-24T20:28:45+07:00
 
-- [x] Initialized workspace and briefing.
-- [x] Read ORIGINAL_REQUEST.md, survey reports, and current catalog/test files.
-- [x] Implement catalog changes in `internal/redbida/catalog.go`.
-- [x] Add unit tests in `internal/redbida/redbida_test.go` and `internal/server/api_redbida_test.go`.
-- [x] Run test suites and verify 100% pass (`go test -v ./internal/redbida/... -cover`, `go test -v ./internal/server/...`, `go test ./...`).
-- [x] Generate handoff report and notify parent.
+## Status: COMPLETED
+
+### Completed Steps:
+- [x] Initial context recovery & specification review (ORIGINAL_REQUEST.md, PROJECT.md, explorer handoffs, camera-naming SKILL.md).
+- [x] Verified Go test suite baseline pass.
+- [x] Implemented `internal/mcp/tools_redbida.go` with 6 MCP tools:
+  - `redbida_list_catalog` (catalog metadata, group & editable filtering, source status)
+  - `redbida_get_keys` (live values from /private/i_gets, secret masking, catalog fallback)
+  - `redbida_set_keys` (writes to /private/i_sets with read-back verification)
+  - `redbida_apply_onboarding_preset` (1-click 15 golden template parameters, 20-tab INI, diacritic-free hashtags, semicolon-free CSS gradient, dryRun mode)
+  - `redbida_trigger_go2rtc` (button_generate_go2rtc_stream trigger)
+  - `redbida_get_time_status` (timedatectl RFC 3339 system time and NTP synchronization)
+  - `registerRedbidaTools` (registration helper for MCP Registry)
+- [x] Implemented `internal/mcp/tools_redbida_test.go` with 13 comprehensive unit tests.
+- [x] Verified test suite: `go test -v ./internal/mcp/...` and `go test ./...` (100% PASS).
+- [x] Verified `go vet` and static binary build (`go build ./cmd/kspcam`).
+- [x] Generated handoff report in `handoff.md`.

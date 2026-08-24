@@ -20,6 +20,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/importer"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mcp"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/redbida"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/server"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/shinobi"
 )
@@ -58,7 +59,18 @@ func main() {
 			sc = shinobi.NewClient(cfg.Shinobi.APIURL, cfg.Shinobi.APIKey, cfg.Shinobi.GroupKey)
 		}
 
-		mcpServer := mcp.NewServer(&cfg, inv, sc)
+		var rSvc *redbida.Service
+		if cfg.Redbida.Enabled {
+			broker := redbida.NewMQTTBroker(redbida.MQTTOptions{
+				Host: cfg.Redbida.BrokerHost, Port: cfg.Redbida.BrokerPort,
+				ReadTopic: cfg.Redbida.ReadTopic, ReadAckTopic: cfg.Redbida.ReadAckTopic,
+				WriteTopic: cfg.Redbida.WriteTopic, WriteAckTopic: cfg.Redbida.WriteAckTopic,
+				Timeout: time.Duration(cfg.Redbida.TimeoutSeconds) * time.Second,
+			})
+			rSvc = redbida.NewService(broker, redbida.NewCatalog(cfg.Redbida.KeyDir), cfg.Redbida.MaxBatchKeys)
+		}
+
+		mcpServer := mcp.NewServer(&cfg, inv, sc, rSvc)
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
 

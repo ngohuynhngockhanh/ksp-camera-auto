@@ -7,8 +7,10 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/redbida"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/shinobi"
 )
 
@@ -17,16 +19,30 @@ type Server struct {
 	cfg      *config.Config
 	inv      *config.Inventory
 	shinobi  *shinobi.Client
+	redbida  *redbida.Service
 	registry *Registry
 	mu       sync.RWMutex
 	sessions map[string]*Session
 }
 
 // NewServer initializes a new MCP server and registers all standard tools.
-func NewServer(cfg *config.Config, inv *config.Inventory, shinobiClient *shinobi.Client) *Server {
+func NewServer(cfg *config.Config, inv *config.Inventory, shinobiClient *shinobi.Client, redbidaService ...*redbida.Service) *Server {
 	if cfg == nil {
 		defaultCfg := config.Default()
 		cfg = &defaultCfg
+	}
+
+	var rSvc *redbida.Service
+	if len(redbidaService) > 0 && redbidaService[0] != nil {
+		rSvc = redbidaService[0]
+	} else if cfg.Redbida.Enabled {
+		broker := redbida.NewMQTTBroker(redbida.MQTTOptions{
+			Host: cfg.Redbida.BrokerHost, Port: cfg.Redbida.BrokerPort,
+			ReadTopic: cfg.Redbida.ReadTopic, ReadAckTopic: cfg.Redbida.ReadAckTopic,
+			WriteTopic: cfg.Redbida.WriteTopic, WriteAckTopic: cfg.Redbida.WriteAckTopic,
+			Timeout: time.Duration(cfg.Redbida.TimeoutSeconds) * time.Second,
+		})
+		rSvc = redbida.NewService(broker, redbida.NewCatalog(cfg.Redbida.KeyDir), cfg.Redbida.MaxBatchKeys)
 	}
 
 	registry := NewRegistry()
@@ -34,11 +50,13 @@ func NewServer(cfg *config.Config, inv *config.Inventory, shinobiClient *shinobi
 	registerCameraConfigTools(registry, cfg, inv)
 	registerDiscoveryDiagnosisTools(registry, cfg, inv)
 	registerShinobiTools(registry, cfg, inv, shinobiClient)
+	registerRedbidaTools(registry, cfg, rSvc)
 
 	return &Server{
 		cfg:      cfg,
 		inv:      inv,
 		shinobi:  shinobiClient,
+		redbida:  rSvc,
 		registry: registry,
 		sessions: make(map[string]*Session),
 	}

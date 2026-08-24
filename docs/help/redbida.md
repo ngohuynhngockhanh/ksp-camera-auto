@@ -5,7 +5,7 @@ section: admin
 order: 16
 keywords: [redbida, bida, nodered, node-red, mqtt, ota, change_ok, catalog, key, broker]
 ui: "#redbida"
-covers: ["/api/redbida/catalog", "/api/redbida/refresh", "/api/redbida/apply", "/api/redbida/time-status"]
+covers: ["/api/redbida/catalog", "/api/redbida/refresh", "/api/redbida/apply", "/api/redbida/time-status", "/api/redbida/upload-logo", "/api/upload-logo", "/logo.png"]
 related: [cau-hinh-yaml, mcp-server]
 ---
 ## Mục đích
@@ -26,6 +26,18 @@ Cung cấp giao diện quản lý và tra cứu tập trung các tham số cấu
 3. **Cập nhật & Xác nhận đọc lại**:
    - Gửi yêu cầu cập nhật qua topic MQTT riêng tư `/private/i_sets`.
    - Tự động đọc lại qua `/private/i_gets` để đảm bảo giá trị đã được áp dụng thành công.
+
+## Tích hợp Máy chủ MCP (Model Context Protocol)
+
+Hệ thống cung cấp 6 công cụ MCP chuyên biệt phục vụ tự động hóa và tích hợp AI:
+- `redbida_list_catalog`: Liệt kê toàn bộ metadata, nhóm chức năng, kiểu dữ liệu và mức độ rủi ro của các khóa cấu hình.
+- `redbida_get_keys`: Đọc giá trị trực tiếp của một hoặc nhiều khóa từ MQTT broker `/private/i_gets` (tự động ẩn mật khẩu).
+- `redbida_set_keys`: Ghi một hoặc nhiều khóa cấu hình qua `/private/i_sets` kèm xác nhận đọc lại bắt buộc.
+- `redbida_apply_onboarding_preset`: Tự động tính toán và áp dụng 1-Click bộ 15 tham số Golden Template tiêu chuẩn (xóa dấu tiếng Việt hashtag, chuẩn hóa CSS gradient, 20 tab INI, token Shinobi).
+- `redbida_trigger_go2rtc`: Gửi tín hiệu kích hoạt Node-RED biên dịch cấu hình luồng `/root/go2rtc.yaml`.
+- `redbida_get_time_status`: Kiểm tra đồng hồ hệ thống và trạng thái đồng bộ NTP qua `timedatectl`.
+
+Xem thêm chi tiết tại bài trợ giúp [Máy chủ MCP](#help/mcp-server).
 
 ## Cách sử dụng
 

@@ -1,13 +1,19 @@
-## 2026-08-24T12:01:10Z
-<USER_REQUEST>
-You are Challenger 1 for Milestone 1 (Backend Catalog & Metadata Refinements).
-Your working directory: /home/ksp/ksp-camera-auto/.agents/challenger_m1_1/
-Authoritative user request: /home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md
-Master project specification: /home/ksp/ksp-camera-auto/.agents/PROJECT.md
-Worker handoff report: /home/ksp/ksp-camera-auto/.agents/worker_m1/handoff.md
+# Task Assignment: Challenger 1 for Milestone 1
 
-Your Mission:
-1. Empirically verify that `toolbar_show_count`, `custom_hashtags`, `ui_tabs_links`, `shinobi_group_key`, and the 5 domain groups behave correctly under stressful/adversarial inputs.
-2. Run test executions and edge case validations in Go.
-3. Write your verdict (APPROVE or REQUEST_CHANGES) with detailed empirical evidence to `/home/ksp/ksp-camera-auto/.agents/challenger_m1_1/handoff.md` and send a message back to parent.
-</USER_REQUEST>
+Empirically challenge `internal/mcp/tools_redbida.go` and `internal/mcp/tools_redbida_test.go`.
+Design and execute adversarial stress tests, edge case inputs (invalid camera counts, malformed JSON, strange Unicode characters, extremely long titles, SQL injection / shell injection strings in parameters, concurrent tool invocations).
+Write your report and verdict (APPROVE or REQUEST_CHANGES) to `/home/ksp/ksp-camera-auto/.agents/challenger_m1_1/handoff.md`.
+
+## 2026-08-24T13:29:41Z
+You are teamwork_preview_challenger challenging Milestone 1 for the ksp-camera-auto project.
+Your working directory is `/home/ksp/ksp-camera-auto/.agents/challenger_m1_1`.
+Read `/home/ksp/ksp-camera-auto/ORIGINAL_REQUEST.md`, `/home/ksp/ksp-camera-auto/PROJECT.md`, and `/home/ksp/ksp-camera-auto/.agents/challenger_m1_1/DISPATCH.md`.
+
+Adversarially challenge `internal/mcp/tools_redbida.go`:
+1. Test extreme and boundary inputs (invalid cameraCount < 1 or > 20, empty titles, special characters, unicode, trailing semicolons in CSS, invalid JSON arguments).
+2. Execute tests against the code using Go at `/home/ksp/go-sdk/bin/go`.
+3. Provide concrete verdict: APPROVE or REQUEST_CHANGES.
+
+Write your report and verdict to `/home/ksp/ksp-camera-auto/.agents/challenger_m1_1/handoff.md`.
+Update `progress.md` with your status.
+When done, call `send_message` to your parent with a concise summary, verdict, and path to your handoff file.

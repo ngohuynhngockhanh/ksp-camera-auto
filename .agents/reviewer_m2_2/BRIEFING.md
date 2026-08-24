@@ -1,61 +1,75 @@
-# BRIEFING — 2026-08-24T19:14:00+07:00
+# BRIEFING — 2026-08-24T20:45:00+07:00
 
 ## Mission
-Objective Review & Adversarial Challenge for Milestone 2 (Frontend Glassmorphism Design & DOM Structure).
+Objective Review & Adversarial Challenge for Milestone 2: MCP Server Integration, Dual Transports (Stdio & HTTP/SSE), and Documentation Accuracy.
 
 ## 🔒 My Identity
 - Archetype: Reviewer / Critic
 - Roles: reviewer, critic
 - Working directory: /home/ksp/ksp-camera-auto/.agents/reviewer_m2_2
-- Original parent: 2459fd81-eea0-41c3-8a5b-e354b9c9f098
-- Milestone: Milestone 2 (Frontend Glassmorphism Design & DOM Structure)
+- Original parent: 6a8fb107-278e-456d-910f-dfb3bd7838d2
+- Milestone: Milestone 2 (MCP Server Integration & Documentation)
 - Instance: 2 of 2 (Reviewer 2)
 
 ## 🔒 Key Constraints
 - Review-only — do NOT modify implementation code
 - Check for integrity violations (hardcoded test results, facade logic, bypassed tasks)
-- Adversarially challenge CSS and DOM structure:
-  * Responsive design on mobile/tablet screen sizes
-  * Theme switching contrast between dark mode and light mode
-  * DOM accessibility, ARIA labels, semantic tags, non-breaking hierarchy
-- Execute automated tests (Playwright and Go test suite)
-- Self-contained handoff report in handoff.md and send_message to parent
+- Review `internal/mcp/server_test.go` and `internal/mcp/server.go`
+- Verify both Stdio mode and HTTP/SSE JSON-RPC 2.0 dispatch mechanisms
+- Review documentation accuracy in `docs/` and `GEMINI.md` / `AGENTS.md`
+- Run tests with Go at `/home/ksp/go-sdk/bin/go`
+- Issue verdict: APPROVE or REQUEST_CHANGES in `handoff.md` and report to parent
 
 ## Current Parent
-- Conversation ID: 2459fd81-eea0-41c3-8a5b-e354b9c9f098
-- Updated: 2026-08-24T19:14:00+07:00
+- Conversation ID: 6a8fb107-278e-456d-910f-dfb3bd7838d2
+- Updated: 2026-08-24T20:45:00+07:00
 
 ## Review Scope
-- **Files to review**: `web/static/style.css`, `web/static/index.html`, `tests/ui/redbida.spec.js`, `web/static/redbida.js`
+- **Files to review**:
+  * `internal/mcp/server.go` & `internal/mcp/server_test.go`
+  * `internal/mcp/types.go` & `internal/mcp/registry.go`
+  * `internal/mcp/sse.go` & `internal/mcp/stdio.go`
+  * `internal/mcp/tools_redbida.go` & `internal/mcp/tools_redbida_test.go`
+  * `cmd/kspcam/main.go`
+  * `internal/server/server.go` & `internal/server/mcp_test.go`
+  * `docs/help/mcp-server.md` & `docs/help/redbida.md`
+  * `docs/CODEBASE-KNOWLEDGE.md`
+  * `GEMINI.md` & `AGENTS.md`
 - **Interface contracts**: `PROJECT.md`, `ORIGINAL_REQUEST.md`
-- **Review criteria**: Glassmorphism token design, responsive layouts, theme switching contrast, accessibility / ARIA / semantic markup, test selector preservation, regression testing, integrity check.
+- **Review criteria**: Correctness, Completeness, Quality, Dual Transport Handling, Security/Auth, Documentation Accuracy, Integrity.
 
 ## Review Checklist
 - **Items reviewed**:
-  * `web/static/style.css` (Glassmorphism tokens, status grid, preset card, 4 pillars, swatches, live gradient preview, reflow tables, responsive media queries)
-  * `web/static/index.html` (`#view-redbida` DOM structure, 6 metric cards, 1-click preset panel, 4-pillar knowledge hub, test selectors)
-  * `tests/ui/redbida.spec.js` (18/18 Playwright test cases verified passing)
-  * Go test suite (`go test -count=1 ./...` verified 100% passing across all 19 packages)
+  * `internal/mcp/server.go` (Server lifecycle, NewServer dependency injection, ProcessRequest JSON-RPC dispatch)
+  * `internal/mcp/server_test.go` (Handshake, 31 tool list verification, Stdio transport, HTTP direct/auth, SSE lifecycle)
+  * `internal/mcp/stdio.go` & `cmd/kspcam/main.go` (Stdio newline JSON-RPC loop, 8MB buffer, stderr log redirection)
+  * `internal/mcp/sse.go` (SSE event streaming, session management, constant-time auth check, loopback bypass)
+  * `internal/mcp/tools_redbida.go` (6 RedBida tools, pure Go Vietnamese accent removal, 20-tab INI synthesis, gradient semicolon stripping)
+  * `docs/` (`docs/help/mcp-server.md`, `docs/help/redbida.md`, `docs/CODEBASE-KNOWLEDGE.md`, `docgen -check`)
+  * `GEMINI.md` & `AGENTS.md` (31 MCP tools table and architecture details)
 - **Verdict**: APPROVE
-- **Unverified claims**: None. All claims verified via direct file inspection and automated test runs.
+- **Unverified claims**: None. All claims independently verified via direct inspection, live CLI invocation, and automated test suite.
 
 ## Attack Surface
 - **Hypotheses tested**:
-  1. Mobile screen width (<768px and 320px) overflow or broken grid: PASS (grid switches to 1fr/2-col, full width fields, table horizontal scroll).
-  2. Dark/Light theme switching contrast: PASS (WCAG AAA/AA contrast verified on dark and light palettes, text shadow on gradient preview).
-  3. Form input label association: PASS (all `<label for>` match input IDs).
-  4. Test selector preservation: PASS (18/18 Playwright tests pass).
-  5. Integrity violation check: PASS (no hardcoded test hacks or facade logic).
-- **Vulnerabilities found**: None.
-- **Untested angles**: JavaScript dynamic handlers for new preset swatches and 1-click generator algorithm (scheduled for Milestone 3).
+  1. Integrity violation & dummy implementations: PASS (real logic, no hardcoded cheating).
+  2. Stdio protocol frame pollution: PASS (logs redirected to os.Stderr, stdout carries only valid JSON-RPC frames).
+  3. HTTP SSE authentication bypass: PASS (constant-time token check, loopback check parses IP securely).
+  4. RedBida Onboarding input boundary violations: PASS (title trimmed, cameraCount 1-20 clamped, diacritics stripped, semicolons stripped).
+  5. Concurrency & race conditions: PASS on server production code. Noted minor test-recorder data race in unit tests during `go test -race`.
+  6. Documentation drift: PASS (`tools/docgen -check` passed with 25 articles, 0 broken links).
+- **Vulnerabilities found**: None in production code.
+- **Untested angles**: Live remote edge box deployment on ARM64 nodes (scheduled for Milestone 3).
 
 ## Key Decisions Made
-- [2026-08-24] Initialized Reviewer 2 briefing and workspace.
-- [2026-08-24] Verified Go unit tests (100% pass) and RedBida Playwright UI tests (18/18 pass).
-- [2026-08-24] Confirmed Glassmorphism tokens, responsive behavior, accessibility, and DOM structure.
-- [2026-08-24] Rendered APPROVE verdict for Milestone 2.
+- [2026-08-24] Conducted exhaustive review of Milestone 2 deliverables.
+- [2026-08-24] Verified 100% test pass rate across all packages with `/home/ksp/go-sdk/bin/go`.
+- [2026-08-24] Verified live Stdio JSON-RPC execution with CLI binary against `config.yaml`.
+- [2026-08-24] Verified documentation synchronization with `docgen -check`.
+- [2026-08-24] Rendered final APPROVE verdict.
 
 ## Artifact Index
 - `.agents/reviewer_m2_2/DISPATCH.md` — Incoming dispatch log
 - `.agents/reviewer_m2_2/BRIEFING.md` — Active working memory
+- `.agents/reviewer_m2_2/progress.md` — Liveness and progress tracker
 - `.agents/reviewer_m2_2/handoff.md` — Final review report

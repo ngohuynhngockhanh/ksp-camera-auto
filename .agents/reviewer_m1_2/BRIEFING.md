@@ -1,13 +1,13 @@
-# BRIEFING — 2026-08-24T19:02:20+07:00
+# BRIEFING — 2026-08-24T20:31:20+07:00
 
 ## Mission
-Adversarially review and verify Milestone 1 (Backend Catalog & Metadata Refinements) implementation and tests.
+Review and verify Milestone 1: `internal/mcp/tools_redbida.go` and `internal/mcp/tools_redbida_test.go` for correctness, adversarial edge cases, integrity violations, and full test passage.
 
 ## 🔒 My Identity
 - Archetype: reviewer & critic
 - Roles: reviewer, critic
 - Working directory: /home/ksp/ksp-camera-auto/.agents/reviewer_m1_2/
-- Original parent: 2459fd81-eea0-41c3-8a5b-e354b9c9f098
+- Original parent: 6a8fb107-278e-456d-910f-dfb3bd7838d2
 - Milestone: Milestone 1
 - Instance: 2 of 2
 
@@ -17,34 +17,33 @@ Adversarially review and verify Milestone 1 (Backend Catalog & Metadata Refineme
 - Issue verdict: APPROVE or REQUEST_CHANGES
 
 ## Current Parent
-- Conversation ID: 2459fd81-eea0-41c3-8a5b-e354b9c9f098
-- Updated: 2026-08-24T19:02:20+07:00
+- Conversation ID: 6a8fb107-278e-456d-910f-dfb3bd7838d2
+- Updated: 2026-08-24T20:31:20+07:00
 
 ## Review Scope
 - **Files to review**:
+  - `internal/mcp/tools_redbida.go`
+  - `internal/mcp/tools_redbida_test.go`
   - `internal/redbida/catalog.go`
-  - `internal/redbida/redbida_test.go`
-  - `internal/server/api_redbida_test.go`
-- **Interface contracts**: `/home/ksp/ksp-camera-auto/.agents/PROJECT.md` & `/home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md`
-- **Review criteria**: Correctness, integrity violations, edge cases, type conversions, regression safety.
+- **Interface contracts**: `/home/ksp/ksp-camera-auto/PROJECT.md` & `/home/ksp/ksp-camera-auto/ORIGINAL_REQUEST.md` & `/home/ksp/ksp-camera-auto/.agents/skills/camera-naming/SKILL.md`
+- **Review criteria**: Correctness, integrity violations, edge cases (removeVietnameseTones NFC/NFD, sanitizeCSSGradient, 20 sections [C01]-[C20], all 15 parameters synthesis, dry-run vs live, read-back verification).
 
 ## Review Checklist
 - **Items reviewed**:
-  - `internal/redbida/catalog.go` (metadata definitions, regexes, grouping, numeric rules)
-  - `internal/redbida/service.go` (validation logic, read-back verification)
-  - `internal/redbida/redbida_test.go` (5 new unit tests)
-  - `internal/server/api_redbida_test.go` (2 new integration tests)
+  - `internal/mcp/tools_redbida.go` (verified all 6 tools, tone removal, INI formatting, CSS sanitization, boundary checks)
+  - `internal/mcp/tools_redbida_test.go` (verified 13 test suites, dry-run, live, error handling)
 - **Verdict**: APPROVE
 - **Unverified claims**: none
 
 ## Attack Surface
 - **Hypotheses tested**:
-  1. Empty string & zero integer edge cases -> Pass (handled properly)
-  2. Hashtags with special/UTF-8 chars and long strings -> Pass (TypeString accepts up to 2MB)
-  3. 20-tab INI parsing with section headers -> Pass (no longer rejected by jsonKeySet)
-  4. Non-numeric / float / out-of-bounds input to `toolbar_show_count` -> Pass (strict validation [0, 4096] integer)
-  5. Case sensitivity in regexes -> Pass ((?i) flag preserved across sensitive/protected/runtime regexes)
-  6. Integrity violation / hardcoded fake checks -> Pass (zero integrity violations)
+  1. `removeVietnameseTones` with NFC and NFD strings -> PASS
+  2. `sanitizeCSSGradient` with trailing semicolons and whitespace -> PASS
+  3. `generate20TabINITabs` with exactly 20 sections [C01]..[C20] and 4 lines each -> PASS
+  4. `redbida_apply_onboarding_preset` boundary checks (cameraCount 0, 21, empty title) -> PASS
+  5. Dry-run safety (no MQTT broker writes) -> PASS
+  6. Nil redbida service handling across all tools -> PASS
+  7. Zero integrity violations / hardcoded cheats -> PASS
 - **Vulnerabilities found**: none
 - **Untested angles**: none for M1 scope
 
@@ -54,3 +53,4 @@ Adversarially review and verify Milestone 1 (Backend Catalog & Metadata Refineme
 
 ## Artifact Index
 - `.agents/reviewer_m1_2/handoff.md` — Final review report
+- `.agents/reviewer_m1_2/progress.md` — Progress log

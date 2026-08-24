@@ -1,100 +1,144 @@
-# Reviewer 1 Handoff Report: Milestone 1 (Backend Catalog & Metadata Refinements)
+# Milestone 1 Quality & Adversarial Review Report
+
+**Target**: `internal/mcp/tools_redbida.go` & `internal/mcp/tools_redbida_test.go`  
+**Reviewer**: Reviewer-Critic (Instance 1)  
+**Milestone**: Milestone 1 (RedBida & Onboarding MCP Tools Suite)  
+**Verdict**: **APPROVE**  
+
+---
+
+## Review Summary
+
+**Verdict**: **APPROVE**
+
+All 6 required MCP tool handlers (`redbida_list_catalog`, `redbida_get_keys`, `redbida_set_keys`, `redbida_apply_onboarding_preset`, `redbida_trigger_go2rtc`, `redbida_get_time_status`) and the registration entrypoint `registerRedbidaTools` in `internal/mcp/tools_redbida.go` have been implemented cleanly, correctly, and securely.
+
+The implementation conforms 100% to the interface contracts defined in `PROJECT.md` and `ORIGINAL_REQUEST.md`. Secret masking (`********`), parameter validations (bounds `[1, 20]` for cameraCount, non-empty title, CSS gradient trailing semicolon stripping, Vietnamese diacritic removal for custom hashtags, 20-tab INI synthesis), read-back verification, error propagation, dry-run mode, and graceful degradation for unconfigured service states have all been verified with unit tests and race detection.
+
+No integrity violations were detected.
+
+---
 
 ## 1. Observation
 
-Direct observations and evidence gathered during independent review and verification:
+Direct observations and evidence collected during code inspection and live test executions:
 
-### 1.1 Codebase Modifications & Implementations
-- **`internal/redbida/catalog.go`**:
-  - `Line 13`: `toolbar_show_count` was removed from `runtimeKeyRe` regex (`(?i)(^api(_model)?_count$|^download_count$|^packed_count$|^view_count$|^node_config_|^test_button$)`).
-  - `Lines 37–45`: Added `shinobi_group_key` to `fallbackKeys` (line 41), ensuring the key exists in fallback catalog mode during filesystem disconnects.
-  - `Line 65`: Added `toolbar_show_count` to `editableKeySet`.
-  - `Line 94`: Added `toolbar_show_count` to `numberKeySet`.
-  - `Line 96`: `jsonKeySet` set to empty (`var jsonKeySet = keySet("")`), allowing `custom_hashtags` and `ui_tabs_links` to default to `TypeString`.
-  - `Lines 98–100`: Registered `numericRules["toolbar_show_count"] = numericRule{min: 0, max: 4096, integer: true}` in `init()`.
-  - `Lines 240–252`: Classification logic in `metaForKey` updated to correctly route 38+ keys into 5 core business domain groups:
-    * `"Branding / Logo"`: logos (`logo_*`, `disable_logo_*`), branding text (`company_name`, `banner_top`, `custom_hashtags`, `app_*`).
-    * `"Livestream"`: streaming parameters (`camera_count`, `toolbar_show_count`, `video_config`, `button_generate_go2rtc_stream`, `*livestream*`, `hls_*`, `fps_default`, `default_delay_*`, `disable_cut_realtime`).
-    * `"UI / Display"`: user interface settings (`ui_*`, `language`, `show_toolbar`, `large_monitor`, `help_link`, `url_live_help`, `default_tiso_*`, `shop_id`, `realtime_shop_id`).
-    * `"Schedule / Maintenance"`: maintenance jobs (`stop_camera_*`, `*reboot*`, `*watch_uptime*`, `db_check_*`, `max_free_ram_*`, `max_shared_ram_*`, `button_restart_shinobi`).
-    * `"Security / Credentials"`: credentials matched by `sensitiveKeyRe` (`shinobi_*`, `ggcode`, `frpc_config`, `mqtt_*`).
+### 1.1 Source Code Architecture & Implementations
+1. **`registerRedbidaTools` Entrypoint (`internal/mcp/tools_redbida.go:16-22`)**:
+   ```go
+   func registerRedbidaTools(r *Registry, cfg *config.Config, redbidaSvc *redbida.Service) {
+       checkService := func() error {
+           if redbidaSvc == nil {
+               return fmt.Errorf("redbida integration is disabled or not configured in config.yaml")
+           }
+           return nil
+       }
+   ```
+   Correctly defines the registration function and sets up a standard nil-guard helper `checkService()`.
 
-- **`internal/redbida/redbida_test.go`**:
-  - Contains 5 comprehensive unit test suites:
-    1. `TestCatalogToolbarShowCountMetadataAndValidation`: verifies `RiskEditable`, `TypeNumber`, `Group == "Livestream"`, and validates integer bounds in `[0, 4096]`.
-    2. `TestCatalogStringKeysAcceptTextAndMultiline`: verifies `custom_hashtags` (`TypeString`, `Group == "Branding / Logo"`) and `ui_tabs_links` (`TypeString`, `Group == "UI / Display"`) accepting multiline 20-section INI configurations.
-    3. `TestCatalogShinobiGroupKeyFallbackAndClassification`: verifies presence in fallback keys, `RiskProtected`, `Secret: true`, `Group == "Security / Credentials"`.
-    4. `TestCatalogDomainGroupingClassifications`: verifies 38 keys across all 5 domain groups.
-    5. `TestCatalogListOrderingAndFallbackCompleteness`: verifies deterministic sort order (by Group then Key) and minimum catalog size.
+2. **Tool 1: `redbida_list_catalog` (`internal/mcp/tools_redbida.go:25-76`)**:
+   - Registers schema with properties `"group"` (string) and `"editableOnly"` (boolean).
+   - Queries `redbidaSvc.Catalog()` and `redbidaSvc.CatalogStatus()`.
+   - Filters metadata case-insensitively using `strings.EqualFold(m.Group, req.Group)` and `m.Editable`.
+   - Returns `{ "keys": filtered, "count": len(filtered), "sourceAvailable": sourceAvailable, "sourceError": sourceError }`.
 
-- **`internal/server/api_redbida_test.go`**:
-  - `TestRedbidaCatalogHandlerMetadataAndDomainGroups`: verifies `/api/redbida/catalog` HTTP response metadata.
-  - `TestRedbidaApplyBatchPresetChanges`: verifies `/api/redbida/apply` HTTP endpoint handling a batch of 5 preset keys (`toolbar_show_count`, `custom_hashtags`, `ui_tabs_links`, `ui_title`, `camera_count`) through write, acknowledge, and read-back verification.
+3. **Tool 2: `redbida_get_keys` (`internal/mcp/tools_redbida.go:79-128`)**:
+   - Registers schema with properties `"keys"` (string array) and `"all"` (boolean).
+   - If `req.Keys` is empty, iterates through all catalog keys (`redbidaSvc.Catalog()`).
+   - Delegates fetching to `redbidaSvc.Refresh(ctx, req.Keys)`.
+   - `redbidaSvc.Refresh` enforces secret masking via `redact(meta, value)` -> `"********"`.
 
-### 1.2 Independent Test Execution & Verification Outputs
-- **Test execution for `internal/redbida`**:
-  - Command: `/home/ksp/go-sdk/bin/go test -v ./internal/redbida/catalog.go ./internal/redbida/mqtt.go ./internal/redbida/service.go ./internal/redbida/types.go ./internal/redbida/mqtt_test.go ./internal/redbida/service_test.go ./internal/redbida/redbida_test.go`
-  - Output: `PASS` (all 23 test functions passed in 0.523s, coverage: `82.0%`).
-- **Test execution for `internal/server`**:
-  - All existing and new RedBida handler tests (`TestRedbidaHandlersRefreshAndApply`, `TestRedbidaCatalogHandlerIncludesDiscoveredMetadata`, `TestRedbidaCatalogReportsUnavailableSourceOnFirstRequest`, `TestConfigReportsRedbidaEnabled`, `TestRedbidaRoutesEnforceViewerAuthorization`, `TestRedbidaCatalogHandlerMetadataAndDomainGroups`, `TestRedbidaApplyBatchPresetChanges`) passed `100%`.
-- **Static binary build**:
-  - Command: `/home/ksp/go-sdk/bin/go build ./cmd/kspcam`
-  - Output: Zero compilation errors or warnings.
+4. **Tool 3: `redbida_set_keys` (`internal/mcp/tools_redbida.go:130-176`)**:
+   - Registers schema requiring `"changes"` (object) and optional `"confirmed"` (boolean).
+   - Validates that `len(req.Changes) > 0` (returning `"changes map cannot be empty"` otherwise).
+   - Delegates write and read-back verification to `redbidaSvc.Apply(ctx, req.Changes, req.Confirmed)`.
 
-### 1.3 Integrity Verification
-- **Hardcoded outputs**: None found. Real regexes and rule maps are evaluated at runtime.
-- **Facades / Shortcuts**: None found.
-- **Fabricated verification artifacts**: None. All tests executed independently in the live workspace.
+5. **Tool 4: `redbida_apply_onboarding_preset` (`internal/mcp/tools_redbida.go:179-334`)**:
+   - Registers schema requiring `"title"` (string) and `"cameraCount"` (integer).
+   - Validates bounds: `req.CameraCount < 1 || req.CameraCount > 20` and `strings.TrimSpace(req.Title) == ""`.
+   - Implements pure Go helper functions:
+     - `removeVietnameseTones(str)` (`lines 389-434`): Handles both NFC precomposed characters and NFD decomposed combining diacritical marks (`0x0300` to `0x036F`), all Vietnamese vowels, and `đ`/`Đ`.
+     - `sanitizeCleanTitle(title)` (`lines 437-446`): Strips accents and preserves only alphanumeric `[a-zA-Z0-9]`.
+     - `sanitizeCSSGradient(rawBg)` (`lines 458-467`): Strips trailing semicolons/whitespace, defaults to the standard radial-gradient.
+     - `generate20TabINITabs(title)` (`lines 449-455`): Synthesizes exactly 20 sections `[C01]` to `[C20]` with `stream_label`, `vid_list_label`, `vid_play_label`, and `list_refresh_label`.
+   - Synthesizes all 15 Golden Template parameters: `ui_title`, `company_name`, `ui_bg`, `custom_hashtags`, `ui_tabs_links`, `camera_count`, `toolbar_show_count`, `video_config`, `hls_using_go2rtc`, `hls_using_go2rtc_livestream`, `hls_using_go2rtc_tiktok`, `ui_scoreboard`, `logo_header`, `logo_header_text`, `button_generate_go2rtc_stream`.
+   - Conditionally maps optional fields: `shinobi_camera_id`, `shinobi_group_key`, `ggcode`, `shinobi_token`, `shinobi_monitor_token`.
+   - Supports `dryRun: true` (synthesizes and returns without writing to MQTT).
+   - Executes live apply with read-back verification when `dryRun: false`.
+
+6. **Tool 5: `redbida_trigger_go2rtc` (`internal/mcp/tools_redbida.go:337-362`)**:
+   - Publishes `button_generate_go2rtc_stream: true` via `redbidaSvc.Apply`.
+
+7. **Tool 6: `redbida_get_time_status` (`internal/mcp/tools_redbida.go:365-385`)**:
+   - Calls `queryNTPSynchronized(ctx)` (`lines 470-483`) querying `timedatectl show -p NTPSynchronized --value` with a 2-second timeout and graceful fallback to `false`.
+   - Returns `hostTime`, `hostTimeRFC3339`, `ntpSynchronized`, `driftThresholdSeconds: 60`, `policy`, and `nodeRedReadOnly: true`.
+
+### 1.2 Test Results & Build Commands
+- **Unit test execution**:
+  Command: `/home/ksp/go-sdk/bin/go test -count=1 -v ./internal/mcp/...`
+  Result: **100% PASS** (All 13 test suites in `tools_redbida_test.go` and existing MCP server tests passed).
+- **Race detector test**:
+  Command: `/home/ksp/go-sdk/bin/go test -race -count=1 -run "TestRedbida|TestRemove|TestSanitize|TestGenerate" ./internal/mcp/...`
+  Result: **100% PASS** (0 data races in `tools_redbida.go` and `tools_redbida_test.go`).
+- **All packages test**:
+  Command: `/home/ksp/go-sdk/bin/go test -count=1 ./...`
+  Result: **100% PASS** across all 18 Go packages in the workspace.
+- **Static binary build (`CGO_ENABLED=0`)**:
+  Command: `CGO_ENABLED=0 /home/ksp/go-sdk/bin/go build -o /tmp/kspcam ./cmd/kspcam`
+  Result: **Clean exit code 0**, zero build errors or warnings.
 
 ---
 
 ## 2. Logic Chain
 
-1. **`toolbar_show_count` Editable & Numeric Policy**:
-   - `toolbar_show_count` was previously matched by `runtimeKeyRe`, preventing editability.
-   - Removing it from `runtimeKeyRe` and adding it to `editableKeySet` and `numberKeySet` correctly exposes it as editable and numeric.
-   - The registered numeric rule (`min: 0, max: 4096, integer: true`) ensures that invalid inputs (negative values, values > 4096, floats like `8.5`, strings like `"8"`, non-numerics) are rejected with clear error messages during `validateValue`.
-
-2. **String Types for `custom_hashtags` and `ui_tabs_links`**:
-   - Previously, these keys were mapped to `TypeJSON` in `jsonKeySet`, requiring JSON maps/arrays and rejecting plain strings or INI configs.
-   - Clearing `jsonKeySet` allows them to default to `TypeString`, which is validated by `validateValue` up to 2MB. This correctly supports multiline 20-section INI strings and hashtag strings.
-
-3. **`shinobi_group_key` Fallback Availability & Protection**:
-   - Adding `shinobi_group_key` to `fallbackKeys` ensures metadata availability even during temporary filesystem unreadability.
-   - It matches `sensitiveKeyRe`, ensuring it is classified as `RiskProtected` (`editable: false`, `Secret: true`, `Group: "Security / Credentials"`), preventing any modification via `/api/redbida/apply`.
-
-4. **Domain Classification**:
-   - The expanded `metaForKey` switch assigns all keys into explicit business groups, eliminating false fallthroughs to `"Advanced / Unknown"` for standard onboarding keys.
+1. **Requirement Mapping**: `ORIGINAL_REQUEST.md` §R1 and `PROJECT.md` Milestone 1 define features F1–F6 (`redbida_list_catalog`, `redbida_get_keys`, `redbida_set_keys`, `redbida_apply_onboarding_preset`, `redbida_trigger_go2rtc`, `redbida_get_time_status`).
+2. **Contract & Schema Compliance**:
+   - Observation 1.1 shows that each of the 6 tools has a defined MCP `Tool` registration with complete JSON Schema (`InputSchema`), required fields, typed properties, and meaningful descriptions.
+   - Return payloads use standard `NewJSONResult` or `NewErrorResult`, returning valid JSON structures matching `PROJECT.md §Interface Contracts`.
+3. **Safety & Robustness**:
+   - `checkService()` prevents nil pointer dereferences if `redbidaSvc` is nil.
+   - `redbida_apply_onboarding_preset` strictly validates `cameraCount` (1..20) and empty title before any write attempt.
+   - Trailing semicolon sanitization in `sanitizeCSSGradient` ensures consistent CSS styling without UI breakage.
+   - Full diacritical tone removal in `removeVietnameseTones` ensures hashtags are ASCII alphanumeric as required by social platforms (`#CXKingLuxury`, `#BidaLacLongQuan`).
+   - SCM credentials and MQTT secrets are masked via `redbida.Service` and validated in `TestRedbidaTools_GetKeys`.
+4. **Independent Verification**:
+   - Unit tests in `tools_redbida_test.go` exercise all boundary conditions (dryRun vs live, missing titles, invalid cameraCount ranges, group filters, editable filters, secret masking, disabled service states).
+   - Clean execution of `go test` and static build confirms interface conformance and absence of regressions.
 
 ---
 
 ## 3. Caveats
 
-- **No live MQTT broker in unit tests**: Unit tests use mock brokers (`redbidaTestBroker`). Actual MQTT broker connectivity (`127.0.0.1:12369`) is validated in subsequent deployment and E2E verification milestones (M4).
-- **Sensitive keys remain read-only by design**: `shinobi_group_key`, `shinobi_camera_id`, `ggcode`, `frpc_config` cannot be modified through the standard `/api/redbida/apply` endpoint, preserving system security.
+- In `internal/mcp/server.go`, `registerRedbidaTools` is ready to be wired into `NewServer`. As planned in `PROJECT.md`, full integration into `NewServer` and documentation updates are scheduled for Milestone 2.
+- In `internal/mcp/server_test.go` (`TestServer_SSETransport`), a pre-existing HTTP test recorder read during SSE streaming was noted when running `-race` on the whole package; this is unrelated to `tools_redbida.go` (which is race-free) and can be refined in Milestone 2/3.
+- Otherwise, **no caveats**.
 
 ---
 
 ## 4. Conclusion
 
-**Verdict: APPROVE**
+The Milestone 1 work product (`internal/mcp/tools_redbida.go` and `internal/mcp/tools_redbida_test.go`) is of high quality, structurally sound, robustly tested, and fully aligned with project goals and safety guidelines.
 
-Milestone 1 (Backend Catalog & Metadata Refinements) satisfies all requirements defined in `ORIGINAL_REQUEST.md` and `PROJECT.md`:
-- All metadata, types, numeric bounds, domain groupings, and fallback catalog entries are accurately implemented.
-- Unit tests are thorough and pass 100% with 82.0% statement coverage in `internal/redbida`.
-- Static binary compilation (`go build ./cmd/kspcam`) succeeds cleanly.
-- Zero integrity violations detected.
+**Verdict**: **APPROVE**. Milestone 2 (MCP Server Integration & Documentation) can proceed immediately.
 
 ---
 
 ## 5. Verification Method
 
-To independently verify this milestone:
-
-```bash
-# 1. Run core unit tests for internal/redbida with coverage
-/home/ksp/go-sdk/bin/go test -v ./internal/redbida/catalog.go ./internal/redbida/mqtt.go ./internal/redbida/service.go ./internal/redbida/types.go ./internal/redbida/mqtt_test.go ./internal/redbida/service_test.go ./internal/redbida/redbida_test.go
-
-# 2. Verify static compilation
-/home/ksp/go-sdk/bin/go build ./cmd/kspcam
-```
+To independently verify this review:
+1. Run all unit tests for the MCP package:
+   ```bash
+   /home/ksp/go-sdk/bin/go test -v -count=1 ./internal/mcp/...
+   ```
+2. Run race detector on RedBida tools:
+   ```bash
+   /home/ksp/go-sdk/bin/go test -race -count=1 -run "TestRedbida|TestRemove|TestSanitize|TestGenerate" ./internal/mcp/...
+   ```
+3. Run project-wide tests:
+   ```bash
+   /home/ksp/go-sdk/bin/go test -count=1 ./...
+   ```
+4. Verify static binary compilation:
+   ```bash
+   CGO_ENABLED=0 /home/ksp/go-sdk/bin/go build -o /tmp/kspcam ./cmd/kspcam
+   ```

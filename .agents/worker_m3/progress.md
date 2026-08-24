@@ -1,23 +1,14 @@
 # Progress — Worker M3
 
-Last visited: 2026-08-24T12:26:40Z
+Last visited: 2026-08-24T13:50:20Z
 
 ## Status
-Task complete. All features implemented, verified with unit tests and full Playwright E2E suite (100% pass, zero errors).
+Task complete. All local tests pass 100%, multi-arch build generated, deployed to remote edge nodes (`inut_204_164`, `inut_204_163`), live MCP tools verified, git committed & pushed.
 
-## Completed Steps
-- [x] Initialized DISPATCH.md and BRIEFING.md
-- [x] Read survey reports, handoffs, and current codebase
-- [x] Implemented Preset Generator (`redbidaGeneratePreset`) with clean hashtags, 20-tab INI `ui_tabs_links`, and 15 standard parameters
-- [x] Implemented Visual Diff Preview card in `#redbida-preset-diff`
-- [x] Implemented Gradient Preset Swatches and live background preview bindings (both in preset card and `ui_bg` table row)
-- [x] Implemented Logo Checkerboard preview with 512 KiB validation
-- [x] Implemented 4-Pillar Filter Buttons with robust group alias matching
-- [x] Implemented collapsible toggles (`#redbida-toggle-preset`, `#redbida-toggle-hub`) and Go2RTC quick action
-- [x] Dynamic broker status and draft count metric updates
-- [x] Verified JavaScript syntax: `node --check web/static/redbida.js` (pass)
-- [x] Verified unit logic in node sandbox (pass)
-- [x] Verified Playwright tests: `tests/ui/redbida.spec.js` (18/18 pass)
-- [x] Verified full Playwright test suite (109 passed, 11 skipped, 0 failed)
-- [x] Verified Go backend tests: `go test ./...` (100% pass)
-- [x] Created completion handoff report `handoff.md`
+## Steps
+- [x] 1. Verify 100% test pass on local repo (`go test -count=1 ./...` and `go vet ./...`)
+- [x] 2. Multi-Arch Build (`make build-all`, verify amd64, arm64, armv7)
+- [x] 3. Deploy `dist/kspcam-linux-arm64` to `inut_204_164` and `inut_204_163` via `root@172.16.5.180`
+- [x] 4. Live MCP verification on both nodes (initialize, tools/list, redbida_list_catalog, redbida_get_keys, redbida_get_time_status, redbida_apply_onboarding_preset dryRun)
+- [x] 5. Git status, stage, commit, and push
+- [x] 6. Write handoff report and notify parent

@@ -1,14 +1,14 @@
-# BRIEFING — 2026-08-24T19:20:00+07:00
+# BRIEFING — 2026-08-24T20:46:15+07:00
 
 ## Mission
-Empirical stress-testing and verification of Milestone 2 (Frontend Glassmorphism Design & DOM Structure), cross-browser compatibility (Chrome, Safari/WebKit, Firefox), and Go static asset embedding.
+Empirical stress-testing and adversarial challenge of Milestone 2 deliverables: MCP Server integration, 31 tools registration/sorting/schemas, HTTP/SSE concurrent sessions & routing, loopback vs API key authentication, and CGO_ENABLED=0 static compilation.
 
 ## 🔒 My Identity
 - Archetype: challenger
 - Roles: critic, specialist
 - Working directory: /home/ksp/ksp-camera-auto/.agents/challenger_m2_2
-- Original parent: 2459fd81-eea0-41c3-8a5b-e354b9c9f098
-- Milestone: Milestone 2 (Frontend Glassmorphism Design & DOM Structure)
+- Original parent: 6a8fb107-278e-456d-910f-dfb3bd7838d2
+- Milestone: Milestone 2 (MCP Server Integration & Dual Transports)
 - Instance: 2 of 2
 
 ## 🔒 Key Constraints
@@ -17,32 +17,36 @@ Empirical stress-testing and verification of Milestone 2 (Frontend Glassmorphism
 - Empirical Challenger: MUST run verification code and tests directly (no unverified claims)
 
 ## Current Parent
-- Conversation ID: 2459fd81-eea0-41c3-8a5b-e354b9c9f098
-- Updated: 2026-08-24T19:20:00+07:00
+- Conversation ID: 6a8fb107-278e-456d-910f-dfb3bd7838d2
+- Updated: 2026-08-24T20:46:15+07:00
 
 ## Review Scope
-- **Files to review**: `web/static/style.css`, `web/static/index.html`, `web/embed.go`, `cmd/kspcam/main.go`
-- **Interface contracts**: `/home/ksp/ksp-camera-auto/.agents/PROJECT.md`, `/home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md`
-- **Review criteria**: Cross-browser glassmorphism (backdrop-filter, saturate, theme tokens, fallback), DOM structure, Go static embedding, test suite pass.
+- **Files to review**: `internal/mcp/*`, `internal/server/*`, `cmd/kspcam/*`, `docs/*`, `GEMINI.md`, `AGENTS.md`
+- **Interface contracts**: `ORIGINAL_REQUEST.md`, `PROJECT.md`
+- **Review criteria**:
+  1. Concurrent session creation, SSE stream handling, session message routing, loopback bypass vs API key enforcement.
+  2. `tools/list` on MCP server returns exactly 31 sorted tools with complete input schemas.
+  3. Static compilation with `CGO_ENABLED=0 go build ./cmd/kspcam`.
+  4. Accuracy of documentation updates.
 
 ## Attack Surface
 - **Hypotheses tested**:
-  - Hypothesis 1: CSS variables for Glassmorphism fail to resolve or fallback in light theme / prefers-color-scheme -> REJECTED (Variables resolve correctly across :root, [data-theme="dark"], and [data-theme="light"]).
-  - Hypothesis 2: `backdrop-filter: blur(...) saturate(...)` syntax fails or produces invalid computed styles in Chromium and Firefox -> REJECTED (Both engines parse and compute `blur(16px) saturate(1.8)` properly).
-  - Hypothesis 3: Responsive reflow causes horizontal scrolling or breaks buttons on narrow viewports (375px/390px) -> REJECTED (Zero horizontal overflow; grids adaptively collapse).
-  - Hypothesis 4: Go binary fails to compile or fails to embed newly added static CSS/HTML -> REJECTED (`go build ./cmd/kspcam` succeeds, `web/embed_test.go` validates all substrings).
-- **Vulnerabilities found**:
-  - None blocking.
-- **Untested angles**:
-  - Milestone 3 JS event wireup (planned for M3).
+  - Hypothesis 1: Concurrent SSE session creation or message routing races on session maps or deadlocks on mutexes. -> REJECTED (50 concurrent SSE sessions connected simultaneously with 100% unique 32-char hex session IDs; 50 concurrent JSON-RPC requests routed with 0 cross-talk or loss).
+  - Hypothesis 2: Loopback IP detection can be bypassed or misclassifies remote client IPs as loopback. -> REJECTED (Remote IPs without key are strictly rejected with 401 Unauthorized; supported all 4 auth methods: X-MCP-Key, Bearer, ?key=, ?apiKey=; loopback disables bypass when configured).
+  - Hypothesis 3: `tools/list` does not contain exactly 31 tools, is not alphabetically sorted, or contains invalid JSON schema structures. -> REJECTED (Exactly 31 tools returned, strictly sorted alphabetically by name, 100% valid JSON schemas with complete properties).
+  - Hypothesis 4: Static compilation fails with CGO_ENABLED=0 or requires dynamic C libraries. -> REJECTED (Static compilation verified on AMD64, ARM64, and ARMv7; ELF binaries confirmed `statically linked` with `not a dynamic executable`).
+- **Vulnerabilities found**: None.
+- **Untested angles**: Live remote edge node deployment on `inut_204_164` / `inut_204_163` (Milestone 3).
 
 ## Loaded Skills
-- None
+- **Source**: `/home/ksp/ksp-camera-auto/.agents/skills/camera-naming/SKILL.md`
+- **Core methodology**: Camera naming, Shinobi Golden Template, 20-tab INI format, RedBida keys specification.
 
 ## Key Decisions Made
-- Verdict: **APPROVE**.
-- Empirically verified with Playwright Chromium & Firefox across 5 viewport breakpoints and Go static asset test suite.
+- Issue Verdict: **APPROVE**.
+- All 36 empirical challenge tests passed across SSE concurrency, routing isolation, authentication matrix, 31 tool catalog, schema integrity, and static compilation.
 
 ## Artifact Index
 - `handoff.md` — Final challenger evaluation and verdict report
 - `progress.md` — Liveness heartbeat and progress tracking
+- `DISPATCH.md` — Task assignment log

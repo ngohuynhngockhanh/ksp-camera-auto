@@ -1,12 +1,13 @@
 # Progress — Challenger 2 (Milestone 1)
 
-- Last visited: 2026-08-24T19:07:05+07:00
-- Status: Completed adversarial empirical testing; verdict generated
+- Last visited: 2026-08-24T20:33:40+07:00
+- Status: Completed adversarial empirical testing; verdict APPROVE generated in handoff.md
 
 ## Steps
-- [x] Step 1: Initialize DISPATCH.md, BRIEFING.md, and progress.md
-- [x] Step 2: Code inspection of `internal/redbida/catalog.go`, `service.go`, `internal/server/api_redbida.go`
-- [x] Step 3: Run existing unit test suite with race detector (`go test -race ./internal/redbida/... ./internal/server/...`)
-- [x] Step 4: Construct and run comprehensive empirical stress harness (concurrency RWMutex, multiline INI, Vietnamese UTF-8, boundary numeric tests, sorting determinism)
-- [x] Step 5: Evaluate results, identify failure modes/findings (all 12+ adversarial suites passed with -race)
-- [x] Step 6: Generate `handoff.md` with verdict and send message to parent
+- [x] Step 1: Initialize DISPATCH.md, BRIEFING.md, and progress.md for M1 MCP RedBida challenge
+- [x] Step 2: Code inspection of `internal/mcp/tools_redbida.go`, `internal/mcp/tools_redbida_test.go`, `internal/redbida/service.go`, `internal/redbida/catalog.go`
+- [x] Step 3: Write adversarial test suite `internal/mcp/tools_redbida_adversarial_test.go` targeting all required failure modes
+- [x] Step 4: Run test suite with race detector using `/home/ksp/go-sdk/bin/go test -v -race`
+- [x] Step 5: Stress-test boundary conditions, partial ACKs, timeout recoveries, and concurrency under load (50 workers, 500 ops)
+- [x] Step 6: Generate final `handoff.md` with concrete verdict (APPROVE)
+- [x] Step 7: Send message to parent
