@@ -25,8 +25,12 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 | **Redbida `shinobi_monitor_token`** | API Key IP `0.0.0.0` (Quyền: Get Monitors, View Streams, View Videos) | `2Ow8jOi8MEwUfBByYruwgGapk2wHVL` | Dùng để lấy danh sách monitors và cấu hình luồng camera. |
 | **Redbida `ui_tabs_links`** | Chuẩn INI 20 section `[C01]` .. `[C20]` (4 dòng/section) | Xem chi tiết Section 4 bên dưới | Dòng 3 `vid_play_label` = `<ui_title>` (Tên quán). |
 | **Redbida `video_config`** | Chuỗi cấu hình video playback | `range=72` | Giới hạn tra cứu lịch sử highlight/video 72 giờ. |
-| **Redbida `logo_livestream`** | URL logo hiển thị góc livestream | `http://127.0.0.1:2028/logo.png` | Upload qua `/api/upload-logo` hoặc phục vụ từ KSP-Cam. |
 | **Redbida `custom_hashtags`** | Chuỗi hashtag định dạng chuẩn | `#<UITitleNoSpaces> #BILLIARDSlive #INUTlive #highlightsports` | Tên quán không dấu không cách + 3 hashtag chuẩn. |
+| **Redbida `ui_bg`** | CSS background gradient data | `radial-gradient( circle farthest-corner at 10% 20%, rgba(2,37,78,1) 0%, ... );` | Màu gradient CSS riêng biệt, sang trọng cho từng quán. |
+| **Redbida `camera_count`** | Số lượng camera Shinobi thực tế | `5`, `8`, `10` | Bắt buộc bằng số lượng camera active trên Shinobi. |
+| **Redbida `toolbar_show_count`** | Số nút camera hiển thị trên thanh công cụ | `5`, `8`, `10` | Luôn đặt cùng giá trị với `camera_count`. |
+| **Redbida `hls_using_go2rtc`** | Bật phân phối HLS qua Go2RTC | `true` | Tối ưu hóa độ trễ stream và giảm tải CPU. |
+| **Redbida `button_generate_go2rtc_stream`** | Nút trigger sinh cấu hình Go2RTC | `true` | Gửi qua `/private/i_sets` để Node-RED 2023 tự sinh `/root/go2rtc.yaml`. |
 
 ---
 
@@ -130,6 +134,30 @@ list_refresh_label=Cập nhật highlight
 - **Quản lý FRP / Subdomain qua key `frpc_config`**:
   - Tuyệt đối **KHÔNG** thao tác trực tiếp vào `/tmp/frpc.ini` hoặc tự restart process frpc thủ công.
   - Khi cần bổ sung proxy/subdomain, chỉ cần cập nhật nội dung vào key **`frpc_config`** của Redbida qua MQTT `/private/i_sets`. Hệ thống sẽ tự động xử lý và duy trì kết nối frpc an toàn.
+
+---
+
+## 7. Cài đặt & Quản lý Tiến trình Go2RTC qua PM2
+
+Kiểm tra kiến trúc CPU thiết bị (`uname -m`):
+- **64-bit (`aarch64` / `arm64`)**:
+  ```bash
+  cd ~
+  wget https://inut-vip-pro-dl.a.inut.vn/go2rtc_linux_arm64 -O go2rtc_linux_arm
+  chmod +x go2rtc_linux_arm
+  pm2 start ./go2rtc_linux_arm -e /dev/null -o /dev/null
+  pm2 save
+  ```
+- **32-bit (`armv7l` / `armv7`)**:
+  ```bash
+  cd ~
+  wget https://inut-vip-pro-dl.a.inut.vn/go2rtc_linux_arm -O go2rtc_linux_arm
+  chmod +x go2rtc_linux_arm
+  pm2 start ./go2rtc_linux_arm -e /dev/null -o /dev/null
+  pm2 save
+  ```
+*Sau khi cài đặt xong, đẩy key `button_generate_go2rtc_stream: "true"` qua MQTT `/private/i_sets` để Node-RED :2023 sinh `/root/go2rtc.yaml`, sau đó gọi `pm2 restart go2rtc_linux_arm`.*
+
 
 
 
