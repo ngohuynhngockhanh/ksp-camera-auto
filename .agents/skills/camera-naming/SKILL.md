@@ -117,3 +117,15 @@ list_refresh_label=Cập nhật highlight
 - `inut_204_163` (SD Billiards Club - CS2): `video.io.vn:45528`
 - Sử dụng qua Ansible inventory: `inut_204_164 ansible_host=video.io.vn ansible_port=45529` / `inut_204_163 ansible_host=video.io.vn ansible_port=45528`.
 
+---
+
+## 6. Quy tắc Giao tiếp & Đồng bộ Cấu hình Redbida (MQTT-Only)
+- **Tuyệt đối KHÔNG ghi đè trực tiếp file vào `/root/ota-mqtt/change_ok/`**.
+- Mọi thao tác cấu hình/đồng bộ thông số quán và Redbida **BẮT BUỘC** phải:
+  1. Kết nối tới MQTT Broker cục bộ `127.0.0.1:12369`.
+  2. Đẩy gói tin cập nhật JSON `{"key": "<key_name>", "value": "<val>"}` lên topic `/private/i_sets`.
+  3. Lắng nghe phản hồi xác nhận từ topic `/private/i_sets/ack`.
+  4. Đọc lại (read-back) qua topic `/private/i_gets` và đối chiếu kết quả trả về trên `/private/i_gets/ack`.
+  5. `ota-mqtt` và Node-RED sẽ tự động nhận diện thay đổi, lưu trữ nhất quán và đồng bộ hai chiều với cloud.
+
+
