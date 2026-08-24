@@ -913,6 +913,20 @@
             </div>
           </div>
           <p class="muted">Key mật khẩu/token/mạng và key chưa biết được hiển thị để khảo sát nhưng không cho sửa. Key reboot/restart cần xác nhận trước khi submit.</p>
+
+          <!-- Floating Action Bar for Unsaved Changes -->
+          <div class="redbida-floating-bar" id="redbida-floating-bar" style="display:none;" aria-live="polite">
+            <div class="redbida-floating-content">
+              <div class="redbida-floating-info">
+                <span class="redbida-floating-dot"></span>
+                <span class="redbida-floating-label">Đang có <b id="redbida-floating-count">0</b> thay đổi chưa lưu</span>
+              </div>
+              <div class="redbida-floating-actions">
+                <button class="btn btn-secondary btn-sm" id="redbida-floating-discard" type="button">✕ Hủy thay đổi</button>
+                <button class="btn btn-primary btn-sm redbida-floating-submit" id="redbida-floating-apply" type="button">💾 Submit thay đổi (<span id="redbida-floating-btn-count">0</span>)</button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- Shinobi NVR -->

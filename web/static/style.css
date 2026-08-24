@@ -946,8 +946,94 @@ button { font-family: inherit; }
   font-size: 0.82rem;
 }
 
+/* ---------- RedBida Floating Action Bar ---------- */
+.redbida-floating-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  z-index: 1000;
+  max-width: 660px;
+  width: calc(100% - 32px);
+  background: var(--glass-bg, rgba(15, 23, 42, 0.92));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--accent, #3b82f6);
+  border-radius: 14px;
+  padding: 10px 16px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 24px color-mix(in srgb, var(--accent) 35%, transparent);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: redbidaSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes redbidaSlideUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(30px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+.redbida-floating-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.redbida-floating-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text, #f1f5f9);
+}
+
+.redbida-floating-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--warning, #f59e0b);
+  box-shadow: 0 0 10px var(--warning, #f59e0b);
+  animation: redbidaDotPulse 1.8s infinite;
+}
+
+@keyframes redbidaDotPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.7; }
+}
+
+.redbida-floating-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.redbida-floating-submit {
+  font-weight: 700 !important;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 40%, transparent) !important;
+}
+
 /* Responsive Breakpoints */
 @media (max-width: 767px) {
+  .redbida-floating-bar {
+    bottom: calc(var(--bottomnav-h, 60px) + 16px + env(safe-area-inset-bottom, 0px));
+    width: calc(100% - 24px);
+    padding: 8px 12px;
+  }
+  .redbida-floating-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .redbida-floating-actions {
+    justify-content: flex-end;
+  }
   .redbida-status-grid {
     grid-template-columns: 1fr 1fr;
   }

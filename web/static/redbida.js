@@ -529,6 +529,32 @@ function redbidaUpdateMetrics() {
     brokerStatusEl.textContent = '127.0.0.1:12369';
   }
   redbidaAuditGoldenStandard();
+  redbidaUpdateFloatingBar();
+}
+
+function redbidaUpdateFloatingBar() {
+  const bar = document.getElementById('redbida-floating-bar');
+  const countEl = document.getElementById('redbida-floating-count');
+  const btnCountEl = document.getElementById('redbida-floating-btn-count');
+  if (!bar) return;
+  const count = redbidaState.drafts.size;
+  if (count > 0) {
+    if (countEl) countEl.textContent = String(count);
+    if (btnCountEl) btnCountEl.textContent = String(count);
+    bar.style.display = 'block';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function redbidaDiscardAllDrafts() {
+  if (!redbidaState.drafts.size) return;
+  if (!window.confirm(`Bạn có chắc muốn hủy toàn bộ ${redbidaState.drafts.size} thay đổi chưa lưu?`)) return;
+  redbidaState.drafts.clear();
+  redbidaState.results.clear();
+  redbidaRender();
+  redbidaUpdateMetrics();
+  redbidaSetMessage('Đã hủy toàn bộ thay đổi chưa lưu.', '');
 }
 
 function redbidaGroups() {
@@ -1321,6 +1347,8 @@ window.removeVietnameseTones = removeVietnameseTones;
 window.redbidaAuditGoldenStandard = redbidaAuditGoldenStandard;
 window.redbidaAutoFixKey = redbidaAutoFixKey;
 window.redbidaAutoFixAll = redbidaAutoFixAll;
+window.redbidaUpdateFloatingBar = redbidaUpdateFloatingBar;
+window.redbidaDiscardAllDrafts = redbidaDiscardAllDrafts;
 window.redbidaState = redbidaState;
 window.REDBIDA_GRADIENT_PALETTE = REDBIDA_GRADIENT_PALETTE;
 
@@ -1342,6 +1370,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('redbida-autofix-all-btn')?.addEventListener('click', redbidaAutoFixAll);
   document.getElementById('redbida-audit-btn')?.addEventListener('click', redbidaAuditGoldenStandard);
+
+  document.getElementById('redbida-floating-apply')?.addEventListener('click', () => redbidaApply().catch(err => redbidaSetMessage(err.message, 'err')));
+  document.getElementById('redbida-floating-discard')?.addEventListener('click', redbidaDiscardAllDrafts);
 
   redbidaInitSwatches();
   redbidaInitPresetInputs();
