@@ -474,7 +474,8 @@ Module `internal/shinobi` cung cấp client Go thuần kết nối trực tiếp
 - **Quy ước Khóa Redbida & Shinobi NVR (`/root/ota-mqtt/change_ok/`)**:
   - `shinobi_camera_id`: **Bắt buộc lưu `mid` Shinobi tương ứng** (ví dụ: `camera01`, `camera02`), **KHÔNG ĐƯỢC** lưu GroupKey.
   - `shinobi_group_key`: Lưu GroupKey 10 ký tự của Shinobi (ví dụ: `AWU8wJMd2l`, `P6zP1kVhht`).
-  - `shinobi_monitor_token`: Lưu API Key có quyền truy cập `0.0.0.0` để xem trực tiếp và tải video ra ngoài.
+  - `shinobi_token`: Lưu API Key cấp quyền `0.0.0.0` với quyền xem luồng (`watch_stream`) và xem lại/tải video clip (`watch_videos`).
+  - `shinobi_monitor_token`: Lưu API Key cấp quyền `0.0.0.0` với quyền đọc danh sách camera (`get_monitors`), xem luồng và xem video.
 
 ---
 

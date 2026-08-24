@@ -22,7 +22,8 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 | **Shinobi Notes Metadata** | JSON format: `{"sn": "...", "safety_code": "..."}` | `{"sn": "33443ACPSFC97C2", "safety_code": "L2D6643F"}` | Lưu trữ Serial Number và Safety Code gốc của hãng. |
 | **Redbida `shinobi_camera_id`** | Giá trị phải là **`mid` Shinobi tương ứng** | `camera01`, `camera02` | **KHÔNG ĐƯỢC** lưu GroupKey; phải là monitor ID của bàn/camera. |
 | **Redbida `shinobi_group_key`** | Chuỗi 10 ký tự GroupKey Shinobi | `AWU8wJMd2l`, `P6zP1kVhht` | Lưu mã nhóm người dùng Shinobi. |
-| **Redbida `shinobi_monitor_token`** | API Key có quyền `0.0.0.0` | `M3hPVanNdAYKN2soHbvs05mLgUeyoo` | Token dùng để xem stream và tải clip ra ngoài. |
+| **Redbida `shinobi_token`** | API Key IP `0.0.0.0` (Quyền: View Streams, View Videos, Snapshots) | `zd5DARMBYbos4CqoMlvDIafwBP6IR0` | Dùng cho khách hàng xem luồng trực tiếp và xem lại/tải video. |
+| **Redbida `shinobi_monitor_token`** | API Key IP `0.0.0.0` (Quyền: Get Monitors, View Streams, View Videos) | `2Ow8jOi8MEwUfBByYruwgGapk2wHVL` | Dùng để lấy danh sách monitors và cấu hình luồng camera. |
 
 ---
 
