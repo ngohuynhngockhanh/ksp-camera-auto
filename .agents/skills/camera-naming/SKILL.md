@@ -19,8 +19,7 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 | **KSP-Cam Inventory ID** | `<ip_address>:<port>` | `192.168.1.195:37777` | Cổng cấu hình DVRIP (`37777`), ISAPI (`80`), hoặc SDK (`8000`). |
 | **RTSP Main-stream Path** | `rtsp://<user>:<pass>@<ip>:554/cam/realmonitor?channel=1&subtype=0` | `rtsp://admin:Admin123456@192.168.1.195:554/cam/realmonitor?channel=1&subtype=0` | Transport bắt buộc `tcp`, codec remux `copy`. |
 | **RTSP Sub-stream Path** | `rtsp://<user>:<pass>@<ip>:554/cam/realmonitor?channel=1&subtype=1` | `rtsp://admin:Admin123456@192.168.1.195:554/cam/realmonitor?channel=1&subtype=1` | Dùng cho preview / thumbnail hoặc low bandwidth. |
-| **Shinobi Notes Metadata** | JSON format: `{"sn": "...", "safety_code": "..."}` | `{"sn": "33443ACPSFC97C2", "safety_code": "L2D6643F"}` | Lưu trữ Serial Number và Safety Code gốc của hãng. |
-| **Redbida `shinobi_camera_id`** | Giá trị phải là **`mid` Shinobi tương ứng** | `camera01`, `camera02` | **KHÔNG ĐƯỢC** lưu GroupKey; phải là monitor ID của bàn/camera. |
+| **Redbida `shinobi_camera_id`** | Giá trị là **Shinobi Group ID / Group Key** | `AWU8wJMd2l`, `P6zP1kVhht` | Mã nhóm Group ID của Shinobi NVR. |
 | **Redbida `shinobi_group_key`** | Chuỗi 10 ký tự GroupKey Shinobi | `AWU8wJMd2l`, `P6zP1kVhht` | Lưu mã nhóm người dùng Shinobi. |
 | **Redbida `shinobi_token`** | API Key IP `0.0.0.0` (Quyền: View Streams, View Videos, Snapshots) | `zd5DARMBYbos4CqoMlvDIafwBP6IR0` | Dùng cho khách hàng xem luồng trực tiếp và xem lại/tải video. |
 | **Redbida `shinobi_monitor_token`** | API Key IP `0.0.0.0` (Quyền: Get Monitors, View Streams, View Videos) | `2Ow8jOi8MEwUfBByYruwgGapk2wHVL` | Dùng để lấy danh sách monitors và cấu hình luồng camera. |
