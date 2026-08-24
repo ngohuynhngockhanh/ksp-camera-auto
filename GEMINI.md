@@ -471,6 +471,10 @@ Module `internal/shinobi` cung cấp client Go thuần kết nối trực tiếp
   - Đọc danh sách monitor từ Shinobi NVR.
   - Phân tích cú pháp chuỗi RTSP URL để trích xuất Host, Port, Username, Password, Channel number và tự động nhận diện Vendor.
   - Upsert thiết bị vào `Inventory`, tự động mã hóa mật khẩu AES-256-GCM.
+- **Quy ước Khóa Redbida & Shinobi NVR (`/root/ota-mqtt/change_ok/`)**:
+  - `shinobi_camera_id`: **Bắt buộc lưu `mid` Shinobi tương ứng** (ví dụ: `camera01`, `camera02`), **KHÔNG ĐƯỢC** lưu GroupKey.
+  - `shinobi_group_key`: Lưu GroupKey 10 ký tự của Shinobi (ví dụ: `AWU8wJMd2l`, `P6zP1kVhht`).
+  - `shinobi_monitor_token`: Lưu API Key có quyền truy cập `0.0.0.0` để xem trực tiếp và tải video ra ngoài.
 
 ---
 

@@ -20,6 +20,9 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 | **RTSP Main-stream Path** | `rtsp://<user>:<pass>@<ip>:554/cam/realmonitor?channel=1&subtype=0` | `rtsp://admin:Admin123456@192.168.1.195:554/cam/realmonitor?channel=1&subtype=0` | Transport bắt buộc `tcp`, codec remux `copy`. |
 | **RTSP Sub-stream Path** | `rtsp://<user>:<pass>@<ip>:554/cam/realmonitor?channel=1&subtype=1` | `rtsp://admin:Admin123456@192.168.1.195:554/cam/realmonitor?channel=1&subtype=1` | Dùng cho preview / thumbnail hoặc low bandwidth. |
 | **Shinobi Notes Metadata** | JSON format: `{"sn": "...", "safety_code": "..."}` | `{"sn": "33443ACPSFC97C2", "safety_code": "L2D6643F"}` | Lưu trữ Serial Number và Safety Code gốc của hãng. |
+| **Redbida `shinobi_camera_id`** | Giá trị phải là **`mid` Shinobi tương ứng** | `camera01`, `camera02` | **KHÔNG ĐƯỢC** lưu GroupKey; phải là monitor ID của bàn/camera. |
+| **Redbida `shinobi_group_key`** | Chuỗi 10 ký tự GroupKey Shinobi | `AWU8wJMd2l`, `P6zP1kVhht` | Lưu mã nhóm người dùng Shinobi. |
+| **Redbida `shinobi_monitor_token`** | API Key có quyền `0.0.0.0` | `M3hPVanNdAYKN2soHbvs05mLgUeyoo` | Token dùng để xem stream và tải clip ra ngoài. |
 
 ---
 
