@@ -30,6 +30,7 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 | **Redbida `camera_count`** | Số lượng camera Shinobi thực tế | `5`, `8`, `10` | Bắt buộc bằng số lượng camera active trên Shinobi. |
 | **Redbida `toolbar_show_count`** | Số nút camera hiển thị trên thanh công cụ | `5`, `8`, `10` | Luôn đặt cùng giá trị với `camera_count`. |
 | **Redbida `hls_using_go2rtc`** | Bật phân phối HLS qua Go2RTC | `true` | Tối ưu hóa độ trễ stream và giảm tải CPU. |
+| **Redbida `logo_header`** | URL logo header chuẩn | `https://vnmap-backend.inut.vn/uploads/bidalive_efd101c4e6.png` | URL ảnh logo header cố định cho hệ thống Bida. |
 | **Redbida `logo_header_text`** | Chuỗi tiêu đề phụ / header text | `Billiard Live - Tải clip bàn bida và livestream` | Luôn cố định câu slogan chuẩn này cho toàn bộ hệ thống Bida. |
 | **Redbida `button_generate_go2rtc_stream`** | Nút trigger sinh cấu hình Go2RTC | `true` | Gửi qua `/private/i_sets` để Node-RED 2023 tự sinh `/root/go2rtc.yaml`. |
 
