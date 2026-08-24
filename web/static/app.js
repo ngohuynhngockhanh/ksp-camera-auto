@@ -3880,6 +3880,24 @@ async function init() {
 
 // ---------- Anti-A Guardian Panel Logic ----------
 
+function formatDateTime(isoString) {
+  if (!isoString) return '—';
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return String(isoString);
+    const pad = n => String(n).padStart(2, '0');
+    const hours = pad(d.getHours());
+    const mins = pad(d.getMinutes());
+    const secs = pad(d.getSeconds());
+    const day = pad(d.getDate());
+    const month = pad(d.getMonth() + 1);
+    const year = d.getFullYear();
+    return `${hours}:${mins}:${secs} ${day}/${month}/${year}`;
+  } catch (e) {
+    return String(isoString);
+  }
+}
+
 async function renderAntiAPanel() {
   const badge = document.getElementById('anti-a-status-badge');
   const runningText = document.getElementById('anti-a-running-text');
