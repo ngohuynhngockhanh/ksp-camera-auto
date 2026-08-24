@@ -168,6 +168,27 @@ button { font-family: inherit; }
 .view { display: none; }
 .view.active { display: block; }
 
+/* ---------- RedBida / OTA-MQTT settings ---------- */
+.redbida-status-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:14px; }
+.redbida-toolbar { display:flex; gap:12px; align-items:end; flex-wrap:wrap; }
+.redbida-toolbar .field { margin-bottom:0; min-width:190px; }
+.redbida-table code { word-break:break-word; }
+.redbida-table textarea { min-width:240px; font:inherit; resize:vertical; }
+.redbida-table input, .redbida-table select { min-width:170px; }
+.redbida-editor { display:flex; flex-direction:column; gap:6px; min-width:220px; }
+.redbida-file { font-size:.78rem; }
+.redbida-logo-preview { width:150px; max-height:56px; object-fit:contain; background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:4px; }
+.redbida-protected-value { color:var(--muted); }
+.redbida-dirty { background:color-mix(in srgb, var(--accent) 8%, transparent); }
+.redbida-risk-editable { color:var(--success); }
+.redbida-risk-confirm-required { color:var(--warning, #d97706); }
+.redbida-risk-read-only-protected, .redbida-risk-unknown { color:var(--muted); }
+@media (max-width:767px) {
+  .redbida-toolbar { align-items:stretch; }
+  .redbida-toolbar .field { min-width:100%; }
+  .redbida-table textarea, .redbida-table input, .redbida-table select { width:100%; min-width:0; }
+}
+
 /* ---------- bottom nav + drawer (mobile) ---------- */
 
 .bottomnav {

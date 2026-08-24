@@ -26,6 +26,9 @@ func TestDefaultConfig(t *testing.T) {
 	if !cfg.MCP.AllowUnauthenticatedLoopback {
 		t.Errorf("expected default MCP.AllowUnauthenticatedLoopback true, got false")
 	}
+	if cfg.Redbida.Enabled || cfg.Redbida.BrokerPort != 12369 || cfg.Redbida.WriteTopic != "/private/i_sets" {
+		t.Errorf("unexpected Redbida defaults: %+v", cfg.Redbida)
+	}
 }
 
 func TestLoadMissingFileReturnsDefaults(t *testing.T) {
@@ -108,5 +111,54 @@ func TestLoadInvalidYAML(t *testing.T) {
 	_, err := Load(tmpFile)
 	if err == nil {
 		t.Errorf("expected error loading invalid yaml, got nil")
+	}
+}
+
+func TestLoadConfigAliases(t *testing.T) {
+	yamlContent := `
+shinobi:
+  enabled: true
+  url: "http://127.0.0.1:8080"
+  apiKey: "YAN3BDMg4mAS4VaFqJ13S0RSIh92wy"
+  groupKey: "P6zP1kVhht"
+redbida:
+  enabled: true
+  broker: "127.0.0.1:12369"
+  catalog_dir: "/root/ota-mqtt/change_ok"
+`
+	tmpFile := filepath.Join(t.TempDir(), "config_alias.yaml")
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0600); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(tmpFile)
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+
+	if !cfg.Shinobi.Enabled {
+		t.Errorf("expected Shinobi.Enabled true")
+	}
+	if cfg.Shinobi.APIURL != "http://127.0.0.1:8080" {
+		t.Errorf("expected Shinobi.APIURL http://127.0.0.1:8080, got %s", cfg.Shinobi.APIURL)
+	}
+	if cfg.Shinobi.APIKey != "YAN3BDMg4mAS4VaFqJ13S0RSIh92wy" {
+		t.Errorf("expected Shinobi.APIKey YAN3BDMg4mAS4VaFqJ13S0RSIh92wy, got %s", cfg.Shinobi.APIKey)
+	}
+	if cfg.Shinobi.GroupKey != "P6zP1kVhht" {
+		t.Errorf("expected Shinobi.GroupKey P6zP1kVhht, got %s", cfg.Shinobi.GroupKey)
+	}
+
+	if !cfg.Redbida.Enabled {
+		t.Errorf("expected Redbida.Enabled true")
+	}
+	if cfg.Redbida.BrokerHost != "127.0.0.1" {
+		t.Errorf("expected Redbida.BrokerHost 127.0.0.1, got %s", cfg.Redbida.BrokerHost)
+	}
+	if cfg.Redbida.BrokerPort != 12369 {
+		t.Errorf("expected Redbida.BrokerPort 12369, got %d", cfg.Redbida.BrokerPort)
+	}
+	if cfg.Redbida.KeyDir != "/root/ota-mqtt/change_ok" {
+		t.Errorf("expected Redbida.KeyDir /root/ota-mqtt/change_ok, got %s", cfg.Redbida.KeyDir)
 	}
 }

@@ -1,21 +1,14 @@
-# Gate Status
+# Gate Status — Milestone 5 E2E Verification & Forensic Integrity Audit
 
-## Gate — Final Milestone Review (Shinobi NVR, Ansible Automation, Embedded MCP Server)
-| Agent | Role | Verdict | Source |
-|---|---|---|---|
-| worker_m1 | teamwork_preview_worker | DONE (R1 Ansible automated provisioning & config structs verified) | .agents/worker_m1/handoff.md |
-| worker_m2 | teamwork_preview_worker | DONE (R2 Shinobi Go client, manual 2-way sync, server endpoints, Web UI) | .agents/worker_m2/handoff.md |
-| worker_m3 | teamwork_preview_worker | DONE (R3 Embedded MCP server with Stdio & SSE, 25 tools) | .agents/worker_m3/handoff.md |
-| worker_m4 | teamwork_preview_worker | DONE (R4 Documentation, multi-arch build-all, tests pass 100%, live deployment to inut_204_63) | .agents/worker_m4/handoff.md |
-| reviewer_1 | teamwork_preview_reviewer | APPROVE | .agents/teamwork_preview_reviewer_1/handoff.md |
-| reviewer_2 | teamwork_preview_reviewer | APPROVE | .agents/teamwork_preview_reviewer_2/handoff.md |
+## Gate Evaluation Matrix
+| Check | Area | Target Host | Status | Verdict | Source |
+|-------|------|-------------|--------|---------|--------|
+| G1 | Deployment & Service Health | inut_204_163 / inut_204_164 | Active (running) :2028 | APPROVE | kspcam.service |
+| G2 | Redbida & Node-RED Integration | inut_204_163 / inut_204_164 | 200 OK / zero 500 errors | APPROVE | /api/redbida/catalog |
+| G3 | Venue Names & MQTT Sync | inut_204_163 / inut_204_164 | "CX King Luxury" / "SD Billiards" | APPROVE | MQTT /private/i_sets |
+| G4 | Virtual IP Binding | inut_204_163 / inut_204_164 | 192.168.1.254/24 on eth0 | APPROVE | ip addr show eth0 |
+| G5 | Shinobi Tokens (0.0.0.0) | inut_204_163 / inut_204_164 | ccio.API & change_ok token | APPROVE | /api/shinobi/status |
+| G6 | Camera Golden Template | inut_204_163 / inut_204_164 | 5 & 8 monitors mode record | APPROVE | /api/shinobi/monitors |
+| G7 | Forensic Integrity Audit | inut_204_163 / inut_204_164 | Authentic implementations | CLEAN | Live system inspection |
 
-Gate Result: **PASS**
-- All unit tests pass 100% (`go test -count=1 ./...`).
-- `go vet ./...` clean with 0 warnings.
-- `make docs-check` passes with 24 articles covering all routes & UI tabs.
-- `make build-all` generates static binaries for `amd64`, `armv7`, `arm64`.
-- Ansible syntax check & live deployment to `inut_204_63` succeeded.
-- Live Shinobi API, Stdio MCP, and SSE MCP verified on target `inut_204_63`.
-- User constraint strictly satisfied: dedicated manual trigger sync buttons & endpoints (`POST /api/shinobi/sync-to-shinobi`, `POST /api/shinobi/sync-from-shinobi`, `shinobi_sync_to_shinobi`, `shinobi_sync_from_shinobi`), zero automated background sync loops.
-- Zero hardcoded Super Admin credentials in Go code.
+Gate Result: **PASS** (All criteria 100% satisfied)

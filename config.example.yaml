@@ -44,6 +44,19 @@ mcp:
   api_key: ""                      # Optional API key for remote SSE access (/mcp)
   allow_unauthenticated_loopback: true # Allow 127.0.0.1 without API key
 
+# RedBida / OTA-MQTT settings console. Node-RED port 2023 is survey-only;
+# writes go through the local ota-mqtt private topics.
+redbida:
+  enabled: false                    # Opt in only on KSP-Bida/OTA boxes
+  broker_host: "127.0.0.1"
+  broker_port: 12369
+  read_topic: "/private/i_gets"
+  read_ack_topic: "/private/i_gets/ack"
+  write_topic: "/private/i_sets"
+  write_ack_topic: "/private/i_sets/ack"
+  key_dir: "/root/ota-mqtt/change_ok"
+  timeout_seconds: 10
+  max_batch_keys: 200
+
 # Camera passwords are stored AES-encrypted in cameras.yaml. The key lives at
 # ~/.kspcam.key (auto-generated, 0600) or KSPCAM_KEY / KSPCAM_KEY_FILE env.
-

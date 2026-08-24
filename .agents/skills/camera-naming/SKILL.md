@@ -38,15 +38,19 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 - `hls_time`: `"2"`
 - `hls_list_size`: `"2"`
 
-### B. Quy tắc xử lý Âm thanh (Audio Codec Rule):
-- **Nếu camera CÓ âm thanh AAC** (`audioEnable: true` và `audioCodec == "AAC"`):
-  - `acodec`: `"copy"`
-  - `stream_acodec`: `"copy"`
-  - `record_acodec`: `"aac"`
-- **Nếu camera KHÔNG có âm thanh AAC** (hoặc tắt mic/audio):
-  - `acodec`: `"no"`
-  - `stream_acodec`: `"no"`
-  - `record_acodec`: `"no"`
+### B. Quy tắc xử lý Âm thanh (Audio Codec & Probe Workflow):
+- **Quy trình bắt buộc khi thêm/cài đặt Camera vào hệ thống**:
+  1. **Bước 1 (Probe Audio)**: Thăm dò luồng/cấu hình âm thanh của camera (`audioEnable`, `audioCodec`, hoặc qua `ffprobe`).
+  2. **Bước 2 (Chuyển đổi sang AAC)**: Nếu phát hiện âm thanh đang ở codec khác AAC (`pcm_alaw`, `pcm_mulaw`, `G.711A`, `G.711U`, `PCM`...), hệ thống **BẮT BUỘC** phải thử gửi lệnh cấu hình chuyển encoder âm thanh của camera về `AAC` (`Audio.Compression=AAC` / `SetAudioAAC: true`).
+  3. **Bước 3 (Đọc lại & Phân nhánh cấu hình Shinobi)**:
+     - **Nếu chuyển thành công sang AAC** (hoặc camera vốn đã có AAC):
+       - `acodec`: `"copy"`
+       - `stream_acodec`: `"copy"`
+       - `record_acodec`: `"aac"`
+     - **Nếu KHÔNG sửa được về AAC** (firmware/phần cứng camera không hỗ trợ encoder AAC, read-back vẫn giữ non-AAC hoặc không có mic):
+       - `acodec`: `"no"`
+       - `stream_acodec`: `"no"`
+       - `record_acodec`: `"no"` (Tắt toàn bộ copy âm thanh trên Shinobi để chống lỗi luồng / giật lag).
 
 ### C. Quy tắc Flags (FFmpeg Flags Standard):
 - `cust_input`: `""` (**BẮT BUỘC ĐỂ TRỐNG** — không chèn cờ `-fflags nobuffer...` hay `-flags low_delay...`).

@@ -540,6 +540,42 @@
           </dialog>
         </section>
 
+        <!-- RedBida / OTA-MQTT settings -->
+        <section class="view" id="view-redbida" data-view="redbida">
+          <div class="page-heading">
+            <div>
+              <h2 class="page-title">RedBida / OTA-MQTT</h2>
+              <p class="page-lead">Khảo sát Node-RED 2023, đọc key từ ota-mqtt và đồng bộ giá trị qua MQTT nội bộ. Flow Node-RED luôn ở chế độ chỉ đọc.</p>
+            </div>
+            <div class="page-actions">
+              <button class="btn btn-secondary" id="redbida-refresh" type="button" data-testid="redbida-refresh">Đọc lại từ OTA</button>
+              <button class="btn" id="redbida-apply" type="button" data-testid="redbida-apply">Submit thay đổi</button>
+            </div>
+          </div>
+          <div class="redbida-status-grid">
+            <div class="stat-card"><div class="stat-label">Node-RED</div><div class="stat-value" id="redbida-node-status">Chỉ khảo sát</div></div>
+            <div class="stat-card"><div class="stat-label">Key đã nạp</div><div class="stat-value" id="redbida-key-count">–</div></div>
+            <div class="stat-card"><div class="stat-label">Giờ host</div><div class="stat-value" id="redbida-time-status">–</div></div>
+            <div class="stat-card"><div class="stat-label">NTP host</div><div class="stat-value" id="redbida-ntp-status">–</div></div>
+          </div>
+          <div class="card redbida-toolbar">
+            <div class="field field-sm"><label for="redbida-search">Tìm key</label><input id="redbida-search" type="search" placeholder="logo, livestream, schedule…" data-testid="redbida-search"></div>
+            <div class="field field-sm"><label for="redbida-group">Nhóm</label><select id="redbida-group" data-testid="redbida-group"><option value="">Tất cả nhóm</option></select></div>
+            <label class="checkbox-row compact"><input id="redbida-dirty-only" type="checkbox"> Chỉ thay đổi</label>
+            <button class="btn btn-secondary btn-sm" id="redbida-time-refresh" type="button">Cập nhật trạng thái giờ</button>
+          </div>
+          <div class="msg" id="redbida-msg"></div>
+          <div class="card">
+            <div class="table-wrap">
+              <table class="reflow redbida-table" id="redbida-table">
+                <thead><tr><th>Nhóm</th><th>Key</th><th>Risk</th><th>Giá trị hiện tại</th><th>Giá trị mới</th><th>Trạng thái</th></tr></thead>
+                <tbody id="redbida-tbody"><tr><td colspan="6" class="empty-hint">Bấm “Đọc lại từ OTA”.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+          <p class="muted">Key mật khẩu/token/mạng và key chưa biết được hiển thị để khảo sát nhưng không cho sửa. Key reboot/restart cần xác nhận trước khi submit.</p>
+        </section>
+
         <!-- Shinobi NVR -->
         <section class="view" id="view-shinobi" data-view="shinobi">
           <div class="page-heading">
@@ -906,6 +942,7 @@
   </div>
   <script src="ui-core.js"></script>
   <script src="app.js"></script>
+  <script src="redbida.js"></script>
   <script src="help.js"></script>
   <script src="vis-timeline-graph2d.min.js"></script>
   <script src="qrcode.min.js"></script>

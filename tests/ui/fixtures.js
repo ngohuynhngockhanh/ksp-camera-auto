@@ -39,7 +39,7 @@ const STREAM_INFO = [
 ];
 
 const DEFAULTS = {
-  '/api/config': { role: 'admin', maxReviewHours: 72 },
+  '/api/config': { role: 'admin', maxReviewHours: 72, redbidaEnabled: true },
   '/api/cameras': CAMERAS,
   '/api/probe': { streams: STREAM_INFO, serialNumber: '8K01234PAZ56789', port: 37777 },
   '/api/fps-capability': { currentFps: 25, maxFps: 25, source: 'capability' },
@@ -117,6 +117,32 @@ const DEFAULTS = {
   '/api/recordings': { recordings: [] },
   '/api/export-progress': { done: 0, total: 0, phase: '', error: '' },
   '/api/playback-token': { token: 'tok', exp: '2026-07-26T12:00:00Z' },
+  '/api/redbida/catalog': {
+    keys: [
+      { key: 'logo_header', label: 'logo header', group: 'Branding / Logo', risk: 'editable', valueType: 'image', editable: true, secret: false },
+      { key: 'logo_livestream', label: 'logo livestream', group: 'Branding / Logo', risk: 'editable', valueType: 'image', editable: true, secret: false },
+      { key: 'show_toolbar', label: 'show toolbar', group: 'UI / Display', risk: 'editable', valueType: 'boolean', editable: true, secret: false },
+      { key: 'mqtt_password', label: 'mqtt password', group: 'Security / Credentials', risk: 'read-only-protected', valueType: 'string', editable: false, secret: true },
+      { key: 'button_reboot', label: 'button reboot', group: 'Schedule / Maintenance', risk: 'confirm-required', valueType: 'boolean', editable: true, secret: false },
+    ],
+  },
+  '/api/redbida/refresh': {
+    values: [
+      { key: 'logo_header', value: 'https://example.test/logo.png', exists: true, meta: { key: 'logo_header', label: 'logo header', group: 'Branding / Logo', risk: 'editable', valueType: 'image', editable: true, secret: false } },
+      { key: 'logo_livestream', value: '', exists: true, meta: { key: 'logo_livestream', label: 'logo livestream', group: 'Branding / Logo', risk: 'editable', valueType: 'image', editable: true, secret: false } },
+      { key: 'show_toolbar', value: true, exists: true, meta: { key: 'show_toolbar', label: 'show toolbar', group: 'UI / Display', risk: 'editable', valueType: 'boolean', editable: true, secret: false } },
+      { key: 'mqtt_password', value: '********', exists: true, meta: { key: 'mqtt_password', label: 'mqtt password', group: 'Security / Credentials', risk: 'read-only-protected', valueType: 'string', editable: false, secret: true } },
+      { key: 'button_reboot', value: false, exists: true, meta: { key: 'button_reboot', label: 'button reboot', group: 'Schedule / Maintenance', risk: 'confirm-required', valueType: 'boolean', editable: true, secret: false } },
+    ],
+    refreshedAt: '2026-08-24T08:00:00Z',
+  },
+  '/api/redbida/apply': {
+    results: [{ key: 'logo_header', applied: true, changed: true, oldValue: 'old', newValue: 'new', meta: { key: 'logo_header', risk: 'editable' } }],
+    appliedAt: '2026-08-24T08:00:01Z',
+  },
+  '/api/redbida/time-status': {
+    hostTime: '2026-08-24 15:00:00', ntpSynchronized: true, nodeRedReadOnly: true, driftThresholdSeconds: 60,
+  },
 };
 
 // ndjson builds the "data: {...}\n\n" frame stream that /api/apply and

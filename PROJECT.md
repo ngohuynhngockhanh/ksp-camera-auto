@@ -1,12 +1,14 @@
 # Project: ksp-camera-auto — Shinobi NVR Management & Embedded MCP Server
 
+Current source-verified architecture snapshot: [docs/CODEBASE-KNOWLEDGE.md](docs/CODEBASE-KNOWLEDGE.md).
+
 ## Architecture
 `ksp-camera-auto` (`kspcam`) is a Go-based camera automation, bulk configuration, Shinobi NVR management, and embedded AI MCP tool server.
 - **Entrypoint**: `cmd/kspcam/main.go` (supports web server on `:2028`, `--mcp` Stdio mode, `--config`, `--version`)
 - **Configuration & Storage**: `internal/config/` (AES-GCM encrypted YAML store, Shinobi config, MCP config)
 - **Web & API Layer**: `internal/server/` (Cookie auth, REST API, SSE streaming, snapshot cache, Shinobi management REST routes `/api/shinobi/*`, SSE MCP endpoint `/mcp`)
 - **Shinobi Management**: `internal/shinobi/` (Pure Go client for Shinobi NVR REST API, monitors CRUD, stream states, videos, manual trigger 2-way sync engine)
-- **Embedded MCP Server**: `internal/mcp/` (JSON-RPC 2.0 protocol engine, Stdio transport, HTTP/SSE transport with API key auth, 23 tool definitions across Inventory, Config/Bulk, Discovery/Diagnosis, and Shinobi domains)
+- **Embedded MCP Server**: `internal/mcp/` (JSON-RPC 2.0 protocol engine, Stdio transport, HTTP/SSE transport with API key auth, 24 tool definitions across Inventory, Config/Bulk, Discovery/Diagnosis, and Shinobi domains)
 - **Core Orchestration**: `internal/bulk/` (Sequential task execution, credential testing)
 - **Camera Abstraction Layer**: `internal/camera/` (Unified `Camera` interface, capability type assertions, Probe -> Apply -> Read-Back verification)
 - **Protocol Implementations**: `internal/dahua/`, `internal/isapi/`, `internal/hik/`, `internal/hiksdk/`, `internal/tiandy/`

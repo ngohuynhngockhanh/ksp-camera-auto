@@ -15,6 +15,7 @@ const ICONS = {
   reload: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>',
   help: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5.1.8c0 1.6-2.6 2.2-2.6 3.5"/><path d="M12 17h.01"/></svg>',
   video: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>',
+  settings: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.8 1.8-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V20h-2.55v-.1a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06-1.8-1.8.06-.06A1.7 1.7 0 0 0 8.1 15a1.7 1.7 0 0 0-1.56-1.03H6v-2.55h.1A1.7 1.7 0 0 0 7.66 10a1.7 1.7 0 0 0-.34-1.88l-.06-.06 1.8-1.8.06.06A1.7 1.7 0 0 0 11 6.1a1.7 1.7 0 0 0 1.03-1.56V4h2.55v.1A1.7 1.7 0 0 0 15.6 5.66a1.7 1.7 0 0 0 1.88-.34l.06-.06 1.8 1.8-.06.06A1.7 1.7 0 0 0 18.9 9a1.7 1.7 0 0 0 1.56 1.03h.1v2.55h-.1A1.7 1.7 0 0 0 18.9 15Z"/></svg>',
 };
 
 // Nav config shared by sidebar / bottom-nav / drawer. Kho camera / Chỉnh
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { hash: 'cameras', label: 'Kho camera', short: 'Camera', icon: ICONS.camera, bottom: true },
   { hash: 'review', label: 'Xem lại', short: 'Xem lại', icon: ICONS.radar, bottom: true },
   { hash: 'shinobi', label: 'Shinobi NVR', short: 'Shinobi', icon: ICONS.video, bottom: false },
+  { hash: 'redbida', label: 'RedBida / OTA', short: 'RedBida', icon: ICONS.settings, bottom: false },
   // bottom: false — mobile bottom nav stays at 4 items + Menu so it doesn't
   // get crowded; import (an occasional setup action, unlike the other four
   // which are used every visit) is reachable from the sidebar and the drawer.
@@ -264,6 +266,7 @@ function setRoute() {
   let hash = currentHash();
   // A viewer is locked to the review view — bounce any other route back.
   if (appRole === 'viewer' && hash !== 'review') { location.hash = '#review'; return; }
+  if (!appRedbidaEnabled && hash === 'redbida') { location.hash = '#dashboard'; return; }
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.dataset.view === hash));
   const item = NAV_ITEMS.find(n => n.hash === hash);
   document.getElementById('view-title').textContent = item ? item.label : '';
@@ -274,6 +277,10 @@ function setRoute() {
   if (hash === 'cameras') renderCameraTask();
   if (hash === 'dashboard') renderDashboard();
   if (hash === 'shinobi') renderShinobiView();
+  if (hash === 'redbida') {
+    if (window.redbidaOnShow) window.redbidaOnShow();
+    else window.addEventListener('load', () => { if (window.redbidaOnShow) window.redbidaOnShow(); }, { once: true });
+  }
   if (hash === 'review') {
     // reviewOnShow may not exist yet if review.js is still loading (a viewer is
     // forced here during init, before the later <script> runs) — retry on load.
@@ -288,8 +295,10 @@ function goto(hash) { location.hash = '#' + hash; }
 
 // appRole gates the UI: a "viewer" login only sees the "Xem lại" (review) view.
 let appRole = 'admin';
+let appRedbidaEnabled = false;
 function navItems() {
-  return appRole === 'viewer' ? NAV_ITEMS.filter(n => n.hash === 'review') : NAV_ITEMS;
+  if (appRole === 'viewer') return NAV_ITEMS.filter(n => n.hash === 'review');
+  return NAV_ITEMS.filter(n => n.hash !== 'redbida' || appRedbidaEnabled);
 }
 
 function buildNav() {
@@ -3357,7 +3366,11 @@ function wireShinobiTabEvents() {
 
 async function init() {
   // Learn the session role first so the nav/views can be gated for a viewer.
-  try { const cfg = await api('/api/config'); if (cfg && cfg.role) appRole = cfg.role; } catch (e) { /* default admin */ }
+  try {
+    const cfg = await api('/api/config');
+    if (cfg && cfg.role) appRole = cfg.role;
+    appRedbidaEnabled = cfg?.redbidaEnabled === true;
+  } catch (e) { /* keep optional surfaces disabled */ }
   if (appRole === 'viewer') {
     document.body.classList.add('role-viewer');
     if (currentHash() !== 'review') location.hash = '#review';

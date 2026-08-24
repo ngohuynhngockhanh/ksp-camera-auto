@@ -1,19 +1,39 @@
-# Dispatch Record
+# Dispatch Log
 
-## 2026-08-23T16:29:05Z
+## 2026-08-24T09:07:35Z
 
-You are the Project Orchestrator for the task defined in `/home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md`.
+Triển khai và hoàn thiện cấu hình ksp-camera-auto (kspcam) trên thiết bị đích inut_204_163 (77.88.204.163), tích hợp đồng bộ thông suốt với Node-RED (cổng :2023) qua module redbida (MQTT/Key files) và Shinobi NVR (:8080) để phục vụ bàn giao cho khách hàng.
 
-Your working directory is: `/home/ksp/ksp-camera-auto/.agents/orchestrator_1/`
+Workspace root: /home/ksp/ksp-camera-auto
+Your working directory: /home/ksp/ksp-camera-auto/.agents/orchestrator_1
+Authoritative user request: /home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md
+Skill available: camera-naming (/home/ksp/ksp-camera-auto/.agents/skills/camera-naming/SKILL.md)
 
-Please read `/home/ksp/ksp-camera-auto/.agents/ORIGINAL_REQUEST.md`, initialize your `BRIEFING.md` and `plan.md`, coordinate workers and specialists according to the system rules, track progress in `progress.md`, ensure all requirements R1, R2, R3, R4 and acceptance criteria are satisfied, and notify the sentinel upon completion.
+## 2026-08-24T09:21:54Z
 
-## 2026-08-23T16:34:00Z
+[BỔ SUNG YÊU CẦU QUAN TRỌNG TỪ NGƯỜI DÙNG CHO INUT_204_163]
 
-[CRITICAL USER CONSTRAINT UPDATE]
-User has provided a mandatory design constraint regarding the Sync mechanism:
-"LƯU Ý QUAN TRỌNG TỪ USER VỀ CƠ CHẾ ĐỒNG BỘ (SYNC):
-User yêu cầu: KHÔNG tự động chạy sync ngầm liên tục 2 chiều giữa ksp-cam và Shinobi. Thay vào đó, mỗi chiều đồng bộ phải có NÚT BẤM RIÊNG BIỆT (manual trigger):
-1. Nút "Đồng bộ từ KSP-Cam sang Shinobi" (Export / Push cameras.yaml -> Shinobi monitors).
-2. Nút "Đồng bộ từ Shinobi về KSP-Cam" (Import / Pull Shinobi monitors -> cameras.yaml).
-Tạo các REST API endpoint tương ứng cho từng chiều (ví dụ: POST /api/shinobi/sync-to-shinobi và POST /api/shinobi/sync-from-shinobi) cùng các công cụ MCP tương ứng (`shinobi_sync_to_shinobi`, `shinobi_sync_from_shinobi`), kèm nút bấm rõ ràng trên Web UI."
+## 2026-08-24T09:46:42Z
+
+[ĐIỀU CHỈNH KHẨN CẤP THIẾT BỊ ĐÍCH CHO QUÁN CX KING]
+
+## 2026-08-24T09:56:32Z
+
+[THÔNG BÁO HOÀN TẤT TRIỂN KHAI VÀ NGHIỆM THU TỪ PARENT]
+
+Toàn bộ cấu hình trên cả hai thiết bị đã được triển khai, kiểm thử và nghiệm thu thành công 100%:
+
+1. inut_204_164 (Quán "CX King Luxury"):
+   - Tên quán: "CX King Luxury"
+   - IP ảo: 192.168.1.254/24 trên eth0
+   - NVR Dahua: 192.168.1.108 (SN: AK0C842PAZ39A81, pass: a12345678)
+   - 5 Camera: Camera01 (192.168.1.201) -> Camera05 (192.168.1.205), pass a12345678
+   - Shinobi: 5 monitors camera01..camera05 mode record theo Golden Template (-tag:v hvc1, audio copy)
+   - Shinobi Token: quyền 0.0.0.0 đã lưu vào /root/ota-mqtt/change_ok/shinobi_monitor_token
+
+2. inut_204_163 (Quán "SD Billiards Club - CS2"):
+   - Tên quán: "SD Billiards Club - CS2"
+   - IP ảo: 192.168.1.254/24 trên eth0
+   - 8 Camera: Camera01 (192.168.1.111) -> Camera08 (192.168.1.118), pass Sonduong1011@
+   - Shinobi: 8 monitors camera01..camera08 mode record theo Golden Template (-tag:v hvc1, audio copy)
+   - Shinobi Token: quyền 0.0.0.0 đã lưu vào /root/ota-mqtt/change_ok/shinobi_monitor_token

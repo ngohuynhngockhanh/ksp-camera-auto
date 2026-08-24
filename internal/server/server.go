@@ -21,6 +21,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/camera"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mcp"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/redbida"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/shinobi"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/web"
 )
@@ -40,6 +41,7 @@ type Server struct {
 	snaps    *snapCache
 	dlKey    []byte // HMAC key for short-lived tokenized playback/download links (QR)
 	nvrWatch *nvrWatchdog
+	redbida  *redbida.Service
 }
 
 // New builds a Server with routes registered.
@@ -62,6 +64,15 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 		s.shinobi = shinobi.NewClient(cfg.Shinobi.APIURL, cfg.Shinobi.APIKey, cfg.Shinobi.GroupKey)
 	}
 	s.mcp = mcp.NewServer(&cfg, inv, s.shinobi)
+	if cfg.Redbida.Enabled {
+		broker := redbida.NewMQTTBroker(redbida.MQTTOptions{
+			Host: cfg.Redbida.BrokerHost, Port: cfg.Redbida.BrokerPort,
+			ReadTopic: cfg.Redbida.ReadTopic, ReadAckTopic: cfg.Redbida.ReadAckTopic,
+			WriteTopic: cfg.Redbida.WriteTopic, WriteAckTopic: cfg.Redbida.WriteAckTopic,
+			Timeout: time.Duration(cfg.Redbida.TimeoutSeconds) * time.Second,
+		})
+		s.redbida = redbida.NewService(broker, redbida.NewCatalog(cfg.Redbida.KeyDir), cfg.Redbida.MaxBatchKeys)
+	}
 	if _, err := rand.Read(s.dlKey); err != nil {
 		return nil, fmt.Errorf("gen download key: %w", err)
 	}
@@ -154,6 +165,12 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/shinobi/sync-to-shinobi", api(s.handleShinobiSyncToShinobi))
 	s.mux.Handle("/api/shinobi/sync-from-shinobi", api(s.handleShinobiSyncFromShinobi))
 	s.mux.Handle("/api/shinobi/videos", api(s.handleShinobiVideos))
+	if s.redbida != nil {
+		s.mux.Handle("/api/redbida/catalog", api(s.handleRedbidaCatalog))
+		s.mux.Handle("/api/redbida/refresh", api(s.handleRedbidaRefresh))
+		s.mux.Handle("/api/redbida/apply", api(s.handleRedbidaApply))
+		s.mux.Handle("/api/redbida/time-status", api(s.handleRedbidaTimeStatus))
+	}
 	// /api/playback accepts EITHER a session OR a valid signed token (so a phone
 	// scanning the QR download link, with no session cookie, can still fetch it).
 	s.mux.Handle("/api/playback", limitBody(8<<20, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -198,6 +215,8 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 func viewerAllowed(path, method string) bool {
 	switch path {
 	case "/api/config", "/api/cameras", "/api/recordings", "/api/live", "/api/snapshot":
+		return method == http.MethodGet
+	case "/api/redbida/catalog", "/api/redbida/time-status":
 		return method == http.MethodGet
 	case "/api/playback-token":
 		return true

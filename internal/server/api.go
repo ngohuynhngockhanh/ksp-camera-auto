@@ -2235,12 +2235,15 @@ func (s *Server) handlePlaybackToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"token": tok, "exp": exp})
 }
 
-// handleConfig exposes a small bootstrap payload the web UI needs (currently
-// just the review-window cap).
+// handleConfig exposes the bootstrap payload used to gate optional UI surfaces.
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	max := s.cfg.Defaults.MaxReviewHours
 	if max <= 0 {
 		max = 72
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"maxReviewHours": max, "role": s.sessionRole(r)})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"maxReviewHours": max,
+		"role":           s.sessionRole(r),
+		"redbidaEnabled": s.cfg.Redbida.Enabled,
+	})
 }

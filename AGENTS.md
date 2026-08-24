@@ -457,9 +457,10 @@ Module `internal/shinobi` cung cấp client Go thuần kết nối trực tiếp
     - *Hikvision*: `rtsp://<user>:<pass>@<host>:554/Streaming/Channels/101`
     - *Tiandy*: `rtsp://<user>:<pass>@<host>:554/live/ch0`
   - **Quy tắc Codec & Remux (Zero-transcoding)**: `type: "h264"`, `vcodec: "copy"`, `record_vcodec: "copy"` (remux trực tiếp không tốn CPU).
-  - **Quy tắc Xử lý Âm thanh (Audio Codec Rule)**:
-    - *Camera CÓ âm thanh AAC* (`audioEnable: true` và `audioCodec == "AAC"`): Thiết lập `acodec: "copy"`, `stream_acodec: "copy"`, `record_acodec: "aac"`.
-    - *Camera KHÔNG CÓ âm thanh AAC* (hoặc tắt audio): Bắt buộc tắt copy âm thanh bằng cách gán `acodec: "no"`, `stream_acodec: "no"`, `record_acodec: "no"`.
+  - **Quy tắc Xử lý Âm thanh (Audio Codec & Probe Workflow)**:
+    - *Quy trình khi cài đặt/probe*: Khi thêm camera, hệ thống thăm dò (`probe`) cấu hình âm thanh. Nếu audio đang ở codec khác AAC (`pcm_alaw`, `pcm_mulaw`, `G.711A`, `G.711U`...), hệ thống **bắt buộc phải thử chuyển đổi encoder của camera về `AAC`** (`Audio.Compression=AAC` / `SetAudioAAC: true`).
+    - *Camera CÓ/CHUYỂN THÀNH CÔNG sang AAC* (`audioEnable: true` và `audioCodec == "AAC"`): Thiết lập `acodec: "copy"`, `stream_acodec: "copy"`, `record_acodec: "aac"`.
+    - *Camera KHÔNG SỬA ĐƯỢC về AAC* (firmware không hỗ trợ AAC, read-back vẫn giữ non-AAC, hoặc tắt audio): Bắt buộc tắt copy âm thanh bằng cách gán `acodec: "no"`, `stream_acodec: "no"`, `record_acodec: "no"` trên Shinobi monitor.
   - **Quy tắc FFmpeg Flags**:
     - `cust_input`: `""` (**BẮT BUỘC ĐỂ TRỐNG** — xóa bỏ mọi cờ buffer/low_delay `-fflags nobuffer...`).
     - `cust_stream`: `""` (**BẮT BUỘC ĐỂ TRỐNG** — xóa bỏ mọi cờ stream `-hls_flags...`).

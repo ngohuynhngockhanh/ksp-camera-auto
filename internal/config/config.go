@@ -5,7 +5,9 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"strconv"
 
 	"gopkg.in/yaml.v3"
 )
@@ -61,9 +63,34 @@ type Defaults struct {
 
 // ShinobiConfig holds connection parameters for the Shinobi NVR REST API.
 type ShinobiConfig struct {
+	Enabled  bool   `yaml:"enabled"`
 	APIURL   string `yaml:"api_url"`   // Base URL e.g. "http://127.0.0.1:8080"
 	APIKey   string `yaml:"api_key"`   // 30-character API key
 	GroupKey string `yaml:"group_key"` // Shinobi Group Key (ke)
+}
+
+func (s *ShinobiConfig) UnmarshalYAML(value *yaml.Node) error {
+	type rawShinobi ShinobiConfig
+	var raw struct {
+		rawShinobi `yaml:",inline"`
+		URL        string `yaml:"url"`
+		Key        string `yaml:"apiKey"`
+		Group      string `yaml:"groupKey"`
+	}
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	*s = ShinobiConfig(raw.rawShinobi)
+	if s.APIURL == "" && raw.URL != "" {
+		s.APIURL = raw.URL
+	}
+	if s.APIKey == "" && raw.Key != "" {
+		s.APIKey = raw.Key
+	}
+	if s.GroupKey == "" && raw.Group != "" {
+		s.GroupKey = raw.Group
+	}
+	return nil
 }
 
 // MCPConfig holds configuration for the embedded Model Context Protocol (MCP) server.
@@ -73,6 +100,49 @@ type MCPConfig struct {
 	AllowUnauthenticatedLoopback bool   `yaml:"allow_unauthenticated_loopback"`
 }
 
+// RedbidaConfig describes the local OTA-MQTT bridge used by the RedBida
+// settings console. Node-RED remains a read-only survey target; writes travel
+// through ota-mqtt's private MQTT topics.
+type RedbidaConfig struct {
+	Enabled        bool   `yaml:"enabled"`
+	BrokerHost     string `yaml:"broker_host"`
+	BrokerPort     int    `yaml:"broker_port"`
+	ReadTopic      string `yaml:"read_topic"`
+	ReadAckTopic   string `yaml:"read_ack_topic"`
+	WriteTopic     string `yaml:"write_topic"`
+	WriteAckTopic  string `yaml:"write_ack_topic"`
+	KeyDir         string `yaml:"key_dir"`
+	TimeoutSeconds int    `yaml:"timeout_seconds"`
+	MaxBatchKeys   int    `yaml:"max_batch_keys"`
+}
+
+func (r *RedbidaConfig) UnmarshalYAML(value *yaml.Node) error {
+	type rawRedbida RedbidaConfig
+	var raw struct {
+		rawRedbida `yaml:",inline"`
+		Broker     string `yaml:"broker"`
+		CatalogDir string `yaml:"catalog_dir"`
+	}
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	*r = RedbidaConfig(raw.rawRedbida)
+	if raw.Broker != "" {
+		if host, portStr, err := net.SplitHostPort(raw.Broker); err == nil {
+			r.BrokerHost = host
+			if p, err := strconv.Atoi(portStr); err == nil && p > 0 {
+				r.BrokerPort = p
+			}
+		} else {
+			r.BrokerHost = raw.Broker
+		}
+	}
+	if r.KeyDir == "" && raw.CatalogDir != "" {
+		r.KeyDir = raw.CatalogDir
+	}
+	return nil
+}
+
 // Config is the top-level configuration document.
 type Config struct {
 	Server      Server        `yaml:"server"`
@@ -80,6 +150,7 @@ type Config struct {
 	Defaults    Defaults      `yaml:"defaults"`
 	Shinobi     ShinobiConfig `yaml:"shinobi"`
 	MCP         MCPConfig     `yaml:"mcp"`
+	Redbida     RedbidaConfig `yaml:"redbida"`
 }
 
 // Default returns a Config populated with built-in defaults.
@@ -109,6 +180,18 @@ func Default() Config {
 		MCP: MCPConfig{
 			Enabled:                      true,
 			AllowUnauthenticatedLoopback: true,
+		},
+		Redbida: RedbidaConfig{
+			Enabled:        false,
+			BrokerHost:     "127.0.0.1",
+			BrokerPort:     12369,
+			ReadTopic:      "/private/i_gets",
+			ReadAckTopic:   "/private/i_gets/ack",
+			WriteTopic:     "/private/i_sets",
+			WriteAckTopic:  "/private/i_sets/ack",
+			KeyDir:         "/root/ota-mqtt/change_ok",
+			TimeoutSeconds: 10,
+			MaxBatchKeys:   200,
 		},
 	}
 }
@@ -178,5 +261,32 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Shinobi.APIURL == "" {
 		c.Shinobi.APIURL = d.Shinobi.APIURL
+	}
+	if c.Redbida.BrokerHost == "" {
+		c.Redbida.BrokerHost = d.Redbida.BrokerHost
+	}
+	if c.Redbida.BrokerPort == 0 {
+		c.Redbida.BrokerPort = d.Redbida.BrokerPort
+	}
+	if c.Redbida.ReadTopic == "" {
+		c.Redbida.ReadTopic = d.Redbida.ReadTopic
+	}
+	if c.Redbida.ReadAckTopic == "" {
+		c.Redbida.ReadAckTopic = d.Redbida.ReadAckTopic
+	}
+	if c.Redbida.WriteTopic == "" {
+		c.Redbida.WriteTopic = d.Redbida.WriteTopic
+	}
+	if c.Redbida.WriteAckTopic == "" {
+		c.Redbida.WriteAckTopic = d.Redbida.WriteAckTopic
+	}
+	if c.Redbida.KeyDir == "" {
+		c.Redbida.KeyDir = d.Redbida.KeyDir
+	}
+	if c.Redbida.TimeoutSeconds == 0 {
+		c.Redbida.TimeoutSeconds = d.Redbida.TimeoutSeconds
+	}
+	if c.Redbida.MaxBatchKeys == 0 {
+		c.Redbida.MaxBatchKeys = d.Redbida.MaxBatchKeys
 	}
 }

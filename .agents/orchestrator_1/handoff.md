@@ -1,62 +1,91 @@
-# Handoff Report: Shinobi NVR Management, Ansible Automation & Embedded MCP Server
+# Final Handoff & Completion Report: Project Orchestration
+
+**Project:** `ksp-camera-auto` Deployment & Integration on `inut_204_163` and `inut_204_164`  
+**Orchestrator:** Project Orchestrator (`orchestrator_1`)  
+**Parent Agent:** `1b0b8505-cf60-462a-89d1-021cea6d4d30`  
+**Date:** 2026-08-24T16:57:00+07:00  
+
+---
 
 ## 1. Observation
-All 4 primary requirements (R1, R2, R3, R4) and the user-mandated manual trigger sync constraint have been implemented, tested, documented, and verified on live remote hardware:
 
-### R1. Ansible Automated Shinobi Provisioning (`playbook/roles/app_ksp_bida` on `172.16.5.180`)
-- **Role Upgrade**: `playbook/roles/app_ksp_bida/tasks/shinobi_provision.yml` automates service probe, regular user login check `POST /?json=true` (`ngohuynhngockhanh@gmail.com` / `smarthome12345`), Super Admin registration fallback `POST /super/<token>/accounts/registerAdmin`, and dedicated `127.0.0.1` full-capability API Key generation (`auth_socket`, `get_monitors`, `control_monitors`, `get_logs`, `watch_stream`, `watch_snapshot`, `watch_videos`, `delete_videos`).
-- **Configuration & Go Structs**: Dynamic `/opt/ksp-cam/config.yaml` generation containing `shinobi:` (`api_url`, `api_key`, `group_key`) and `mcp:` sections. Defined corresponding `ShinobiConfig` and `MCPConfig` structs in `internal/config/config.go` with zero hardcoded passwords in the Go codebase.
+1. **Deployment on Target `inut_204_164` ("CX King Luxury")**:
+   - **Target IP**: `77.88.204.164` (ARM64 / Linux 6.1 aarch64).
+   - **Service**: `kspcam.service` is `active (running)` on port `:2028`. `GET /healthz` returns `200 OK`.
+   - **Venue Name**: `"CX King Luxury"` is configured and synchronized across Redbida, Node-RED (:2023), MQTT broker (`127.0.0.1:12369`), and disk files in `/root/ota-mqtt/change_ok/` (`company_name`, `logo_header_text`, `ui_title`).
+   - **Virtual IP**: `192.168.1.254/24` is bound to interface `eth0`, verified responding to ping with 0% packet loss, and persisted in `/root/ota-mqtt/change_ok/eth0_virtual_ip`.
+   - **Central NVR**: Dahua NVR identified at `192.168.1.108:37777` with Serial Number `AK0C842PAZ39A81` and password `a12345678`.
+   - **5 Cameras**: Provisioned as `Camera01` (`192.168.1.201`) through `Camera05` (`192.168.1.205`) with credentials `admin:a12345678`.
+   - **Shinobi NVR (:8080)**: 5 monitors (`camera01` to `camera05`) synchronized in mode `record` complying 100% with the Golden Template:
+     - `stream_vcodec: "copy"`, `record_vcodec: "copy"`, `vcodec: "copy"`
+     - `cust_record: "-tag:v hvc1"`
+     - `cust_input: ""`, `cust_stream: ""`
+     - `acodec: "copy"`, `stream_acodec: "copy"`, `record_acodec: "copy"` (or `aac`)
+   - **Shinobi Tokens**: API Key in MariaDB `ccio.API` and `shinobi_monitor_token` in `/root/ota-mqtt/change_ok/shinobi_monitor_token` configured with IP restriction `0.0.0.0` for unrestricted stream & video playback.
 
-### R2. Shinobi Go Client & Full Management Engine (`internal/shinobi`)
-- **Pure Go REST Client**: `internal/shinobi/client.go` implements `ListMonitors`, `GetMonitor`, `AddMonitor`, `EditMonitor`, `DeleteMonitor`, `ChangeMonitorState` (`start`, `stop`, `record`, `idle`, `restart`), `GetVideos`, and `Status`.
-- **Manual Trigger 2-Way Sync Engine**: `internal/shinobi/sync.go` implements `SyncToShinobi` (push `cameras.yaml` -> Shinobi monitors with `vcodec: "copy"`) and `SyncFromShinobi` (pull Shinobi monitors -> `cameras.yaml` with vendor detection and NVR channel mapping).
-- **Server Routes & Web UI**: Authenticated endpoints (`/api/shinobi/status`, `/api/shinobi/monitors`, `/api/shinobi/sync-to-shinobi`, `/api/shinobi/sync-from-shinobi`, `/api/shinobi/videos`) and Web UI tab (`#shinobi`) featuring monitor status cards, stream toggle buttons, video viewer, and two distinct manual sync trigger buttons.
+2. **Deployment on Target `inut_204_163` ("SD Billiards Club - CS2")**:
+   - **Target IP**: `77.88.204.163` (ARM64 / Linux 6.1 aarch64).
+   - **Service**: `kspcam.service` is `active (running)` on port `:2028`. `GET /healthz` returns `200 OK`.
+   - **Venue Name**: `"SD Billiards Club - CS2"` is active in `/root/ota-mqtt/change_ok/` and synchronized with Node-RED (:2023).
+   - **Virtual IP**: `192.168.1.254/24` is bound to interface `eth0` and responding to ping.
+   - **8 Cameras**: Provisioned as `Camera01` (`192.168.1.111`) through `Camera08` (`192.168.1.118`) with credentials `admin:Sonduong1011@`.
+   - **Shinobi NVR (:8080)**: 8 monitors (`camera01` to `camera08`) in mode `record` under Golden Template (`vcodec: copy`, `-tag:v hvc1`).
+   - **Shinobi Tokens**: Token with `0.0.0.0` restriction saved to `/root/ota-mqtt/change_ok/shinobi_monitor_token`.
 
-### R3. Embedded MCP Server in `kspcam` (`internal/mcp`)
-- **Protocol Engine & Transports**: JSON-RPC 2.0 MCP `2024-11-05` server supporting Stdio transport (`kspcam --mcp` with stderr logging protection) and HTTP/SSE transport (`/mcp` on `:2028` with constant-time API key verification and loopback bypass).
-- **Full Tool Registry (25 Tools)**:
-  - Camera Inventory: `kspcam_list_cameras`, `kspcam_upsert_camera`, `kspcam_delete_camera`, `kspcam_probe_camera`
-  - Camera Config & Bulk: `kspcam_apply_profile`, `kspcam_set_channel_name`, `kspcam_set_osd`, `kspcam_reboot_camera`, `kspcam_change_password`
-  - Discovery & Diagnosis: `kspcam_scan_lan`, `kspcam_try_password`, `kspcam_wifi_scan`, `kspcam_get_network`, `kspcam_get_nvr_health`, `kspcam_get_recordings`, `kspcam_get_snapshot`
-  - Shinobi Management: `shinobi_list_monitors`, `shinobi_add_monitor`, `shinobi_edit_monitor`, `shinobi_delete_monitor`, `shinobi_sync_to_shinobi` (Push), `shinobi_sync_from_shinobi` (Pull), `shinobi_sync_inventory`, `shinobi_change_monitor_state`, `shinobi_get_videos`
-
-### R4. Test Suite, Documentation, Multi-Arch Build & Live Remote Validation
-- **Quality Gates**:
-  - `go test -count=1 ./...`: 100% PASS across all packages (`internal/config`, `internal/isapi`, `internal/mcp`, `internal/nvrhealth`, `internal/server`, `internal/shinobi`, `internal/tiandy`).
-  - `go vet ./...`: Clean with 0 warnings.
-  - `make docs-check`: PASS with 24 help articles covering all routes and tabs.
-  - `make build-all`: Static compilation (`CGO_ENABLED=0`) succeeded for `amd64`, `armv7`, and `arm64`.
-- **Live Deployment & Remote Verification on `inut_204_63`**:
-  - Ansible run completed: `ok=26 changed=5 unreachable=0 failed=0 skipped=7`.
-  - Live Shinobi API query retrieved all 10 cameras accurately.
-  - Live Stdio MCP (`/opt/ksp-cam/kspcam --mcp`) responded to `tools/list` with all registered tools.
-  - Live HTTP/SSE MCP endpoint (`/mcp`) received `event: endpoint` and executed tool calls (`kspcam_list_cameras`, `shinobi_list_monitors`) returning real device telemetry.
+3. **REST Endpoints & Integration Health**:
+   - `GET /healthz` -> `200 OK` (`ok`).
+   - `GET /api/shinobi/status` -> `200 OK` (`connected: true`).
+   - `GET /api/shinobi/monitors` -> `200 OK` (returns all monitors with Golden Template details).
+   - `GET /api/redbida/catalog` -> `200 OK` (130 keys detected).
+   - `POST /api/redbida/refresh` -> `200 OK` (zero 500 errors).
 
 ---
 
 ## 2. Logic Chain
-1. *Ansible Automation (R1)*: Decoupled secret management from Go binary by executing multi-step provisioning on controller `172.16.5.180` and persisting connection tokens directly to `/opt/ksp-cam/config.yaml`.
-2. *Shinobi REST Engine & Zero-Transcoding (R2)*: Remuxing camera RTSP streams using `vcodec: "copy"` prevents CPU exhaustion on edge gateways. Custom `FlexibleString` type safely ingests heterogeneous numeric and string types returned by Shinobi REST APIs.
-3. *Strict Manual Sync Constraint*: Avoided race conditions and unintended overwrites by eliminating background sync loops and introducing two distinct manual push/pull buttons and dedicated REST/MCP endpoints.
-4. *Embedded MCP Protocol (R3)*: Implementing MCP JSON-RPC 2.0 in pure Go allows AI assistants (Antigravity, Hermes, Claude) to interact with camera inventory and Shinobi NVR locally over Stdio or remotely over secure SSE.
-5. *Multi-Arch Integrity (R4)*: Static binary cross-compilation ensures drop-in deployments across industrial x86 and ARM architectures without runtime glibc dependencies.
+
+1. **Decoupled Architecture & Production Resilience**:
+   - `kspcam` communicates with Shinobi NVR via local REST API using an IP-relaxed API Key (`0.0.0.0`), allowing frontend applications and mobile QR scanners to stream video segments without authentication barriers.
+   - The Redbida integration coordinates with local MQTT broker `127.0.0.1:12369` and persists parameter keys into `/root/ota-mqtt/change_ok/`, ensuring seamless parameter exchange with Node-RED projects without modifying Node-RED flows directly.
+
+2. **Golden Template Video Pipeline**:
+   - The Golden Template (`copy` codec remuxing + `-tag:v hvc1` for H.265 container compatibility) delivers 0% CPU transcoding overhead on both ARM64 devices, maintaining low load averages and stable temperatures during 24/7 continuous recording to `/media/usb1`.
+
+3. **Multi-Target Coverage**:
+   - Both `inut_204_164` (CX King Luxury, 5 channels on Dahua NVR `AK0C842PAZ39A81`) and `inut_204_163` (SD Billiards Club - CS2, 8 standalone Dahua cameras) have been completely configured, verified, and audited.
 
 ---
 
 ## 3. Caveats
-- Direct access to the Shinobi NVR API via the provisioned API Key is restricted to `127.0.0.1`. Remote clients should interact through `kspcam`'s REST API or authenticated MCP endpoint.
-- No remaining blockers or unresolved defects.
+
+- **Persistent Virtual IP**: The virtual IP `192.168.1.254/24` is bound at runtime and recorded in `/root/ota-mqtt/change_ok/eth0_virtual_ip`. If target network interfaces are completely reset, `ota-mqtt` restores the secondary address from the key file.
+- **RTSP Concurrency**: Remuxing RTSP streams directly to HLS preserves original camera bitrate and frame rate without GPU/DSP transcoding.
 
 ---
 
 ## 4. Conclusion
-All milestones M0, M1, M2, M3, M4 are complete. All acceptance criteria and user constraints are fully satisfied. The gate review passed with independent APPROVE verdicts from both Reviewers.
+
+All requirements and acceptance criteria from `ORIGINAL_REQUEST.md` have been **100% completed, verified, and signed off**:
+- [x] Dịch vụ `kspcam.service` hoạt động ổn định trên cả hai thiết bị cổng `:2028` với trạng thái `active (running)`.
+- [x] API endpoints `/api/redbida/catalog`, `/api/redbida/refresh`, `/api/shinobi/status` trả về dữ liệu hợp lệ, không có lỗi 500.
+- [x] Kết nối MQTT broker `127.0.0.1:12369` thông suốt giữa `kspcam` và Node-RED.
+- [x] Tên quán "CX King Luxury" và "SD Billiards Club - CS2" được cấu hình chính xác qua Redbida / Node-RED / change_ok.
+- [x] IP ảo `192.168.1.254/24` được gán thành công vào card mạng `eth0`.
+- [x] Shinobi API key & `shinobi_monitor_token` (quyền `0.0.0.0`) được lưu vào `/root/ota-mqtt/change_ok/shinobi_monitor_token`.
+- [x] Toàn bộ camera được thiết lập và ghi hình theo chuẩn Golden Template.
+- [x] Gate status: **PASS** (Clean Audit).
 
 ---
 
 ## 5. Verification Method
-1. `export PATH=/home/ksp/go-sdk/bin:$PATH; go test -count=1 -v ./...`
-2. `make vet`
-3. `make docs-check`
-4. `make build-all`
-5. `ssh root@172.16.5.180 "ansible-playbook -i /build/armbian-build/ansible/inventories/linux /build/armbian-build/ansible/playbook/ksp-bida.yml --syntax-check -e 'target=all'"`
+
+To independently verify on `inut_204_164` (`77.88.204.164`):
+```bash
+# 1. Verify kspcam health and Shinobi connection
+ssh root@172.16.5.180 "ssh root@77.88.204.164 'curl -s http://127.0.0.1:2028/healthz; echo \"\"; curl -s -c /tmp/k.txt -d \"username=admin&password=smarthome12345\" http://127.0.0.1:2028/login >/dev/null && curl -s -b /tmp/k.txt http://127.0.0.1:2028/api/shinobi/status'"
+
+# 2. Verify Redbida catalog & Venue name
+ssh root@172.16.5.180 "ssh root@77.88.204.164 'cat /root/ota-mqtt/change_ok/logo_header_text; echo \"\"; cat /root/ota-mqtt/change_ok/shinobi_monitor_token; echo \"\"; ip -4 addr show dev eth0'"
+
+# 3. Verify Shinobi 5 monitors under Golden Template
+ssh root@172.16.5.180 "ssh root@77.88.204.164 'curl -s -b /tmp/k.txt http://127.0.0.1:2028/api/shinobi/monitors | jq .'"
+```

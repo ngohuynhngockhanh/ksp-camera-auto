@@ -1,32 +1,45 @@
-# Orchestration Plan: Shinobi Integration & Embedded MCP Server
+# Master Execution Plan: ksp-camera-auto Deployment & Integration on inut_204_163
 
-## Objectives
-Integrate comprehensive Shinobi NVR management, Ansible automated provisioning (`playbook/roles/app_ksp_bida`), and embedded MCP Server in `kspcam` with full testing, documentation, and verification.
+## Objective
+Triển khai hoàn chỉnh `ksp-camera-auto` lên thiết bị `inut_204_163` (77.88.204.163), tích hợp với Node-RED (:2023) qua module `redbida` (MQTT :12369 / change_ok catalog) và Shinobi NVR (:8080), probe và cấu hình 8 camera với Golden Template, kiểm tra sức khỏe và bàn giao.
 
-## Phases & Milestones
+## Milestones Breakdown
 
-### Phase 0: Survey & Discovery (M0)
-- **Explorer 1 (Ansible & Config)**: Investigate `playbook/roles/app_ksp_bida` on `172.16.5.180`, Shinobi API endpoints (`/?json=true`, `/super/?json=true`), group key creation, API key generation with IP 127.0.0.1 and all permissions, `/opt/ksp-cam/config.yaml` schema and `internal/config/config.go`.
-- **Explorer 2 (Shinobi Go Client & REST API)**: Investigate Shinobi REST API (monitors CRUD, states, RTSP/codecs), existing `internal/importer` Shinobi parsing, bi-directional sync design with `cameras.yaml`/Inventory, and REST endpoints in `internal/server/`.
-- **Explorer 3 (Embedded MCP Server)**: Investigate MCP JSON-RPC 2.0 specification, Stdio transport (`kspcam --mcp`), HTTP/SSE endpoint `/mcp` on port 2028 with API key security, and complete tool schemas for all 4 tool groups (Inventory, Bulk/Config, Discovery/Diag, Shinobi).
+### Milestone 1: Comprehensive Survey & Discovery
+- **Scope**:
+  - Local codebase survey: redbida module implementation, config schema, Shinobi client, build scripts.
+  - Target system survey (`inut_204_163` / 77.88.204.163): SSH access, OS architecture (amd64/arm), existing services (Node-RED on 2023, MQTT broker on 12369, Shinobi NVR on 8080, `/root/ota-mqtt/change_ok`, systemd services).
+  - Network & Camera environment survey on target LAN (192.168.1.x, camera IPs, credentials, ONVIF/DVRIP/ISAPI access).
+- **Deliverables**: Survey synthesis report with full environment status and dependency roadmap.
 
-### Phase 1: Milestone M1 — Ansible Automated Shinobi Provisioning (R1)
-- Upgrade `app_ksp_bida` role on `172.16.5.180` to automate user check, super admin login, user & group key creation, API key creation (IP 127.0.0.1, all perms), and writing `shinobi` section into `/opt/ksp-cam/config.yaml`.
-- Ensure zero hardcoded Super Admin password in Go code.
+### Milestone 2: Build & Target Deployment
+- **Scope**:
+  - Compile static binary `kspcam` for target architecture.
+  - Prepare target configuration (`/opt/ksp-cam/config.yaml` or relevant path) with encrypted storage, Shinobi credentials, redbida settings, MCP server.
+  - Setup and verify `kspcam.service` on target `inut_204_163:2028`.
+- **Exit Gate**: `kspcam.service` active and running on `inut_204_163`, web UI accessible on port 2028, healthz 200 OK.
 
-### Phase 2: Milestone M2 — Shinobi Go Client & Full Management Engine (R2)
-- Build pure Go `internal/shinobi` client (Monitors CRUD, stream control, bi-directional sync).
-- Add REST endpoints in `internal/server` (`/api/shinobi/status`, `/api/shinobi/monitors`, `/api/shinobi/sync`, `/api/shinobi/videos`) and web UI integration.
+### Milestone 3: Redbida & Node-RED (:2023) Integration
+- **Scope**:
+  - Verify MQTT broker `127.0.0.1:12369` on target with `/private/i_gets` and `/private/i_sets`.
+  - Verify and configure key catalog `/root/ota-mqtt/change_ok`.
+  - Validate endpoints `/api/redbida/catalog` and `/api/redbida/refresh`.
+  - Verify bi-directional sync/update between KSP-Cam Web UI / API and Node-RED project.
+- **Exit Gate**: Endpoints return valid data with no 500 errors, MQTT test round-trip passes, Node-RED integration verified.
 
-### Phase 3: Milestone M3 — Embedded MCP Server (R3)
-- Implement `internal/mcp` supporting Stdio mode (`kspcam --mcp`) and HTTP/SSE mode (`/mcp` on `:2028` with API key auth).
-- Implement all required MCP tools (Camera Inventory, Config & Bulk, Discovery & Diag, Shinobi Management).
+### Milestone 4: Camera Setup, Golden Template & Shinobi Monitor Sync
+- **Scope**:
+  - Probe target cameras (192.168.1.190-197 or detected cameras).
+  - Apply Camera Naming convention (`Camera01`..`Camera08`, `mid: camera01..camera08`).
+  - Apply Golden Template settings: remux copy, audio AAC copy/no, `-tag:v hvc1`, empty cust_input/cust_stream, watchdog flags.
+  - Synchronize monitors to Shinobi NVR (:8080) and verify stream states (`start`/`record`).
+  - Test video playback and recording health.
+- **Exit Gate**: 8 cameras configured, Shinobi monitors active, streams and recordings healthy.
 
-### Phase 4: Milestone M4 — Tests, Docs, Multi-Arch Build & Remote Validation (R4)
-- Comprehensive unit tests in `internal/shinobi` and `internal/mcp`.
-- Update `GEMINI.md`, `AGENTS.md`, and run `make docs`.
-- Run `make build-all`, `go test ./...`, `make docs-check`.
-- Deploy to `inut_204_63` and validate live Shinobi API + MCP Server operations.
-
-### Phase 5: Review, Gate & Final Notification
-- Gate checks and completion reporting to Sentinel.
+### Milestone 5: E2E Verification & Forensic Integrity Audit
+- **Scope**:
+  - Comprehensive verification against all Acceptance Criteria in ORIGINAL_REQUEST.md.
+  - Challenger stress test & edge case verification.
+  - Forensic integrity audit (`teamwork_preview_auditor`).
+  - Generate final handover report for human/sentinel review.
+- **Exit Gate**: All acceptance criteria satisfied, Reviewers APPROVE, Auditor CLEAN.
