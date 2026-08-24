@@ -150,6 +150,7 @@
                   <button class="btn btn-primary btn-sm" type="button" id="cd-live-start" data-testid="live-start">▶ Xem trực tiếp</button>
                   <button class="btn btn-secondary btn-sm" type="button" id="cd-live-extend" data-testid="live-extend" hidden>+5 phút</button>
                   <button class="btn btn-secondary btn-sm" type="button" id="cd-live-stop" data-testid="live-stop" hidden>Dừng</button>
+                  <button class="btn btn-secondary btn-sm" type="button" id="cd-live-fullscreen" title="Toàn màn hình">⛶ Phóng to</button>
                   <button class="btn btn-secondary btn-sm" type="button" id="ce-preview-reload">Tải lại ảnh</button>
                 </div>
                 <span class="muted" id="cd-live-status" data-testid="live-status"></span>
@@ -269,7 +270,13 @@
                 <div class="card-title">Danh sách camera</div>
                 <p class="card-sub">Chọn camera để chỉnh hàng loạt; lựa chọn được giữ khi chuyển tab.</p>
               </div>
-              <span class="badge info" id="camera-list-count">0 camera</span>
+              <div class="view-switch-group">
+                <span class="badge info" id="camera-list-count">0 camera</span>
+                <div class="view-mode-toggle" id="cam-view-toggle">
+                  <button class="btn btn-sm btn-secondary active" type="button" id="cam-view-table-btn" data-testid="camera-view-table" title="Dạng Bảng">☰ Bảng</button>
+                  <button class="btn btn-sm btn-secondary" type="button" id="cam-view-grid-btn" data-testid="camera-view-grid" title="Dạng Thẻ Lưới">⊞ Lưới</button>
+                </div>
+              </div>
             </div>
             <div class="camera-toolbar">
               <div class="field field-grow">
@@ -289,7 +296,7 @@
               <button class="btn btn-danger" type="button" id="bulk-delete-cameras-btn" data-testid="bulk-delete-cameras" disabled>Xóa các cam đã chọn</button>
               <span class="muted" id="probe-names-msg"></span>
             </div>
-            <div class="table-wrap">
+            <div class="table-wrap" id="cam-table-wrap">
               <table class="reflow" id="cam-table">
                 <thead>
                   <tr>
@@ -300,13 +307,22 @@
                 <tbody id="cam-tbody" data-testid="camera-list"><tr><td colspan="7" class="empty-hint">Đang tải...</td></tr></tbody>
               </table>
             </div>
+            <div class="cam-grid" id="cam-grid" data-testid="camera-grid" hidden></div>
           </div>
 
           <div class="card" data-camera-panel="bulk">
             <div class="card-title">Chỉnh hàng loạt</div>
             <p class="card-sub">Chọn camera ngay tại đây, sau đó chỉ bật những thiết lập cần thay đổi.</p>
+
+            <div class="bulk-golden-bar">
+              <button class="btn btn-primary" type="button" id="bulk-golden-template-btn" data-testid="bulk-golden-template">
+                ⚡ Áp dụng Chuẩn Bida (Golden Template)
+              </button>
+              <span class="muted">Tự động nạp: H.264 Main, 1080p, GOP 50, Bitrate 2048 CBR, Bật Audio AAC</span>
+            </div>
+
             <div id="bulk-selection">
-              <span class="muted" id="bulk-selected-count">Chưa chọn camera nào.</span>
+              <span class="muted" id="bulk-selected-count">Chưa chọn camera nào (0 camera).</span>
             </div>
             <div class="chip-list" id="bulk-selected-chips"></div>
             <div class="bulk-camera-picker" id="bulk-camera-picker" data-testid="bulk-picker"></div>
@@ -317,6 +333,7 @@
               <span class="summary-label">Sẽ đổi:</span>
               <span class="muted" id="bulk-summary-empty">chưa bật thiết lập nào</span>
               <div class="chip-list" id="bulk-summary-chips"></div>
+              <div class="bulk-safety-alert" id="bulk-safety-alert" hidden></div>
             </div>
 
             <div class="field section-gap">
@@ -550,7 +567,9 @@
             <div class="page-actions">
               <button class="btn btn-secondary" id="redbida-refresh" type="button" data-testid="redbida-refresh">Đọc lại từ OTA</button>
               <button class="btn" id="redbida-apply" type="button" data-testid="redbida-apply">Submit thay đổi</button>
+              <button class="btn btn-secondary" id="redbida-toggle-inspector" type="button">🛡️ Inspector Chuẩn</button>
               <button class="btn btn-secondary" id="redbida-toggle-preset" type="button">⚡ 1-Click Preset</button>
+              <button class="btn btn-secondary" id="redbida-toggle-20tabs" type="button">🎛️ Ma trận 20 Bàn</button>
               <button class="btn btn-secondary" id="redbida-toggle-hub" type="button">📚 Knowledge Hub</button>
             </div>
           </div>
@@ -587,6 +606,46 @@
               <div class="stat-value" id="redbida-draft-count">0</div>
               <div class="stat-sub">Bản nháp chưa apply</div>
             </div>
+            <div class="stat-card redbida-metric-card" id="redbida-metric-score-card">
+              <div class="stat-label">Chuẩn Bida</div>
+              <div class="stat-value" id="redbida-standard-score">100%</div>
+              <div class="stat-sub" id="redbida-standard-sub">15/15 key đạt chuẩn</div>
+            </div>
+          </div>
+
+          <!-- Golden Standard Inspector Panel -->
+          <div class="card redbida-inspector-card" id="redbida-inspector-panel">
+            <div class="card-head-row">
+              <div>
+                <div class="card-title">🛡️ Trợ Lý Kiểm Tra Chuẩn Bida (Golden Standard Inspector)</div>
+                <div class="card-sub">Tự động quét và đối chiếu toàn bộ 15 key cấu hình với quy chuẩn Golden Template. Hỗ trợ sửa nhanh 1-click từng key hoặc toàn bộ hệ thống.</div>
+              </div>
+              <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+                <span class="badge badge-success" id="redbida-inspector-badge">100% Chuẩn Bida (Hoàn Hảo)</span>
+                <button class="btn btn-sm" id="redbida-autofix-all-btn" type="button">⚡ 1-Click Sửa Tất Cả</button>
+                <button class="btn btn-secondary btn-sm" id="redbida-audit-btn" type="button">🔍 Quét Lại Chuẩn</button>
+              </div>
+            </div>
+
+            <div class="redbida-inspector-progress-wrap" style="margin-top:1rem;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
+                <span style="font-size:0.82rem;font-weight:600;color:var(--text);">Tiến độ Đạt Chuẩn Bida:</span>
+                <span id="redbida-inspector-score-text" style="font-size:0.85rem;font-weight:700;color:var(--accent);">15 / 15 Key Đạt Chuẩn (100%)</span>
+              </div>
+              <div class="redbida-progress-track">
+                <div class="redbida-progress-bar" id="redbida-inspector-progress-bar" style="width: 100%;"></div>
+              </div>
+            </div>
+
+            <div class="redbida-checklist-wrap" id="redbida-checklist-wrap" style="margin-top:1rem;">
+              <div class="redbida-checklist-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+                <span style="font-size:0.82rem;font-weight:600;color:var(--text-2);">Danh mục 15 tiêu chí Golden Standard:</span>
+                <button class="btn btn-text btn-sm" id="redbida-toggle-checklist" type="button" style="font-size:0.78rem;">Thu gọn / Mở rộng</button>
+              </div>
+              <div id="redbida-checklist-items" class="redbida-checklist-grid">
+                <!-- Populated dynamically by redbidaAuditGoldenStandard() -->
+              </div>
+            </div>
           </div>
 
           <!-- 1-Click Onboarding Generator Panel -->
@@ -594,7 +653,7 @@
             <div class="card-head-row">
               <div>
                 <div class="card-title">⚡ Bộ Sinh Cấu Hình Onboarding 1-Click (Preset Generator)</div>
-                <div class="card-sub">Nhập thông tin quán để tự động sinh 13+ tham số chuẩn (20-tab INI, hashtags, gradient, Go2RTC, v.v.) và nạp vào bản nháp.</div>
+                <div class="card-sub">Nhập thông tin quán để tự động sinh 15 tham số chuẩn (20-tab INI, hashtags, gradient, Go2RTC, v.v.) và nạp vào bản nháp.</div>
               </div>
               <span class="badge badge-accent">1-Click Onboarding</span>
             </div>
@@ -617,27 +676,55 @@
                 <input id="redbida-preset-ggcode" type="text" placeholder="G-SFSDZPR95Z" value="G-SFSDZPR95Z">
               </div>
               <div class="field field-full">
-                <label for="redbida-preset-bg">Theme Background CSS Gradient (<code>ui_bg</code>)</label>
-                <input id="redbida-preset-bg" type="text" placeholder="radial-gradient( circle farthest-corner at 10% 20%, rgba(2,37,78,1) 0%, rgba(4,4,16,1) 90.1% )" value="radial-gradient( circle farthest-corner at 10% 20%, rgba(2,37,78,1) 0%, rgba(4,4,16,1) 90.1% )">
+                <label for="redbida-preset-bg">Theme Background CSS Gradient (<code>ui_bg</code> - không chứa dấu chấm phẩy ở cuối)</label>
+                <input id="redbida-preset-bg" type="text" placeholder="linear-gradient(135deg, #0b192c 0%, #1e3e62 50%, #000000 100%)" value="linear-gradient(135deg, #0b192c 0%, #1e3e62 50%, #000000 100%)">
+              </div>
+              <div class="field field-full">
+                <label>Smart Hashtags tự động (Unicode NFC/NFD không dấu tiếng Việt):</label>
+                <div class="redbida-hashtag-preview" id="redbida-preset-hashtags-preview">
+                  <span class="badge redbida-hashtag-badge">#CXKingLuxury</span>
+                  <span class="badge redbida-hashtag-badge">#BILLIARDSlive</span>
+                  <span class="badge redbida-hashtag-badge">#INUTlive</span>
+                  <span class="badge redbida-hashtag-badge">#highlightsports</span>
+                </div>
               </div>
             </div>
 
             <div class="redbida-preset-swatches-wrap">
-              <label>Bộ mẫu Gradient thịnh hành (Click để chọn nhanh):</label>
+              <label>Bộ sưu tập 8 Bảng màu Gradient Bida Đẳng cấp (Curated CSS Gradient Palette):</label>
               <div class="redbida-preset-swatches" id="redbida-preset-swatches">
-                <button type="button" class="redbida-swatch active" data-bg="radial-gradient( circle farthest-corner at 10% 20%, rgba(2,37,78,1) 0%, rgba(4,4,16,1) 90.1% )"><span class="redbida-swatch-color" style="background: radial-gradient(circle, #02254e 0%, #040410 90%);"></span>Royal Sapphire</button>
-                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #093028 0%, #237a57 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #093028, #237a57);"></span>Cyber Emerald</button>
-                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #0f2027, #2c5364);"></span>Midnight Obsidian</button>
-                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #4b1248 0%, #f0c27b 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #4b1248, #f0c27b);"></span>Luxury Crimson</button>
-                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #20002c 0%, #cbb4d4 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #20002c, #cbb4d4);"></span>Deep Amethyst</button>
-                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #1f1c2c 0%, #928dab 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #1f1c2c, #928dab);"></span>Dark Titanium</button>
+                <button type="button" class="redbida-swatch active" data-bg="linear-gradient(135deg, #0b192c 0%, #1e3e62 50%, #000000 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #0b192c 0%, #1e3e62 50%, #000000 100%);"></span>Royal Deep Blue Glow</button>
+                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #051f20 0%, #0b2b26 40%, #163832 70%, #001414 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #051f20 0%, #163832 70%, #001414 100%);"></span>Midnight Emerald Cyber</button>
+                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #1f1035 0%, #341247 45%, #0d0221 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #1f1035 0%, #341247 45%, #0d0221 100%);"></span>Cyberpunk Neon</button>
+                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #2b1e05 0%, #4a3508 50%, #171003 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #2b1e05 0%, #4a3508 50%, #171003 100%);"></span>Golden Velvet</button>
+                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #121212 0%, #242424 50%, #0a0a0a 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #121212 0%, #242424 50%, #0a0a0a 100%);"></span>Obsidian Carbon</button>
+                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #2c0b0e 0%, #52151c 50%, #140507 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #2c0b0e 0%, #52151c 50%, #140507 100%);"></span>Crimson Elegance</button>
+                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #0a1128 0%, #1c2541 50%, #000814 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #0a1128 0%, #1c2541 50%, #000814 100%);"></span>Sapphire Blue</button>
+                <button type="button" class="redbida-swatch" data-bg="linear-gradient(135deg, #3d0c11 0%, #68131d 50%, #200407 100%)"><span class="redbida-swatch-color" style="background: linear-gradient(135deg, #3d0c11 0%, #68131d 50%, #200407 100%);"></span>Ruby Luxury</button>
               </div>
             </div>
 
             <div class="redbida-gradient-preview-wrap">
-              <div class="redbida-gradient-preview" id="redbida-preset-bg-preview" style="background: radial-gradient( circle farthest-corner at 10% 20%, rgba(2,37,78,1) 0%, rgba(4,4,16,1) 90.1% );">
-                <span class="redbida-preview-title">CX King Luxury</span>
-                <span class="redbida-preview-sub">Billiard Live · Visual Gradient Preview Live</span>
+              <label style="font-weight:600;font-size:0.8rem;color:var(--text-2);margin-bottom:6px;display:block;">Live Canvas Preview (Mô phỏng giao diện khách hàng):</label>
+              <div class="redbida-gradient-preview" id="redbida-preset-bg-preview" style="background: linear-gradient(135deg, #0b192c 0%, #1e3e62 50%, #000000 100%);">
+                <div class="redbida-canvas-header" style="display:flex;align-items:center;gap:12px;width:100%;justify-content:flex-start;">
+                  <div class="redbida-checkerboard" style="width:38px;height:38px;border-radius:6px;padding:3px;display:flex;align-items:center;justify-content:center;flex:none;">
+                    <img class="redbida-canvas-logo-img" id="redbida-canvas-logo" src="https://vnmap-backend.inut.vn/uploads/bidalive_efd101c4e6.png" alt="Logo" style="max-width:100%;max-height:100%;object-fit:contain;">
+                  </div>
+                  <div style="text-align:left;">
+                    <div class="redbida-preview-title" id="redbida-canvas-title" style="font-size:1.05rem;font-weight:700;">CX King Luxury</div>
+                    <div class="redbida-preview-sub" id="redbida-canvas-sub" style="font-size:0.75rem;opacity:0.9;">Billiard Live - Tải clip bàn bida và livestream</div>
+                  </div>
+                </div>
+                <div class="redbida-canvas-hashtags" id="redbida-canvas-hashtags" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;width:100%;">
+                  <span class="badge" style="background:rgba(255,255,255,0.15);font-size:0.7rem;">#CXKingLuxury</span>
+                  <span class="badge" style="background:rgba(255,255,255,0.15);font-size:0.7rem;">#BILLIARDSlive</span>
+                  <span class="badge" style="background:rgba(255,255,255,0.15);font-size:0.7rem;">#INUTlive</span>
+                  <span class="badge" style="background:rgba(255,255,255,0.15);font-size:0.7rem;">#highlightsports</span>
+                </div>
+                <div class="redbida-tab-simulator" id="redbida-canvas-tabs" style="margin-top:8px;width:100%;">
+                  <!-- Simulator items Bàn 01..Bàn 20 -->
+                </div>
               </div>
             </div>
 
@@ -647,6 +734,61 @@
             </div>
 
             <div id="redbida-preset-diff" class="redbida-preset-diff" style="display:none;"></div>
+          </div>
+
+          <!-- Visual 20-Tab INI Editor Panel -->
+          <div class="card redbida-20tab-card" id="redbida-20tab-panel">
+            <div class="card-head-row">
+              <div>
+                <div class="card-title">🎛️ Trình Soạn Thảo 20 Bàn Bida (Visual 20-Tab INI Editor)</div>
+                <div class="card-sub">Quản lý ma trận 20 tab [C01]..[C20], chỉnh sửa nhãn từng bàn, sao chép URL stream nhanh và đồng bộ tên quán cho toàn bộ bàn.</div>
+              </div>
+              <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+                <button class="btn btn-sm" id="redbida-tab-sync-title-btn" type="button">⚡ Đồng bộ tên quán (20 bàn)</button>
+                <button class="btn btn-secondary btn-sm" id="redbida-tab-view-toggle" type="button">🔄 Xem Mã INI Gốc</button>
+              </div>
+            </div>
+
+            <div id="redbida-tab-visual-wrap">
+              <div class="redbida-matrix-label" style="font-size:0.8rem;font-weight:600;color:var(--text-2);margin-top:0.8rem;margin-bottom:0.4rem;">
+                Chọn bàn để cấu hình (C01 – C20):
+              </div>
+              <div class="redbida-matrix-grid" id="redbida-tab-matrix-grid">
+                <!-- 20 Table Buttons C01..C20 generated dynamically -->
+              </div>
+
+              <div class="redbida-tab-detail-box" style="margin-top:1rem;padding:1rem;border-radius:var(--radius);background:var(--glass-bg-subtle);border:1px solid var(--glass-border);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;flex-wrap:wrap;gap:0.5rem;">
+                  <span style="font-weight:700;font-size:0.9rem;color:var(--accent);" id="redbida-current-tab-title">Cấu hình Bàn 01 ([C01])</span>
+                  <button class="btn btn-secondary btn-sm" id="redbida-tab-copy-url-btn" type="button" style="font-size:0.75rem;">📋 Sao chép Stream URL</button>
+                </div>
+                <div class="redbida-preset-grid" style="margin-top:0;">
+                  <div class="field">
+                    <label for="redbida-tab-play-label">Tiêu đề phát / Tên quán (<code>vid_play_label</code>)</label>
+                    <input id="redbida-tab-play-label" type="text" placeholder="CX King Luxury">
+                  </div>
+                  <div class="field">
+                    <label for="redbida-tab-stream-label">Nhãn video trực tiếp (<code>stream_label</code>)</label>
+                    <input id="redbida-tab-stream-label" type="text" value="Video Trực tiếp">
+                  </div>
+                  <div class="field">
+                    <label for="redbida-tab-list-label">Nhãn danh sách highlight (<code>vid_list_label</code>)</label>
+                    <input id="redbida-tab-list-label" type="text" value="Danh sách highlight">
+                  </div>
+                  <div class="field">
+                    <label for="redbida-tab-refresh-label">Nhãn nút cập nhật (<code>list_refresh_label</code>)</label>
+                    <input id="redbida-tab-refresh-label" type="text" value="Cập nhật highlight">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="redbida-tab-raw-wrap" style="display:none;margin-top:0.8rem;">
+              <div class="field field-full">
+                <label for="redbida-tab-raw-ini">Mã INI gốc (20 sections [C01]..[C20]):</label>
+                <textarea id="redbida-tab-raw-ini" rows="10" style="font-family:var(--font-mono, monospace);font-size:0.8rem;"></textarea>
+              </div>
+            </div>
           </div>
 
           <!-- 4-Pillar Knowledge Hub -->
@@ -749,6 +891,13 @@
           <div class="card redbida-toolbar">
             <div class="field field-sm"><label for="redbida-search">Tìm key</label><input id="redbida-search" type="search" placeholder="logo, livestream, schedule…" data-testid="redbida-search"></div>
             <div class="field field-sm"><label for="redbida-group">Nhóm</label><select id="redbida-group" data-testid="redbida-group"><option value="">Tất cả nhóm</option></select></div>
+            <div class="redbida-group-pills" id="redbida-group-pills" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+              <button type="button" class="btn btn-sm btn-secondary active" data-pill-group="">Tất cả</button>
+              <button type="button" class="btn btn-sm btn-secondary" data-pill-group="Branding / Logo">🎨 Branding</button>
+              <button type="button" class="btn btn-sm btn-secondary" data-pill-group="Video & Streaming">⚡ Streaming</button>
+              <button type="button" class="btn btn-sm btn-secondary" data-pill-group="Security / Credentials">🛡️ Shinobi</button>
+              <button type="button" class="btn btn-sm btn-secondary" data-pill-group="Schedule & Maintenance">🔒 Hệ thống</button>
+            </div>
             <label class="checkbox-row compact"><input id="redbida-dirty-only" type="checkbox"> Chỉ thay đổi</label>
             <button class="btn btn-secondary btn-sm" id="redbida-time-refresh" type="button">Cập nhật trạng thái giờ</button>
           </div>
@@ -1128,6 +1277,49 @@
       </div>
     </dialog>
 
+    <dialog id="quick-ptz-dialog" class="dialog-quick-ptz">
+      <div class="dialog-body">
+        <div class="dialog-title" id="quick-ptz-title">Điều khiển PTZ nhanh</div>
+        <div class="quick-ptz-layout">
+          <div class="quick-ptz-preview">
+            <div class="ce-preview-img-wrap" id="quick-ptz-img-wrap"><span class="spinner"></span></div>
+            <img id="quick-ptz-live" class="ptz-live-img" alt="Xem trực tiếp PTZ" hidden>
+            <div class="quick-ptz-live-actions">
+              <button class="btn btn-primary btn-sm" type="button" id="quick-ptz-live-start">▶ Xem trực tiếp</button>
+              <button class="btn btn-secondary btn-sm" type="button" id="quick-ptz-live-stop" hidden>Dừng</button>
+            </div>
+          </div>
+          <div class="quick-ptz-controls">
+            <div class="ptz-pad" id="quick-ptz-pad">
+              <button class="qptz-btn" data-ptz="LeftUp" aria-label="Trái trên">↖</button>
+              <button class="qptz-btn" data-ptz="Up" aria-label="Lên">↑</button>
+              <button class="qptz-btn" data-ptz="RightUp" aria-label="Phải trên">↗</button>
+              <button class="qptz-btn" data-ptz="Left" aria-label="Trái">←</button>
+              <button class="qptz-btn ptz-center" disabled aria-hidden="true">●</button>
+              <button class="qptz-btn" data-ptz="Right" aria-label="Phải">→</button>
+              <button class="qptz-btn" data-ptz="LeftDown" aria-label="Trái dưới">↙</button>
+              <button class="qptz-btn" data-ptz="Down" aria-label="Xuống">↓</button>
+              <button class="qptz-btn" data-ptz="RightDown" aria-label="Phải dưới">↘</button>
+            </div>
+            <div class="field field-sm">
+              <label for="quick-ptz-speed">Tốc độ (1–8)</label>
+              <input id="quick-ptz-speed" type="range" min="1" max="8" value="5">
+            </div>
+            <div class="row">
+              <button class="btn btn-secondary btn-sm" data-ptz="ZoomTele">Zoom +</button>
+              <button class="btn btn-secondary btn-sm" data-ptz="ZoomWide">Zoom −</button>
+              <button class="btn btn-secondary btn-sm" data-ptz="FocusFar">Nét xa</button>
+              <button class="btn btn-secondary btn-sm" data-ptz="FocusNear">Nét gần</button>
+            </div>
+          </div>
+        </div>
+        <p class="muted section-gap">Giữ chuột/chạm để xoay/zoom, thả ra để dừng. Hỗ trợ phím mũi tên và WASD.</p>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary" type="button" id="quick-ptz-goto-detail">Mở cấu hình PTZ đầy đủ</button>
+        <button class="btn btn-secondary" type="button" id="quick-ptz-close">Đóng</button>
+      </div>
+    </dialog>
 
   </div>
   <script src="ui-core.js"></script>

@@ -234,3 +234,52 @@ test('keeps detected Dahua ports exact and renders a QR for a probed serial numb
   await expect(refreshed.locator('[data-label="SN / QR"]')).toContainText('8K01234PAZ56789');
   await expect(refreshed.getByTestId('camera-serial-qr').locator('canvas:visible, img:visible')).toHaveCount(1);
 });
+
+test('view switcher toggles between table and grid view with persistence', async ({ page }) => {
+  const tableBtn = page.locator('#cam-view-table-btn');
+  const gridBtn = page.locator('#cam-view-grid-btn');
+  const tableWrap = page.locator('#cam-table-wrap');
+  const grid = page.locator('#cam-grid');
+
+  // Default is table
+  await expect(tableBtn).toHaveClass(/active/);
+  await expect(tableWrap).toBeVisible();
+  await expect(grid).toBeHidden();
+
+  // Switch to grid
+  await gridBtn.click();
+  await expect(gridBtn).toHaveClass(/active/);
+  await expect(grid).toBeVisible();
+  await expect(tableWrap).toBeHidden();
+  await expect(page.getByTestId('camera-card')).toHaveCount(3);
+
+  // Check persistence in localStorage
+  const saved = await page.evaluate(() => localStorage.getItem('kspcam_cam_view_mode'));
+  expect(saved).toBe('grid');
+
+  // Switch back to table
+  await tableBtn.click();
+  await expect(tableBtn).toHaveClass(/active/);
+  await expect(tableWrap).toBeVisible();
+  await expect(grid).toBeHidden();
+});
+
+test('quick actions toolbar opens quick PTZ dialog and snapshot lightbox', async ({ page }) => {
+  const firstRow = page.getByTestId('camera-row').first();
+
+  // Quick PTZ
+  await firstRow.locator('[data-action="quick-ptz"]').click();
+  const ptzDlg = page.locator('#quick-ptz-dialog');
+  await expect(ptzDlg).toBeVisible();
+  await expect(ptzDlg.locator('#quick-ptz-pad')).toBeVisible();
+  await ptzDlg.locator('#quick-ptz-close').click();
+  await expect(ptzDlg).toBeHidden();
+
+  // Quick Snapshot
+  await firstRow.locator('[data-action="quick-snap"]').click();
+  const lbDlg = page.locator('#lightbox-dialog');
+  await expect(lbDlg).toBeVisible();
+  await lbDlg.locator('#lightbox-close').click();
+  await expect(lbDlg).toBeHidden();
+});
+

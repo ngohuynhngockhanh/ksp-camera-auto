@@ -60,3 +60,40 @@ test('the password change is folded away behind a disclosure', async ({ page }) 
   await zone.locator('summary').click();
   await expect(zone.getByTestId('bulk-password-apply')).toBeVisible();
 });
+
+test('golden template 1-click populates H.264 1080p GOP 50 Bitrate 2048 and AAC audio', async ({ page }) => {
+  await openApp(page, { hash: 'cameras/bulk' });
+  const goldenBtn = page.getByTestId('bulk-golden-template');
+  await expect(goldenBtn).toBeVisible();
+  await goldenBtn.click();
+
+  // Codec
+  await expect(page.locator('#p-codec-enable')).toBeChecked();
+  await expect(page.locator('#p-codec-value')).toHaveValue('H.264');
+
+  // Res
+  await expect(page.locator('#p-res-enable')).toBeChecked();
+  await expect(page.locator('#p-width')).toHaveValue('1920');
+  await expect(page.locator('#p-height')).toHaveValue('1080');
+
+  // GOP
+  await expect(page.locator('#p-gop-enable')).toBeChecked();
+  await expect(page.locator('#p-gop-value')).toHaveValue('50');
+
+  // Bitrate
+  await expect(page.locator('#p-bitrate-enable')).toBeChecked();
+  await expect(page.locator('#p-bitrate-value')).toHaveValue('2048');
+  await expect(page.locator('#p-bitrate-mode')).toHaveValue('CBR');
+
+  // Audio
+  await expect(page.locator('#p-audio-enable')).toBeChecked();
+
+  // Summary chips
+  const summary = page.getByTestId('bulk-summary');
+  await expect(summary).toContainText('Codec H.264');
+  await expect(summary).toContainText('1920x1080');
+  await expect(summary).toContainText('GOP 50');
+  await expect(summary).toContainText('Bitrate 2048 Kbps CBR');
+  await expect(summary).toContainText('AAC');
+});
+

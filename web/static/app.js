@@ -397,6 +397,21 @@ function camSortVal(c, key) {
   }
 }
 
+let cameraViewMode = localStorage.getItem('kspcam_cam_view_mode') || 'table';
+
+function setCameraViewMode(mode) {
+  cameraViewMode = (mode === 'grid') ? 'grid' : 'table';
+  localStorage.setItem('kspcam_cam_view_mode', cameraViewMode);
+  const tableBtn = document.getElementById('cam-view-table-btn');
+  const gridBtn = document.getElementById('cam-view-grid-btn');
+  const tableWrap = document.getElementById('cam-table-wrap') || document.getElementById('cam-table');
+  const gridWrap = document.getElementById('cam-grid');
+  if (tableBtn) tableBtn.classList.toggle('active', cameraViewMode === 'table');
+  if (gridBtn) gridBtn.classList.toggle('active', cameraViewMode === 'grid');
+  if (tableWrap) tableWrap.hidden = (cameraViewMode === 'grid');
+  if (gridWrap) gridWrap.hidden = (cameraViewMode === 'table');
+}
+
 function sortedCameras() {
   const { key, dir } = camSort;
   return cameras.slice().sort((a, b) => {
@@ -408,6 +423,7 @@ function sortedCameras() {
 
 function renderCameras() {
   const tbody = document.getElementById('cam-tbody');
+  const grid = document.getElementById('cam-grid');
   document.querySelectorAll('#cam-table th.sortable').forEach(th => {
     th.classList.toggle('sort-asc', th.dataset.sort === camSort.key && camSort.dir === 1);
     th.classList.toggle('sort-desc', th.dataset.sort === camSort.key && camSort.dir === -1);
@@ -422,11 +438,13 @@ function renderCameras() {
   document.getElementById('camera-list-count').textContent = `${visible.length}/${cameras.length} camera`;
   if (!cameras.length) {
     tbody.innerHTML = '<tr><td colspan="10" class="empty-hint">Chưa có camera nào. Bấm “Thêm camera”.</td></tr>';
+    if (grid) grid.innerHTML = '<p class="empty-hint">Chưa có camera nào. Bấm “Thêm camera”.</p>';
     renderDashboard();
     return;
   }
   if (!visible.length) {
     tbody.innerHTML = '<tr><td colspan="10" class="empty-hint">Không có camera khớp bộ lọc.</td></tr>';
+    if (grid) grid.innerHTML = '<p class="empty-hint">Không có camera khớp bộ lọc.</p>';
     renderDashboard();
     return;
   }
@@ -447,6 +465,13 @@ function renderCameras() {
       <td data-label="Mật khẩu"><span class="password-cell"><code data-password-for="${escapeHtml(c.id)}">••••••••</code><button class="btn-icon password-toggle" data-action="reveal-pass" data-id="${escapeHtml(c.id)}" aria-label="Hiện mật khẩu">Hiện</button></span></td>
       <td data-label="Thông tin luồng" class="probe-box" id="probe-${cssEscape(c.id)}">${fmtStreamInfo(probeCache[c.id]) || '<span class="muted">chưa dò</span>'}</td>
       <td class="actions-cell">
+        <span class="row-quick-actions">
+          <button class="btn-icon quick-btn" data-action="quick-live" data-id="${escapeHtml(c.id)}" title="Xem Live MJPEG">👁️</button>
+          <button class="btn-icon quick-btn" data-action="quick-snap" data-id="${escapeHtml(c.id)}" title="Chụp ảnh Snapshot">📷</button>
+          <button class="btn-icon quick-btn" data-action="quick-ptz" data-id="${escapeHtml(c.id)}" title="Bàn xoay PTZ">🎮</button>
+          <button class="btn-icon quick-btn" data-action="quick-reboot" data-id="${escapeHtml(c.id)}" title="Khởi động lại">🔄</button>
+          <button class="btn-icon quick-btn" data-action="quick-sync-time" data-id="${escapeHtml(c.id)}" title="Đồng bộ giờ NTP">⏰</button>
+        </span>
         <button class="btn btn-secondary" data-action="view" data-id="${escapeHtml(c.id)}">Xem hình</button>
         <details class="row-menu">
           <summary class="btn btn-secondary" aria-label="Thao tác khác cho ${escapeHtml(c.name || c.host)}">⋯</summary>
@@ -461,7 +486,60 @@ function renderCameras() {
       </td>
     </tr>
   `).join('');
+
+  if (grid) {
+    grid.innerHTML = visible.map(c => {
+      const streams = probeCache[c.id] || [];
+      const main = streams.find(s => s.stream === 0) || streams[0];
+      const resTag = main ? `${main.width}x${main.height}` : '';
+      const fpsTag = (main && main.fps > 0) ? `${main.fps}fps` : '';
+      const codecTag = main ? main.compression : '';
+      const audioTag = (main && main.audioEnable) ? (main.audioCodec || 'AAC') : '';
+      const vendorClass = `vendor-${c.vendor || 'dahua'}`;
+      const isChecked = selectedCameraSet.has(c.id);
+      const snapUrl = `/api/snapshot?id=${encodeURIComponent(c.id)}&channel=0&stream=1&_r=${Date.now()}`;
+      return `
+      <div class="cam-card ${isChecked ? 'selected' : ''}" data-id="${escapeHtml(c.id)}" data-testid="camera-card" tabindex="0" aria-label="Camera ${escapeHtml(c.name || c.host)}">
+        <div class="cam-card-thumb-wrap">
+          <img class="cam-card-thumb" src="${snapUrl}" alt="${escapeHtml(c.name || c.host)}" loading="lazy" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'cam-card-thumb-fallback\\'><span>📷 Không có ảnh</span><small class=\\'muted\\'>${escapeHtml(c.host)}</small></div>';">
+          <div class="cam-card-badge-overlay">
+            <label class="cam-card-check" title="Chọn camera">
+              <input type="checkbox" class="cam-card-cb" value="${escapeHtml(c.id)}" ${isChecked ? 'checked' : ''}>
+            </label>
+            <span class="cam-card-vendor-badge ${vendorClass}">${escapeHtml(c.vendor)}</span>
+          </div>
+        </div>
+        <div class="cam-card-body">
+          <div class="cam-card-title-row">
+            <h4 class="cam-card-title" title="${escapeHtml(c.name || c.host)}">${escapeHtml(c.name || '(chưa đặt tên)')}</h4>
+            ${c.isNvr ? '<span class="badge">NVR</span>' : ''}
+            ${(c.noStorage && c.nvrId) ? '<span class="badge ok" title="Xem lại từ đầu ghi">⛁ NVR</span>' : ''}
+          </div>
+          <div class="cam-card-meta">
+            <span>${escapeHtml(c.host)}:${c.port}</span>
+            ${c.channelName ? `<span class="muted">· ${escapeHtml(c.channelName)}</span>` : ''}
+          </div>
+          <div class="cam-card-specs">
+            ${resTag ? `<span class="cam-spec-tag">${resTag}</span>` : ''}
+            ${fpsTag ? `<span class="cam-spec-tag">${fpsTag}</span>` : ''}
+            ${codecTag ? `<span class="cam-spec-tag">${codecTag}</span>` : ''}
+            ${audioTag ? `<span class="cam-spec-tag" style="color:var(--success)">🔊 ${audioTag}</span>` : ''}
+          </div>
+          <div class="cam-card-actions">
+            <button class="btn-icon" data-action="quick-live" data-id="${escapeHtml(c.id)}" title="Xem Live Stream">👁️</button>
+            <button class="btn-icon" data-action="quick-snap" data-id="${escapeHtml(c.id)}" title="Chụp ảnh tức thời">📷</button>
+            <button class="btn-icon" data-action="quick-ptz" data-id="${escapeHtml(c.id)}" title="Điều khiển PTZ">🎮</button>
+            <button class="btn-icon" data-action="quick-reboot" data-id="${escapeHtml(c.id)}" title="Khởi động lại">🔄</button>
+            <button class="btn-icon" data-action="quick-sync-time" data-id="${escapeHtml(c.id)}" title="Đồng bộ giờ NTP">⏰</button>
+            <button class="btn-icon" data-action="detail" data-id="${escapeHtml(c.id)}" title="Cấu hình chi tiết">⚙</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
   renderCameraSerialQRCodes(tbody);
+  setCameraViewMode(cameraViewMode);
   renderDashboard();
 }
 
@@ -595,8 +673,11 @@ function selectedCameraIds() {
 function setCameraSelected(id, selected) {
   if (selected) selectedCameraSet.add(id);
   else selectedCameraSet.delete(id);
-  document.querySelectorAll('.cam-cb, .bulk-cam-cb').forEach(cb => {
+  document.querySelectorAll('.cam-cb, .bulk-cam-cb, .cam-card-cb').forEach(cb => {
     if (cb.value === id) cb.checked = selected;
+  });
+  document.querySelectorAll(`.cam-card[data-id="${CSS.escape(id)}"]`).forEach(card => {
+    card.classList.toggle('selected', selected);
   });
   renderBulkSelection();
 }
@@ -686,7 +767,7 @@ function renderBulkSelection() {
   }
   document.getElementById('apply-count').textContent = ids.length ? ids.length + ' camera đã chọn' : '';
   if (!ids.length) {
-    countEl.textContent = 'Chưa chọn camera nào.';
+    countEl.textContent = 'Chưa chọn camera nào (0 camera).';
     chipsEl.innerHTML = '';
   } else {
     countEl.textContent = ids.length + ' camera đã chọn:';
@@ -782,8 +863,119 @@ document.getElementById('add-form').addEventListener('submit', async (ev) => {
 // rename input and every action control opt out via this guard.
 function rowOpensDetail(ev) {
   if (ev.target.closest('button, input, select, textarea, a, summary, details')) return null;
-  const tr = ev.target.closest('tr[data-id]');
+  const tr = ev.target.closest('tr[data-id], .cam-card[data-id]');
   return tr ? tr.dataset.id : null;
+}
+
+async function syncDeviceTime(c) {
+  if (!c) return;
+  try {
+    const timeStr = (new Date()).toISOString().replace('T', ' ').slice(0, 19);
+    await api('/api/device-time', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: c.id,
+        currentTime: timeStr,
+        ntpEnable: true,
+        timeoutSeconds: timeoutSec(),
+      }),
+    });
+    showToast(`Đã đồng bộ giờ máy chủ cho "${c.name || c.host}".`, 'ok');
+  } catch (e) {
+    showToast('Lỗi đồng bộ giờ: ' + e.message, 'err');
+  }
+}
+
+async function handleCameraAction(action, id, btn) {
+  const c = cameras.find(x => x.id === id);
+  if (!id) return;
+  const menu = btn?.closest('details.row-menu');
+  if (menu) menu.open = false;
+
+  if (action === 'detail') { gotoCameraDetail(id, 'osd'); return; }
+  if (action === 'edit') { if (c) openCameraForm(c); return; }
+  if (action === 'delete') {
+    const ok = await showConfirm('Xóa camera', `Xóa camera "${c ? (c.name || c.host) : id}" khỏi kho?`, { danger: true, okLabel: 'Xóa' });
+    if (!ok) return;
+    if (btn) btn.disabled = true;
+    try {
+      await api('/api/cameras/delete', { method: 'POST', body: JSON.stringify({ id, timeoutSeconds: timeoutSec() }) });
+      delete probeCache[id];
+      showToast('Đã xóa camera.', 'ok');
+      await loadCameras();
+    } catch (e) {
+      showToast('Lỗi xóa: ' + e.message, 'err');
+      if (btn) btn.disabled = false;
+    }
+    return;
+  }
+  if (action === 'probe') {
+    if (btn) btn.disabled = true;
+    const cell = document.getElementById('probe-' + cssEscape(id));
+    if (cell) cell.innerHTML = '<span class="muted">đang dò...</span>';
+    try {
+      rememberProbeResult(id, await api('/api/probe', { method: 'POST', body: JSON.stringify({ id, timeoutSeconds: timeoutSec() }) }));
+      renderCameras();
+    } catch (e) {
+      if (cell) cell.innerHTML = `<span class="msg err">${escapeHtml(e.message)}</span>`;
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+    return;
+  }
+  if (action === 'view') {
+    openGallery(buildTiles([id]));
+    return;
+  }
+  if (action === 'view-all') {
+    await viewAllChannels(id, btn);
+    return;
+  }
+  if (action === 'rename-inline') {
+    startInlineRename(btn?.closest('.cell-name'), id);
+    return;
+  }
+  if (action === 'reveal-pass') {
+    const code = Array.from(document.querySelectorAll('[data-password-for]')).find(el => el.dataset.passwordFor === id);
+    if (!c || !code) return;
+    const revealed = btn.dataset.revealed === 'true';
+    code.textContent = revealed ? '••••••••' : (c.password || '(trống)');
+    btn.dataset.revealed = revealed ? 'false' : 'true';
+    btn.textContent = revealed ? 'Hiện' : 'Ẩn';
+    btn.setAttribute('aria-label', revealed ? 'Hiện mật khẩu' : 'Ẩn mật khẩu');
+    return;
+  }
+  if (action === 'quick-live') {
+    gotoCameraDetail(id, 'osd');
+    setTimeout(() => {
+      if (detailLive && !detailLive.running()) detailLive.start();
+    }, 250);
+    return;
+  }
+  if (action === 'quick-snap') {
+    const snapUrl = `/api/snapshot?id=${encodeURIComponent(id)}&channel=0&stream=0&timeoutSeconds=${timeoutSec()}&_r=${Date.now()}`;
+    const lb = document.getElementById('lightbox-dialog');
+    const img = document.getElementById('lightbox-img');
+    const lbl = document.getElementById('lightbox-label');
+    if (lb && img && lbl) {
+      lbl.textContent = `Snapshot: ${c ? (c.name || c.host) : id} — ${new Date().toLocaleTimeString('vi-VN')}`;
+      img.src = snapUrl;
+      openDialog(lb);
+    }
+    return;
+  }
+  if (action === 'quick-ptz') {
+    if (c) openQuickPtz(c);
+    return;
+  }
+  if (action === 'quick-reboot') {
+    if (c) rebootDevice(c);
+    return;
+  }
+  if (action === 'quick-sync-time') {
+    if (c) syncDeviceTime(c);
+    return;
+  }
 }
 
 document.getElementById('cam-tbody').addEventListener('click', async (ev) => {
@@ -792,56 +984,40 @@ document.getElementById('cam-tbody').addEventListener('click', async (ev) => {
   const btn = ev.target.closest('button[data-action]');
   if (!btn) return;
   const id = btn.dataset.id;
-  // Close the ⋯ menu the action was chosen from.
-  const menu = btn.closest('details.row-menu');
-  if (menu) menu.open = false;
-  if (btn.dataset.action === 'detail') { gotoCameraDetail(id, 'osd'); return; }
-  if (btn.dataset.action === 'edit') {
-    const c = cameras.find(x => x.id === id);
-    if (c) openCameraForm(c);
+  await handleCameraAction(btn.dataset.action, id, btn);
+});
+
+document.getElementById('cam-grid')?.addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('button[data-action]');
+  if (btn) {
+    ev.stopPropagation();
+    const id = btn.dataset.id;
+    await handleCameraAction(btn.dataset.action, id, btn);
     return;
   }
-  if (btn.dataset.action === 'delete') {
-    const c = cameras.find(x => x.id === id);
-    const ok = await showConfirm('Xóa camera', `Xóa camera "${c ? (c.name || c.host) : id}" khỏi kho?`, { danger: true, okLabel: 'Xóa' });
-    if (!ok) return;
-    btn.disabled = true;
-    try {
-      await api('/api/cameras/delete', { method: 'POST', body: JSON.stringify({ id, timeoutSeconds: timeoutSec() }) });
-      delete probeCache[id];
-      showToast('Đã xóa camera.', 'ok');
-      await loadCameras();
-    } catch (e) {
-      showToast('Lỗi xóa: ' + e.message, 'err');
-      btn.disabled = false;
-    }
-  } else if (btn.dataset.action === 'probe') {
-    btn.disabled = true;
-    const cell = document.getElementById('probe-' + cssEscape(id));
-    cell.innerHTML = '<span class="muted">đang dò...</span>';
-    try {
-      rememberProbeResult(id, await api('/api/probe', { method: 'POST', body: JSON.stringify({ id, timeoutSeconds: timeoutSec() }) }));
-      renderCameras();
-    } catch (e) {
-      cell.innerHTML = `<span class="msg err">${escapeHtml(e.message)}</span>`;
-    } finally {
-      btn.disabled = false;
-    }
-  } else if (btn.dataset.action === 'view') {
-    openGallery(buildTiles([id]));
-  } else if (btn.dataset.action === 'view-all') {
-    await viewAllChannels(id, btn);
-  } else if (btn.dataset.action === 'rename-inline') {
-    startInlineRename(btn.closest('.cell-name'), id);
-  } else if (btn.dataset.action === 'reveal-pass') {
-    const c = cameras.find(x => x.id === id);
-    const code = Array.from(document.querySelectorAll('[data-password-for]')).find(el => el.dataset.passwordFor === id);
-    if (!c || !code) return;
-    const revealed = btn.dataset.revealed === 'true';
-    code.textContent = revealed ? '••••••••' : (c.password || '(trống)');
-    btn.dataset.revealed = revealed ? 'false' : 'true';
-    btn.textContent = revealed ? 'Hiện' : 'Ẩn';
-    btn.setAttribute('aria-label', revealed ? 'Hiện mật khẩu' : 'Ẩn mật khẩu');
+  const checkLabel = ev.target.closest('.cam-card-check');
+  if (checkLabel) {
+    ev.stopPropagation();
+    const cb = checkLabel.querySelector('.cam-card-cb');
+    if (cb) setCameraSelected(cb.value, cb.checked);
+    return;
+  }
+  const cb = ev.target.closest('.cam-card-cb');
+  if (cb) {
+    ev.stopPropagation();
+    setCameraSelected(cb.value, cb.checked);
+    return;
+  }
+  if (ev.target.closest('.cam-card-actions')) return;
+  const card = ev.target.closest('.cam-card[data-id]');
+  if (card) {
+    gotoCameraDetail(card.dataset.id, 'osd');
+  }
+});
+
+document.getElementById('cam-grid')?.addEventListener('change', (ev) => {
+  if (ev.target.classList.contains('cam-card-cb')) {
+    setCameraSelected(ev.target.value, ev.target.checked);
   }
 });
 
@@ -1316,9 +1492,24 @@ async function scanWiFi() {
     if (!devices.length) {
       results.innerHTML = '<p class="muted">Không tìm thấy mạng Wi-Fi nào.</p>';
     } else {
-      results.innerHTML = '<div class="chip-list">' + devices.map(d =>
-        `<button type="button" class="chip chip-btn" data-wifi-ssid="${escapeHtml(d.ssid)}">${escapeHtml(d.ssid)} (${d.linkQuality}%)</button>`
-      ).join('') + '</div>';
+      results.innerHTML = '<div class="chip-list">' + devices.map(d => {
+        const q = d.linkQuality || 0;
+        const cls = q >= 70 ? 'active-high' : q >= 40 ? 'active-med' : 'active-low';
+        const h1 = q >= 25 ? cls : '';
+        const h2 = q >= 50 ? cls : '';
+        const h3 = q >= 75 ? cls : '';
+        const h4 = q >= 90 ? cls : '';
+        return `<button type="button" class="chip chip-btn wifi-rssi-meter" data-wifi-ssid="${escapeHtml(d.ssid)}">
+          <span class="wifi-signal-bars">
+            <span class="wifi-signal-bar ${h1}" style="height:4px"></span>
+            <span class="wifi-signal-bar ${h2}" style="height:7px"></span>
+            <span class="wifi-signal-bar ${h3}" style="height:10px"></span>
+            <span class="wifi-signal-bar ${h4}" style="height:14px"></span>
+          </span>
+          <span>${escapeHtml(d.ssid)}</span>
+          <span class="muted mono">(${q}%)</span>
+        </button>`;
+      }).join('') + '</div>';
       results.querySelectorAll('[data-wifi-ssid]').forEach(el => {
         el.addEventListener('click', () => { document.getElementById('net-wifi-ssid').value = el.dataset.wifiSsid; });
       });
@@ -1381,10 +1572,25 @@ document.querySelector('#cam-table thead').addEventListener('click', (ev) => {
 });
 
 document.getElementById('select-all').addEventListener('change', (ev) => {
-  document.querySelectorAll('.cam-cb').forEach(cb => {
-    cb.checked = ev.target.checked;
-    if (ev.target.checked) selectedCameraSet.add(cb.value);
-    else selectedCameraSet.delete(cb.value);
+  const isChecked = ev.target.checked;
+  const visibleChecks = document.querySelectorAll('.cam-cb');
+  if (visibleChecks.length) {
+    visibleChecks.forEach(cb => {
+      if (isChecked) selectedCameraSet.add(cb.value);
+      else selectedCameraSet.delete(cb.value);
+    });
+  } else {
+    cameras.forEach(c => {
+      if (isChecked) selectedCameraSet.add(c.id);
+      else selectedCameraSet.delete(c.id);
+    });
+  }
+  document.querySelectorAll('.cam-cb, .bulk-cam-cb, .cam-card-cb').forEach(cb => {
+    cb.checked = selectedCameraSet.has(cb.value);
+  });
+  document.querySelectorAll('.cam-card').forEach(card => {
+    const id = card.dataset.id;
+    card.classList.toggle('selected', id ? selectedCameraSet.has(id) : isChecked);
   });
   renderBulkSelection();
 });
@@ -1421,13 +1627,102 @@ const BULK_SETTINGS = [
   { key: 'audio', enable: 'p-audio-enable', fields: null, summary: () => 'Bật âm thanh AAC' },
 ];
 
+function checkBulkSafety() {
+  const alertEl = document.getElementById('bulk-safety-alert');
+  if (!alertEl) return;
+  const warnings = [];
+
+  const resEnabled = document.getElementById('p-res-enable') && document.getElementById('p-res-enable').checked;
+  const w = parseInt(document.getElementById('p-width')?.value, 10) || 0;
+  const h = parseInt(document.getElementById('p-height')?.value, 10) || 0;
+
+  const bitrateEnabled = document.getElementById('p-bitrate-enable') && document.getElementById('p-bitrate-enable').checked;
+  const bitrate = parseInt(document.getElementById('p-bitrate-value')?.value, 10) || 0;
+
+  const gopEnabled = document.getElementById('p-gop-enable') && document.getElementById('p-gop-enable').checked;
+  const gop = parseInt(document.getElementById('p-gop-value')?.value, 10) || 0;
+
+  if (bitrateEnabled && bitrate > 8192) {
+    warnings.push(`Bitrate ${bitrate} Kbps quá cao (vượt ngưỡng 8192 Kbps an toàn), có thể gây nghẽn băng thông switch/NVR.`);
+  }
+  if (resEnabled && (w >= 3840 || h >= 2160) && bitrateEnabled && bitrate < 2048) {
+    warnings.push('Độ phân giải 4K (3840x2160) với Bitrate quá thấp (< 2048 Kbps) có thể làm vỡ hạt khung hình.');
+  }
+  if (gopEnabled && gop > 200) {
+    warnings.push(`Khoảng I-frame GOP ${gop} quá lớn (khuyến nghị 50-100), sẽ làm tăng độ trễ khi xem trực tiếp.`);
+  }
+
+  if (warnings.length) {
+    alertEl.hidden = false;
+    alertEl.innerHTML = `<span>⚠️ <b>Cảnh báo an toàn phần cứng:</b> ${warnings.map(escapeHtml).join(' · ')}</span>`;
+  } else {
+    alertEl.hidden = true;
+    alertEl.innerHTML = '';
+  }
+}
+
+function applyGoldenTemplate() {
+  const cEnable = document.getElementById('p-codec-enable');
+  const cVal = document.getElementById('p-codec-value');
+  const cFields = document.getElementById('p-codec-fields');
+  if (cEnable) {
+    cEnable.checked = true;
+    if (cFields) cFields.hidden = false;
+    if (cVal) cVal.value = 'H.264';
+  }
+
+  const rEnable = document.getElementById('p-res-enable');
+  const rFields = document.getElementById('p-res-fields');
+  const rPreset = document.getElementById('p-res-preset');
+  const wInput = document.getElementById('p-width');
+  const hInput = document.getElementById('p-height');
+  if (rEnable) {
+    rEnable.checked = true;
+    if (rFields) rFields.hidden = false;
+    if (rPreset) rPreset.value = '1920x1080';
+    if (wInput) wInput.value = '1920';
+    if (hInput) hInput.value = '1080';
+  }
+
+  const gEnable = document.getElementById('p-gop-enable');
+  const gFields = document.getElementById('p-gop-fields');
+  const gVal = document.getElementById('p-gop-value');
+  if (gEnable) {
+    gEnable.checked = true;
+    if (gFields) gFields.hidden = false;
+    if (gVal) gVal.value = '50';
+  }
+
+  const bEnable = document.getElementById('p-bitrate-enable');
+  const bFields = document.getElementById('p-bitrate-fields');
+  const bVal = document.getElementById('p-bitrate-value');
+  const bMode = document.getElementById('p-bitrate-mode');
+  if (bEnable) {
+    bEnable.checked = true;
+    if (bFields) bFields.hidden = false;
+    if (bVal) bVal.value = '2048';
+    if (bMode) bMode.value = 'CBR';
+  }
+
+  const aEnable = document.getElementById('p-audio-enable');
+  if (aEnable) {
+    aEnable.checked = true;
+  }
+
+  renderBulkSummary();
+  showToast('⚡ Đã nạp cấu hình Chuẩn Bida (Golden Template)!', 'ok');
+}
+
 function renderBulkSummary() {
   const chips = BULK_SETTINGS
     .filter(sp => document.getElementById(sp.enable).checked)
     .map(sp => `<button type="button" class="chip chip-btn" data-bulk-jump="setting-${sp.key}">${escapeHtml(sp.summary())}</button>`);
   document.getElementById('bulk-summary-chips').innerHTML = chips.join('');
   document.getElementById('bulk-summary-empty').hidden = chips.length > 0;
+  checkBulkSafety();
 }
+
+document.getElementById('bulk-golden-template-btn')?.addEventListener('click', applyGoldenTemplate);
 
 BULK_SETTINGS.forEach(sp => {
   const enable = document.getElementById(sp.enable);
@@ -1763,6 +2058,168 @@ document.getElementById('ce-panel-ptz').addEventListener('pointerleave', ptzStop
 // Belt-and-suspenders: if the user routes away mid-press, stop the camera.
 window.addEventListener('hashchange', ptzStop);
 
+/* ---------- Quick PTZ Dialog controller & PTZ keyboard navigation ---------- */
+let quickPtzCam = null;
+let quickPtzLive = null;
+let quickPtzActive = null;
+
+function initQuickPtzDialog() {
+  const dlg = document.getElementById('quick-ptz-dialog');
+  if (!dlg) return;
+  const liveImg = document.getElementById('quick-ptz-live');
+  const startBtn = document.getElementById('quick-ptz-live-start');
+  const stopBtn = document.getElementById('quick-ptz-live-stop');
+  const pad = document.getElementById('quick-ptz-pad');
+  const speedInput = document.getElementById('quick-ptz-speed');
+
+  quickPtzLive = livePreview({
+    img: liveImg,
+    start: startBtn,
+    stop: stopBtn,
+  }, () => quickPtzCam ? { id: quickPtzCam.id, channel: 0 } : null);
+
+  document.getElementById('quick-ptz-close')?.addEventListener('click', () => {
+    if (quickPtzLive) quickPtzLive.stop();
+    closeDialog(dlg);
+  });
+  document.getElementById('quick-ptz-goto-detail')?.addEventListener('click', () => {
+    if (quickPtzCam) {
+      const id = quickPtzCam.id;
+      if (quickPtzLive) quickPtzLive.stop();
+      closeDialog(dlg);
+      gotoCameraDetail(id, 'ptz');
+    }
+  });
+
+  const sendQuickPTZ = (code, start) => {
+    if (!quickPtzCam) return;
+    api('/api/ptz', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: quickPtzCam.id,
+        channel: 0,
+        code,
+        speed: parseInt(speedInput?.value, 10) || 5,
+        start,
+        timeoutSeconds: timeoutSec(),
+      }),
+    }).catch(() => {});
+  };
+
+  if (pad) {
+    pad.addEventListener('pointerdown', (ev) => {
+      const btn = ev.target.closest('[data-ptz]');
+      if (!btn) return;
+      ev.preventDefault();
+      btn.setPointerCapture?.(ev.pointerId);
+      quickPtzActive = btn.dataset.ptz;
+      sendQuickPTZ(quickPtzActive, true);
+    });
+    pad.addEventListener('pointerup', () => {
+      if (!quickPtzActive) return;
+      const code = quickPtzActive;
+      quickPtzActive = null;
+      sendQuickPTZ(code, false);
+    });
+    pad.addEventListener('pointercancel', () => {
+      if (!quickPtzActive) return;
+      const code = quickPtzActive;
+      quickPtzActive = null;
+      sendQuickPTZ(code, false);
+    });
+  }
+
+  dlg.querySelectorAll('.quick-ptz-controls button[data-ptz]').forEach(btn => {
+    if (btn.closest('#quick-ptz-pad')) return;
+    btn.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      btn.setPointerCapture?.(ev.pointerId);
+      quickPtzActive = btn.dataset.ptz;
+      sendQuickPTZ(quickPtzActive, true);
+    });
+    btn.addEventListener('pointerup', () => {
+      if (!quickPtzActive) return;
+      const code = quickPtzActive;
+      quickPtzActive = null;
+      sendQuickPTZ(code, false);
+    });
+    btn.addEventListener('pointercancel', () => {
+      if (!quickPtzActive) return;
+      const code = quickPtzActive;
+      quickPtzActive = null;
+      sendQuickPTZ(code, false);
+    });
+  });
+}
+
+function openQuickPtz(c) {
+  quickPtzCam = c;
+  const dlg = document.getElementById('quick-ptz-dialog');
+  if (!dlg) return;
+  const title = document.getElementById('quick-ptz-title');
+  if (title) title.textContent = `Điều khiển PTZ nhanh — ${c.name || c.host}`;
+  const wrap = document.getElementById('quick-ptz-img-wrap');
+  if (wrap) {
+    wrap.innerHTML = `<img src="/api/snapshot?id=${encodeURIComponent(c.id)}&channel=0&stream=1&_r=${Date.now()}" alt="${escapeHtml(c.name || c.host)}">`;
+  }
+  openDialog(dlg, {
+    onClose: () => {
+      if (quickPtzLive) quickPtzLive.stop();
+      quickPtzCam = null;
+    }
+  });
+}
+
+// PTZ Keyboard navigation (Arrow keys & WASD)
+window.addEventListener('keydown', (ev) => {
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(ev.target.tagName)) return;
+  const inDetailPTZ = ceActiveTab === 'ptz' && !document.getElementById('camera-detail').hidden;
+  const inQuickPTZ = document.getElementById('quick-ptz-dialog')?.open;
+  if (!inDetailPTZ && !inQuickPTZ) return;
+
+  const keyMap = {
+    'ArrowUp': 'Up', 'KeyW': 'Up', 'w': 'Up', 'W': 'Up',
+    'ArrowDown': 'Down', 'KeyS': 'Down', 's': 'Down', 'S': 'Down',
+    'ArrowLeft': 'Left', 'KeyA': 'Left', 'a': 'Left', 'A': 'Left',
+    'ArrowRight': 'Right', 'KeyD': 'Right', 'd': 'Right', 'D': 'Right',
+  };
+  const code = keyMap[ev.code] || keyMap[ev.key];
+  if (code && !ev.repeat) {
+    ev.preventDefault();
+    if (inQuickPTZ && quickPtzCam) {
+      quickPtzActive = code;
+      const speed = parseInt(document.getElementById('quick-ptz-speed')?.value, 10) || 5;
+      api('/api/ptz', { method: 'POST', body: JSON.stringify({ id: quickPtzCam.id, channel: 0, code, speed, start: true, timeoutSeconds: timeoutSec() }) }).catch(() => {});
+    } else if (inDetailPTZ && channelEditTile) {
+      ptzStart(code);
+    }
+  }
+});
+
+window.addEventListener('keyup', (ev) => {
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(ev.target.tagName)) return;
+  const inDetailPTZ = ceActiveTab === 'ptz' && !document.getElementById('camera-detail').hidden;
+  const inQuickPTZ = document.getElementById('quick-ptz-dialog')?.open;
+  if (!inDetailPTZ && !inQuickPTZ) return;
+
+  const keyMap = {
+    'ArrowUp': 'Up', 'KeyW': 'Up', 'w': 'Up', 'W': 'Up',
+    'ArrowDown': 'Down', 'KeyS': 'Down', 's': 'Down', 'S': 'Down',
+    'ArrowLeft': 'Left', 'KeyA': 'Left', 'a': 'Left', 'A': 'Left',
+    'ArrowRight': 'Right', 'KeyD': 'Right', 'd': 'Right', 'D': 'Right',
+  };
+  const code = keyMap[ev.code] || keyMap[ev.key];
+  if (code) {
+    if (inQuickPTZ && quickPtzCam) {
+      quickPtzActive = null;
+      const speed = parseInt(document.getElementById('quick-ptz-speed')?.value, 10) || 5;
+      api('/api/ptz', { method: 'POST', body: JSON.stringify({ id: quickPtzCam.id, channel: 0, code, speed, start: false, timeoutSeconds: timeoutSec() }) }).catch(() => {});
+    } else if (inDetailPTZ && channelEditTile) {
+      ptzStop();
+    }
+  }
+});
+
 /* ---------- live view (MJPEG over the DVRIP snapshot, no ffmpeg) ---------- */
 // One preview owned by the detail page's left column. It deliberately keeps
 // running across tab switches: the whole point of the detail layout is to
@@ -1777,6 +2234,18 @@ const detailLive = livePreview({
 }, () => channelEditTile ? { id: channelEditTile.camId, channel: channelEditTile.channel } : null);
 
 function stopLive() { detailLive.stop(); }
+
+document.getElementById('cd-live-fullscreen')?.addEventListener('click', () => {
+  const wrap = document.getElementById('ce-preview-img-wrap');
+  const live = document.getElementById('cd-live');
+  const target = (live && !live.hidden) ? live : wrap;
+  if (!document.fullscreenElement) {
+    if (target.requestFullscreen) target.requestFullscreen();
+    else if (target.webkitRequestFullscreen) target.webkitRequestFullscreen();
+  } else {
+    if (document.exitFullscreen) document.exitFullscreen();
+  }
+});
 
 // Lazy-load sentinels for the detail page's data tabs (null until the tab is
 // first opened for the current camera; reset in openCameraDetail).
@@ -3377,6 +3846,11 @@ async function init() {
   }
   buildNav();
   wireShinobiTabEvents();
+  initQuickPtzDialog();
+
+  document.getElementById('cam-view-table-btn')?.addEventListener('click', () => setCameraViewMode('table'));
+  document.getElementById('cam-view-grid-btn')?.addEventListener('click', () => setCameraViewMode('grid'));
+  setCameraViewMode(cameraViewMode);
 
   const themeBtn = document.getElementById('theme-toggle');
   themeBtn.innerHTML = `<span class="icon-sun">${ICONS.sun}</span><span class="icon-moon">${ICONS.moon}</span>`;

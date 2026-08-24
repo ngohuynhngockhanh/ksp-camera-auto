@@ -1,123 +1,60 @@
-# Project: ksp-camera-auto RedBida & Onboarding MCP Tools Suite
+# Project: ksp-camera-auto UI/UX Overhaul & Dual-Track Deployment (Cameras & RedBida)
 
 ## Architecture
-
-`ksp-camera-auto` features an embedded Model Context Protocol (MCP) server that provides AI assistants with standardized tools over dual transports: Stdio JSON-RPC 2.0 (CLI `--mcp`) and HTTP/SSE (`:2028/mcp`).
-
-### Subsystem Interaction & Data Flow
-
-```
-[AI Assistant / Client]
-       │
-       ├── Stdio (JSON-RPC 2.0 via CLI --mcp)
-       └── HTTP / SSE (:2028/mcp, with Loopback bypass / API Key auth)
-               │
-               ▼
-   [internal/mcp: Server & Registry]
-               │
-       ┌───────┼───────────────────────────┬──────────────────────────┐
-       │       │                           │                          │
-       ▼       ▼                           ▼                          ▼
- [Camera Tools] [Discovery Tools]    [Shinobi Tools]       [RedBida & Onboarding Tools]
- (kspcam_*)     (kspcam_scan_*)      (shinobi_*)           (redbida_*)
-                                                                      │
-                                                     ┌────────────────┴────────────────┐
-                                                     ▼                                 ▼
-                                            [MQTT Broker :12369]             [System Time & NTP]
-                                            /private/i_gets & /private/i_sets (timedatectl)
-```
+- **Web Layer (`web/static/`)**: Single-page application embedded via `go:embed static` into the Go static binary. Modern Glassmorphism styling (`--glass-*`, `backdrop-filter: blur(16px)`), responsive CSS Grid/Flexbox, dynamic DOM rendering across `/#cameras`, `/#redbida`, `/#discovery`, `/#shinobi`, and `/#help`.
+- **API & Server Layer (`internal/server/`)**: Go HTTP server exposing 35+ REST endpoints (`/api/cameras`, `/api/probe`, `/api/apply`, `/api/snapshot`, `/api/live`, `/api/ptz`, `/api/storage`, `/api/recordings`, `/api/playback`, `/api/channel-info`, `/api/osd`, `/api/picture`, `/api/network`, `/api/wifi`, `/api/device-time`, `/api/autoreboot`, `/api/nvr/*`, `/api/redbida/*`, `/api/shinobi/*`) protected by session auth, rate limiting, and singleflight snapshot caching.
+- **Core Protocol & Camera Adapters (`internal/camera/`, `internal/dahua/`, `internal/isapi/`, `internal/hik/`, `internal/tiandy/`)**: Unified camera capability interfaces with sequential bulk orchestration, hardware safety limits, and 3-state read-back verification.
+- **RedBida & MQTT Layer (`internal/redbida/`, `internal/mcp/`)**: 15-key Golden Standard metadata catalog, MQTT broker integration (`127.0.0.1:12369`), and 31+ tool embedded Model Context Protocol (MCP) server.
 
 ## Feature Inventory
-
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| F1 | `redbida_list_catalog` | Lists all configuration keys in the RedBida / OTA-MQTT catalog with functional groups, risk classifications (editable, confirm-required, protected), data types, and availability. | M1 | ORIGINAL_REQUEST §R1.1 |
-| F2 | `redbida_get_keys` | Reads live key values from local `ota-mqtt` broker (`127.0.0.1:12369`) via topic `/private/i_gets` with `{"info": [...]}` and automatic secret masking (`********`). | M1 | ORIGINAL_REQUEST §R1.2 |
-| F3 | `redbida_set_keys` | Writes key-value changes to `ota-mqtt` via `/private/i_sets` with `{"info": {...}}` and enforces mandatory read-back verification (up to 3 attempts with exponential backoff). | M1 | ORIGINAL_REQUEST §R1.3 |
-| F4 | `redbida_apply_onboarding_preset` | 1-Click Bida Onboarding tool: synthesizes and applies the 15 standard parameters (`ui_title`, `ui_bg` without semicolon, `custom_hashtags` normalized without diacritics, `ui_tabs_links` 20-tab INI, `camera_count`, `toolbar_show_count`, `hls_using_go2rtc`, `button_generate_go2rtc_stream`, `logo_header`, `logo_header_text`, `shinobi_camera_id`, `shinobi_group_key`, `video_config`, `ui_scoreboard`, `ggcode`) with read-back verification. | M1 | ORIGINAL_REQUEST §R1.4 |
-| F5 | `redbida_trigger_go2rtc` | Triggers Node-RED (:2023) to generate `/root/go2rtc.yaml` stream configuration by publishing `button_generate_go2rtc_stream: "true"` over `/private/i_sets`. | M1 | ORIGINAL_REQUEST §R1.5 |
-| F6 | `redbida_get_time_status` | Checks host system time (RFC 3339) and NTP synchronization status via `timedatectl`. | M1 | ORIGINAL_REQUEST §R1.6 |
-| F7 | MCP Server Registration & Dual Transports | Registers all 6 `redbida_*` tools in `internal/mcp/server.go`, wires `redbida.Service` into `NewServer`, ensures smooth operation for both Stdio (`kspcam --mcp`) and HTTP/SSE (`:2028/mcp`) transports. | M2 | ORIGINAL_REQUEST §R2 |
-| F8 | Documentation Updates | Updates technical documentation in `docs/help/mcp-server.md`, `docs/help/redbida.md`, `docs/CODEBASE-KNOWLEDGE.md`, and `GEMINI.md` / `AGENTS.md` to detail all 31 MCP tools. | M2 | ORIGINAL_REQUEST §R2 |
-| F9 | Comprehensive Unit & JSON-RPC Tests | Implements 100% passing unit tests in `internal/mcp/tools_redbida_test.go` and `internal/mcp/server_test.go` verifying JSON-RPC 2.0 compliance (`initialize`, `tools/list`, `tools/call`). | M3 | ORIGINAL_REQUEST §R3 |
-| F10 | Multi-Arch Compilation | Builds static binaries (`CGO_ENABLED=0`) for `linux/amd64`, `linux/arm64`, and `linux/armv7` via `make build-all`. | M3 | ORIGINAL_REQUEST §R3 |
-| F11 | Remote Deployment & Live Verification | Deploys ARM64 binary to live edge nodes `inut_204_164` and `inut_204_163` via jump host `root@172.16.5.180`, restarts services, and verifies live MCP tool calls over HTTP/SSE. | M3 | ORIGINAL_REQUEST §R3 |
-| F12 | Git Commit & Push | Commits and pushes all code, test, and documentation changes to the remote git repository. | M3 | ORIGINAL_REQUEST §R3 |
+| F1 | View Switcher: Table & Grid Cards View | Modern Glassmorphism Grid Card view with auto snapshot thumbnails, vendor badges, status indicators, resolution/FPS tags alongside Table view | M1 | ORIGINAL_REQUEST §R1 |
+| F2 | Quick Actions Toolbar | 1-Click action buttons on each camera row/card (Instant Live Stream, Snapshot modal, PTZ quick nudge, Reboot, NTP sync) | M1 | ORIGINAL_REQUEST §R1 |
+| F3 | Camera Detail 7-Tab Workspace | Left column live MJPEG + snapshot preview with fullscreen/auto-refresh; Right column 7 tabs (OSD/Channel, Color sliders Lite/Full, Video encoder with FPS caps, Audio encoder with AAC conversion, Network & Wi-Fi scanning with RSSI %, PTZ 8-direction pan-tilt, Storage & Maintenance/Auto-Reboot) | M1 | ORIGINAL_REQUEST §R1 |
+| F4 | Smart Bulk Wizard & Golden Template | 1-Click preset "Áp dụng Chuẩn Bida (Golden Template)", hardware safety limits clamping alerts (e.g., FPS > 25 on 4K), sequential execution progress | M1 | ORIGINAL_REQUEST §R1 |
+| F5 | NVR Diagnostics & Sub-channel Scanning | Visual timeline gap analysis, automated sub-camera scanning & mapping from NVR, watchdog status | M1 | ORIGINAL_REQUEST §R1 |
+| F6 | Golden Standard Inspector & 1-Click Auto-Fix | Automatic audit of 15 node configuration keys, % Chuẩn Bida progress bar, 1-Click per-key Auto-Fix and Auto-Fix All | M2 | ORIGINAL_REQUEST §R2 |
+| F7 | Curated 8 CSS Gradient Palette & Live Canvas Preview | 8 luxury gradient presets (Royal Deep Blue Glow, Midnight Emerald Cyber, Cyberpunk Neon, Golden Velvet, Obsidian Carbon, Crimson Elegance, Sapphire Blue, Ruby Luxury), custom color picker, realtime canvas preview | M2 | ORIGINAL_REQUEST §R2 |
+| F8 | Visual 20-Tab INI Editor `[C01]`..`[C20]` | 20-tab matrix grid editor, per-table label/URL editing, quick copy stream URL, 1-click sync venue name to `vid_play_label`, raw INI toggle | M2 | ORIGINAL_REQUEST §R2 |
+| F9 | Smart Hashtag Generator | Dynamic Unicode normalization (NFC/NFD) stripping Vietnamese diacritics on typing venue name to produce clean hashtags | M2 | ORIGINAL_REQUEST §R2 |
+| F10 | Enhanced Key Management Table | Group filtering, fast search, Risk Badges, inline image checkerboard preview, and gradient swatch preview | M2 | ORIGINAL_REQUEST §R2 |
+| F11 | Deep Compatibility & Go Unit Tests | Verify 100% Go unit tests (`go test ./...`) across all packages without regressions | M3 | ORIGINAL_REQUEST §R3 |
+| F12 | Playwright UI Automated Test Suite | Comprehensive Playwright test suite covering Cameras Grid/Table, Quick Actions, Detail 7-tabs, RedBida Inspector, 8 Gradients, 20-tab INI editor, and Hashtag generator | M3 | ORIGINAL_REQUEST §R3 |
+| F13 | Multi-Arch Static Binary Build | Static compilation (`CGO_ENABLED=0`) for `linux/amd64`, `linux/arm64`, and `linux/armv7` via `make build-all` | M3 | ORIGINAL_REQUEST §R3 |
+| F14 | Edge Node Deployment & Git Main Push | Remote deployment to `inut_204_164` and `inut_204_163` via Ansible/SSH/SCP, live healthz verification, git commit & push to `main` | M3 | ORIGINAL_REQUEST §R3 |
 
 ## Milestones
-
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | RedBida & Onboarding MCP Tools Suite | Implement `internal/mcp/tools_redbida.go` with F1-F6: `redbida_list_catalog`, `redbida_get_keys`, `redbida_set_keys`, `redbida_apply_onboarding_preset` (all 15 parameters, 20-tab INI, accent stripping, trailing semicolon removal), `redbida_trigger_go2rtc`, and `redbida_get_time_status`. | none | DONE |
-| M2 | MCP Server Integration & Documentation | Integrate new tools in `internal/mcp/server.go` (F7), wire `redbida.Service` into `NewServer`, verify Stdio/SSE modes, and update documentation in `docs/` and `GEMINI.md`/`AGENTS.md` (F8). | M1 | DONE |
-| M3 | Testing, Multi-Arch Build, Remote Deployment & Live Verification | Implement unit tests (F9), execute `make build-all` (F10), deploy to `inut_204_164` and `inut_204_163` (F11), execute live MCP tests, and push git commit (F12). | M2 | DONE |
+| M1 | Full Overhaul of `/#cameras` | `web/static/index.html`, `web/static/app.js`, `web/static/ui-core.js`, `web/static/style.css` (Grid/Table, Quick Actions, Detail 7 Tabs, Smart Bulk Golden Template, NVR Diagnostics) | None | DONE |
+| M2 | Full Overhaul of `/#redbida` | `web/static/index.html`, `web/static/redbida.js`, `web/static/style.css` (Inspector 15 keys, 8 Gradient Palette, 20-Tab INI Editor, Smart Hashtags, Key Management) | M1 | DONE |
+| M3 | Comprehensive Testing, Multi-Arch Build, Edge Node Deployment & Git Push | `tests/ui/`, Playwright specs, Go unit tests, `Makefile`, Ansible deployment, target nodes `inut_204_164` / `inut_204_163`, Git push | M1, M2 | IN_PROGRESS |
 
 ## Interface Contracts
-
-### 1. `redbida_list_catalog`
-- **Arguments**: `{ "group"?: string, "editableOnly"?: boolean }`
-- **Output**: Array of catalog items with `key`, `group`, `risk`, `type`, `description`, `secret`, `source`.
-
-### 2. `redbida_get_keys`
-- **Arguments**: `{ "keys"?: string[], "all"?: boolean }`
-- **Output**: Array of `{ key, value, risk, type, secret, verified }`. Secrets masked as `"********"`.
-
-### 3. `redbida_set_keys`
-- **Arguments**: `{ "changes": { [key: string]: any }, "confirmed"?: boolean }`
-- **Output**: Array of `ChangeResult{ key, meta, oldValue, newValue, changed, acknowledged, readBack, verified, applied, error }`.
-
-### 4. `redbida_apply_onboarding_preset`
-- **Arguments**:
-  ```json
-  {
-    "title": "string (required)",
-    "cameraCount": "integer (required, 1-20)",
-    "bg": "string (optional CSS gradient)",
-    "groupKey": "string (optional Shinobi group key)",
-    "shinobiToken": "string (optional)",
-    "shinobiMonitorToken": "string (optional)",
-    "ggcode": "string (optional Google Analytics)",
-    "customHashtags": "string (optional override)",
-    "dryRun": "boolean (optional)",
-    "confirmed": "boolean (optional, default true)"
-  }
-  ```
-- **Synthesized 15 Golden Template Parameters**:
-  1. `ui_title`: Quán title (e.g. `"CX King Luxury"`)
-  2. `company_name`: Same as `ui_title`
-  3. `ui_bg`: CSS gradient background with trailing semicolon stripped (e.g. `"radial-gradient( circle farthest-corner at 10% 20%, rgba(2,37,78,1) 0%, rgba(4,4,16,1) 90.1% )"`)
-  4. `custom_hashtags`: Normalized no diacritics + `#<CleanTitle> #BILLIARDSlive #INUTlive #highlightsports`
-  5. `ui_tabs_links`: Exactly 20 sections `[C01]` to `[C20]` INI format with `stream_label=Video Trực tiếp\nvid_list_label=Danh sách highlight\nvid_play_label=<ui_title>\nlist_refresh_label=Cập nhật highlight`
-  6. `camera_count`: Integer matching `cameraCount`
-  7. `toolbar_show_count`: Integer matching `cameraCount`
-  8. `hls_using_go2rtc`: `true`
-  9. `button_generate_go2rtc_stream`: `true`
-  10. `logo_header`: `"https://vnmap-backend.inut.vn/uploads/bidalive_efd101c4e6.png"`
-  11. `logo_header_text`: `"Billiard Live - Tải clip bàn bida và livestream"`
-  12. `shinobi_camera_id`: Primary camera identifier (e.g. `"C01"` or provided `groupKey`)
-  13. `shinobi_group_key`: Shinobi group key string (e.g. `"AWU8wJMd2l"`)
-  14. `video_config`: `"range=72"`
-  15. `ui_scoreboard`: `true`
-  16. `ggcode`: Google Analytics measurement code (e.g. `"G-SFSDZPR95Z"`)
-
-### 5. `redbida_trigger_go2rtc`
-- **Arguments**: `{}`
-- **Output**: `{ "ok": true, "message": "Go2RTC generation triggered via MQTT button_generate_go2rtc_stream" }`
-
-### 6. `redbida_get_time_status`
-- **Arguments**: `{}`
-- **Output**: `{ "hostTime": string, "hostTimeRFC3339": string, "ntpSynchronized": boolean, "driftThresholdSeconds": 60, "policy": string }`
+### Web UI ↔ REST API (`internal/server`)
+- `GET /api/cameras` -> `[]deviceView`
+- `POST /api/probe` with `{id, timeoutSeconds}` -> `probeView`
+- `POST /api/fps-capability` with `{id, channel, stream, width, height, codec}` -> `{fpsList: []int}`
+- `POST /api/apply` with `bulk.Request` -> `text/event-stream` (`bulk.Event`)
+- `GET /api/snapshot?id=...&channel=...` -> `image/jpeg`
+- `GET /api/live?id=...&channel=...&fps=...` -> `multipart/x-mixed-replace`
+- `POST /api/ptz` with `{id, channel, code, speed, start}` -> `{ok: true}`
+- `POST /api/reboot` with `{id}` -> `{ok: true}`
+- `POST /api/device-time` with `{id, time}` -> `{ok: true}`
+- `POST /api/nvr/scan` with `{id, ...}` -> `[]nvrScanRow`
+- `GET /api/nvr/health?id=...` -> `nvrHealthReport`
+- `POST /api/redbida/catalog` -> `{ "keys": [KeyMeta...], "sourceAvailable": bool }`
+- `POST /api/redbida/refresh` with `{ "keys": ["k1", ...] }` -> `{ "values": { ... }, "refreshedAt": "RFC3339" }`
+- `POST /api/redbida/apply` with `{ "changes": { "k1": "v1" }, "confirmed": bool }` -> `{ "results": { ... }, "appliedAt": "RFC3339" }`
 
 ## Code Layout
-
-- `internal/mcp/types.go` — JSON-RPC 2.0 models & Tool schemas
-- `internal/mcp/registry.go` — Tool registry & invocation dispatcher
-- `internal/mcp/server.go` — Server lifecycle & tool category registrations
-- `internal/mcp/tools_redbida.go` — RedBida & Onboarding MCP tools implementation (NEW)
-- `internal/mcp/tools_redbida_test.go` — Unit tests for RedBida tools (NEW)
-- `internal/mcp/server_test.go` — JSON-RPC 2.0 integration & tool registration tests
-- `internal/redbida/` — Pure Go MQTT client, Catalog, Service, and verification logic
-- `docs/help/mcp-server.md` — Help documentation for MCP server
-- `docs/help/redbida.md` — Help documentation for RedBida
-- `docs/CODEBASE-KNOWLEDGE.md` — Architecture & tools inventory
-- `GEMINI.md` / `AGENTS.md` — Second brain & tools table
+- `web/static/index.html`: Main SPA layout containing `#view-cameras`, `#camera-detail`, `#view-redbida`, etc.
+- `web/static/app.js`: Camera inventory rendering, grid/table view switcher, quick actions, camera detail 7 tabs, bulk wizard, NVR management.
+- `web/static/ui-core.js`: UI helper utilities, modal managers, live preview controllers, notification toasts.
+- `web/static/redbida.js`: RedBida SPA logic, 15-key Inspector, 8-Gradient Palette, 20-Tab INI Editor, Smart Hashtags generator, Key management table.
+- `web/static/style.css`: Glassmorphism design tokens (`--glass-*`), responsive grid layouts, card styles, glowing badges, animations.
+- `internal/server/`: HTTP server, REST endpoints, session auth, rate limiting.
+- `internal/camera/`: Camera interface, capabilities, and device abstraction.
+- `internal/redbida/`: Key catalog, validation rules, MQTT broker client.
+- `tests/ui/`: Playwright E2E UI test suites.
