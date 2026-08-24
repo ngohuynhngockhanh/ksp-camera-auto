@@ -24,6 +24,9 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 | **Redbida `shinobi_group_key`** | Chuỗi 10 ký tự GroupKey Shinobi | `AWU8wJMd2l`, `P6zP1kVhht` | Lưu mã nhóm người dùng Shinobi. |
 | **Redbida `shinobi_token`** | API Key IP `0.0.0.0` (Quyền: View Streams, View Videos, Snapshots) | `zd5DARMBYbos4CqoMlvDIafwBP6IR0` | Dùng cho khách hàng xem luồng trực tiếp và xem lại/tải video. |
 | **Redbida `shinobi_monitor_token`** | API Key IP `0.0.0.0` (Quyền: Get Monitors, View Streams, View Videos) | `2Ow8jOi8MEwUfBByYruwgGapk2wHVL` | Dùng để lấy danh sách monitors và cấu hình luồng camera. |
+| **Redbida `ui_tabs_links`** | Chuẩn INI 20 section `[C01]` .. `[C20]` (4 dòng/section) | Xem chi tiết Section 4 bên dưới | Dòng 3 `vid_play_label` = `<ui_title>` (Tên quán). |
+| **Redbida `video_config`** | Chuỗi cấu hình video playback | `range=72` | Giới hạn tra cứu lịch sử highlight/video 72 giờ. |
+| **Redbida `logo_livestream`** | URL logo hiển thị góc livestream | `http://127.0.0.1:2028/logo.png` | Upload qua `/api/upload-logo` hoặc phục vụ từ KSP-Cam. |
 
 ---
 
@@ -37,6 +40,7 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 - `stream_vcodec`: `"copy"`
 - `vcodec`: `"copy"`
 - `record_vcodec`: `"copy"`
+- `cutoff`: `"5"` (**BẮT BUỘC: 5 phút / segment file**, `segment_time 300`)
 - `rtsp_transport`: `"tcp"`
 - `preset_stream`: `"ultrafast"`
 - `hls_time`: `"2"`
@@ -79,3 +83,37 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 | 6 | `camera06` | `Camera06` | `192.168.1.197` | `0731FACPSF4A471` | `L250833C` | `Admin123456` |
 | 7 | `camera07` | `Camera07` | `192.168.1.196` | `33443ACPSF294DB` | `L22F39D1` | `Admin123456` |
 | 8 | `camera08` | `Camera08` | `192.168.1.193` | `33443ACPSF01EB0` | `L21F07E0` | `Admin123456` |
+
+---
+
+## 4. Đặc tả Chuẩn INI `ui_tabs_links` & Redbida Keys
+
+File `/root/ota-mqtt/change_ok/ui_tabs_links` bắt buộc định dạng INI với đúng 20 section từ `[C01]` đến `[C20]` (2 chữ số đệm 0). Mỗi section gồm 4 dòng:
+```ini
+[C01]
+stream_label=Video Trực tiếp
+vid_list_label=Danh sách highlight
+vid_play_label=<ui_title>
+list_refresh_label=Cập nhật highlight
+
+[C02]
+stream_label=Video Trực tiếp
+vid_list_label=Danh sách highlight
+vid_play_label=<ui_title>
+list_refresh_label=Cập nhật highlight
+...
+[C20]
+stream_label=Video Trực tiếp
+vid_list_label=Danh sách highlight
+vid_play_label=<ui_title>
+list_refresh_label=Cập nhật highlight
+```
+*Lưu ý: Dòng 3 `vid_play_label` bắt buộc bằng giá trị của `<ui_title>` (Tên quán, ví dụ `CX King Luxury` hoặc `SD Billiards Club - CS2`).*
+
+---
+
+## 5. NAT Port Fallback khi VPN đứt
+- `inut_204_164` (CX King Luxury): `video.io.vn:45529`
+- `inut_204_163` (SD Billiards Club - CS2): `video.io.vn:45528`
+- Sử dụng qua Ansible inventory: `inut_204_164 ansible_host=video.io.vn ansible_port=45529` / `inut_204_163 ansible_host=video.io.vn ansible_port=45528`.
+

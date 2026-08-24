@@ -165,10 +165,13 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/shinobi/sync-to-shinobi", api(s.handleShinobiSyncToShinobi))
 	s.mux.Handle("/api/shinobi/sync-from-shinobi", api(s.handleShinobiSyncFromShinobi))
 	s.mux.Handle("/api/shinobi/videos", api(s.handleShinobiVideos))
+	s.mux.HandleFunc("/logo.png", s.handleLogoFile)
+	s.mux.Handle("/api/upload-logo", api(s.handleUploadLogo))
 	if s.redbida != nil {
 		s.mux.Handle("/api/redbida/catalog", api(s.handleRedbidaCatalog))
 		s.mux.Handle("/api/redbida/refresh", api(s.handleRedbidaRefresh))
 		s.mux.Handle("/api/redbida/apply", api(s.handleRedbidaApply))
+		s.mux.Handle("/api/redbida/upload-logo", api(s.handleUploadLogo))
 		s.mux.Handle("/api/redbida/time-status", api(s.handleRedbidaTimeStatus))
 	}
 	// /api/playback accepts EITHER a session OR a valid signed token (so a phone
