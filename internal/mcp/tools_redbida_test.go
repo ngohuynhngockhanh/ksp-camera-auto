@@ -420,8 +420,8 @@ func TestRedbidaTools_ApplyOnboardingPreset_DryRun(t *testing.T) {
 	if strings.HasSuffix(params["ui_bg"].(string), ";") {
 		t.Errorf("ui_bg must not contain trailing semicolon: %s", params["ui_bg"])
 	}
-	if params["custom_hashtags"] != "#CXKingLuxury #BILLIARDSlive #INUTlive #highlightsports" {
-		t.Errorf("expected custom_hashtags '#CXKingLuxury #BILLIARDSlive #INUTlive #highlightsports', got %v", params["custom_hashtags"])
+	if params["custom_hashtags"] != "Tìm hiểu thêm tại BilliardLive.IO.VN\n#CXKingLuxury #BILLIARDSlive #INUTlive #highlightsports" {
+		t.Errorf("expected custom_hashtags 'Tìm hiểu thêm tại BilliardLive.IO.VN\\n#CXKingLuxury #BILLIARDSlive #INUTlive #highlightsports', got %v", params["custom_hashtags"])
 	}
 	if !strings.Contains(params["ui_tabs_links"].(string), "[C01]") || !strings.Contains(params["ui_tabs_links"].(string), "[C20]") {
 		t.Errorf("ui_tabs_links must contain [C01] and [C20]")
@@ -492,8 +492,8 @@ func TestRedbidaTools_ApplyOnboardingPreset_Live(t *testing.T) {
 	if broker.writes["ui_title"] != "Bida Lạc Long Quân" {
 		t.Errorf("expected broker write ui_title='Bida Lạc Long Quân', got %v", broker.writes["ui_title"])
 	}
-	if broker.writes["custom_hashtags"] != "#BidaLacLongQuan #BILLIARDSlive #INUTlive #highlightsports" {
-		t.Errorf("expected custom_hashtags '#BidaLacLongQuan #BILLIARDSlive #INUTlive #highlightsports', got %v", broker.writes["custom_hashtags"])
+	if broker.writes["custom_hashtags"] != "Tìm hiểu thêm tại BilliardLive.IO.VN\n#BidaLacLongQuan #BILLIARDSlive #INUTlive #highlightsports" {
+		t.Errorf("expected custom_hashtags 'Tìm hiểu thêm tại BilliardLive.IO.VN\\n#BidaLacLongQuan #BILLIARDSlive #INUTlive #highlightsports', got %v", broker.writes["custom_hashtags"])
 	}
 }
 

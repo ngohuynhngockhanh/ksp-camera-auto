@@ -396,7 +396,7 @@ func TestAdversarial_OnboardingPreset_ExtremeInputs(t *testing.T) {
 	}
 
 	// Hashtag normalized without diacritics
-	expectedHashtagPrefix := "#CLBBidaSaiGonDeNhatCS3CS4PhuNhuan2026 #BILLIARDSlive"
+	expectedHashtagPrefix := "Tìm hiểu thêm tại BilliardLive.IO.VN\n#CLBBidaSaiGonDeNhatCS3CS4PhuNhuan2026 #BILLIARDSlive"
 	if !strings.HasPrefix(params["custom_hashtags"].(string), expectedHashtagPrefix) {
 		t.Errorf("expected hashtag to start with %q, got %q", expectedHashtagPrefix, params["custom_hashtags"])
 	}
@@ -413,10 +413,10 @@ func TestAdversarial_OnboardingPreset_ExtremeInputs(t *testing.T) {
 		t.Errorf("ui_tabs_links missing [C01] or [C20]")
 	}
 	if !strings.Contains(iniTabs, "vid_play_label="+trimmedTitle) {
-		t.Errorf("ui_tabs_links missing vid_play_label=%s", trimmedTitle)
+		t.Errorf("ui_tabs_links should have vid_play_label=%s", trimmedTitle)
 	}
 
-	// GroupKey mapped to both shinobi_camera_id and shinobi_group_key
+	// Group key mapped
 	if params["shinobi_camera_id"] != "AWU8wJMd2l" || params["shinobi_group_key"] != "AWU8wJMd2l" {
 		t.Errorf("groupKey mapping mismatch: camera_id=%v, group_key=%v", params["shinobi_camera_id"], params["shinobi_group_key"])
 	}
@@ -428,7 +428,7 @@ func TestAdversarial_OnboardingPreset_ExtremeInputs(t *testing.T) {
 		Parameters map[string]any `json:"parameters"`
 	}
 	_ = json.Unmarshal([]byte(resSym.Content[0].Text), &payloadSym)
-	if payloadSym.Parameters["custom_hashtags"] != "#BILLIARDSlive #INUTlive #highlightsports" {
+	if payloadSym.Parameters["custom_hashtags"] != "Tìm hiểu thêm tại BilliardLive.IO.VN\n#BILLIARDSlive #INUTlive #highlightsports" {
 		t.Errorf("pure symbol title should fallback to standard hashtags, got: %v", payloadSym.Parameters["custom_hashtags"])
 	}
 

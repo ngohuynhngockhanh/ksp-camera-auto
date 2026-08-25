@@ -213,7 +213,7 @@ func registerRedbidaTools(r *Registry, cfg *config.Config, redbidaSvc *redbida.S
 				},
 				"customHashtags": map[string]any{
 					"type":        "string",
-					"description": "Custom hashtags override. If omitted, generated as #<CleanTitle> #BILLIARDSlive #INUTlive #highlightsports",
+					"description": "Custom hashtags override. If omitted, generated as 'Tìm hiểu thêm tại BilliardLive.IO.VN\\n#<CleanTitle> #BILLIARDSlive #INUTlive #highlightsports'",
 				},
 				"dryRun": map[string]any{
 					"type":        "boolean",
@@ -263,9 +263,9 @@ func registerRedbidaTools(r *Registry, cfg *config.Config, redbidaSvc *redbida.S
 		if customHashtags == "" {
 			cleanTitle := sanitizeCleanTitle(title)
 			if cleanTitle != "" {
-				customHashtags = fmt.Sprintf("#%s #BILLIARDSlive #INUTlive #highlightsports", cleanTitle)
+				customHashtags = fmt.Sprintf("Tìm hiểu thêm tại BilliardLive.IO.VN\n#%s #BILLIARDSlive #INUTlive #highlightsports", cleanTitle)
 			} else {
-				customHashtags = "#BILLIARDSlive #INUTlive #highlightsports"
+				customHashtags = "Tìm hiểu thêm tại BilliardLive.IO.VN\n#BILLIARDSlive #INUTlive #highlightsports"
 			}
 		}
 

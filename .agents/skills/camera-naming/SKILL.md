@@ -26,7 +26,7 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 | **Backend Admin API Key** | API Key **BẮT BUỘC IP `127.0.0.1`** (Full Admin: `auth_socket`, `get/control_monitors`, `watch/delete_videos`) | `F272sgCvIRnzUVOTqUkkff7aEwCmZX` | Lưu trong `/opt/ksp-cam/config.yaml`, bảo mật nội bộ chỉ cho backend `kspcam` gọi. |
 | **Redbida `ui_tabs_links`** | Chuẩn INI 20 section `[C01]` .. `[C20]` (4 dòng/section) | Xem chi tiết Section 4 bên dưới | Dòng 3 `vid_play_label` = `<ui_title>` (Tên quán). |
 | **Redbida `video_config`** | Chuỗi cấu hình video playback | `range=72` | Giới hạn tra cứu lịch sử highlight/video 72 giờ. |
-| **Redbida `custom_hashtags`** | Chuỗi hashtag định dạng chuẩn | `#<UITitleNoSpaces> #BILLIARDSlive #INUTlive #highlightsports` | Tên quán không dấu không cách + 3 hashtag chuẩn. |
+| **Redbida `custom_hashtags`** | Chuỗi hashtag định dạng chuẩn | `Tìm hiểu thêm tại BilliardLive.IO.VN\n#<UITitleNoSpaces> #BILLIARDSlive #INUTlive #highlightsports` | Bắt đầu "Tìm hiểu thêm tại BilliardLive.IO.VN\n", tên quán không dấu không cách + 3 hashtag chuẩn. |
 | **Redbida `ui_bg`** | CSS background gradient data | `radial-gradient( circle farthest-corner at 10% 20%, rgba(2,37,78,1) 0%, ... )` | Màu gradient CSS riêng biệt, sang trọng cho từng quán (**KHÔNG có dấu chấm phẩy `;` ở cuối**). |
 | **Redbida `camera_count`** | Số lượng camera Shinobi thực tế | `5`, `8`, `10` | Bắt buộc bằng số lượng camera active trên Shinobi. |
 | **Redbida `toolbar_show_count`** | Số nút camera hiển thị trên thanh công cụ | `5`, `8`, `10` | Luôn đặt cùng giá trị với `camera_count`. |

@@ -89,8 +89,9 @@ function sanitizeCleanTitle(title) {
 
 function generateSmartHashtags(title) {
   const clean = sanitizeCleanTitle(title);
-  if (!clean) return '#BILLIARDSlive #INUTlive #highlightsports';
-  return `#${clean} #BILLIARDSlive #INUTlive #highlightsports`;
+  const prefix = 'Tìm hiểu thêm tại BilliardLive.IO.VN\n';
+  if (!clean) return `${prefix}#BILLIARDSlive #INUTlive #highlightsports`;
+  return `${prefix}#${clean} #BILLIARDSlive #INUTlive #highlightsports`;
 }
 
 function redbidaMeta(key) {
@@ -236,12 +237,13 @@ const GOLDEN_STANDARD_RULES = [
   {
     key: 'custom_hashtags',
     label: 'Hashtag Chuẩn (custom_hashtags)',
-    desc: 'Không dấu tiếng Việt, chứa #BILLIARDSlive #INUTlive #highlightsports',
+    desc: 'Bắt đầu "Tìm hiểu thêm tại BilliardLive.IO.VN\\n", không dấu tiếng Việt, chứa #BILLIARDSlive/#PICKLEBALLlive #INUTlive #highlightsports',
     group: 'Branding / Logo',
     check: (val) => {
       if (typeof val !== 'string' || !val.trim()) return false;
-      const hasVN = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(val);
-      return !hasVN && val.includes('#BILLIARDSlive') && val.includes('#INUTlive') && val.includes('#highlightsports');
+      const stripped = val.replace(/Tìm hiểu thêm tại BilliardLive\.IO\.VN/gi, '');
+      const hasVN = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(stripped);
+      return !hasVN && (val.includes('#BILLIARDSlive') || val.includes('#PICKLEBALLlive')) && val.includes('#INUTlive') && val.includes('#highlightsports');
     },
     fix: () => {
       const title = getEffectiveValue('ui_title') || 'CX King Luxury';

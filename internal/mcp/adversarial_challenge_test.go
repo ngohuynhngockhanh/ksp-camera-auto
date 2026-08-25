@@ -286,7 +286,7 @@ func TestAdversarialChallenge_RedbidaJSONRPC_AllTools(t *testing.T) {
 			t.Errorf("semicolon not stripped from ui_bg: %v", dryPayload.Parameters["ui_bg"])
 		}
 		// Verify hashtag sanitization (no tones, no spaces, correct suffixes)
-		expectedHashtag := "#CLBBidaHoangGiaSaiGon #BILLIARDSlive #INUTlive #highlightsports"
+		expectedHashtag := "Tìm hiểu thêm tại BilliardLive.IO.VN\n#CLBBidaHoangGiaSaiGon #BILLIARDSlive #INUTlive #highlightsports"
 		if dryPayload.Parameters["custom_hashtags"] != expectedHashtag {
 			t.Errorf("hashtag mismatch: got %v, expected %v", dryPayload.Parameters["custom_hashtags"], expectedHashtag)
 		}
@@ -732,17 +732,17 @@ func TestAdversarialChallenge_ConcurrentStressAndFuzzing(t *testing.T) {
 			{
 				input:           "CLB Bida Hoàng Gia (Thanh Xuân - Hà Nội)",
 				expectedClean:   "CLBBidaHoangGiaThanhXuanHaNoi",
-				expectedHashtag: "#CLBBidaHoangGiaThanhXuanHaNoi #BILLIARDSlive #INUTlive #highlightsports",
+				expectedHashtag: "Tìm hiểu thêm tại BilliardLive.IO.VN\n#CLBBidaHoangGiaThanhXuanHaNoi #BILLIARDSlive #INUTlive #highlightsports",
 			},
 			{
 				input:           "Quán Bida & Cà Phê 24/7 🎱🏆",
 				expectedClean:   "QuanBidaCaPhe247",
-				expectedHashtag: "#QuanBidaCaPhe247 #BILLIARDSlive #INUTlive #highlightsports",
+				expectedHashtag: "Tìm hiểu thêm tại BilliardLive.IO.VN\n#QuanBidaCaPhe247 #BILLIARDSlive #INUTlive #highlightsports",
 			},
 			{
 				input:           "Đại Nam Bida Club - Chi Nhánh 2",
 				expectedClean:   "DaiNamBidaClubChiNhanh2",
-				expectedHashtag: "#DaiNamBidaClubChiNhanh2 #BILLIARDSlive #INUTlive #highlightsports",
+				expectedHashtag: "Tìm hiểu thêm tại BilliardLive.IO.VN\n#DaiNamBidaClubChiNhanh2 #BILLIARDSlive #INUTlive #highlightsports",
 			},
 		}
 
