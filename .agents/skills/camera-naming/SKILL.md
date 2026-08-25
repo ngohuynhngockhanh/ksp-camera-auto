@@ -42,6 +42,7 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 `Camera01` (`mid: camera01`) được chỉ định là **chuẩn mẫu (Golden Standard)** cho mọi camera tiếp theo:
 
 ### A. Stream & Codec Engine (Remux Copy - 0% CPU Transcoding)
+- `type`: `"h264"` (**BẮT BUỘC trong Shinobi DB**: để switch `buildConnectionFlagsFromConfiguration` sinh cờ `-i "${url}"`, dù luồng camera thực tế là H.264 hay H.265/HEVC)
 - `mode`: `"record"`
 - `stream_type`: `"hls"`
 - `stream_vcodec`: `"copy"`
