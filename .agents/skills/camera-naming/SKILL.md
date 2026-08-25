@@ -19,10 +19,11 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 | **KSP-Cam Inventory ID** | `<ip_address>:<port>` | `192.168.1.195:37777` | Cổng cấu hình DVRIP (`37777`), ISAPI (`80`), hoặc SDK (`8000`). |
 | **RTSP Main-stream Path** | `rtsp://<user>:<pass>@<ip>:554/cam/realmonitor?channel=1&subtype=0` | `rtsp://admin:Admin123456@192.168.1.195:554/cam/realmonitor?channel=1&subtype=0` | Transport bắt buộc `tcp`, codec remux `copy`. |
 | **RTSP Sub-stream Path** | `rtsp://<user>:<pass>@<ip>:554/cam/realmonitor?channel=1&subtype=1` | `rtsp://admin:Admin123456@192.168.1.195:554/cam/realmonitor?channel=1&subtype=1` | Dùng cho preview / thumbnail hoặc low bandwidth. |
-| **Redbida `shinobi_camera_id`** | Giá trị là **Shinobi Group ID / Group Key** | `AWU8wJMd2l`, `P6zP1kVhht` | Mã nhóm Group ID của Shinobi NVR. |
-| **Redbida `shinobi_group_key`** | Chuỗi 10 ký tự GroupKey Shinobi | `AWU8wJMd2l`, `P6zP1kVhht` | Lưu mã nhóm người dùng Shinobi. |
-| **Redbida `shinobi_token`** | API Key IP `0.0.0.0` (Quyền: View Streams, View Videos, Snapshots) | `zd5DARMBYbos4CqoMlvDIafwBP6IR0` | Dùng cho khách hàng xem luồng trực tiếp và xem lại/tải video. |
-| **Redbida `shinobi_monitor_token`** | API Key IP `0.0.0.0` (Quyền: Get Monitors, View Streams, View Videos) | `2Ow8jOi8MEwUfBByYruwgGapk2wHVL` | Dùng để lấy danh sách monitors và cấu hình luồng camera. |
+| **Redbida `shinobi_camera_id`** | Giá trị là **Shinobi Group ID / Group Key** | `kely`, `pymid463`, `AWU8wJMd2l` | Mã nhóm Group ID của Shinobi NVR dùng ghép URL HLS/Videos trong Node-RED. |
+| **Redbida `shinobi_group_key`** | Chuỗi GroupKey Shinobi | `kely`, `pymid463`, `AWU8wJMd2l` | Đồng bộ cùng giá trị với `shinobi_camera_id`. |
+| **Redbida `shinobi_token`** | API Key IP `0.0.0.0` (Quyền: `watch_stream: 1`, `watch_videos: 1`) | `WI4j88BE80U9xW6dMJ6dgYRtxIN2BT` | Dùng cho khách hàng xem luồng trực tiếp và xem lại/tải video. |
+| **Redbida `shinobi_monitor_token`** | API Key IP `0.0.0.0` (Quyền: `get_monitors: 1`) | `6kA6G986hwa84Je1VKRsF7X68MW7Ok` | Dùng để lấy danh sách monitors cho giao diện web. |
+| **Backend Admin API Key** | API Key **BẮT BUỘC IP `127.0.0.1`** (Full Admin: `auth_socket`, `get/control_monitors`, `watch/delete_videos`) | `F272sgCvIRnzUVOTqUkkff7aEwCmZX` | Lưu trong `/opt/ksp-cam/config.yaml`, bảo mật nội bộ chỉ cho backend `kspcam` gọi. |
 | **Redbida `ui_tabs_links`** | Chuẩn INI 20 section `[C01]` .. `[C20]` (4 dòng/section) | Xem chi tiết Section 4 bên dưới | Dòng 3 `vid_play_label` = `<ui_title>` (Tên quán). |
 | **Redbida `video_config`** | Chuỗi cấu hình video playback | `range=72` | Giới hạn tra cứu lịch sử highlight/video 72 giờ. |
 | **Redbida `custom_hashtags`** | Chuỗi hashtag định dạng chuẩn | `#<UITitleNoSpaces> #BILLIARDSlive #INUTlive #highlightsports` | Tên quán không dấu không cách + 3 hashtag chuẩn. |

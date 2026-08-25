@@ -479,10 +479,11 @@ Module `internal/shinobi` cung cấp client Go thuần kết nối trực tiếp
   - Phân tích cú pháp chuỗi RTSP URL để trích xuất Host, Port, Username, Password, Channel number và tự động nhận diện Vendor.
   - Upsert thiết bị vào `Inventory`, tự động mã hóa mật khẩu AES-256-GCM.
 - **Quy ước Khóa Redbida & Shinobi NVR (`/root/ota-mqtt/change_ok/`)**:
-  - `shinobi_camera_id`: **Bắt buộc lưu `mid` Shinobi tương ứng** (ví dụ: `camera01`, `camera02`), **KHÔNG ĐƯỢC** lưu GroupKey.
-  - `shinobi_group_key`: Lưu GroupKey 10 ký tự của Shinobi (ví dụ: `AWU8wJMd2l`, `P6zP1kVhht`).
-  - `shinobi_token`: Lưu API Key cấp quyền `0.0.0.0` với quyền xem luồng (`watch_stream`) và xem lại/tải video clip (`watch_videos`).
-  - `shinobi_monitor_token`: Lưu API Key cấp quyền `0.0.0.0` với quyền đọc danh sách camera (`get_monitors`), xem luồng và xem video.
+  - `shinobi_camera_id`: **Bắt buộc lưu Shinobi Group Key / Group ID** (ví dụ: `kely`, `pymid463`, `AWU8wJMd2l`). Đây là Group Key mà Node-RED dùng để ghép URL API Shinobi (`/<token>/hls/<group_key>/<mid>/s.m3u8` và `/media/usb1/<group_key>/<mid>/packed.mp4`).
+  - `shinobi_group_key`: Lưu Group Key của Shinobi (đồng bộ cùng giá trị với `shinobi_camera_id`).
+  - `shinobi_token`: Lưu API Key quyền `0.0.0.0` chuyên biệt cho client xem luồng (`watch_stream: 1`) và xem/tải video (`watch_videos: 1`).
+  - `shinobi_monitor_token`: Lưu API Key quyền `0.0.0.0` chuyên biệt cho client đọc danh sách monitors (`get_monitors: 1`).
+  - **Backend Admin API Key** (trong `/opt/ksp-cam/config.yaml` `shinobi.api_key`): Lưu API Key toàn quyền quản trị (`auth_socket`, `get_monitors`, `control_monitors`, `watch_stream`, `watch_videos`, `delete_videos`), **BẮT BUỘC gán IP `127.0.0.1`** để đảm bảo bảo mật tuyệt đối, chỉ cho phép backend `kspcam` gọi nội bộ.
 
 ---
 
