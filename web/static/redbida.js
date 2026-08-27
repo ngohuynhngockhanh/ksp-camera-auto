@@ -291,10 +291,10 @@ const GOLDEN_STANDARD_RULES = [
   {
     key: 'video_config',
     label: 'Cấu Hình Video (video_config)',
-    desc: 'Giới hạn tra cứu highlight 72h ("range=72")',
+    desc: 'Giới hạn tra cứu highlight ("range=24" hoặc "range=72")',
     group: 'Livestream',
-    check: (val) => val === 'range=72',
-    fix: () => 'range=72',
+    check: (val) => typeof val === 'string' && /^range=\d+$/.test(val.trim()),
+    fix: (cur) => (typeof cur === 'string' && /^range=\d+$/.test(cur.trim()) ? cur.trim() : 'range=72'),
   },
   {
     key: 'hls_using_go2rtc',

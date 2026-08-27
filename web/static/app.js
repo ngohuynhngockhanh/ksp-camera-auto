@@ -4078,6 +4078,8 @@ function wireSettingsPopover() {
     pop.hidden = true;
     btn.setAttribute('aria-expanded', 'false');
   });
+}
+
 // ---------- Network Traffic Inspector (iftop) Logic ----------
 
 let trafficEventSource = null;
