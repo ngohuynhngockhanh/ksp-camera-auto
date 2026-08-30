@@ -32,6 +32,9 @@ func keyPath() string {
 	if p := os.Getenv("KSPCAM_KEY_FILE"); p != "" {
 		return p
 	}
+	if _, err := os.Stat("/opt/ksp-cam/.kspcam.key"); err == nil {
+		return "/opt/ksp-cam/.kspcam.key"
+	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return ".kspcam.key"

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"sort"
 	"strings"
@@ -58,8 +59,13 @@ func LoadInventory(path string) (*Inventory, error) {
 		return nil, fmt.Errorf("parse inventory %s: %w", path, err)
 	}
 	for _, d := range list {
-		if pt, err := Decrypt(d.Password); err == nil {
-			d.Password = pt
+		if strings.HasPrefix(d.Password, encPrefix) {
+			if pt, err := Decrypt(d.Password); err == nil {
+				d.Password = pt
+			} else {
+				log.Printf("inventory: failed to decrypt password for device %s: %v (clearing password to prevent camera lockout)", d.ID, err)
+				d.Password = ""
+			}
 		}
 		if d.ID == "" {
 			d.ID = d.Addr()
