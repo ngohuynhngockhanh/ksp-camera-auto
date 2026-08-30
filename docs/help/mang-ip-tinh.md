@@ -5,7 +5,7 @@ section: dahua
 order: 20
 keywords: [mạng, IP tĩnh, đổi IP, IP, DHCP, gateway, cổng vào, DNS, subnet, subnet mask, địa chỉ IP, interface, đổi địa chỉ, cấu hình mạng]
 ui: "#cameras"
-covers: ["/api/network"]
+covers: ["/api/network", "/api/network/traffic/interfaces", "/api/network/traffic/snapshot", "/api/network/traffic/stream"]
 related: [kho-camera, wifi, loi-thuong-gap]
 ---
 ## Mục đích

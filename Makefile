@@ -4,7 +4,8 @@ DIST    := dist
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-GO ?= go
+export PATH := /home/ksp/inut-rk3528-browswer/wpebuild/godl/go/bin:$(PATH)
+GO ?= $(shell which go 2>/dev/null || echo /home/ksp/inut-rk3528-browswer/wpebuild/godl/go/bin/go)
 export CGO_ENABLED=0
 
 .PHONY: all build run test tidy vet fmt clean build-all \
@@ -41,6 +42,13 @@ build-arm32:
 
 build-arm64:
 	GOOS=linux GOARCH=arm64 $(GO) build -ldflags '$(LDFLAGS)' -o $(DIST)/$(BINARY)-linux-arm64 $(PKG)
+
+# Sync latest compiled binaries to Ansible controller on 172.16.5.180
+sync-ansible: build-all
+	scp $(DIST)/$(BINARY)-linux-arm64 root@172.16.5.180:/build/armbian-build/ansible/playbook/roles/app_ksp_bida/files/kspcam
+	scp $(DIST)/$(BINARY)-linux-arm64 root@172.16.5.180:/build/armbian-build/ansible/playbook/roles/app_ksp_bida/files/kspcam-linux-arm64
+	scp $(DIST)/$(BINARY)-linux-armv7 root@172.16.5.180:/build/armbian-build/ansible/playbook/roles/app_ksp_bida/files/kspcam-armhf
+	@echo ">>> Successfully synced binaries to Ansible controller (172.16.5.180)."
 
 # Optional Hikvision SDK (8000) build. Requires the HCNetSDK: set HIKSDK to the
 # SDK dir containing incEn/ and lib/. Produces a cgo binary (not static, amd64).

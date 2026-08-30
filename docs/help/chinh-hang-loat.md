@@ -5,7 +5,7 @@ section: bulk
 order: 10
 keywords: [chỉnh hàng loạt, áp dụng, độ phân giải, codec, H.264, H.265, MJPEG, smart codec, H.265+, GOP, I-frame, bitrate, CBR, VBR, âm thanh, AAC, luồng, main, sub, kênh, đầu ghi]
 ui: "#cameras/bulk"
-covers: ["/api/apply", "/api/fps-capability"]
+covers: ["/api/apply", "/api/fps-capability", "/api/anti-a", "/api/anti-a/trigger"]
 related: [doc-cau-hinh, anh-chup, doi-mat-khau-thiet-bi]
 ---
 ## Mục đích
