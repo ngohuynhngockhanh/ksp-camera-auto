@@ -25,6 +25,19 @@
 5. **Bảo mật dữ liệu tại chỗ (Encrypted-at-Rest)**:
    - Mật khẩu thiết bị lưu trữ trong `cameras.yaml` được mã hóa tự động bằng thuật toán AES-256-GCM với tiền tố `enc:<base64>`.
 
+### 1.2 Chuẩn Branding & Nhận Diện Thể Loại (Billiards vs Pickleball / Sport)
+- **Sân Thể Thao / Pickleball (Ví dụ node `inut_204_160`)**:
+  - `logo_header`: `https://vnmap-backend.inut.vn/uploads/highlightsports_04f6233a64.png`
+  - `logo_header_text`: `Highlight Sport - Tải clip và Livestream Thể thao`
+  - `custom_hashtags`: `Tìm hiểu thêm tại BilliardLive.IO.VN\n#<TênSân> #cameralive #highlightsports #livestream_pickleball #INUTlive`
+- **Quán Bida (Billiards - Mặc định cho hầu hết các quán khác)**:
+  - `logo_header`: `https://vnmap-backend.inut.vn/uploads/bidalive_efd101c4e6.png`
+  - `logo_header_text`: `Billiard Live - Tải clip bàn bida và livestream`
+  - `custom_hashtags`: `Tìm hiểu thêm tại BilliardLive.IO.VN\n#<TênQuán> #BILLIARDSlive #INUTlive #highlightsports`
+- **Quy tắc bảo tồn (Preservation vs Overwrite Policy)**:
+  - Luôn **tôn trọng và giữ nguyên** toàn bộ thông tin branding đã có sẵn của quán/sân (`ui_title`, `logo_livestream`, `logo_header`, `logo_header_text`, `ui_bg`, `custom_hashtags`).
+  - CHỈ ghi đè khi người dùng **nói rõ từ khóa "ghi đè"** (hoặc yêu cầu reset/overwrite branding).
+
 ---
 
 ## 2. Bản đồ kiến trúc hệ thống (System Architecture)

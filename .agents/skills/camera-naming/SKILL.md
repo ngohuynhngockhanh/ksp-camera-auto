@@ -31,9 +31,16 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 | **Redbida `camera_count`** | Số lượng camera Shinobi thực tế | `5`, `8`, `10` | Bắt buộc bằng số lượng camera active trên Shinobi. |
 | **Redbida `toolbar_show_count`** | Số nút camera hiển thị trên thanh công cụ | `5`, `8`, `10` | Luôn đặt cùng giá trị với `camera_count`. |
 | **Redbida `hls_using_go2rtc`** | Bật phân phối HLS qua Go2RTC | `true` | Tối ưu hóa độ trễ stream và giảm tải CPU. |
-| **Redbida `logo_header`** | URL logo header chuẩn | `https://vnmap-backend.inut.vn/uploads/bidalive_efd101c4e6.png` | URL ảnh logo header cố định cho hệ thống Bida. |
-| **Redbida `logo_header_text`** | Chuỗi tiêu đề phụ / header text | `Billiard Live - Tải clip bàn bida và livestream` | Luôn cố định câu slogan chuẩn này cho toàn bộ hệ thống Bida. |
+| **Redbida `logo_header` (Bida)** | URL logo header Bida | `https://vnmap-backend.inut.vn/uploads/bidalive_efd101c4e6.png` | URL ảnh logo header cố định cho hệ thống Quán Bida. |
+| **Redbida `logo_header_text` (Bida)** | Tiêu đề phụ / header text Bida | `Billiard Live - Tải clip bàn bida và livestream` | Cố định câu slogan chuẩn này cho hệ thống Quán Bida. |
+| **Redbida `logo_header` (Pickleball)** | URL logo header Thể Thao | `https://vnmap-backend.inut.vn/uploads/highlightsports_04f6233a64.png` | URL ảnh logo header cố định cho sân Pickleball / Highlight Sport. |
+| **Redbida `logo_header_text` (Pickleball)** | Tiêu đề phụ Thể Thao | `Highlight Sport - Tải clip và Livestream Thể thao` | Cố định câu slogan chuẩn này cho sân Pickleball / Thể thao. |
+| **Redbida `custom_hashtags` (Pickleball)** | Hashtag sân Thể Thao | `Tìm hiểu thêm tại BilliardLive.IO.VN\n#<TênSân> #cameralive #highlightsports #livestream_pickleball #INUTlive` | Mẫu hashtag chuẩn cho sân Pickleball / Thể thao. |
 | **Redbida `button_generate_go2rtc_stream`** | Nút trigger sinh cấu hình Go2RTC | `true` | Gửi qua `/private/i_sets` để Node-RED 2023 tự sinh `/root/go2rtc.yaml`. |
+
+> **⚠️ QUY TẮC BẢO TỒN THÔNG TIN QUÁN (PRESERVATION & OVERWRITE POLICY):**
+> 1. **Mặc định:** Luôn **tôn trọng và giữ nguyên** toàn bộ thông tin branding đã có sẵn của quán (`ui_title`, `logo_livestream`, `logo_header`, `logo_header_text`, `ui_bg`, `custom_hashtags`).
+> 2. **Chỉ ghi đè khi có yêu cầu rõ ràng:** Chỉ khi người dùng **nói rõ từ khóa "ghi đè"** (hoặc yêu cầu reset/overwrite branding) thì mới được phép cập nhật lại `ui_title`, `logo_header`, `logo_header_text`.
 
 ---
 
