@@ -362,6 +362,16 @@ func (s *Server) handlePassword(w http.ResponseWriter, r *http.Request) {
 	if req.NewPassword == "" {
 		req.NewPassword = s.cfg.Defaults.NewPassword
 	}
+
+	// Auto-backup current credentials of target devices before changing passwords
+	targetDevices := make([]config.Device, 0, len(req.DeviceIDs))
+	for _, id := range req.DeviceIDs {
+		if d, ok := s.inv.Get(id); ok {
+			targetDevices = append(targetDevices, d)
+		}
+	}
+	_ = s.savePasswordBackup(targetDevices)
+
 	to := s.reqTimeout(req.TimeoutSeconds)
 	ctx, cancel := context.WithTimeout(r.Context(), to*time.Duration(len(req.DeviceIDs)+1))
 	defer cancel()
@@ -387,6 +397,7 @@ func (s *Server) handlePassword(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	changedHosts := make(map[string]bool)
 	total := len(req.DeviceIDs)
 	for i, id := range req.DeviceIDs {
 		if ctx.Err() != nil {
@@ -398,6 +409,18 @@ func (s *Server) handlePassword(w http.ResponseWriter, r *http.Request) {
 			emit(bulk.Event{Type: "device_done", DeviceID: id, OK: false, Err: "không có trong kho"})
 			continue
 		}
+
+		// If a previous channel on the same physical host:port already updated the device password in this run,
+		// avoid dialling with the old credentials. Just update inventory and report OK.
+		hostKey := d.Addr()
+		if changedHosts[hostKey] {
+			d.Username, d.Password = req.NewUsername, req.NewPassword
+			_ = s.inv.Upsert(d)
+			emit(bulk.Event{Type: "step", DeviceID: id, Name: d.Name, Step: "đổi mật khẩu", Detail: "OK — đã cập nhật kho (chung thiết bị)", OK: true})
+			emit(bulk.Event{Type: "device_done", DeviceID: id, Name: d.Name, OK: true})
+			continue
+		}
+
 		cam, err := camera.Open(ctx, d, to)
 		if err != nil {
 			emit(bulk.Event{Type: "device_done", DeviceID: id, Name: d.Name, OK: false, Err: err.Error()})
@@ -410,6 +433,8 @@ func (s *Server) handlePassword(w http.ResponseWriter, r *http.Request) {
 			emit(bulk.Event{Type: "device_done", DeviceID: id, Name: d.Name, OK: false, Err: err.Error()})
 			continue
 		}
+		changedHosts[hostKey] = true
+
 		// Update the stored credential so we can still connect. Re-read the
 		// entry first: Open() may have just hard-set a fallback DVRIP port
 		// (OnDahuaPortFallback) and the local d predates that.
@@ -418,8 +443,130 @@ func (s *Server) handlePassword(w http.ResponseWriter, r *http.Request) {
 		}
 		d.Username, d.Password = req.NewUsername, req.NewPassword
 		_ = s.inv.Upsert(d)
+
+		// Sync all sibling inventory entries sharing the same host:port
+		for _, sib := range s.inv.List() {
+			if sib.Host == d.Host && sib.Port == d.Port {
+				sib.Username, sib.Password = req.NewUsername, req.NewPassword
+				_ = s.inv.Upsert(sib)
+			}
+		}
+
 		emit(bulk.Event{Type: "step", DeviceID: id, Name: d.Name, Step: "đổi mật khẩu", Detail: "OK — đã cập nhật kho", OK: true})
 		emit(bulk.Event{Type: "device_done", DeviceID: id, Name: d.Name, OK: true})
+	}
+	emit(bulk.Event{Type: "done"})
+}
+
+// handlePasswordBackup returns status of the latest password backup.
+func (s *Server) handlePasswordBackup(w http.ResponseWriter, r *http.Request) {
+	backup, err := s.loadPasswordBackup()
+	if err != nil || len(backup.Items) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"hasBackup": false})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"hasBackup": true,
+		"timestamp": backup.Timestamp,
+		"count":     len(backup.Items),
+	})
+}
+
+// handlePasswordRestore restores passwords from the latest password backup file.
+func (s *Server) handlePasswordRestore(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	backup, err := s.loadPasswordBackup()
+	if err != nil || len(backup.Items) == 0 {
+		writeErr(w, http.StatusBadRequest, "không tìm thấy bản sao lưu mật khẩu nào")
+		return
+	}
+
+	to := s.reqTimeout(0)
+	ctx, cancel := context.WithTimeout(r.Context(), to*time.Duration(len(backup.Items)+1))
+	defer cancel()
+
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	flusher, _ := w.(http.Flusher)
+	emit := func(ev bulk.Event) {
+		if r.Context().Err() != nil {
+			return
+		}
+		b, err := json.Marshal(ev)
+		if err != nil {
+			return
+		}
+		if _, err := w.Write([]byte("data: " + string(b) + "\n\n")); err != nil {
+			return
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+
+	changedHosts := make(map[string]bool)
+	total := len(backup.Items)
+	for i, item := range backup.Items {
+		if ctx.Err() != nil {
+			break
+		}
+		d, ok := s.inv.Get(item.DeviceID)
+		if !ok {
+			// Find by host:port
+			if found, okFound := s.inv.FindByHost(item.Host, item.Port); okFound {
+				d = found
+				ok = true
+			}
+		}
+		emit(bulk.Event{Type: "device_start", DeviceID: item.DeviceID, Name: item.Name, Host: item.Host, Index: i + 1, Total: total})
+		if !ok {
+			emit(bulk.Event{Type: "device_done", DeviceID: item.DeviceID, OK: false, Err: "không có trong kho"})
+			continue
+		}
+
+		hostKey := d.Addr()
+		if changedHosts[hostKey] {
+			d.Username, d.Password = item.Username, item.Password
+			_ = s.inv.Upsert(d)
+			emit(bulk.Event{Type: "step", DeviceID: item.DeviceID, Name: d.Name, Step: "khôi phục mật khẩu", Detail: "OK — đã khôi phục kho (chung thiết bị)", OK: true})
+			emit(bulk.Event{Type: "device_done", DeviceID: item.DeviceID, Name: d.Name, OK: true})
+			continue
+		}
+
+		cam, err := camera.Open(ctx, d, to)
+		if err != nil {
+			emit(bulk.Event{Type: "device_done", DeviceID: item.DeviceID, Name: d.Name, OK: false, Err: err.Error()})
+			continue
+		}
+		err = cam.ChangePassword(ctx, item.Username, item.Password)
+		cam.Close()
+		if err != nil {
+			emit(bulk.Event{Type: "step", DeviceID: item.DeviceID, Name: d.Name, Step: "khôi phục mật khẩu", OK: false, Err: err.Error()})
+			emit(bulk.Event{Type: "device_done", DeviceID: item.DeviceID, Name: d.Name, OK: false, Err: err.Error()})
+			continue
+		}
+		changedHosts[hostKey] = true
+
+		if cur, ok := s.inv.Get(item.DeviceID); ok {
+			d = cur
+		}
+		d.Username, d.Password = item.Username, item.Password
+		_ = s.inv.Upsert(d)
+
+		for _, sib := range s.inv.List() {
+			if sib.Host == d.Host && sib.Port == d.Port {
+				sib.Username, sib.Password = item.Username, item.Password
+				_ = s.inv.Upsert(sib)
+			}
+		}
+
+		emit(bulk.Event{Type: "step", DeviceID: item.DeviceID, Name: d.Name, Step: "khôi phục mật khẩu", Detail: "OK — đã khôi phục kho", OK: true})
+		emit(bulk.Event{Type: "device_done", DeviceID: item.DeviceID, Name: d.Name, OK: true})
 	}
 	emit(bulk.Event{Type: "done"})
 }

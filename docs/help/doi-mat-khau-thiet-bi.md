@@ -5,7 +5,7 @@ section: bulk
 order: 20
 keywords: [đổi mật khẩu, mật khẩu, pass, đổi pass, tài khoản, quên mật khẩu, reset mật khẩu, mật khẩu mới, khóa ngoài, bảo mật, hàng loạt, dahua, hikvision]
 ui: "#cameras"
-covers: ["/api/password"]
+covers: ["/api/password", "/api/password/backup", "/api/password/restore"]
 related: [chinh-hang-loat, kho-camera, loi-thuong-gap]
 ---
 ## Mục đích

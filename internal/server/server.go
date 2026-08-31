@@ -144,6 +144,8 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/scan", api(s.handleScan))
 	s.mux.Handle("/api/import", api(s.handleImport))
 	s.mux.Handle("/api/password", api(s.handlePassword))
+	s.mux.Handle("/api/password/backup", api(s.handlePasswordBackup))
+	s.mux.Handle("/api/password/restore", api(s.handlePasswordRestore))
 	s.mux.Handle("/api/snapshot", api(s.handleSnapshot))
 	s.mux.Handle("/api/live", api(s.handleLive))
 	s.mux.Handle("/api/nvr/scan", api(s.handleNVRScan))

@@ -75,6 +75,13 @@ func LoadInventory(path string) (*Inventory, error) {
 	return inv, nil
 }
 
+// Path returns the backing inventory file path.
+func (i *Inventory) Path() string {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	return i.path
+}
+
 // List returns all devices sorted by ID.
 func (i *Inventory) List() []Device {
 	i.mu.RLock()

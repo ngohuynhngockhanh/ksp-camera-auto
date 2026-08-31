@@ -553,6 +553,7 @@ async function loadCameras() {
     for (const id of selectedCameraSet) if (!cameras.some(c => c.id === id)) selectedCameraSet.delete(id);
     renderCameras();
     renderBulkSelection();
+    checkPasswordBackup();
     if (currentCameraTask() === 'nvr') renderNvrList();
     setRoute();
   } catch (e) {
@@ -3119,6 +3120,57 @@ document.getElementById('pw-btn').addEventListener('click', async () => {
     showToast(`Đổi mật khẩu xong: ${okCount} OK, ${failCount} lỗi.`, failCount ? 'err' : 'ok');
     for (const r of results) if (r.ok) delete probeCache[r.deviceId];
     renderCameras();
+    checkPasswordBackup();
+  } catch (e) {
+    msg.textContent = 'Lỗi: ' + e.message; msg.className = 'msg err';
+    showToast('Lỗi: ' + e.message, 'err');
+  } finally {
+    setBusy(btn, false);
+  }
+});
+
+async function checkPasswordBackup() {
+  const restoreBtn = document.getElementById('pw-restore-btn');
+  const hint = document.getElementById('pw-backup-hint');
+  if (!restoreBtn) return;
+  try {
+    const res = await apiGet('/api/password/backup');
+    if (res && res.hasBackup) {
+      restoreBtn.style.display = 'inline-flex';
+      if (hint) hint.textContent = `Bản sao lưu gần nhất: ${res.timestamp} (${res.count} camera).`;
+    } else {
+      restoreBtn.style.display = 'none';
+    }
+  } catch (_) {
+    restoreBtn.style.display = 'none';
+  }
+}
+
+document.getElementById('pw-restore-btn')?.addEventListener('click', async () => {
+  const msg = document.getElementById('apply-msg');
+  msg.textContent = ''; msg.className = 'msg';
+  const ok = await showConfirm(
+    'Khôi phục mật khẩu cũ',
+    'Khôi phục lại mật khẩu gốc cho các camera từ bản sao lưu gần nhất?',
+    { danger: true, okLabel: 'Khôi phục ngay' }
+  );
+  if (!ok) return;
+  const btn = document.getElementById('pw-restore-btn');
+  setCameraTask('results');
+  setBusy(btn, true, 'Đang khôi phục...');
+  clearLog();
+  msg.textContent = 'Đang khôi phục mật khẩu từ bản sao lưu...';
+  try {
+    const results = await streamPost('/api/password/restore', {});
+    renderResults(results);
+    msg.textContent = 'Hoàn tất khôi phục.'; msg.className = 'msg ok';
+    const okCount = results.filter(r => r.ok).length;
+    const failCount = results.length - okCount;
+    lastRun = { type: 'password_restore', total: results.length, ok: okCount, fail: failCount, time: logTime() };
+    showToast(`Khôi phục xong: ${okCount} OK, ${failCount} lỗi.`, failCount ? 'err' : 'ok');
+    for (const r of results) if (r.ok) delete probeCache[r.deviceId];
+    renderCameras();
+    checkPasswordBackup();
   } catch (e) {
     msg.textContent = 'Lỗi: ' + e.message; msg.className = 'msg err';
     showToast('Lỗi: ' + e.message, 'err');

@@ -473,8 +473,9 @@
                 <input id="pw-pass" type="text" value="smarthome12345">
               </div>
               <button class="btn btn-danger" id="pw-btn" data-testid="bulk-password-apply">Đổi mật khẩu</button>
+              <button class="btn btn-secondary" id="pw-restore-btn" data-testid="bulk-password-restore" style="display:none;">Khôi phục mật khẩu cũ</button>
             </div>
-            <p class="muted">Đổi xong tool tự cập nhật mật khẩu trong kho để vẫn kết nối được (không bị khóa ngoài).</p>
+            <p class="muted" id="pw-backup-hint">Đổi xong tool tự động sao lưu mật khẩu cũ và cập nhật kho để không bị khóa ngoài.</p>
           </details>
 
           <div class="card" data-camera-panel="results">
