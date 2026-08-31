@@ -33,7 +33,9 @@ type Transport interface {
 // Client talks ISAPI (Hikvision's HTTP/XML control API) to one device over a
 // pluggable Transport.
 type Client struct {
-	rt Transport
+	rt   Transport
+	user string
+	pass string
 }
 
 // New builds a Client for the device at host:port over HTTP(S). https selects
@@ -49,13 +51,17 @@ func New(host string, port int, https bool, user, pass string, timeout time.Dura
 	}
 	baseTransport := &http.Transport{TLSClientConfig: tlsConf}
 	digest := NewDigestTransport(user, pass, baseTransport)
-	return &Client{rt: &httpTransport{
-		baseURL: fmt.Sprintf("%s://%s:%d", scheme, host, port),
-		http:    &http.Client{Transport: digest, Timeout: timeout},
-		user:    user,
-		pass:    pass,
-		base:    baseTransport,
-	}}
+	return &Client{
+		rt: &httpTransport{
+			baseURL: fmt.Sprintf("%s://%s:%d", scheme, host, port),
+			http:    &http.Client{Transport: digest, Timeout: timeout},
+			user:    user,
+			pass:    pass,
+			base:    baseTransport,
+		},
+		user: user,
+		pass: pass,
+	}
 }
 
 // NewWithTransport builds a Client over a custom Transport (e.g. the SDK
@@ -948,15 +954,26 @@ var xmlEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`
 // SetUserPassword changes account id (1 = admin) to userName/newPass via
 // PUT /ISAPI/Security/users/<id>.
 func (c *Client) SetUserPassword(ctx context.Context, id int, userName, newPass string) error {
+	path := fmt.Sprintf("/ISAPI/Security/users/%d", id)
 	doc := fmt.Sprintf(
+		`<?xml version="1.0" encoding="UTF-8"?><User version="1.0" xmlns="http://www.hikvision.com/ver20/XMLSchema"><id>%d</id><userName>%s</userName><password>%s</password><loginPassword>%s</loginPassword></User>`,
+		id, xmlEscaper.Replace(userName), xmlEscaper.Replace(newPass), xmlEscaper.Replace(c.pass))
+	resp, err := c.do(ctx, http.MethodPut, path, []byte(doc))
+	if err == nil && checkResponseStatus(resp) == nil {
+		return nil
+	}
+	// Fallback without loginPassword tag (for older camera firmware)
+	docFallback := fmt.Sprintf(
 		`<?xml version="1.0" encoding="UTF-8"?><User><id>%d</id><userName>%s</userName><password>%s</password></User>`,
 		id, xmlEscaper.Replace(userName), xmlEscaper.Replace(newPass))
-	path := fmt.Sprintf("/ISAPI/Security/users/%d", id)
-	resp, err := c.do(ctx, http.MethodPut, path, []byte(doc))
-	if err != nil {
-		return err
+	respFallback, errFallback := c.do(ctx, http.MethodPut, path, []byte(docFallback))
+	if errFallback != nil {
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("isapi: PUT %s: %w", path, err)
 	}
-	if err := checkResponseStatus(resp); err != nil {
+	if err := checkResponseStatus(respFallback); err != nil {
 		return fmt.Errorf("isapi: PUT %s: %w", path, err)
 	}
 	return nil
