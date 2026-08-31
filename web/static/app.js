@@ -812,6 +812,8 @@ function openCameraForm(cam) {
   const pw = document.getElementById('f-password');
   pw.value = cam ? (cam.password || '') : '';
   pw.placeholder = cam ? 'để trống = giữ mật khẩu cũ' : '••••••';
+  const isNvrEl = document.getElementById('f-isnvr');
+  if (isNvrEl) isNvrEl.checked = cam ? !!cam.isNvr : false;
   setCameraFormAddressLocked(!!cam);
   locked.hidden = !cam;
   openDialog(dlg);
@@ -846,6 +848,7 @@ document.getElementById('add-form').addEventListener('submit', async (ev) => {
     vendor: document.getElementById('f-vendor').value,
     username: document.getElementById('f-username').value,
     password: document.getElementById('f-password').value,
+    isNvr: document.getElementById('f-isnvr') ? document.getElementById('f-isnvr').checked : false,
   };
   const btn = document.getElementById('add-submit-btn');
   setBusy(btn, true, 'Đang lưu...');
@@ -2536,26 +2539,28 @@ let pendingDetailChannel = 0;
 async function populateDetailChannels(cam) {
   const select = document.getElementById('detail-channel');
   select.innerHTML = '<option value="0">Kênh 1</option>';
-  if (!cam.isNvr) { select.disabled = true; return; }
-  select.disabled = false;
+  select.disabled = true;
   try {
     const res = await api(`/api/nvr/channels?id=${encodeURIComponent(cam.id)}&timeoutSeconds=${timeoutSec()}`);
     const chans = (res && res.channels) || [];
-    if (chans.length) {
-      select.innerHTML = chans.map(ch => {
-        const n = ch.channel || 0; // device reports 1-based; tiles are 0-based
-        const label = ch.name ? `Kênh ${n} — ${escapeHtml(ch.name)}` : `Kênh ${n}`;
-        return `<option value="${Math.max(0, n - 1)}">${label}</option>`;
+    if (chans.length > 0) {
+      select.innerHTML = chans.map((ch, i) => {
+        const idx = (typeof ch.channel === 'number') ? ch.channel : i;
+        const num = idx + 1;
+        const label = ch.name ? `Kênh ${num} — ${escapeHtml(ch.name)}` : `Kênh ${num}`;
+        return `<option value="${idx}">${label}</option>`;
       }).join('');
+      select.disabled = false;
+      cam.isNvr = true;
     }
   } catch (e) {
     // Channel list is a nicety; a single-channel fallback still works.
   }
-  if (pendingDetailChannel) {
+  if (pendingDetailChannel !== null && pendingDetailChannel !== undefined) {
     const wanted = String(pendingDetailChannel);
     if (Array.from(select.options).some(o => o.value === wanted)) {
       select.value = wanted;
-      channelEditTile.channel = pendingDetailChannel;
+      channelEditTile.channel = parseInt(pendingDetailChannel, 10) || 0;
     }
     pendingDetailChannel = 0;
   }

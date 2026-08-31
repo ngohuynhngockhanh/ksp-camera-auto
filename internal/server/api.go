@@ -188,6 +188,7 @@ type cameraUpsertReq struct {
 	Vendor   config.Vendor `json:"vendor"`
 	Username string        `json:"username"`
 	Password string        `json:"password"`
+	IsNVR    *bool         `json:"isNvr,omitempty"`
 }
 
 func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
@@ -272,6 +273,9 @@ func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
 		d.NVRWatchdog, d.NVRSyncTimeFromHost = existing.NVRWatchdog, existing.NVRSyncTimeFromHost
 		d.ChannelName = existing.ChannelName
 		d.SerialNumber = existing.SerialNumber
+	}
+	if req.IsNVR != nil {
+		d.IsNVR = *req.IsNVR
 	}
 	if err := s.inv.Upsert(d); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
