@@ -80,6 +80,12 @@ func ParseShinobi(data []byte, hikPort, dahuaPort int) (Result, error) {
 				}
 			}
 		}
+		if u, err := url.QueryUnescape(user); err == nil && u != "" {
+			user = u
+		}
+		if u, err := url.QueryUnescape(pass); err == nil && u != "" {
+			pass = u
+		}
 		if host == "" {
 			res.Skipped++
 			continue
