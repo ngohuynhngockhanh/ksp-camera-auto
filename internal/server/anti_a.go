@@ -321,6 +321,9 @@ func (g *antiAGuardian) enforceAll(ctx context.Context) int {
 				SetAudioAAC:   true,
 				Streams:       []int{camera.StreamMain},
 			}
+			if camCfg.NVRChannel > 0 {
+				profile.Channel = camCfg.NVRChannel - 1
+			}
 
 			steps := cam.Apply(cctx, profile, nil)
 			hasErr := false
