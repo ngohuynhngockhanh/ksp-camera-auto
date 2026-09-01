@@ -597,8 +597,23 @@ func (d *dahuaCamera) PTZMove(ctx context.Context, channel int, code string, spe
 	return fmt.Errorf("dvrip: %v; cgi: %v", err, cgiErr)
 }
 
-// Probe reads back main + sub1 + sub2 stream info for channel 0.
+// Probe reads back stream info. For NVR channel devices, it probes the specific NVRChannel.
 func (d *dahuaCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
+	if d.device.NVRChannel > 0 {
+		ch := d.device.NVRChannel - 1
+		var out []StreamInfo
+		for _, s := range []dahua.Stream{dahua.StreamMain, dahua.StreamSub1, dahua.StreamSub2} {
+			info, err := d.client.GetStreamInfo(ch, s)
+			if err == nil {
+				si := toStreamInfo(info)
+				si.Channel = ch + 1
+				out = append(out, si)
+			}
+		}
+		if len(out) > 0 {
+			return out, nil
+		}
+	}
 	infos, err := d.client.ProbeAll()
 	if err != nil {
 		return nil, err
