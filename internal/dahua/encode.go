@@ -78,15 +78,58 @@ func respErr(r rpcResp) string {
 	return "result=false"
 }
 
-// formatOf navigates table[ch] to the MainFormat/ExtraFormat object for stream.
-func formatOf(table []any, ch int, s Stream) (map[string]any, error) {
-	if ch < 0 || ch >= len(table) {
-		return nil, fmt.Errorf("channel %d out of range (have %d)", ch, len(table))
+// getChannelTable fetches configManager.getConfig for name[ch] (or full table fallback).
+func (c *Client) getChannelTable(name string, ch int) (map[string]any, error) {
+	resp, err := c.Call("configManager.getConfig", map[string]any{"name": fmt.Sprintf("%s[%d]", name, ch)})
+	if err == nil && resp.ok() {
+		var p struct {
+			Table any `json:"table"`
+		}
+		if err := json.Unmarshal(resp.Params, &p); err == nil {
+			if m, ok := p.Table.(map[string]any); ok {
+				return m, nil
+			}
+			if arr, ok := p.Table.([]any); ok && len(arr) > 0 {
+				if m, ok := arr[0].(map[string]any); ok {
+					return m, nil
+				}
+			}
+		}
 	}
-	chObj, ok := table[ch].(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("channel %d: unexpected shape", ch)
+	// Fallback to full table
+	full, err := c.getTable(name)
+	if err != nil {
+		return nil, err
 	}
+	if ch < 0 || ch >= len(full) {
+		return nil, fmt.Errorf("channel %d out of range (have %d)", ch, len(full))
+	}
+	if m, ok := full[ch].(map[string]any); ok {
+		return m, nil
+	}
+	return nil, fmt.Errorf("channel %d: unexpected shape", ch)
+}
+
+// setChannelTable writes configManager.setConfig for name[ch] (or full table fallback).
+func (c *Client) setChannelTable(name string, ch int, chObj map[string]any) error {
+	resp, err := c.Call("configManager.setConfig", map[string]any{"name": fmt.Sprintf("%s[%d]", name, ch), "table": chObj})
+	if err == nil && resp.ok() {
+		return nil
+	}
+	// Fallback to setting via full table
+	full, err := c.getTable(name)
+	if err != nil {
+		return err
+	}
+	if ch < 0 || ch >= len(full) {
+		return fmt.Errorf("channel %d out of range (have %d)", ch, len(full))
+	}
+	full[ch] = chObj
+	return c.setTable(name, full)
+}
+
+// formatOfChannel navigates a channel's object to the MainFormat/ExtraFormat object for stream.
+func formatOfChannel(chObj map[string]any, s Stream) (map[string]any, error) {
 	var arrKey string
 	var idx int
 	switch s {
@@ -101,13 +144,25 @@ func formatOf(table []any, ch int, s Stream) (map[string]any, error) {
 	}
 	arr, ok := chObj[arrKey].([]any)
 	if !ok || idx >= len(arr) {
-		return nil, fmt.Errorf("channel %d has no %s[%d]", ch, arrKey, idx)
+		return nil, fmt.Errorf("has no %s[%d]", arrKey, idx)
 	}
 	fmtObj, ok := arr[idx].(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("channel %d %s[%d]: unexpected shape", ch, arrKey, idx)
+		return nil, fmt.Errorf("%s[%d]: unexpected shape", arrKey, idx)
 	}
 	return fmtObj, nil
+}
+
+// formatOf navigates table[ch] to the MainFormat/ExtraFormat object for stream.
+func formatOf(table []any, ch int, s Stream) (map[string]any, error) {
+	if ch < 0 || ch >= len(table) {
+		return nil, fmt.Errorf("channel %d out of range (have %d)", ch, len(table))
+	}
+	chObj, ok := table[ch].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("channel %d: unexpected shape", ch)
+	}
+	return formatOfChannel(chObj, s)
 }
 
 func subMap(m map[string]any, key string) map[string]any {
@@ -122,11 +177,11 @@ func subMap(m map[string]any, key string) map[string]any {
 // SetResolution sets the pixel resolution (and keeps CustomResolutionName in sync)
 // for one channel/stream, using GET-modify-SET on the Encode config.
 func (c *Client) SetResolution(ch int, s Stream, w, h int) error {
-	table, err := c.getTable("Encode")
+	chObj, err := c.getChannelTable("Encode", ch)
 	if err != nil {
 		return err
 	}
-	fmtObj, err := formatOf(table, ch, s)
+	fmtObj, err := formatOfChannel(chObj, s)
 	if err != nil {
 		return err
 	}
@@ -134,21 +189,21 @@ func (c *Client) SetResolution(ch int, s Stream, w, h int) error {
 	video["Width"] = w
 	video["Height"] = h
 	video["CustomResolutionName"] = fmt.Sprintf("%dx%d", w, h)
-	return c.setTable("Encode", table)
+	return c.setChannelTable("Encode", ch, chObj)
 }
 
 // SetFPS sets the stream frame rate through Encode.Video.FPS.
 func (c *Client) SetFPS(ch int, s Stream, fps int) error {
-	table, err := c.getTable("Encode")
+	chObj, err := c.getChannelTable("Encode", ch)
 	if err != nil {
 		return err
 	}
-	fmtObj, err := formatOf(table, ch, s)
+	fmtObj, err := formatOfChannel(chObj, s)
 	if err != nil {
 		return err
 	}
 	subMap(fmtObj, "Video")["FPS"] = fps
-	return c.setTable("Encode", table)
+	return c.setChannelTable("Encode", ch, chObj)
 }
 
 // GetMaxFPS reads the vendor capability table. Dahua firmware varies widely
@@ -218,11 +273,11 @@ func maxFPSValue(v any, fpsField bool) int {
 // Video.Profile ("Main"/"High"/"Baseline"). The device rejects unsupported
 // codecs with an explicit error, which callers surface in the progress log.
 func (c *Client) SetCodec(ch int, s Stream, compression, profile string) error {
-	table, err := c.getTable("Encode")
+	chObj, err := c.getChannelTable("Encode", ch)
 	if err != nil {
 		return err
 	}
-	fmtObj, err := formatOf(table, ch, s)
+	fmtObj, err := formatOfChannel(chObj, s)
 	if err != nil {
 		return err
 	}
@@ -233,48 +288,48 @@ func (c *Client) SetCodec(ch int, s Stream, compression, profile string) error {
 	if profile != "" {
 		video["Profile"] = profile
 	}
-	return c.setTable("Encode", table)
+	return c.setChannelTable("Encode", ch, chObj)
 }
 
 // SetAudioAAC forces the stream's audio codec to AAC and enables audio.
 func (c *Client) SetAudioAAC(ch int, s Stream) error {
-	table, err := c.getTable("Encode")
+	chObj, err := c.getChannelTable("Encode", ch)
 	if err != nil {
 		return err
 	}
-	fmtObj, err := formatOf(table, ch, s)
+	fmtObj, err := formatOfChannel(chObj, s)
 	if err != nil {
 		return err
 	}
 	subMap(fmtObj, "Audio")["Compression"] = "AAC"
 	fmtObj["AudioEnable"] = true
-	return c.setTable("Encode", table)
+	return c.setChannelTable("Encode", ch, chObj)
 }
 
 // SetGOP sets the I-frame interval (frames) for a stream, using GET-modify-SET
 // on the Encode config.
 func (c *Client) SetGOP(ch int, s Stream, gop int) error {
-	table, err := c.getTable("Encode")
+	chObj, err := c.getChannelTable("Encode", ch)
 	if err != nil {
 		return err
 	}
-	fmtObj, err := formatOf(table, ch, s)
+	fmtObj, err := formatOfChannel(chObj, s)
 	if err != nil {
 		return err
 	}
 	subMap(fmtObj, "Video")["GOP"] = gop
-	return c.setTable("Encode", table)
+	return c.setChannelTable("Encode", ch, chObj)
 }
 
 // SetBitrate sets the video bitrate (Kbps) and, when mode is non-empty, the
 // bitrate control mode ("VBR"/"CBR") for a stream, using GET-modify-SET on
 // the Encode config.
 func (c *Client) SetBitrate(ch int, s Stream, kbps int, mode string) error {
-	table, err := c.getTable("Encode")
+	chObj, err := c.getChannelTable("Encode", ch)
 	if err != nil {
 		return err
 	}
-	fmtObj, err := formatOf(table, ch, s)
+	fmtObj, err := formatOfChannel(chObj, s)
 	if err != nil {
 		return err
 	}
@@ -283,25 +338,18 @@ func (c *Client) SetBitrate(ch int, s Stream, kbps int, mode string) error {
 	if mode != "" {
 		video["BitRateControl"] = mode
 	}
-	return c.setTable("Encode", table)
+	return c.setChannelTable("Encode", ch, chObj)
 }
 
 // SetSmartCodec toggles Dahua "Smart Codec" (H.264+/H.265+) for a channel via
 // the SmartEncode config. Smart codec is a per-channel switch (not per-stream).
 func (c *Client) SetSmartCodec(ch int, on bool) error {
-	table, err := c.getTable("SmartEncode")
+	chObj, err := c.getChannelTable("SmartEncode", ch)
 	if err != nil {
 		return err
 	}
-	if ch < 0 || ch >= len(table) {
-		return fmt.Errorf("channel %d out of range for SmartEncode (have %d)", ch, len(table))
-	}
-	chObj, ok := table[ch].(map[string]any)
-	if !ok {
-		return fmt.Errorf("SmartEncode channel %d: unexpected shape", ch)
-	}
 	chObj["Enable"] = on
-	return c.setTable("SmartEncode", table)
+	return c.setChannelTable("SmartEncode", ch, chObj)
 }
 
 // fillFromFormat copies the Video/Audio fields out of a MainFormat/ExtraFormat
@@ -376,21 +424,19 @@ func (c *Client) ProbeAll() ([]StreamInfo, error) {
 // GetStreamInfo reads back the current encode settings for a channel/stream.
 func (c *Client) GetStreamInfo(ch int, s Stream) (StreamInfo, error) {
 	info := StreamInfo{Channel: ch, Stream: s}
-	table, err := c.getTable("Encode")
+	chObj, err := c.getChannelTable("Encode", ch)
 	if err != nil {
 		return info, err
 	}
-	fmtObj, err := formatOf(table, ch, s)
+	fmtObj, err := formatOfChannel(chObj, s)
 	if err != nil {
 		return info, err
 	}
 	fillFromFormat(&info, fmtObj)
 
 	// Smart codec is a separate config.
-	if st, err := c.getTable("SmartEncode"); err == nil && ch < len(st) {
-		if chObj, ok := st[ch].(map[string]any); ok {
-			info.SmartCodec, _ = chObj["Enable"].(bool)
-		}
+	if smartObj, err := c.getChannelTable("SmartEncode", ch); err == nil {
+		info.SmartCodec, _ = smartObj["Enable"].(bool)
 	}
 	return info, nil
 }
