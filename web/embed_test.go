@@ -177,4 +177,3 @@ func TestAllStaticAssetsLoadable(t *testing.T) {
 		}
 	}
 }
-

@@ -205,6 +205,8 @@ func (c *httpTransport) request(ctx context.Context, client *http.Client, method
 	if err != nil {
 		return nil, fmt.Errorf("isapi: build request %s %s: %w", method, path, err)
 	}
+	req.Close = true
+	req.Header.Set("Connection", "close")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/xml")
 	}

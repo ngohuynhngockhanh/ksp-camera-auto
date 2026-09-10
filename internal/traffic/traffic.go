@@ -23,17 +23,17 @@ const (
 
 // FlowEntry represents an active IP connection pair (source <=> destination).
 type FlowEntry struct {
-	SrcHost      string        `json:"srcHost"`
-	SrcPort      int           `json:"srcPort"`
-	SrcLabel     string        `json:"srcLabel,omitempty"`
-	DstHost      string        `json:"dstHost"`
-	DstPort      int           `json:"dstPort"`
-	DstLabel     string        `json:"dstLabel,omitempty"`
-	Protocol     string        `json:"protocol"`
-	Service      string        `json:"service"`
-	Direction    FlowDirection `json:"direction"`
-	IsCamera     bool          `json:"isCamera"`
-	CameraName   string        `json:"cameraName,omitempty"`
+	SrcHost    string        `json:"srcHost"`
+	SrcPort    int           `json:"srcPort"`
+	SrcLabel   string        `json:"srcLabel,omitempty"`
+	DstHost    string        `json:"dstHost"`
+	DstPort    int           `json:"dstPort"`
+	DstLabel   string        `json:"dstLabel,omitempty"`
+	Protocol   string        `json:"protocol"`
+	Service    string        `json:"service"`
+	Direction  FlowDirection `json:"direction"`
+	IsCamera   bool          `json:"isCamera"`
+	CameraName string        `json:"cameraName,omitempty"`
 
 	// EWMA Bitrates (bits per second)
 	Rate2sBps  float64 `json:"rate2sBps"`
@@ -47,13 +47,13 @@ type FlowEntry struct {
 
 // InterfaceStats contains overall interface counters and live rates.
 type InterfaceStats struct {
-	Name       string  `json:"name"`
-	IP         string  `json:"ip,omitempty"`
-	RXRate2s   float64 `json:"rxRate2sBps"`
-	TXRate2s   float64 `json:"txRate2sBps"`
-	RXTotal    uint64  `json:"rxTotalBytes"`
-	TXTotal    uint64  `json:"txTotalBytes"`
-	PeakRate   float64 `json:"peakRateBps"`
+	Name        string  `json:"name"`
+	IP          string  `json:"ip,omitempty"`
+	RXRate2s    float64 `json:"rxRate2sBps"`
+	TXRate2s    float64 `json:"txRate2sBps"`
+	RXTotal     uint64  `json:"rxTotalBytes"`
+	TXTotal     uint64  `json:"txTotalBytes"`
+	PeakRate    float64 `json:"peakRateBps"`
 	ActiveFlows int     `json:"activeFlows"`
 }
 
@@ -354,20 +354,20 @@ func (m *Manager) buildSnapshotLocked(iface string) Snapshot {
 		}
 
 		flows = append(flows, FlowEntry{
-			SrcHost:     k.srcIP,
-			SrcPort:     k.srcPort,
-			DstHost:     k.dstIP,
-			DstPort:     k.dstPort,
-			Protocol:    proto,
-			Service:     service,
-			Direction:   dir,
-			IsCamera:    isCam,
-			CameraName:  camName,
-			Rate2sBps:   rate2s,
-			Rate10sBps:  rate10s,
-			Rate40sBps:  rate40s,
-			TotalBytes:  tot,
-			LastActive:  lastTime.Format("15:04:05"),
+			SrcHost:    k.srcIP,
+			SrcPort:    k.srcPort,
+			DstHost:    k.dstIP,
+			DstPort:    k.dstPort,
+			Protocol:   proto,
+			Service:    service,
+			Direction:  dir,
+			IsCamera:   isCam,
+			CameraName: camName,
+			Rate2sBps:  rate2s,
+			Rate10sBps: rate10s,
+			Rate40sBps: rate40s,
+			TotalBytes: tot,
+			LastActive: lastTime.Format("15:04:05"),
 		})
 	}
 

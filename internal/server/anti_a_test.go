@@ -68,12 +68,13 @@ func TestAntiAGuardian_IsH265AndSmartCodec(t *testing.T) {
 		stream camera.StreamInfo
 		want   bool
 	}{
-		{stream: camera.StreamInfo{Compression: "H.265", SmartCodec: true}, want: true},
-		{stream: camera.StreamInfo{Compression: "HEVC", SmartCodec: true}, want: true},
-		{stream: camera.StreamInfo{Compression: "h265", SmartCodec: true}, want: true},
-		{stream: camera.StreamInfo{Compression: "H.264", SmartCodec: true}, want: false},
-		{stream: camera.StreamInfo{Compression: "H.265", SmartCodec: false}, want: false},
-		{stream: camera.StreamInfo{Compression: "MJPEG", SmartCodec: true}, want: false},
+		{stream: camera.StreamInfo{Compression: "H.265", SmartCodec: true, BitrateKbps: 1280}, want: true},
+		{stream: camera.StreamInfo{Compression: "HEVC", SmartCodec: true, BitrateKbps: 1024}, want: true},
+		{stream: camera.StreamInfo{Compression: "h265", SmartCodec: true, BitrateKbps: 1280}, want: true},
+		{stream: camera.StreamInfo{Compression: "H.265", SmartCodec: true, BitrateKbps: 2048}, want: false}, // Bitrate too high
+		{stream: camera.StreamInfo{Compression: "H.264", SmartCodec: true, BitrateKbps: 1280}, want: false},
+		{stream: camera.StreamInfo{Compression: "H.265", SmartCodec: false, BitrateKbps: 1280}, want: false},
+		{stream: camera.StreamInfo{Compression: "MJPEG", SmartCodec: true, BitrateKbps: 1280}, want: false},
 	}
 
 	for _, tc := range tests {

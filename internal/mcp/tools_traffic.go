@@ -102,11 +102,11 @@ func registerTrafficTools(r *Registry, cfg *config.Config, inv *config.Inventory
 			latestSnap.Flows = filteredFlows
 
 			return NewJSONResult(map[string]any{
-				"interface":   iface,
-				"stats":       latestSnap.Stats,
-				"flows":       latestSnap.Flows,
-				"totalFlows":  len(latestSnap.Flows),
-				"sampleTime":  duration.String(),
+				"interface":  iface,
+				"stats":      latestSnap.Stats,
+				"flows":      latestSnap.Flows,
+				"totalFlows": len(latestSnap.Flows),
+				"sampleTime": duration.String(),
 			})
 		},
 	)

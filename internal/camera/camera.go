@@ -1164,9 +1164,21 @@ func (h *hikCamera) ScanWiFi(ctx context.Context) ([]dahua.WiFiAP, error) {
 // Reboot restarts the device via ISAPI /System/reboot.
 func (h *hikCamera) Reboot(ctx context.Context) error { return h.client.Reboot(ctx) }
 
-// Probe reads back main + sub1 + sub2 stream info for the default channel
-// (Profile.Channel's zero value, i.e. ISAPI channel 1).
+// Probe reads back stream info. For NVR channel devices, it probes the specific NVRChannel.
 func (h *hikCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
+	if h.device.NVRChannel > 0 {
+		ch := h.device.NVRChannel
+		var out []StreamInfo
+		for s := 0; s < 3; s++ {
+			info, err := h.client.GetStreamInfo(ctx, ch, s)
+			if err == nil {
+				out = append(out, hikToStreamInfo(info))
+			}
+		}
+		if len(out) > 0 {
+			return out, nil
+		}
+	}
 	infos, err := h.client.ProbeAll(ctx)
 	if err != nil {
 		return nil, err

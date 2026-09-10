@@ -188,7 +188,8 @@ func (g *antiAGuardian) addLog(entry antiALogEntry) {
 func isStreamH265AndSmartCodec(stream camera.StreamInfo) bool {
 	codecUpper := strings.ToUpper(strings.TrimSpace(stream.Compression))
 	isH265 := strings.Contains(codecUpper, "H.265") || strings.Contains(codecUpper, "H265") || strings.Contains(codecUpper, "HEVC")
-	return isH265 && stream.SmartCodec
+	isBitrateCompliant := stream.BitrateKbps <= 1280 && stream.BitrateKbps > 0
+	return isH265 && stream.SmartCodec && isBitrateCompliant
 }
 
 func (g *antiAGuardian) runCheck(ctx context.Context, forceFull bool) (int, error) {
@@ -312,12 +313,14 @@ func (g *antiAGuardian) enforceAll(ctx context.Context) int {
 				}
 			}
 
-			// Apply H.265 + Smart Codec + Audio AAC
+			// Apply H.265 + Smart Codec + 1280 Kbps Bitrate + Audio AAC
 			profile := camera.Profile{
 				SetCodec:      true,
 				Codec:         "H.265",
 				SetSmartCodec: true,
 				SmartCodec:    true,
+				SetBitrate:    true,
+				Bitrate:       1280,
 				SetAudioAAC:   true,
 				Streams:       []int{camera.StreamMain},
 			}
@@ -350,10 +353,10 @@ func (g *antiAGuardian) enforceAll(ctx context.Context) int {
 					Host:          camCfg.Host,
 					DetectedCodec: detectedCodec,
 					SmartCodec:    smartCodec,
-					ActionTaken:   "Đã ép thành công về H.265 + Smart Codec + Audio AAC",
+					ActionTaken:   "Đã ép thành công về H.265 + Smart Codec + 1280 Kbps + Audio AAC",
 					Success:       true,
 				})
-				log.Printf("[Anti-A] Đã khóa thành công %s (%s) về H.265+ / AAC", camCfg.Name, camCfg.Host)
+				log.Printf("[Anti-A] Đã khóa thành công %s (%s) về H.265+ / 1280kbps / AAC", camCfg.Name, camCfg.Host)
 			} else {
 				g.addLog(antiALogEntry{
 					CameraID:      camCfg.ID,

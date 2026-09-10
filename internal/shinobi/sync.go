@@ -83,23 +83,23 @@ func (c *Client) BuildMonitorConfig(d config.Device) MonitorConfig {
 		Path:     path,
 		Ext:      "mp4",
 		Details: MonitorDetails{
-			AutoHost:           autoHost,
-			Muser:              d.Username,
-			Mpass:              d.Password,
-			Port:               "554",
-			Protocol:           "rtsp",
-			StreamType:         "hls",
-			StreamFlvType:      "ws",
-			StreamVcodec:       "copy",
-			StreamAcodec:       "copy",
-			Vcodec:             "copy",
-			Acodec:             "copy",
-			RecordVcodec:       "copy",
-			RecordAcodec:       "aac",
-			CustInput:          "",            // Input flag để trống
-			CustStream:         "",            // Stream flag để trống
-			CustRecord:         "-tag:v hvc1", // Recording flag chuẩn H.265 MP4
-			Detector:           "0",
+			AutoHost:      autoHost,
+			Muser:         d.Username,
+			Mpass:         d.Password,
+			Port:          "554",
+			Protocol:      "rtsp",
+			StreamType:    "hls",
+			StreamFlvType: "ws",
+			StreamVcodec:  "copy",
+			StreamAcodec:  "copy",
+			Vcodec:        "copy",
+			Acodec:        "copy",
+			RecordVcodec:  "copy",
+			RecordAcodec:  "aac",
+			CustInput:     "",            // Input flag để trống
+			CustStream:    "",            // Stream flag để trống
+			CustRecord:    "-tag:v hvc1", // Recording flag chuẩn H.265 MP4
+			Detector:      "0",
 		},
 	}
 }
