@@ -128,13 +128,13 @@ type responseStatus struct {
 }
 
 // checkResponseStatus parses body as a ResponseStatus envelope and returns an
-// error unless statusCode == 1 ("OK").
+// error unless statusCode is 1 ("OK") or 7 ("Reboot Required" which indicates acceptance).
 func checkResponseStatus(body []byte) error {
 	var rs responseStatus
 	if err := xml.Unmarshal(body, &rs); err != nil {
 		return fmt.Errorf("isapi: decode ResponseStatus: %w (body: %s)", err, truncate(body, 200))
 	}
-	if rs.StatusCode != 1 {
+	if rs.StatusCode != 1 && rs.StatusCode != 7 {
 		return fmt.Errorf("isapi: statusCode=%d statusString=%q subStatusCode=%q", rs.StatusCode, rs.StatusString, rs.SubStatusCode)
 	}
 	return nil
