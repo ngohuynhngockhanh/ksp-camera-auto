@@ -78,7 +78,7 @@ func TestAntiAGuardian_IsH265AndSmartCodec(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := isStreamH265AndSmartCodec(tc.stream)
+		got := isStreamH265AndSmartCodec(tc.stream, 1280)
 		if got != tc.want {
 			t.Errorf("isStreamH265AndSmartCodec(%+v) = %v, want %v", tc.stream, got, tc.want)
 		}

@@ -148,6 +148,7 @@ type AntiAConfig struct {
 	Enabled         bool   `yaml:"enabled"`
 	IntervalMinutes int    `yaml:"interval_minutes"` // Default 30
 	Mode            string `yaml:"mode"`             // "random" (default) or "full"
+	BitrateKbps     int    `yaml:"bitrate_kbps"`     // Default 1280
 }
 
 // Config is the top-level configuration document.
@@ -205,6 +206,7 @@ func Default() Config {
 			Enabled:         false,
 			IntervalMinutes: 30,
 			Mode:            "random",
+			BitrateKbps:     1280,
 		},
 	}
 }
@@ -319,5 +321,8 @@ func (c *Config) applyDefaults() {
 	}
 	if c.AntiA.Mode == "" {
 		c.AntiA.Mode = d.AntiA.Mode
+	}
+	if c.AntiA.BitrateKbps <= 0 {
+		c.AntiA.BitrateKbps = d.AntiA.BitrateKbps
 	}
 }

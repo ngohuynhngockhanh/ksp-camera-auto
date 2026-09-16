@@ -41,3 +41,4 @@ anti_a:
     enabled: false
     interval_minutes: 45
     mode: random
+    bitrate_kbps: 0
