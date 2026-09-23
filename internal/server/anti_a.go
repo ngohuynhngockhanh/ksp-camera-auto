@@ -193,17 +193,25 @@ func (g *antiAGuardian) targetBitrate() int {
 	}
 	return 1280
 }
+func (g *antiAGuardian) targetSmartCodec() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.cfg.SmartCodec != nil {
+		return *g.cfg.SmartCodec
+	}
+	return true
+}
 
-func isStreamH265AndSmartCodec(stream camera.StreamInfo, maxBitrate int) bool {
+func isStreamH265AndSmartCodec(stream camera.StreamInfo, maxBitrate int, reqSmartCodec bool) bool {
 	if maxBitrate <= 0 {
 		maxBitrate = 1280
 	}
 	codecUpper := strings.ToUpper(strings.TrimSpace(stream.Compression))
 	isH265 := strings.Contains(codecUpper, "H.265") || strings.Contains(codecUpper, "H265") || strings.Contains(codecUpper, "HEVC")
 	isBitrateCompliant := stream.BitrateKbps <= maxBitrate && stream.BitrateKbps > 0
-	return isH265 && stream.SmartCodec && isBitrateCompliant
+	smartCodecCompliant := !reqSmartCodec || stream.SmartCodec
+	return isH265 && smartCodecCompliant && isBitrateCompliant
 }
-
 func (g *antiAGuardian) runCheck(ctx context.Context, forceFull bool) (int, error) {
 	g.mu.Lock()
 	g.lastCheck = time.Now()
@@ -246,8 +254,8 @@ func (g *antiAGuardian) runCheck(ctx context.Context, forceFull bool) (int, erro
 		}
 
 		targetBitrate := g.targetBitrate()
-		if !isStreamH265AndSmartCodec(mainStream, targetBitrate) {
-			// INFRACTION DETECTED!
+		targetSmartCodec := g.targetSmartCodec()
+		if !isStreamH265AndSmartCodec(mainStream, targetBitrate, targetSmartCodec) {
 			g.mu.Lock()
 			g.infractionsCount++
 			g.lastInfraction = time.Now()
@@ -321,18 +329,19 @@ func (g *antiAGuardian) enforceAll(ctx context.Context) int {
 						break
 					}
 				}
-				if isStreamH265AndSmartCodec(mainStream, targetBitrate) {
+				if isStreamH265AndSmartCodec(mainStream, targetBitrate, g.targetSmartCodec()) {
 					// Already compliant
 					return
 				}
 			}
 
+			targetSmartCodec := g.targetSmartCodec()
 			// Apply H.265 + Smart Codec + Target Kbps Bitrate + Audio AAC
 			profile := camera.Profile{
 				SetCodec:      true,
 				Codec:         "H.265",
 				SetSmartCodec: true,
-				SmartCodec:    true,
+				SmartCodec:    targetSmartCodec,
 				SetBitrate:    true,
 				Bitrate:       targetBitrate,
 				SetAudioAAC:   true,

@@ -78,10 +78,15 @@ func TestAntiAGuardian_IsH265AndSmartCodec(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := isStreamH265AndSmartCodec(tc.stream, 1280)
+		got := isStreamH265AndSmartCodec(tc.stream, 1280, true)
 		if got != tc.want {
 			t.Errorf("isStreamH265AndSmartCodec(%+v) = %v, want %v", tc.stream, got, tc.want)
 		}
+	}
+	// Test when SmartCodec is disabled (allowed)
+	scFalseStream := camera.StreamInfo{Compression: "H.265", SmartCodec: false, BitrateKbps: 1560}
+	if !isStreamH265AndSmartCodec(scFalseStream, 1560, false) {
+		t.Errorf("expected isStreamH265AndSmartCodec to pass when reqSmartCodec is false")
 	}
 }
 

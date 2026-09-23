@@ -42,3 +42,4 @@ anti_a:
     interval_minutes: 45
     mode: random
     bitrate_kbps: 0
+    smart_codec: null

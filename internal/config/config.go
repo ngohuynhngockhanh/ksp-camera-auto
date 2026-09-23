@@ -149,8 +149,8 @@ type AntiAConfig struct {
 	IntervalMinutes int    `yaml:"interval_minutes"` // Default 30
 	Mode            string `yaml:"mode"`             // "random" (default) or "full"
 	BitrateKbps     int    `yaml:"bitrate_kbps"`     // Default 1280
+	SmartCodec      *bool  `yaml:"smart_codec"`      // nil/true = require H.265+, false = allow/enforce SmartCodec disabled (fixed GOP)
 }
-
 // Config is the top-level configuration document.
 type Config struct {
 	Server      Server        `yaml:"server"`
