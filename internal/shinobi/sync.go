@@ -99,6 +99,7 @@ func (c *Client) BuildMonitorConfig(d config.Device) MonitorConfig {
 			CustInput:     "",            // Input flag để trống
 			CustStream:    "",            // Stream flag để trống
 			CustRecord:    "-tag:v hvc1", // Recording flag chuẩn H.265 MP4
+			WallClockTimestampIgnore: "0", // Luôn bật -use_wallclock_as_timestamps 1 ngăn ngừa lệch timescale
 			Detector:      "0",
 		},
 	}

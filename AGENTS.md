@@ -485,6 +485,7 @@ Module `internal/shinobi` cung cấp client Go thuần kết nối trực tiếp
     - `cust_input`: `""` (**BẮT BUỘC ĐỂ TRỐNG** — xóa bỏ mọi cờ buffer/low_delay `-fflags nobuffer...`).
     - `cust_stream`: `""` (**BẮT BUỘC ĐỂ TRỐNG** — xóa bỏ mọi cờ stream `-hls_flags...`).
     - `cust_record`: `"-tag:v hvc1"` (**BẮT BUỘC** khi luồng là H.265 để container MP4 gắn đúng fourcc `hvc1` phát mượt trên Apple/Web browser).
+    - `wall_clock_timestamp_ignore`: `"0"` (**BẮT BUỘC** để Shinobi tự động chèn cờ `-use_wallclock_as_timestamps 1`, ngăn ngừa lỗi trượt timescale `1/12800` khiến FPS nhảy vọt 11,983 fps khi mạng LAN camera bị nghẽn gói).
 - **SyncFromShinobi (Pull: Shinobi Monitors -> `cameras.yaml`)**:
   - Đọc danh sách monitor từ Shinobi NVR.
   - Phân tích cú pháp chuỗi RTSP URL để trích xuất Host, Port, Username, Password, Channel number và tự động nhận diện Vendor.

@@ -79,6 +79,7 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 - `cust_input`: `""` (**BẮT BUỘC ĐỂ TRỐNG** — không chèn cờ `-fflags nobuffer...` hay `-flags low_delay...`).
 - `cust_stream`: `""` (**BẮT BUỘC ĐỂ TRỐNG** — không chèn cờ `-hls_flags program_date_time...`).
 - `cust_record`: `"-tag:v hvc1"` (**BẮT BUỘC** cho chuẩn H.265 để container MP4 gắn đúng fourcc `hvc1` phát mượt trên Apple/Web).
+- `wall_clock_timestamp_ignore`: `"0"` (**BẮT BUỘC: luôn gán "0"** để Shinobi tự động chèn cờ `-use_wallclock_as_timestamps 1`, ngăn ngừa lỗi trượt timescale `1/12800` khiến FPS nhảy vọt 11,983 fps khi mạng LAN camera bị nghẽn gói).
 
 ### D. Watchdog & Giám sát:
 - `watchdog_reset`: `"1"`

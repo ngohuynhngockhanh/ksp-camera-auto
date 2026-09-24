@@ -45,6 +45,7 @@ type MonitorDetails struct {
 	CustInput          string `json:"cust_input"`                     // "" (trống, không dùng custom input flags)
 	CustStream         string `json:"cust_stream"`                    // "" (trống, không dùng custom stream flags)
 	CustRecord         string `json:"cust_record"`                    // "-tag:v hvc1" cho chuẩn H.265 MP4 recording
+	WallClockTimestampIgnore string `json:"wall_clock_timestamp_ignore,omitempty"` // "0" để Shinobi luôn bật -use_wallclock_as_timestamps 1
 	Detector           string `json:"detector,omitempty"`             // "0"
 	CustomRTSP         string `json:"custom_rtsp,omitempty"`
 }
