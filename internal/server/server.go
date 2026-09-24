@@ -13,6 +13,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -32,20 +33,22 @@ const sessionCookie = "kspcam_session"
 
 // Server is the HTTP server and its dependencies.
 type Server struct {
-	cfg      config.Config
-	inv      *config.Inventory
-	shinobi  *shinobi.Client
-	mcp      *mcp.Server
-	mux      *http.ServeMux
-	static   fs.FS
-	session  *sessionStore
-	limiter  *loginLimiter
-	snaps    *snapCache
-	dlKey    []byte // HMAC key for short-lived tokenized playback/download links (QR)
-	nvrWatch *nvrWatchdog
-	antiA    *antiAGuardian
-	redbida  *redbida.Service
-	traffic  *traffic.Manager
+	cfg         config.Config
+	inv         *config.Inventory
+	shinobi     *shinobi.Client
+	mcp         *mcp.Server
+	mux         *http.ServeMux
+	static      fs.FS
+	session     *sessionStore
+	limiter     *loginLimiter
+	snaps       *snapCache
+	dlKey       []byte // HMAC key for short-lived tokenized playback/download links (QR)
+	nvrWatch    *nvrWatchdog
+	antiA       *antiAGuardian
+	redbida     *redbida.Service
+	traffic     *traffic.Manager
+	uploadsDir  string
+	uploadsStop chan struct{}
 }
 
 // New builds a Server with routes registered.
@@ -97,6 +100,14 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 	s.traffic = traffic.NewManager(inv)
 	s.antiA = newAntiAGuardian(s, inv, "config.yaml", cfg.AntiA)
 	s.antiA.start(context.Background())
+	uploadsDir := defaultUploadsDir
+	if err := os.MkdirAll(uploadsDir, 0755); err != nil {
+		uploadsDir = "uploads"
+		_ = os.MkdirAll(uploadsDir, 0755)
+	}
+	s.uploadsDir = uploadsDir
+	s.uploadsStop = make(chan struct{})
+	s.startUploadsCleaner(24 * time.Hour)
 	s.routes()
 	s.nvrWatch = newNVRWatchdog(s)
 	return s, nil
@@ -109,6 +120,9 @@ func (s *Server) Close() {
 	}
 	if s.antiA != nil {
 		s.antiA.stop()
+	}
+	if s.uploadsStop != nil {
+		close(s.uploadsStop)
 	}
 }
 
@@ -184,6 +198,7 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/network/traffic/stream", api(s.handleTrafficStream))
 	s.mux.HandleFunc("/logo.png", s.handleLogoFile)
 	s.mux.Handle("/api/upload-logo", api(s.handleUploadLogo))
+	s.mux.HandleFunc("/uploads/", s.handleUploads)
 	if s.redbida != nil {
 		s.mux.Handle("/api/redbida/catalog", api(s.handleRedbidaCatalog))
 		s.mux.Handle("/api/redbida/refresh", api(s.handleRedbidaRefresh))
