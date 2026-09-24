@@ -57,33 +57,22 @@ func StreamDav(ctx context.Context, w io.Writer, host string, port int, user, pa
 
 	ch := channel + 1 // this protocol is 1-based
 
-	// Walk the segments, grouping them into chunks whose combined size stays under
-	// the device's per-download cap, and download each chunk on its own session.
-	for i := 0; i < len(recs); {
-		// Grow the chunk until adding the next segment would exceed the cap (always
-		// take at least one segment, even if a single segment is itself over-cap).
-		j, size := i, int64(0)
-		for j < len(recs) && (j == i || size+recs[j].Length <= davChunkBytes) {
-			size += recs[j].Length
-			j++
-		}
-
-		// Clamp the first chunk's start and the last chunk's end to the requested
-		// window; interior cuts use the exact segment boundary times so consecutive
-		// chunks meet without overlap or gap.
+	// Walk the segments, downloading each segment on its own DVRIP session.
+	// Dahua's PlayBack.download with FileDir only streams that specific file;
+	// grouping multiple files into one chunk causes Dahua to stop after the first file.
+	for i := range recs {
 		startStr := davTimeStr(recs[i].StartTime)
 		if i == 0 || startStr == "" {
 			startStr = davTime(start)
 		}
-		endStr := davTimeStr(recs[j-1].EndTime)
-		if j == len(recs) || endStr == "" {
+		endStr := davTimeStr(recs[i].EndTime)
+		if i == len(recs)-1 || endStr == "" {
 			endStr = davTime(end)
 		}
 
 		if err := davChunk(ctx, w, host, port, user, pass, ch, startStr, endStr, recs[i].FilePath); err != nil {
-			return fmt.Errorf("dahua: dav %s: chunk segs %d-%d: %w", host, i, j-1, err)
+			return fmt.Errorf("dahua: dav %s: seg %d: %w", host, i, err)
 		}
-		i = j
 	}
 	return nil
 }
