@@ -15,10 +15,16 @@ var (
 	shortChannelRe = regexp.MustCompile(`^/(\d+)/\d+/?$`)
 	hikChannelRe   = regexp.MustCompile(`(?i)/streaming/channels/(\d+)`)
 	sanitizerRe    = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
+	cameraNameRe   = regexp.MustCompile(`(?i)^camera\s*0*(\d+)$`)
 )
 
 // DeviceToMid generates a URL-safe, deterministic Shinobi monitor ID from a config.Device.
 func DeviceToMid(d config.Device) string {
+	if m := cameraNameRe.FindStringSubmatch(strings.TrimSpace(d.Name)); len(m) > 1 {
+		if num, err := strconv.Atoi(m[1]); err == nil && num > 0 {
+			return fmt.Sprintf("camera%02d", num)
+		}
+	}
 	sanitizedHost := sanitizerRe.ReplaceAllString(d.Host, "_")
 	if d.NVRChannel > 0 {
 		return fmt.Sprintf("cam_%s_c%d", sanitizedHost, d.NVRChannel)
@@ -83,24 +89,24 @@ func (c *Client) BuildMonitorConfig(d config.Device) MonitorConfig {
 		Path:     path,
 		Ext:      "mp4",
 		Details: MonitorDetails{
-			AutoHost:      autoHost,
-			Muser:         d.Username,
-			Mpass:         d.Password,
-			Port:          "554",
-			Protocol:      "rtsp",
-			StreamType:    "hls",
-			StreamFlvType: "ws",
-			StreamVcodec:  "copy",
-			StreamAcodec:  "copy",
-			Vcodec:        "copy",
-			Acodec:        "copy",
-			RecordVcodec:  "copy",
-			RecordAcodec:  "aac",
-			CustInput:     "",            // Input flag để trống
-			CustStream:    "",            // Stream flag để trống
-			CustRecord:    "-tag:v hvc1", // Recording flag chuẩn H.265 MP4
-			WallClockTimestampIgnore: "0", // Luôn bật -use_wallclock_as_timestamps 1 ngăn ngừa lệch timescale
-			Detector:      "0",
+			AutoHost:                 autoHost,
+			Muser:                    d.Username,
+			Mpass:                    d.Password,
+			Port:                     "554",
+			Protocol:                 "rtsp",
+			StreamType:               "hls",
+			StreamFlvType:            "ws",
+			StreamVcodec:             "copy",
+			StreamAcodec:             "copy",
+			Vcodec:                   "copy",
+			Acodec:                   "copy",
+			RecordVcodec:             "copy",
+			RecordAcodec:             "aac",
+			CustInput:                "",            // Input flag để trống
+			CustStream:               "",            // Stream flag để trống
+			CustRecord:               "-tag:v hvc1", // Recording flag chuẩn H.265 MP4
+			WallClockTimestampIgnore: "0",           // Luôn bật -use_wallclock_as_timestamps 1 ngăn ngừa lệch timescale
+			Detector:                 "0",
 		},
 	}
 }

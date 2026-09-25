@@ -440,6 +440,26 @@ func TestBuildMonitorConfigAndDeviceToMid(t *testing.T) {
 	if cfgHik.Path != "/Streaming/Channels/501" {
 		t.Errorf("unexpected Hik path: %s", cfgHik.Path)
 	}
+	// 3. Camera01 naming standard
+	dCam01 := config.Device{
+		ID:       "192.168.1.201:37777",
+		Name:     "Camera01",
+		Host:     "192.168.1.201",
+		Port:     37777,
+		Vendor:   config.VendorDahua,
+		Username: "admin",
+	}
+	if mid := shinobi.DeviceToMid(dCam01); mid != "camera01" {
+		t.Errorf("unexpected Camera01 mid: got %s, want camera01", mid)
+	}
+	dCam2 := config.Device{
+		ID:   "192.168.1.202:37777",
+		Name: "Camera 2",
+		Host: "192.168.1.202",
+	}
+	if mid := shinobi.DeviceToMid(dCam2); mid != "camera02" {
+		t.Errorf("unexpected Camera 2 mid: got %s, want camera02", mid)
+	}
 
 	// 3. Tiandy
 	dTiandy := config.Device{
