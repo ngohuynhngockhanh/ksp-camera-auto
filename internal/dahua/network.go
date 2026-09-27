@@ -211,6 +211,24 @@ func (c *Client) SetWiFiConfig(iface, ssid, password, encryption string) error {
 	return c.setObjectTable("WLan", table)
 }
 
+// DisableWiFi disconnects and turns off a wireless interface (WLan.<iface>.Enable = false,
+// ConnectEnable = false, LinkEnable = false, SSID = "").
+func (c *Client) DisableWiFi(iface string) error {
+	table, err := c.getObjectTable("WLan")
+	if err != nil {
+		return err
+	}
+	ifaceObj, ok := table[iface].(map[string]any)
+	if !ok {
+		return fmt.Errorf("dahua: WLan interface %q not found", iface)
+	}
+	ifaceObj["SSID"] = ""
+	ifaceObj["Enable"] = false
+	ifaceObj["ConnectEnable"] = false
+	ifaceObj["LinkEnable"] = false
+	return c.setObjectTable("WLan", table)
+}
+
 // WiFiAP is one access point returned by ScanWiFi.
 type WiFiAP struct {
 	SSID        string `json:"ssid"`

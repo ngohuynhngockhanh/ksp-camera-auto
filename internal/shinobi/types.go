@@ -28,26 +28,26 @@ type MonitorConfig struct {
 
 // MonitorDetails contains stream parameters, codecs, and credentials for a Shinobi monitor.
 type MonitorDetails struct {
-	AutoHost           string `json:"auto_host"`                      // e.g. "rtsp://user:pass@host:554/path"
-	Muser              string `json:"muser,omitempty"`                // RTSP username
-	Mpass              string `json:"mpass,omitempty"`                // RTSP password
-	Port               string `json:"port,omitempty"`                 // RTSP port ("554")
-	Protocol           string `json:"protocol,omitempty"`             // "rtsp"
-	StreamType         string `json:"stream_type,omitempty"`          // "mp4", "h264", "flv"
-	StreamFlvType      string `json:"stream_flv_type,omitempty"`      // "ws", "http"
-	StreamMjpegClients string `json:"stream_mjpeg_clients,omitempty"` // "" or "1"
-	StreamVcodec       string `json:"stream_vcodec,omitempty"`        // "copy"
-	StreamAcodec       string `json:"stream_acodec,omitempty"`        // "copy", "no"
-	Vcodec             string `json:"vcodec,omitempty"`               // "copy" (0% CPU transcoding)
-	Acodec             string `json:"acodec,omitempty"`               // "copy", "aac", "no"
-	RecordVcodec       string `json:"record_vcodec,omitempty"`        // "copy"
-	RecordAcodec       string `json:"record_acodec,omitempty"`        // "aac", "copy", "no"
-	CustInput          string `json:"cust_input"`                     // "" (trống, không dùng custom input flags)
-	CustStream         string `json:"cust_stream"`                    // "" (trống, không dùng custom stream flags)
-	CustRecord         string `json:"cust_record"`                    // "-tag:v hvc1" cho chuẩn H.265 MP4 recording
+	AutoHost                 string `json:"auto_host"`                             // e.g. "rtsp://user:pass@host:554/path"
+	Muser                    string `json:"muser,omitempty"`                       // RTSP username
+	Mpass                    string `json:"mpass,omitempty"`                       // RTSP password
+	Port                     string `json:"port,omitempty"`                        // RTSP port ("554")
+	Protocol                 string `json:"protocol,omitempty"`                    // "rtsp"
+	StreamType               string `json:"stream_type,omitempty"`                 // "mp4", "h264", "flv"
+	StreamFlvType            string `json:"stream_flv_type,omitempty"`             // "ws", "http"
+	StreamMjpegClients       string `json:"stream_mjpeg_clients,omitempty"`        // "" or "1"
+	StreamVcodec             string `json:"stream_vcodec,omitempty"`               // "copy"
+	StreamAcodec             string `json:"stream_acodec,omitempty"`               // "copy", "no"
+	Vcodec                   string `json:"vcodec,omitempty"`                      // "copy" (0% CPU transcoding)
+	Acodec                   string `json:"acodec,omitempty"`                      // "copy", "aac", "no"
+	RecordVcodec             string `json:"record_vcodec,omitempty"`               // "copy"
+	RecordAcodec             string `json:"record_acodec,omitempty"`               // "aac", "copy", "no"
+	CustInput                string `json:"cust_input"`                            // "" (trống, không dùng custom input flags)
+	CustStream               string `json:"cust_stream"`                           // "" (trống, không dùng custom stream flags)
+	CustRecord               string `json:"cust_record"`                           // "-tag:v hvc1" cho chuẩn H.265 MP4 recording
 	WallClockTimestampIgnore string `json:"wall_clock_timestamp_ignore,omitempty"` // "0" để Shinobi luôn bật -use_wallclock_as_timestamps 1
-	Detector           string `json:"detector,omitempty"`             // "0"
-	CustomRTSP         string `json:"custom_rtsp,omitempty"`
+	Detector                 string `json:"detector,omitempty"`                    // "0"
+	CustomRTSP               string `json:"custom_rtsp,omitempty"`
 }
 
 // FlexibleString handles JSON fields that can be encoded as either a string, a number, or null.
