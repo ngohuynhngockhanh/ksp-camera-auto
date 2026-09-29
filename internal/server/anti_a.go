@@ -31,6 +31,12 @@ type antiAStatusView struct {
 	Enabled          bool            `json:"enabled"`
 	IntervalMinutes  int             `json:"intervalMinutes"`
 	Mode             string          `json:"mode"`
+	BitrateKbps      int             `json:"bitrateKbps"`
+	SmartCodec       bool            `json:"smartCodec"`
+	ResolutionWidth  int             `json:"resolutionWidth,omitempty"`
+	ResolutionHeight int             `json:"resolutionHeight,omitempty"`
+	FPS              int             `json:"fps,omitempty"`
+	GOP              int             `json:"gop,omitempty"`
 	Running          bool            `json:"running"`
 	LastCheck        string          `json:"lastCheck"`
 	NextCheck        string          `json:"nextCheck"`
@@ -41,9 +47,15 @@ type antiAStatusView struct {
 }
 
 type antiAConfigReq struct {
-	Enabled         *bool   `json:"enabled"`
-	IntervalMinutes *int    `json:"intervalMinutes"`
-	Mode            *string `json:"mode"`
+	Enabled          *bool   `json:"enabled"`
+	IntervalMinutes  *int    `json:"intervalMinutes"`
+	Mode             *string `json:"mode"`
+	BitrateKbps      *int    `json:"bitrateKbps"`
+	SmartCodec       *bool   `json:"smartCodec"`
+	ResolutionWidth  *int    `json:"resolutionWidth"`
+	ResolutionHeight *int    `json:"resolutionHeight"`
+	FPS              *int    `json:"fps"`
+	GOP              *int    `json:"gop"`
 }
 
 // antiAGuardian continuously monitors and enforces H.265 + Smart Codec + Audio AAC
@@ -117,6 +129,25 @@ func (g *antiAGuardian) updateConfig(ctx context.Context, req antiAConfigReq) er
 	}
 	if req.Mode != nil && (*req.Mode == "random" || *req.Mode == "full") {
 		g.cfg.Mode = *req.Mode
+	}
+	if req.BitrateKbps != nil && *req.BitrateKbps > 0 {
+		g.cfg.BitrateKbps = *req.BitrateKbps
+	}
+	if req.SmartCodec != nil {
+		sc := *req.SmartCodec
+		g.cfg.SmartCodec = &sc
+	}
+	if req.ResolutionWidth != nil && *req.ResolutionWidth > 0 {
+		g.cfg.ResolutionWidth = *req.ResolutionWidth
+	}
+	if req.ResolutionHeight != nil && *req.ResolutionHeight > 0 {
+		g.cfg.ResolutionHeight = *req.ResolutionHeight
+	}
+	if req.FPS != nil && *req.FPS > 0 {
+		g.cfg.FPS = *req.FPS
+	}
+	if req.GOP != nil && *req.GOP > 0 {
+		g.cfg.GOP = *req.GOP
 	}
 
 	// Persist to config.yaml if server config is available
@@ -202,15 +233,23 @@ func (g *antiAGuardian) targetSmartCodec() bool {
 	return true
 }
 
-func isStreamH265AndSmartCodec(stream camera.StreamInfo, maxBitrate int, reqSmartCodec bool) bool {
+func isStreamCompliant(stream camera.StreamInfo, maxBitrate int, reqSmartCodec bool, targetWidth, targetHeight int) bool {
 	if maxBitrate <= 0 {
 		maxBitrate = 1280
 	}
 	codecUpper := strings.ToUpper(strings.TrimSpace(stream.Compression))
 	isH265 := strings.Contains(codecUpper, "H.265") || strings.Contains(codecUpper, "H265") || strings.Contains(codecUpper, "HEVC")
 	isBitrateCompliant := stream.BitrateKbps <= maxBitrate && stream.BitrateKbps > 0
-	smartCodecCompliant := !reqSmartCodec || stream.SmartCodec
-	return isH265 && smartCodecCompliant && isBitrateCompliant
+	smartCodecCompliant := (stream.SmartCodec == reqSmartCodec)
+	resCompliant := true
+	if targetWidth > 0 && targetHeight > 0 {
+		resCompliant = (stream.Width == targetWidth && stream.Height == targetHeight)
+	}
+	return isH265 && smartCodecCompliant && isBitrateCompliant && resCompliant
+}
+
+func isStreamH265AndSmartCodec(stream camera.StreamInfo, maxBitrate int, reqSmartCodec bool) bool {
+	return isStreamCompliant(stream, maxBitrate, reqSmartCodec, 0, 0)
 }
 func (g *antiAGuardian) runCheck(ctx context.Context, forceFull bool) (int, error) {
 	g.mu.Lock()
@@ -255,15 +294,17 @@ func (g *antiAGuardian) runCheck(ctx context.Context, forceFull bool) (int, erro
 
 		targetBitrate := g.targetBitrate()
 		targetSmartCodec := g.targetSmartCodec()
-		if !isStreamH265AndSmartCodec(mainStream, targetBitrate, targetSmartCodec) {
+		targetWidth := g.cfg.ResolutionWidth
+		targetHeight := g.cfg.ResolutionHeight
+		if !isStreamCompliant(mainStream, targetBitrate, targetSmartCodec, targetWidth, targetHeight) {
 			g.mu.Lock()
 			g.infractionsCount++
 			g.lastInfraction = time.Now()
-			g.statusMsg = fmt.Sprintf("⚠️ Phát hiện %s bị đổi về %s (Smart: %v)! Đang kích hoạt khóa toàn bộ fleet...", targetCam.Name, mainStream.Compression, mainStream.SmartCodec)
+			g.statusMsg = fmt.Sprintf("⚠️ Phát hiện %s bị đổi về %s (Smart: %v, %dx%d)! Đang kích hoạt khóa toàn bộ fleet...", targetCam.Name, mainStream.Compression, mainStream.SmartCodec, mainStream.Width, mainStream.Height)
 			g.mu.Unlock()
 
-			log.Printf("[Anti-A ALERT] Camera %s (%s) bị lệch chuẩn! Codec: %s, SmartCodec: %v. Đang ép toàn bộ camera về H.265...",
-				targetCam.Name, targetCam.Host, mainStream.Compression, mainStream.SmartCodec)
+			log.Printf("[Anti-A ALERT] Camera %s (%s) bị lệch chuẩn! Codec: %s, SmartCodec: %v, %dx%d. Đang ép toàn bộ camera về chuẩn...",
+				targetCam.Name, targetCam.Host, mainStream.Compression, mainStream.SmartCodec, mainStream.Width, mainStream.Height)
 
 			g.addLog(antiALogEntry{
 				CameraID:      targetCam.ID,
@@ -271,7 +312,7 @@ func (g *antiAGuardian) runCheck(ctx context.Context, forceFull bool) (int, erro
 				Host:          targetCam.Host,
 				DetectedCodec: mainStream.Compression,
 				SmartCodec:    mainStream.SmartCodec,
-				ActionTaken:   "Phát hiện lệch chuẩn -> Kích hoạt khóa toàn bộ hệ thống về H.265/SmartCodec/AAC",
+				ActionTaken:   "Phát hiện lệch chuẩn -> Kích hoạt khóa toàn bộ hệ thống về H.265/AAC/Chuẩn hóa",
 				Success:       true,
 			})
 
@@ -279,7 +320,11 @@ func (g *antiAGuardian) runCheck(ctx context.Context, forceFull bool) (int, erro
 			enforcedCount = g.enforceAll(ctx)
 		} else {
 			g.mu.Lock()
-			g.statusMsg = fmt.Sprintf("Hệ thống an toàn (Đã kiểm tra mẫu %s: %s / SmartCodec: BẬT)", targetCam.Name, mainStream.Compression)
+			smartStr := "TẮT"
+			if targetSmartCodec {
+				smartStr = "BẬT"
+			}
+			g.statusMsg = fmt.Sprintf("Hệ thống an toàn (Đã kiểm tra mẫu %s: %s / SmartCodec: %s / %d kbps)", targetCam.Name, mainStream.Compression, smartStr, targetBitrate)
 			g.mu.Unlock()
 		}
 	} else {
@@ -318,7 +363,9 @@ func (g *antiAGuardian) enforceAll(ctx context.Context) int {
 			}
 			defer cam.Close()
 			targetBitrate := g.targetBitrate()
-
+			targetSmartCodec := g.targetSmartCodec()
+			targetWidth := g.cfg.ResolutionWidth
+			targetHeight := g.cfg.ResolutionHeight
 			// Check current probe
 			streams, err := cam.Probe(cctx)
 			if err == nil && len(streams) > 0 {
@@ -329,14 +376,13 @@ func (g *antiAGuardian) enforceAll(ctx context.Context) int {
 						break
 					}
 				}
-				if isStreamH265AndSmartCodec(mainStream, targetBitrate, g.targetSmartCodec()) {
+				if isStreamCompliant(mainStream, targetBitrate, targetSmartCodec, targetWidth, targetHeight) {
 					// Already compliant
 					return
 				}
 			}
 
-			targetSmartCodec := g.targetSmartCodec()
-			// Apply H.265 + Smart Codec + Target Kbps Bitrate + Audio AAC
+			// Apply H.265 + Smart Codec + Target Kbps Bitrate + Audio AAC + Resolution
 			profile := camera.Profile{
 				SetCodec:      true,
 				Codec:         "H.265",
@@ -344,13 +390,29 @@ func (g *antiAGuardian) enforceAll(ctx context.Context) int {
 				SmartCodec:    targetSmartCodec,
 				SetBitrate:    true,
 				Bitrate:       targetBitrate,
+				BitrateMode:   "CBR",
 				SetAudioAAC:   true,
 				Streams:       []int{camera.StreamMain},
+			}
+			if targetWidth > 0 && targetHeight > 0 {
+				profile.SetResolution = true
+				profile.Width = targetWidth
+				profile.Height = targetHeight
+			}
+			if g.cfg.FPS > 0 {
+				profile.SetFPS = true
+				profile.FPS = g.cfg.FPS
+			}
+			if g.cfg.GOP > 0 {
+				profile.SetGOP = true
+				profile.GOP = g.cfg.GOP
+			} else if !targetSmartCodec {
+				profile.SetGOP = true
+				profile.GOP = 50
 			}
 			if camCfg.NVRChannel > 0 {
 				profile.Channel = camCfg.NVRChannel - 1
 			}
-
 			steps := cam.Apply(cctx, profile, nil)
 			hasErr := false
 			var errMsgs []string
@@ -370,16 +432,20 @@ func (g *antiAGuardian) enforceAll(ctx context.Context) int {
 
 			if !hasErr {
 				enforced++
+				actionMsg := fmt.Sprintf("Đã ép thành công về H.265 (Smart: %v) + %d Kbps + Audio AAC", targetSmartCodec, targetBitrate)
+				if targetWidth > 0 && targetHeight > 0 {
+					actionMsg += fmt.Sprintf(" + %dx%d", targetWidth, targetHeight)
+				}
 				g.addLog(antiALogEntry{
 					CameraID:      camCfg.ID,
 					CameraName:    camCfg.Name,
 					Host:          camCfg.Host,
 					DetectedCodec: detectedCodec,
 					SmartCodec:    smartCodec,
-					ActionTaken:   fmt.Sprintf("Đã ép thành công về H.265 + Smart Codec + %d Kbps + Audio AAC", targetBitrate),
+					ActionTaken:   actionMsg,
 					Success:       true,
 				})
-				log.Printf("[Anti-A] Đã khóa thành công %s (%s) về H.265+ / %dkbps / AAC", camCfg.Name, camCfg.Host, targetBitrate)
+				log.Printf("[Anti-A] Đã khóa thành công %s (%s) về H.265 (Smart: %v) / %dkbps / AAC", camCfg.Name, camCfg.Host, targetSmartCodec, targetBitrate)
 			} else {
 				g.addLog(antiALogEntry{
 					CameraID:      camCfg.ID,
@@ -387,7 +453,7 @@ func (g *antiAGuardian) enforceAll(ctx context.Context) int {
 					Host:          camCfg.Host,
 					DetectedCodec: detectedCodec,
 					SmartCodec:    smartCodec,
-					ActionTaken:   "Lỗi khi áp dụng H.265",
+					ActionTaken:   "Lỗi khi áp dụng cấu hình Anti-A",
 					Success:       false,
 					Error:         strings.Join(errMsgs, "; "),
 				})
@@ -430,10 +496,25 @@ func (g *antiAGuardian) getStatus() antiAStatusView {
 	logsCopy := make([]antiALogEntry, len(g.logs))
 	copy(logsCopy, g.logs)
 
+	bitrate := 1280
+	if g.cfg.BitrateKbps > 0 {
+		bitrate = g.cfg.BitrateKbps
+	}
+	sc := true
+	if g.cfg.SmartCodec != nil {
+		sc = *g.cfg.SmartCodec
+	}
+
 	return antiAStatusView{
 		Enabled:          g.cfg.Enabled,
 		IntervalMinutes:  g.cfg.IntervalMinutes,
 		Mode:             g.cfg.Mode,
+		BitrateKbps:      bitrate,
+		SmartCodec:       sc,
+		ResolutionWidth:  g.cfg.ResolutionWidth,
+		ResolutionHeight: g.cfg.ResolutionHeight,
+		FPS:              g.cfg.FPS,
+		GOP:              g.cfg.GOP,
 		Running:          g.running,
 		LastCheck:        lastCheckStr,
 		NextCheck:        nextCheckStr,

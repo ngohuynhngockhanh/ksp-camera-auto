@@ -145,11 +145,15 @@ func (r *RedbidaConfig) UnmarshalYAML(value *yaml.Node) error {
 
 // AntiAConfig configures the Anti-A Guardian watchdog that locks cameras to H.265, Smart Codec and Audio AAC.
 type AntiAConfig struct {
-	Enabled         bool   `yaml:"enabled"`
-	IntervalMinutes int    `yaml:"interval_minutes"` // Default 30
-	Mode            string `yaml:"mode"`             // "random" (default) or "full"
-	BitrateKbps     int    `yaml:"bitrate_kbps"`     // Default 1280
-	SmartCodec      *bool  `yaml:"smart_codec"`      // nil/true = require H.265+, false = allow/enforce SmartCodec disabled (fixed GOP)
+	Enabled          bool   `yaml:"enabled"`
+	IntervalMinutes  int    `yaml:"interval_minutes"` // Default 30
+	Mode             string `yaml:"mode"`             // "random" (default) or "full"
+	BitrateKbps      int    `yaml:"bitrate_kbps"`     // Default 1280
+	SmartCodec       *bool  `yaml:"smart_codec"`      // nil/true = require H.265+, false = allow/enforce SmartCodec disabled (fixed GOP)
+	ResolutionWidth  int    `yaml:"resolution_width,omitempty"`
+	ResolutionHeight int    `yaml:"resolution_height,omitempty"`
+	FPS              int    `yaml:"fps,omitempty"`
+	GOP              int    `yaml:"gop,omitempty"`
 }
 
 // Config is the top-level configuration document.
