@@ -1,16 +1,16 @@
 # Teamwork Autonomous Execution Draft
 
 ## Description
-Triển khai `ksp-cam` và tối ưu hóa hệ thống toàn diện trên node `inut_204_148` (`77.88.204.148`).
+Khảo sát hiện trạng mờ hình, phân tích nguyên nhân kỹ thuật và chuẩn hóa toàn bộ kênh camera trên 3 node `inut_205_122`, `inut_205_123`, `inut_205_124` (Magic Arena Đà Nẵng) về Profile 4MP, 1536 Kbps VBR, H.265, SmartCodec true.
 
 ## Working Directory
 `/home/ksp/ksp-camera-auto`
 
 ## Status
-Completed — inut_204_148 successfully deployed with kspcam, ZRAM activated, storage guarded, watchdog enabled, sysrq removed, and all camera recordings active.
+Completed — All 64 channels on NVR 192.168.1.50:82 standardized and verified at 2560x1440 (4MP), H.265, 1536 Kbps VBR, SmartCodec: true.
 
 ## Requirements Summary
-- R1: Khảo sát hiện trạng node `204_148` -> [DONE]
-- R2: Deploy static binary `kspcam` ARM64 và service systemd `:2028` -> [DONE]
-- R3: Tối ưu ZRAM Swap (100% RAM, lz4, swappiness 60), gỡ sysrq Node-RED, cài Watchdog thông minh, cài Storage Guard cron, chuẩn hóa wallclock timestamp -> [DONE]
-- R4: Nghiệm thu toàn diện hoạt động của kspcam và tiến trình ghi hình camera -> [DONE]
+- R1: Khảo sát hiện trạng 64 kênh NVR trên `192.168.1.50:82` -> [DONE]
+- R2: Phân tích nguyên nhân video bị mờ (SmartCodec quantization vs bitrate vs sensor resolution) -> [DONE]
+- R3: Cấu hình chuẩn hóa toàn bộ 64 kênh theo yêu cầu: 2560x1440 (4MP), 1536 VBR, H.265, SmartCodec true kèm read-back 100% -> [DONE]
+- R4: Nghiệm thu ghi hình trên cả 3 node 122, 123, 124 -> [DONE]
