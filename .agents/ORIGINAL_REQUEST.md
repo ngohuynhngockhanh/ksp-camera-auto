@@ -2,40 +2,38 @@
 
 ## Request — 2026-10-01
 User request:
-"Ok 4_148 nữa"
+"Camera07 bạn đổi ip thành 1.65 thả xem đổi bên camera chính luôn cảm ơn"
 
 Working directory: `/home/ksp/ksp-camera-auto`
 
 Target Node:
 - `inut_204_148` (`77.88.204.148`) — RUBY BILLIARD CLUB (group `na`)
+- Target Camera: `Camera07` (Hikvision IP Camera `DS-2CD1143G2-LIU`, MAC `04:ee:cd:7b:e2:aa`)
 
 ## Requirements
 
-### R1. Khảo sát hiện trạng & kiểm tra dịch vụ trên `inut_204_148` [HOÀN THÀNH]
-- Đã kiểm tra chi tiết trên node `204_148`:
-  - Box H313 (ARM64), 1.9GB RAM, Swap = 0B.
-  - Từng reboot lúc 07:16 sáng nay do cạn RAM và kích hoạt 6 node sysrq trong Node-RED.
-  - Thẻ nhớ 69% (40GB/58GB) không có Storage Guard cron.
-  - Watchdog cũ chỉ kiểm tra PID mà không kiểm tra số lượng tiến trình FFmpeg thực tế.
+### R1. Đổi địa chỉ IP của Camera07 trực tiếp trên phần cứng camera từ 192.168.1.64 sang 192.168.1.65 [HOÀN THÀNH]
+- Gọi lệnh ISAPI `PUT /ISAPI/System/Network/interfaces/1/ipAddress` cấu hình IP tĩnh `192.168.1.65` (subnet `255.255.255.0`, gateway `192.168.1.1`).
+- Thực hiện reboot camera để áp dụng IP mới (`/ISAPI/System/reboot`).
+- Sau 26 giây, camera đã phản hồi ping thành công trên IP mới `192.168.1.65`.
+- Kiểm tra ISAPI `deviceInfo` và `Network/interfaces/1/ipAddress` xác nhận chính xác model `DS-2CD1143G2-LIU`, MAC `04:ee:cd:7b:e2:aa` đang chạy trên `192.168.1.65`.
 
-### R2. Đóng gói & Triển khai `ksp-cam` lên `inut_204_148` [HOÀN THÀNH]
-- Đã cập nhật binary tĩnh `kspcam` ARM64 mới nhất.
-- Dịch vụ `kspcam.service` trên cổng `:2028` đang active và quản lý 7 camera Hikvision.
+### R2. Cập nhật cấu hình Shinobi NVR cho Monitor `camera07` [HOÀN THÀNH]
+- Cập nhật host sang `192.168.1.65`.
+- Sửa lại đường dẫn RTSP từ `/Streaming/channels/1001` (kênh NVR sai) thành `/Streaming/channels/101` (luồng chính của camera độc lập).
+- Chuyển chế độ hoạt động từ `stop` sang `record`.
+- Đã kiểm tra ffprobe xác nhận luồng H.265 và âm thanh AAC hoạt động ổn định.
 
-### R3. Tối ưu hóa hệ thống toàn diện chống crash / OOM / tràn thẻ nhớ [HOÀN THÀNH]
-- Kích hoạt phân vùng ZRAM Swap 1.9 GiB nén `lz4` trên 4 core CPU, gỡ bỏ `mem_limit`, tối ưu `vm.swappiness = 60`.
-- Gỡ bỏ hoàn toàn 6 node `echo b > /proc/sysrq-trigger` trong Node-RED và hạ ngưỡng cảnh báo RAM về 60/80/100.
-- Khắc phục thứ tự khởi động `pm2-root.service` chờ MariaDB (`After=mariadb.service`).
-- Nâng cấp Watchdog thông minh `shinobi-camera-watchdog` (quét mỗi 60s, kiểm tra tiến trình FFmpeg thực tế).
-- Cài đặt Van xả thẻ nhớ tự động `shinobi-storage-guard.sh` (cron 15 phút/lần, dọn rác 0-byte, xoay vòng khi $\ge 85\%$).
-- Chuẩn hóa cấu hình Shinobi (`wall_clock_timestamp_ignore = "0"`, `hls_time = "2"`, `max_keep_days = 3`).
+### R3. Cập nhật cấu hình `kspcam` (`/opt/ksp-cam/cameras.yaml`) [HOÀN THÀNH]
+- Cập nhật thiết bị Camera07 sang `id: 192.168.1.65:80`, `host: 192.168.1.65`.
+- Đã probe qua MCP xác nhận thông số live: 2560x1440 (2K), 20fps, H.265, AAC, GOP 50, Bitrate 3072 Kbps.
 
-### R4. Nghiệm thu & Xác nhận hoạt động [HOÀN THÀNH]
-- `kspcam` (:2028) active.
-- Toàn bộ camera đang ghi hình đầy đủ (12–13 tiến trình FFmpeg hoạt động liên tục, sinh file mới đều đặn).
+### R4. Nghiệm thu ghi hình thực tế [HOÀN THÀNH]
+- Toàn bộ 7/7 camera (`camera01` đến `camera07`) đang chạy 14 tiến trình FFmpeg liên tục.
+- Thư mục `/media/usb1/na/camera07/` đang sinh các file `.mp4` đều đặn.
 
 ## Acceptance Criteria
-- [x] C1: Node `204_148` được khảo sát và ghi nhận hiện trạng chi tiết.
-- [x] C2: `kspcam` được triển khai và kích hoạt thành công trên cổng `:2028`.
-- [x] C3: Hệ thống được tối ưu ZRAM, Node-RED sysrq, Watchdog, Storage guard, và timestamp.
-- [x] C4: Có đầy đủ tiến trình FFmpeg ghi hình ổn định, file video mới tạo hợp lệ.
+- [x] C1: Đổi IP trên phần cứng camera chính thành 192.168.1.65 thành công.
+- [x] C2: Monitor camera07 trong Shinobi được trỏ đúng IP 1.65 và luồng 101.
+- [x] C3: cameras.yaml và kspcam được cập nhật và probe thành công.
+- [x] C4: Camera07 bắt đầu ghi hình ổn định cùng toàn bộ 6 camera còn lại.
