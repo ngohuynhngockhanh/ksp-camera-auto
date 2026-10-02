@@ -2,46 +2,48 @@
 
 ## Request — 2026-10-02
 User request:
-"Ok xong chỉnh về 25fps giúp 1536 kbps là ok"
+"5_53 luôn nhé"
 
 Working directory: `/home/ksp/ksp-camera-auto`
 
 Target Node:
-- `inut_205_56` (`77.88.205.56`) — King Kong Thái Nguyên (group `mp4`)
-- Cameras: 9 Dahua cameras (`192.168.1.241` .. `192.168.1.250`)
+- `inut_205_53` (`77.88.205.53`) — The Best Billiards Club (group `ultrapool1`)
+- Cameras: 12 IP cameras (`camera01` to `camera12`)
 
 ## Requirements & Implementation Results
 
-### R1. Tối ưu hóa hệ thống toàn diện chống treo / crash / OOM trên `inut_205_56` [HOÀN THÀNH]
-- **Kích hoạt ZRAM Swap 1.9 GiB**: Thuật toán `lz4`, `MEM_LIMIT_PERCENTAGE=100`, `vm.swappiness = 60`, đã xóa bỏ `mem_limit`.
-- **Gỡ bỏ ngòi nổ tự sát Node-RED**: Loại bỏ toàn bộ các lệnh `echo b > /proc/sysrq-trigger` và `rm -rf /tmp` trong `inut_3rd_project/flow.json` và `ok2/flow.json`. Hạ ngưỡng cảnh báo RAM về `60 / 80 / 100`.
-- **Cấu hình khởi động dịch vụ**: Cập nhật `pm2-root.service` chờ MariaDB (`After=mariadb.service`, `Wants=mariadb.service`).
+### R1. Khảo sát hiện trạng & lỗ hổng hệ thống trên `inut_205_53` [HOÀN THÀNH]
+- Đã khảo sát chi tiết:
+  - Box Allwinner H313 (ARM64), 1.9 GB RAM vật lý, gánh 12 camera.
+  - Swap: 0 Byte (`ENABLED=false`), Free RAM chỉ còn vỏn vẹn **41 MB**.
+  - `wall_clock_timestamp_ignore: "1"` (FFmpeg thiếu cờ `-use_wallclock_as_timestamps 1` làm rò rỉ bộ nhớ queue).
+  - Shinobi đang bật audio transcoding CPU (`acodec: "default"`, mux sang AAC trong khi camera gửi `pcm_mulaw`), ngốn CPU và RAM.
+  - Node-RED có ngòi nổ `sysrq-trigger` khi RAM trống dưới 70 MB.
+  - Chưa cài đặt `kspcam` (:2028) và chưa có Van xả thẻ nhớ tự động (Storage Guard).
+
+### R2. Đóng gói & Triển khai `ksp-cam` (:2028) [HOÀN THÀNH]
+- Đã triển khai binary ARM64 tĩnh mới nhất vào `/opt/ksp-cam/kspcam`.
+- Tạo admin API key chuyên biệt cho IP `127.0.0.1` trong bảng `ccio.API`.
+- Cấu hình `/opt/ksp-cam/config.yaml` và kích hoạt dịch vụ `kspcam.service` (Active).
+
+### R3. Tối ưu hóa hệ thống toàn diện chống crash / OOM / tràn thẻ nhớ [HOÀN THÀNH]
+- **Kích hoạt ZRAM Swap 1.9 GiB**: Nén `lz4`, `MEM_LIMIT_PERCENTAGE=100`, `vm.swappiness = 60`, đã xóa bỏ `mem_limit`.
+- **Gỡ bỏ ngòi nổ tự sát Node-RED**: Loại bỏ toàn bộ các lệnh `echo b > /proc/sysrq-trigger` và `rm -rf /tmp` trong `flow.json`. Hạ ngưỡng cảnh báo RAM về `60 / 80 / 100`.
+- **Khắc phục thứ tự khởi động dịch vụ**: Cập nhật `pm2-root.service` chờ MariaDB (`After=mariadb.service`, `Wants=mariadb.service`).
 - **Nâng cấp Watchdog thông minh**: Cài đặt `/usr/local/bin/shinobi-camera-watchdog.sh` kèm timer `shinobi-camera-watchdog.timer` (quét mỗi 60s, kiểm tra số lượng tiến trình FFmpeg thực tế).
-- **Cài đặt Storage Guard**: Cài đặt `/usr/local/bin/shinobi-storage-guard.sh` targeting `/media/usb1/mp4`, kích hoạt cron 15 phút/lần (`/etc/cron.d/shinobi-storage-guard`).
-- **Chuẩn hóa Shinobi**: Kích hoạt `deleteOld`, `deleteOrphans`, `deleteOverMax` trong `conf.json`; đặt `max_keep_days = 3`, `wall_clock_timestamp_ignore = '0'`, `hls_time = '2'` trong MySQL.
-- **Cập nhật kspcam**: Đã deploy binary ARM64 tĩnh mới nhất vào `/opt/ksp-cam/kspcam` và service `kspcam.service` (Active).
+- **Cài đặt Storage Guard**: Cài đặt `/usr/local/bin/shinobi-storage-guard.sh` targeting `/media/usb1/ultrapool1`, kích hoạt cron 15 phút/lần (`/etc/cron.d/shinobi-storage-guard`).
+- **Chuẩn hóa Shinobi & triệt tiêu CPU audio transcoding**:
+  - `wall_clock_timestamp_ignore = "0"` $\rightarrow$ chèn `-use_wallclock_as_timestamps 1` ngăn chặn trôi timestamp và phình RAM.
+  - `acodec = "no"`, `stream_acodec = "no"`, `record_acodec = "no"` $\rightarrow$ chèn cờ `-an`, loại bỏ hoàn toàn bộ chuyển đổi âm thanh `pcm_mulaw` sang AAC tốn CPU.
+  - `hls_time = "2"`, `max_keep_days = 3`, bật các cờ dọn file mồ côi trong `conf.json`.
 
-### R2. Chuẩn hóa 9 camera Dahua về 25 FPS, 1536 Kbps, GOP 50 [HOÀN THÀNH]
-- Đã áp dụng tuần tự an toàn qua `kspcam_apply_profile` và xác nhận đọc lại 100% trên cả 9 camera:
-  - `192.168.1.241:37777`: 2880x1620 @ 25fps, H.265, 1536kbps VBR, GOP 50, AAC (OK)
-  - `192.168.1.242:37777`: 2880x1620 @ 25fps, H.265, 1536kbps VBR, GOP 50, AAC (OK)
-  - `192.168.1.243:37777`: 2880x1620 @ 25fps, H.265, 1536kbps VBR, GOP 50, AAC (OK)
-  - `192.168.1.244:37777`: 2880x1620 @ 25fps, H.265, 1536kbps VBR, GOP 50, AAC (OK)
-  - `192.168.1.245:37777`: 2880x1620 @ 25fps, H.265, 1536kbps VBR, GOP 50, AAC (OK)
-  - `192.168.1.246:37777`: 2880x1620 @ 25fps, H.265, 1536kbps VBR, GOP 50, AAC (OK)
-  - `192.168.1.248:37777`: 2880x1620 @ 25fps, H.265, 1536kbps VBR, GOP 50, AAC (OK)
-  - `192.168.1.249:37777`: 2880x1620 @ 25fps, H.265, 1536kbps VBR, GOP 50, AAC (OK)
-  - `192.168.1.250:37777`: 2880x1620 @ 25fps, H.265, 1536kbps VBR, GOP 50, AAC (OK)
-
-### R3. Nghiệm thu & Kết quả đo đạc thực tế [HOÀN THÀNH]
-- **Tải RAM FFmpeg**: Giảm từ **839 MB** xuống **623 MB** (tiết kiệm hơn 215 MB RAM vật lý).
-- **RAM khả dụng**: Tăng từ **47 MB** lên **913 MB – 1.0 GiB**.
-- **ZRAM Swap**: Sẵn sàng 1.9 GiB bảo vệ hệ thống tuyệt đối không bao giờ bị nghẽn RAM.
-- **Tiến trình ghi hình**: Toàn bộ **18/18 tiến trình FFmpeg** đang chạy ghi hình file mới đều đặn.
+### R4. Nghiệm thu & Kết quả đo đạc thực tế [HOÀN THÀNH]
+- **RAM khả dụng**: Tăng từ **41 MB** lên **882 MB – 1.1 GiB** (thông thoáng gấp 25 lần).
+- **ZRAM Swap**: 1.9 GiB bảo vệ hệ thống tuyệt đối.
+- **Tiến trình ghi hình**: Toàn bộ 11 camera đang online (`camera02` đến `camera12`) đều ghi hình mượt mà, file mới sinh đều đặn (`camera01` bị mất nguồn/mất kết nối vật lý tại cổng mạng LAN).
 
 ## Acceptance Criteria
-- [x] C1: ZRAM Swap 1.9 GiB được kích hoạt và hoạt động.
-- [x] C2: Node-RED sysrq và `rm -rf /tmp` bị loại bỏ hoàn toàn.
-- [x] C3: Watchdog thông minh và Storage guard cron được kích hoạt.
-- [x] C4: Toàn bộ 9 camera Dahua được chuẩn hóa về 25fps, 1536 kbps H.265, GOP 50.
-- [x] C5: Cả 9 camera ghi hình đều đặn, RAM khả dụng thông thoáng > 900 MB.
+- [x] C1: Node `205_53` được khảo sát và ghi nhận hiện trạng chi tiết.
+- [x] C2: `kspcam` được triển khai và kích hoạt thành công trên cổng `:2028`.
+- [x] C3: Hệ thống được tối ưu ZRAM, Node-RED sysrq, Watchdog, Storage guard, và timestamp.
+- [x] C4: Có đầy đủ tiến trình FFmpeg ghi hình ổn định, file video mới tạo hợp lệ.
