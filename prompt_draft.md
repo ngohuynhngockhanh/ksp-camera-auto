@@ -1,16 +1,16 @@
 # Teamwork Autonomous Execution Draft
 
 ## Description
-Khảo sát hiện trạng, triển khai `ksp-cam` (:2028) và tối ưu hóa hệ thống toàn diện trên 3 node `inut_205_62`, `inut_205_6`, `inut_205_10`.
+Điều tra nguyên nhân và khắc phục tình trạng node `inut_205_69` (`77.88.205.69`) chập chờn online/offline liên tục.
 
 ## Working Directory
 `/home/ksp/ksp-camera-auto`
 
 ## Status
-Completed — All 3 nodes (inut_205_62, inut_205_6, inut_205_10) successfully hardened with ZRAM, sysrq removed, storage guarded, watchdog enabled, and all 26 cameras actively recording with healthy FFmpeg processes and fresh video segments.
+Completed — inut_205_69 successfully diagnosed and remediated: removed flash swapfile, activated ZRAM 1.9GB, removed Node-RED sysrq triggers, enabled watchdog timer and storage guard, synced group keys, and verified rock-solid 31ms network ping and continuous 12 FFmpeg recording processes.
 
 ## Requirements Summary
-- R1: Khảo sát hiện trạng 3 node `205_62`, `205_6`, `205_10` -> [DONE]
-- R2: Deploy static binary `kspcam` và service systemd `:2028` -> [DONE]
-- R3: Tối ưu ZRAM Swap (100% RAM, lz4, swappiness 60), gỡ sysrq Node-RED, cài Watchdog thông minh, cài Storage Guard cron, chuẩn hóa wallclock timestamp -> [DONE]
-- R4: Nghiệm thu toàn diện hoạt động của kspcam và tiến trình ghi hình camera trên cả 3 node -> [DONE]
+- R1: Khảo sát hiện trạng mạng, độ trễ ping, card mạng, dmesg, syslog, tinc VPN, uptime trên `205_69` -> [DONE]
+- R2: Xác định nguyên nhân gốc rễ gây chập chờn (OOM / Node-RED sysrq reboot loop + flash swapfile I/O stall) -> [DONE]
+- R3: Đề xuất & xử lý dứt điểm (ZRAM 1.9GB, gỡ sysrq, cài Watchdog & Storage Guard, cập nhật kspcam) -> [DONE]
+- R4: Nghiệm thu tính ổn định kết nối (0% packet loss, ping phẳng 31ms, 12 FFmpeg processes online) -> [DONE]
