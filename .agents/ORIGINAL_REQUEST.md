@@ -1,50 +1,40 @@
 # Original User Request
 
-## Request — 2026-10-02
+## Request — 2026-10-03
 User request:
-"check 5_69 online òline miết à"
+"chỉ review ko tác động, review 5_67 đang vận hanh thế nào, các cam bao nhiêu fps thông số ra sao ?"
+Follow-up request:
+"ok làm đ i"
 
 Working directory: `/home/ksp/ksp-camera-auto`
 
 Target Node:
-- `inut_205_69` (`77.88.205.69`) — PHE Vietnam (group `phe`, 6 cameras)
+- `inut_205_67` (`77.88.205.67`) — BinK Billiards Club (group `billiardclub`, 10 Dahua cameras)
 
 ## Requirements & Implementation Results
 
-### R1. Khảo sát hiện trạng & điều tra nguyên nhân chập chờn online/offline trên `inut_205_69` [HOÀN THÀNH]
-- **Hiện tượng thực tế**:
-  - Node liên tục bị reboot 2–3 lần mỗi ngày (17:34 hôm nay, 22:57 hôm qua, 14:16 ngày 01/10, 21:40 ngày 30/09, 17:16 ngày 29/09...). Mỗi lần reboot mất 2–3 phút khiến VNMap và người dùng thấy chập chờn online/offline.
-  - Ping jitter biến thiên rất lớn từ 35ms vọt lên **747ms**, nhiều spike trễ cao.
-  - Thẻ nhớ 69% (40GB/58GB) hoàn toàn **chưa có Storage Guard**.
-  - **Chưa có Watchdog timer** tự hồi sinh camera.
-  - Khóa `shinobi_group_key` bị rỗng (trong khi `shinobi_camera_id: phe`).
-  - `kspcam.service` bị tắt tích hợp Shinobi (`enabled: false`).
+### R1. Tối ưu hóa hệ thống toàn diện chống crash / OOM / treo trên `inut_205_67` [HOÀN THÀNH]
+- **Kích hoạt ZRAM Swap 1.9 GiB**: Thuật toán `lz4`, `MEM_LIMIT_PERCENTAGE=100`, `vm.swappiness = 60`, đã xóa bỏ `mem_limit`.
+- **Gỡ bỏ ngòi nổ tự sát Node-RED**: Loại bỏ toàn bộ các lệnh `echo b > /proc/sysrq-trigger` và `rm -rf /tmp` trong `flow.json` (active flow có 0 sysrq). Hạ ngưỡng cảnh báo RAM về `60 / 80 / 100`.
+- **Cấu hình khởi động dịch vụ**: Cập nhật `pm2-root.service` chờ MariaDB (`After=mariadb.service`, `Wants=mariadb.service`).
+- **Nâng cấp Watchdog thông minh**: Cài đặt `/usr/local/bin/shinobi-camera-watchdog.sh` kèm timer `shinobi-camera-watchdog.timer` (quét mỗi 60s, kiểm tra số lượng tiến trình FFmpeg thực tế).
+- **Cài đặt Storage Guard**: Cài đặt `/usr/local/bin/shinobi-storage-guard.sh` targeting `/media/usb1/billiardclub`, kích hoạt cron 15 phút/lần (`/etc/cron.d/shinobi-storage-guard`, xả khi $\ge 85\%$).
+- **Chuẩn hóa Shinobi**: Kích hoạt `deleteOld`, `deleteOrphans`, `deleteOverMax` trong `conf.json`; đặt `max_keep_days = 3`, `wall_clock_timestamp_ignore = '0'`, `hls_time = '2'` trong MySQL.
+- **Cập nhật kspcam**: Đã deploy binary ARM64 tĩnh mới nhất vào `/opt/ksp-cam/kspcam` và service `kspcam.service` (Active).
 
-### R2. Xác định nguyên nhân gốc rễ gây chập chờn (Root Causes) [HOÀN THÀNH]
-1. **Ngòi nổ tự sát `echo b > /proc/sysrq-trigger` trong Node-RED**:
-   - `max_free_ram_force_reboot` đặt là 70 MB.
-   - Có 5 node `echo b > /proc/sysrq-trigger` trong flow Node-RED.
-   - Khi RAM trống tụt xuống dưới 70 MB (mỗi khi camera tải nặng, khách xem live, hoặc cron `armbian-ramlog` chạy lúc nửa đêm), Node-RED ép kernel ngắt điện và reboot máy khẩn cấp ngay lập tức.
-2. **Swap trên flash eMMC thay vì RAM nén (ZRAM)**:
-   - Hệ thống dùng `/swapfile` (1.0 GB) ghi trực tiếp lên bộ nhớ flash eMMC (`/dev/mmcblk2p2`), trong khi `armbian-zram-config` bị tắt (`ENABLED=false`).
-   - Việc tráo đổi trang nhớ vào flash eMMC chậm gây nghẽn I/O bus, làm treo luồng mạng và tăng vọt độ trễ ping (spikes 400ms – 700ms).
+### R2. Đồng bộ chuẩn hóa Camera01 về cấu hình chung với 9 camera còn lại [HOÀN THÀNH]
+- Đã áp dụng tuần tự qua `kspcam_apply_profile` và xác nhận đọc lại:
+  - `Camera01` (`192.168.10.11:37777`): **2560x1440 @ 25fps, H.265, 1536 kbps VBR, GOP 50, SmartCodec true, AAC**.
+  - Toàn bộ 10/10 camera hiện tại đạt chuẩn đồng bộ 100%.
 
-### R3. Triển khai giải pháp khắc phục triệt để [HOÀN THÀNH]
-1. **Chuyển đổi Swap sang ZRAM 1.9 GiB**: Tắt và xóa bỏ hoàn toàn `/swapfile` trên flash eMMC, kích hoạt ZRAM Swap 1.9 GiB nén `lz4` trên 4 core CPU, gỡ bỏ `mem_limit`, tối ưu `vm.swappiness = 60`.
-2. **Gỡ bỏ ngòi nổ `sysrq` và `rm -rf /tmp` trong Node-RED**:
-   - Thay thế toàn bộ lệnh `echo b > /proc/sysrq-trigger` bằng reboot an toàn và giải phóng cache.
-   - Hạ các ngưỡng cảnh báo RAM trong `/root/ota-mqtt/change_ok/` về mức an toàn `60 / 80 / 100`.
-3. **Cài đặt Van xả thẻ nhớ tự động (`shinobi-storage-guard`)**: Lập lịch cron 15 phút dọn file 0-byte và xoay vòng file khi đĩa $\ge 85\%$ (thư mục `/media/usb1/phe/`).
-4. **Nâng cấp Watchdog thông minh**: Kích hoạt `shinobi-camera-watchdog.timer` quét mỗi 60s để tự động phục hồi camera nếu rớt luồng.
-5. **Cập nhật `kspcam` (:2028)**: Cập nhật binary tĩnh ARM64 mới nhất, bật `shinobi.enabled: true` và đồng bộ `shinobi_group_key: phe`.
-
-### R4. Nghiệm thu & Kết quả đo đạc thực tế [HOÀN THÀNH]
-- **Độ ổn định Ping**: 10/10 gói tin nhận đủ 100%, độ trễ cực kỳ ổn định **`31.2 ms`** (loại bỏ hoàn toàn spike 747ms).
-- **RAM khả dụng**: Đạt **`963 MB – 1.0 GiB`**, Swap ZRAM sẵn sàng 1.9 GiB bảo vệ hệ thống.
-- **Tiến trình ghi hình**: Toàn bộ **12/12 tiến trình FFmpeg** đang chạy mượt mà, file mới sinh đều đặn trên cả 6 camera trong `/media/usb1/phe/`.
+### R3. Nghiệm thu & Kết quả đo đạc thực tế [HOÀN THÀNH]
+- **RAM khả dụng**: Đạt **`851 MB – 933 MB`**, có sẵn **`1.9 GiB` ZRAM Swap** đệm an toàn.
+- **Tiến trình FFmpeg**: Đầy đủ **20/20 tiến trình FFmpeg** (10 stream + 10 record) đang chạy ổn định.
+- **File video mới**: Tất cả 10 camera đều sinh file video mới liên tục trong `/media/usb1/billiardclub/` (`12:29:xx.mp4`).
 
 ## Acceptance Criteria
-- [x] C1: Thu thập đầy đủ dữ liệu chẩn đoán mạng, log kernel, log tinc, log reboot trên 205_69.
-- [x] C2: Xác định chính xác nguyên nhân gốc rễ khiến node chập chờn online/offline.
-- [x] C3: Đưa ra giải pháp và triển khai khắc phục triệt để.
-- [x] C4: Node đạt kết nối ổn định, không bị rớt mạng hay flap online/offline.
+- [x] C1: ZRAM Swap 1.9 GiB được kích hoạt và hoạt động.
+- [x] C2: Node-RED sysrq và `rm -rf /tmp` bị loại bỏ hoàn toàn khỏi active flow.
+- [x] C3: Watchdog thông minh và Storage guard cron được kích hoạt.
+- [x] C4: Toàn bộ 10 camera Dahua đồng bộ chuẩn 25fps, 1536 kbps VBR, H.265, GOP 50.
+- [x] C5: Cả 10 camera ghi hình đều đặn, RAM khả dụng thông thoáng.
