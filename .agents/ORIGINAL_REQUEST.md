@@ -2,54 +2,53 @@
 
 ## Request — 2026-10-04
 User request:
-"Ok coi tiếp 4.159 nãy bị treo phải nhờ rút gắm lại tìm nguyên nhân với"
+"4-157 vẫn bị hết ram ó"
 
 Working directory: `/home/ksp/ksp-camera-auto`
 
 Target Node:
-- `inut_204_159` (`77.88.204.159`) — Axis Billiards (group `axis`, 9 Dahua cameras)
+- `inut_204_157` (`77.88.204.157`) — Kely Pickleball (group `kely`, 12 recorded cameras `camera01` .. `camera13`, `camera03` stop)
 
 ## Root Cause Analysis
-1. **Phần cứng Octopus Planet (Chip Amlogic S912, 8 nhân CPU)**:
-   - Box chạy chip 8 nhân (`CPU=8`).
-2. **"Cầu dao tự sát" trong Node-RED đặc thù cho CPU 8 nhân**:
-   - Trong file `/root/.node-red/projects/inut_3rd_project/flow.json`:
-     ```bash
-     CPU=$(grep -c ^processor /proc/cpuinfo); echo "[INFO] CPU cores: $CPU"; [ "$CPU" -eq 8 ] && { echo "[ACTION] Force reboot"; echo b > /proc/sysrq-trigger; } || { echo "[ACTION] pm2 restart camera"; pm2 restart camera; }
-     ```
-   - Trên các box 4 nhân, khi RAM thiếu, script chỉ chạy `pm2 restart camera`.
-   - NHƯNG trên box này vì có **8 nhân (`CPU=8`)**, nó cố tình nhảy vào nhánh `echo b > /proc/sysrq-trigger`!
-3. **Cơ chế gây treo cứng (Freeze/Hang) phải rút nguồn cắm lại**:
-   - Khi `echo b > /proc/sysrq-trigger` kích hoạt trong lúc 18 tiến trình FFmpeg đang ghi dữ liệu xuống thẻ nhớ exFAT (`mmcblk1p1`) và eMMC (`mmcblk2p2`):
-     - Chip controller MMC (`meson-gx-mmc`) bị ngắt ngang khi DMA bus đang pending.
-     - SoC Amlogic S912 bị khóa cứng thanh ghi bus reset (bus lockup state) thay vì power-cycle sạch PMIC.
-     - Đèn nguồn vẫn sáng nhưng toàn bộ CPU bị treo cứng ở bootrom/reset vector, watchdog phần cứng không thể tự reset được $\rightarrow$ **bắt buộc phải rút phích cắm điện nguồn 12V ra cắm lại mới khởi động lại được**.
-4. **Không có Swap (`Swap = 0B`)**:
-   - `armbian-zram-config` bị tắt (`ENABLED=false`).
-   - RAM trống thực tế chỉ quanh mức **62 MB**, thấp hơn ngưỡng kích hoạt `max_free_ram_force_reboot = 70 MB` $\rightarrow$ box liên tục rơi vào bẫy tự sát `sysrq`.
-5. **Dung lượng thẻ nhớ nguy hiểm & Không có Storage Guard**:
-   - Thẻ nhớ `/media/usb1` đang dùng **47 GB / 58 GB (81%)**, hoàn toàn chưa có cron tự xả thẻ nhớ.
-6. **Watchdog camera cũ**:
-   - Script watchdog cũ chỉ kiểm tra PID tồn tại, không kiểm tra tiến trình FFmpeg thực tế.
+1. **Phân bổ tải bộ nhớ cực cao (12 Camera trên 1.8GB RAM)**:
+   - Box có 1.8 GiB RAM vật lý nhưng gánh tới **12 luồng camera** (24 tiến trình FFmpeg + 12 tiến trình `singleCamera.js` Node.js).
+   - Tổng bộ nhớ ẩn danh cơ sở (Anonymous RSS) của toàn bộ tiến trình:
+     - 12 tiến trình FFmpeg: ~520 MB
+     - 12 tiến trình `singleCamera.js`: ~600 MB
+     - Node-RED (`inut`): ~250 MB
+     - Shinobi master (`camera.js`): ~150 MB (ballooned to 327 MB)
+     - PM2, ota-mqtt, mariadb: ~200 MB
+     - **Tổng base memory: ~1,725 MB / 1,837 MB** (chiếm 95% RAM vật lý).
+2. **Khuyết tật ZRAM `MEM_LIMIT_PERCENTAGE=50` (Nguyên nhân cốt lõi gây OOM)**:
+   - Trong `/etc/default/armbian-zram-config`, `MEM_LIMIT_PERCENTAGE` bị để giá trị mặc định là **`50`**.
+   - Hậu quả: Khi ZRAM lưu được ~110 MB dữ liệu nén, driver ZRAM chạm trần và trả về mã lỗi **`-ENOMEM` (Swap write error)** cho kernel.
+   - Khi kernel không thể hoán đổi thêm trang nhớ ẩn danh vào Swap, cơ chế page reclaim thất bại hoàn toàn. Ngay lập tức kernel gọi OOM killer (lúc 15:38 hôm nay):
+     `Out of memory: Killed process 2157 (node /home/Shin) total-vm:52544412kB, anon-rss:326860kB`.
+3. **Không có ngưỡng giới hạn heap cho Node.js**:
+   - V8 mặc định cho phép heap phình lên 300MB–500MB trước khi thu gom rác. Chỉ cần `camera.js` hoặc `node-red` nở thêm 100MB là toàn bộ hệ thống bị cạn RAM.
+4. **Thiếu vắng Watchdog timer và Storage Guard**:
+   - Box hoàn toàn chưa có `shinobi-camera-watchdog.timer` và chưa có `shinobi-storage-guard`.
 
 ## Remediation & Actions Taken
-1. **Kích hoạt ZRAM Swap 1.8 GiB**:
-   - Cấu hình `ZRAM_PERCENTAGE=100`, `SWAP_ALGORITHM=lz4`, `vm.swappiness = 60`, xóa `mem_limit`.
-   - Nâng RAM khả dụng lên **`938 MB / 1.8 GiB`** (có sẵn 1.8 GiB đệm ảo nén nhanh).
-2. **Gỡ bỏ triệt để các ngòi nổ `sysrq` và `rm -rf /tmp` trong Node-RED**:
-   - Thay thế toàn bộ 5 node `echo b > /proc/sysrq-trigger` và node `[ "$CPU" -eq 8 ]` bằng lệnh giải phóng cache và restart camera an toàn.
-   - Hạ các ngưỡng cảnh báo RAM trong `/root/ota-mqtt/change_ok/` về mức an toàn `60 / 80 / 100`.
+1. **Mở khóa ZRAM Swap lên 100% & Gỡ bỏ `mem_limit`**:
+   - Cấu hình `ZRAM_PERCENTAGE=100`, `MEM_LIMIT_PERCENTAGE=100`, `SWAP_ALGORITHM=lz4`.
+   - Ghi `0` vào `/sys/block/zram0/mem_limit` để xóa bỏ hoàn toàn giới hạn dung lượng swap.
+   - Tăng `vm.swappiness = 80` và `vm.vfs_cache_pressure = 100` để kernel chủ động đẩy các trang nhớ tĩnh của Node.js sang ZRAM.
+   - Mở rộng tổng Swap lên **`3.5 GiB`**.
+2. **Thiết lập giới hạn bộ nhớ PM2 chủ động (`--max-memory-restart`)**:
+   - `camera`: giới hạn 220MB (ngăn chặn tình trạng balloon lên 327MB gây OOM).
+   - `inut` (node-red): giới hạn 280MB.
+   - `ota-mqtt`: giới hạn 120MB.
 3. **Cài đặt Smart Watchdog (`shinobi-camera-watchdog`)**:
-   - Cài đặt script kiểm tra `pgrep -c ffmpeg` kèm timer quét mỗi 60 giây.
-4. **Cài đặt Van xả thẻ nhớ tự động (`shinobi-storage-guard`)**:
-   - Script xả đĩa targeting `/media/usb1/axis/`, kích hoạt cron 15 phút/lần (`/etc/cron.d/shinobi-storage-guard`).
-5. **Cập nhật `kspcam` (:2028)**:
-   - Deploy binary tĩnh ARM64 mới nhất vào `/opt/ksp-cam/kspcam` và service `kspcam.service` (Active).
-6. **Chuẩn hóa Shinobi**:
+   - Kích hoạt timer `shinobi-camera-watchdog.timer` quét mỗi 60s, kiểm tra số lượng tiến trình FFmpeg thực tế (`pgrep -c ffmpeg`).
+4. **Cài đặt Storage Guard (`shinobi-storage-guard`)**:
+   - Kích hoạt cron 15 phút/lần bảo vệ thẻ nhớ `/media/usb1/kely/` (xả khi $\ge 85\%$).
+5. **Chuẩn hóa Shinobi**:
    - Cập nhật `wall_clock_timestamp_ignore = '0'`, `hls_time = '2'`, `max_keep_days = '3'`, bật cờ dọn file mồ côi trong `conf.json`.
 
-## Acceptance Criteria
-- [x] C1: Node `204_159` được khảo sát và xác định chính xác nguyên nhân gây treo cứng.
-- [x] C2: `kspcam` được triển khai và kích hoạt thành công trên cổng `:2028`.
-- [x] C3: Hệ thống được tối ưu ZRAM, Node-RED sysrq, Watchdog thông minh, Storage guard, và timestamp.
-- [x] C4: Có đầy đủ 18 tiến trình FFmpeg ghi hình ổn định, file video mới tạo hợp lệ trên cả 9 camera.
+## Acceptance Verification
+- [x] RAM khả dụng tăng từ mức báo động lên **`950 MiB`** (tăng thêm gần 300MB RAM khả dụng).
+- [x] Swap ZRAM hoạt động trơn tru với dung lượng mở rộng **`3.5 GiB`** (không còn bị chặn ở 50%).
+- [x] Toàn bộ 12 camera ghi hình đang chạy đủ **24 tiến trình FFmpeg** (12 stream HLS + 12 record MP4).
+- [x] File ghi hình MP4 sinh đều đặn trên cả 12 sân pickleball trong `/media/usb1/kely/`.
+- [x] Smart watchdog và Storage guard cron đã kích hoạt và hoạt động tự động.

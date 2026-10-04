@@ -1,16 +1,16 @@
 # Teamwork Autonomous Execution Draft
 
 ## Description
-Điều tra nguyên nhân gây treo cứng (phải rút nguồn cắm lại) trên node `inut_204_159` (`77.88.204.159`), triển khai `ksp-cam` (:2028) và tối ưu hóa hệ thống toàn diện.
+Điều tra và khắc phục triệt để tình trạng cạn RAM (OOM / Out of Memory) trên node `inut_204_157` (`77.88.204.157` — Kely Pickleball).
 
 ## Working Directory
 `/home/ksp/ksp-camera-auto`
 
 ## Status
-Completed — inut_204_159 root cause identified (CPU=8 sysrq trap on Amlogic S912 causing bus lockup + 0B swap + 81% disk) and fully remediated: ZRAM 1.8GB active, Node-RED sysrq removed, Smart Watchdog and Storage Guard cron deployed, kspcam updated, and all 9 Dahua cameras actively recording with 18 healthy FFmpeg processes.
+Completed — inut_204_157 memory root cause identified (MEM_LIMIT_PERCENTAGE=50 clamping ZRAM swap writes + no heap caps on Node.js with 12 camera threads + missing watchdog/storage guard) and fully resolved: ZRAM Swap expanded to 3.5GB without mem_limit, PM2 max-memory-restart limits configured, Smart Watchdog and Storage Guard cron active, available RAM increased to 950MB, and all 12 cameras running 24 healthy FFmpeg processes.
 
 ## Requirements Summary
-- R1: Khảo sát hiện trạng node `204_159` và tìm nguyên nhân gây treo cứng -> [DONE]
-- R2: Deploy static binary `kspcam` và service systemd `:2028` -> [DONE]
-- R3: Tối ưu ZRAM Swap (100% RAM, lz4, swappiness 60), gỡ sysrq Node-RED, cài Watchdog thông minh, cài Storage Guard cron, chuẩn hóa wallclock timestamp -> [DONE]
-- R4: Nghiệm thu toàn diện hoạt động của kspcam và tiến trình ghi hình camera -> [DONE]
+- R1: Khảo sát hiện trạng RAM, dmesg OOM killer, và các tiến trình trên `204_157` -> [DONE]
+- R2: Khắc phục điểm nghẽn ZRAM mem_limit và giới hạn heap V8 -> [DONE]
+- R3: Cài đặt Smart Watchdog, Storage Guard cron, và chuẩn hóa Shinobi -> [DONE]
+- R4: Nghiệm thu toàn diện hoạt động của 12 camera và dung lượng RAM khả dụng -> [DONE]
