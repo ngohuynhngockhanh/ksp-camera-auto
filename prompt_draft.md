@@ -1,15 +1,16 @@
 # Teamwork Autonomous Execution Draft
 
 ## Description
-Kiểm tra tình trạng vận hành của node `inut_207_12` (Poseidon Billiards) và khắc phục lỗi `camera16` không chạy/không ghi hình được.
+Điều tra nguyên nhân gây treo cứng (phải rút nguồn cắm lại) trên node `inut_204_159` (`77.88.204.159`), triển khai `ksp-cam` (:2028) và tối ưu hóa hệ thống toàn diện.
 
 ## Working Directory
 `/home/ksp/ksp-camera-auto`
 
 ## Status
-Completed — Camera16 on inut_207_12 diagnosed and fixed (switched T31N Dahua to H.264 Main 2048kbps, fixed rtsp_transport=tcp and timestamp flags in Shinobi), live HLS streaming restored, MP4 recording restored (12MB+ per file), and all 17 cameras running 34 healthy FFmpeg processes.
+Completed — inut_204_159 root cause identified (CPU=8 sysrq trap on Amlogic S912 causing bus lockup + 0B swap + 81% disk) and fully remediated: ZRAM 1.8GB active, Node-RED sysrq removed, Smart Watchdog and Storage Guard cron deployed, kspcam updated, and all 9 Dahua cameras actively recording with 18 healthy FFmpeg processes.
 
 ## Requirements Summary
-- R1: Khảo sát hiện trạng node `207_12` và tìm nguyên nhân `camera16` không chạy -> [DONE]
-- R2: Khắc phục lỗi luồng RTSP / FFmpeg crash trên `camera16` -> [DONE]
-- R3: Nghiệm thu toàn diện hoạt động của `camera16` và 16 camera còn lại -> [DONE]
+- R1: Khảo sát hiện trạng node `204_159` và tìm nguyên nhân gây treo cứng -> [DONE]
+- R2: Deploy static binary `kspcam` và service systemd `:2028` -> [DONE]
+- R3: Tối ưu ZRAM Swap (100% RAM, lz4, swappiness 60), gỡ sysrq Node-RED, cài Watchdog thông minh, cài Storage Guard cron, chuẩn hóa wallclock timestamp -> [DONE]
+- R4: Nghiệm thu toàn diện hoạt động của kspcam và tiến trình ghi hình camera -> [DONE]

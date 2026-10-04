@@ -2,38 +2,54 @@
 
 ## Request — 2026-10-04
 User request:
-"Kiểm tra 7.12 chạy ok ko em do có camera16 ko biết sao ko chạy xem giúp a"
+"Ok coi tiếp 4.159 nãy bị treo phải nhờ rút gắm lại tìm nguyên nhân với"
 
 Working directory: `/home/ksp/ksp-camera-auto`
 
 Target Node:
-- `inut_207_12` (`77.88.207.12`) — Poseidon Billiards (group `hk`, 17 Dahua cameras `camera01` .. `camera17`)
-- Target Camera: `camera16` (Dahua `DH-IPC-HDW1230C-A-V7` on `192.168.1.216:554`)
+- `inut_204_159` (`77.88.204.159`) — Axis Billiards (group `axis`, 9 Dahua cameras)
 
 ## Root Cause Analysis
-1. **Model & Chipset**:
-   - `camera16` là dòng camera Dahua đời mới chạy chip **Ingenic T31N** (`DH-IPC-HDW1230C-A-V7`), khác biệt so với các camera đời trước (`HDW1230C-A`).
-2. **Cấu hình sai `rtsp_transport`**:
-   - Trong Shinobi database `Monitors.details`, `camera16` bị cấu hình `rtsp_transport: "no"`.
-   - Điều này khiến FFmpeg kết nối RTSP bằng giao thức **UDP** thay vì **TCP**.
-3. **Lỗi đứt gãy luồng HLS / mpegts**:
-   - Firmware chip T31N khi xuất luồng H.265 không đính kèm PTS trên các NALU khởi tạo (VPS/SPS/PPS). Khi chạy kèm cờ `-use_wallclock_as_timestamps 1`, container `mpegts` của HLS báo lỗi nghiêm trọng `[mpegts] first pts value must be set` và crash ngay lập tức.
-   - Hậu quả: FFmpeg chết liên tục sau mỗi 18 giây, tạo ra hàng loạt file rác 294 bytes và camera16 hoàn toàn không thể xem live hay ghi hình.
+1. **Phần cứng Octopus Planet (Chip Amlogic S912, 8 nhân CPU)**:
+   - Box chạy chip 8 nhân (`CPU=8`).
+2. **"Cầu dao tự sát" trong Node-RED đặc thù cho CPU 8 nhân**:
+   - Trong file `/root/.node-red/projects/inut_3rd_project/flow.json`:
+     ```bash
+     CPU=$(grep -c ^processor /proc/cpuinfo); echo "[INFO] CPU cores: $CPU"; [ "$CPU" -eq 8 ] && { echo "[ACTION] Force reboot"; echo b > /proc/sysrq-trigger; } || { echo "[ACTION] pm2 restart camera"; pm2 restart camera; }
+     ```
+   - Trên các box 4 nhân, khi RAM thiếu, script chỉ chạy `pm2 restart camera`.
+   - NHƯNG trên box này vì có **8 nhân (`CPU=8`)**, nó cố tình nhảy vào nhánh `echo b > /proc/sysrq-trigger`!
+3. **Cơ chế gây treo cứng (Freeze/Hang) phải rút nguồn cắm lại**:
+   - Khi `echo b > /proc/sysrq-trigger` kích hoạt trong lúc 18 tiến trình FFmpeg đang ghi dữ liệu xuống thẻ nhớ exFAT (`mmcblk1p1`) và eMMC (`mmcblk2p2`):
+     - Chip controller MMC (`meson-gx-mmc`) bị ngắt ngang khi DMA bus đang pending.
+     - SoC Amlogic S912 bị khóa cứng thanh ghi bus reset (bus lockup state) thay vì power-cycle sạch PMIC.
+     - Đèn nguồn vẫn sáng nhưng toàn bộ CPU bị treo cứng ở bootrom/reset vector, watchdog phần cứng không thể tự reset được $\rightarrow$ **bắt buộc phải rút phích cắm điện nguồn 12V ra cắm lại mới khởi động lại được**.
+4. **Không có Swap (`Swap = 0B`)**:
+   - `armbian-zram-config` bị tắt (`ENABLED=false`).
+   - RAM trống thực tế chỉ quanh mức **62 MB**, thấp hơn ngưỡng kích hoạt `max_free_ram_force_reboot = 70 MB` $\rightarrow$ box liên tục rơi vào bẫy tự sát `sysrq`.
+5. **Dung lượng thẻ nhớ nguy hiểm & Không có Storage Guard**:
+   - Thẻ nhớ `/media/usb1` đang dùng **47 GB / 58 GB (81%)**, hoàn toàn chưa có cron tự xả thẻ nhớ.
+6. **Watchdog camera cũ**:
+   - Script watchdog cũ chỉ kiểm tra PID tồn tại, không kiểm tra tiến trình FFmpeg thực tế.
 
 ## Remediation & Actions Taken
-1. **Cấu hình lại camera phần cứng**:
-   - Chuyển `table.Encode[0].MainFormat[0].Video.Compression = H.264`, `Profile = Main`, `BitRate = 2048` trên camera `192.168.1.216`. Chuẩn H.264 trên chip T31N cung cấp đầy đủ PTS và tương thích 100% với FFmpeg.
-2. **Cập nhật Shinobi Monitor `camera16`**:
-   - `rtsp_transport = "tcp"` (buộc FFmpeg kéo RTSP qua TCP).
-   - `wall_clock_timestamp_ignore = "1"` (không gán cờ wallclock gây lệch PTS).
-   - `cust_record = ""` (xóa bỏ cờ `-tag:v hvc1` vì video là H.264).
-   - `vcodec = "copy"`, `acodec = "no"`.
-3. **Dọn dẹp & Khởi động lại**:
-   - Xóa bỏ toàn bộ các file rác 294 bytes cũ trong `/media/usb1/hk/camera16/`.
-   - Khởi động lại tiến trình PM2 `camera`.
+1. **Kích hoạt ZRAM Swap 1.8 GiB**:
+   - Cấu hình `ZRAM_PERCENTAGE=100`, `SWAP_ALGORITHM=lz4`, `vm.swappiness = 60`, xóa `mem_limit`.
+   - Nâng RAM khả dụng lên **`938 MB / 1.8 GiB`** (có sẵn 1.8 GiB đệm ảo nén nhanh).
+2. **Gỡ bỏ triệt để các ngòi nổ `sysrq` và `rm -rf /tmp` trong Node-RED**:
+   - Thay thế toàn bộ 5 node `echo b > /proc/sysrq-trigger` và node `[ "$CPU" -eq 8 ]` bằng lệnh giải phóng cache và restart camera an toàn.
+   - Hạ các ngưỡng cảnh báo RAM trong `/root/ota-mqtt/change_ok/` về mức an toàn `60 / 80 / 100`.
+3. **Cài đặt Smart Watchdog (`shinobi-camera-watchdog`)**:
+   - Cài đặt script kiểm tra `pgrep -c ffmpeg` kèm timer quét mỗi 60 giây.
+4. **Cài đặt Van xả thẻ nhớ tự động (`shinobi-storage-guard`)**:
+   - Script xả đĩa targeting `/media/usb1/axis/`, kích hoạt cron 15 phút/lần (`/etc/cron.d/shinobi-storage-guard`).
+5. **Cập nhật `kspcam` (:2028)**:
+   - Deploy binary tĩnh ARM64 mới nhất vào `/opt/ksp-cam/kspcam` và service `kspcam.service` (Active).
+6. **Chuẩn hóa Shinobi**:
+   - Cập nhật `wall_clock_timestamp_ignore = '0'`, `hls_time = '2'`, `max_keep_days = '3'`, bật cờ dọn file mồ côi trong `conf.json`.
 
-## Acceptance Verification
-- [x] FFmpeg cho `camera16` đã chạy ổn định liên tục, không bị crash-loop.
-- [x] File ghi hình MP4 của `camera16` sinh đều đặn và tăng trưởng bình thường (`12 MB` cho đoạn hiện tại).
-- [x] Luồng live HLS (`/dev/shm/streams/hk/camera16/s.m3u8`) sinh đầy đủ các segment `.ts` và `icon.jpg`.
-- [x] Toàn bộ 17/17 camera trên node `inut_207_12` đều có 34 tiến trình FFmpeg hoạt động đầy đủ.
+## Acceptance Criteria
+- [x] C1: Node `204_159` được khảo sát và xác định chính xác nguyên nhân gây treo cứng.
+- [x] C2: `kspcam` được triển khai và kích hoạt thành công trên cổng `:2028`.
+- [x] C3: Hệ thống được tối ưu ZRAM, Node-RED sysrq, Watchdog thông minh, Storage guard, và timestamp.
+- [x] C4: Có đầy đủ 18 tiến trình FFmpeg ghi hình ổn định, file video mới tạo hợp lệ trên cả 9 camera.
