@@ -19,6 +19,29 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
 
 ## 2. Danh Mục Các Node Đã Áp Dụng Chuẩn PM2 Memory Guard & Tối Ưu Toàn Diện
 
+- [x] **Node `inut_204_150`** (99 Billiards - CS11 - 1 — `77.88.204.150`, group `99cs111`)
+  - Phần cứng: Rockchip RK3528 (ARM64), RAM 1.8 GiB, Thẻ nhớ 118 GB
+  - LAN Local: `172.10.17.252` (Cùng LAN với `inut_204_152` và `inut_206_60`), MAC `02:04:69:ff:04:50`
+  - Số lượng camera: 12 camera (`camera01` .. `camera13`, all `record`)
+  - Fix VPN: Tái lập phiên Tinc VPN kết nối máy chủ `77.88.192.2`, node đã online thông suốt
+  - Cấu hình PM2 Memory Guard: `camera`: 220M | `inut`: 280M | `ota-mqtt`: 120M (log `/dev/null`)
+  - Cấu hình Kernel & Swap: ZRAM 2.6 GiB (`lz4`, uncap `mem_limit=0`, `swappiness=80`, `vfs_cache_pressure=100`)
+  - Cơ chế bảo vệ: Smart Watchdog 60s, Storage Guard 15p (`/media/usb1/99cs111`), Gỡ 6 node sysrq
+  - Trạng thái: 24/25 FFmpeg ghi 12 bàn liên tục, RAM khả dụng >730M, file mới sinh đều đặn
+
+- [x] **Node `inut_204_152`** (99 Billiards - CS11 - 2 — `77.88.204.152`, group `99cs112`)
+  - Phần cứng: Rockchip RK3528 (ARM64), RAM 1.8 GiB
+  - LAN Local: `172.10.16.109/23` (Trạm cầu nối quét ARP LAN thành công)
+  - Số lượng camera: 12 camera
+  - Cấu hình PM2 Memory Guard: `camera`: 180M | `inut`: 280M | `ota-mqtt`: 120M (log `/dev/null`)
+  - Cấu hình Kernel & Swap: ZRAM 1.8 GiB (`lz4`, uncap `mem_limit=0`, `swappiness=80`, `vfs_cache_pressure=100`)
+  - Cơ chế bảo vệ: Smart Watchdog 60s, Storage Guard 15p, Sysrq gỡ sạch
+  - Trạng thái: RAM khả dụng 1.4 GB, 12/12 FFmpeg ghi hình ổn định
+
+- [x] **Node `inut_206_60`** (99 Billiards - CS11 - 3 — `77.88.206.60`, group `vip`)
+  - Phần cứng: Rockchip RK3528 (ARM64), LAN Local: `172.10.16.122/23`, MAC `02:06:06:06:06:60`
+  - Hoạt động ổn định cùng phân đoạn LAN với `204_150` và `204_152`
+
 - [x] **Node `inut_204_157`** (Kely Pickleball — `77.88.204.157`, group `kely`)
   - Phần cứng: ARM64 (Octopus Planet), RAM 1.8 GiB
   - Số lượng camera: 12 camera (12 sân Pickleball)
@@ -57,7 +80,7 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
   - Cấu hình PM2 Memory Guard: `camera`: 220M | `inut`: 280M | `ota-mqtt`: 120M (log `/dev/null`)
   - Cấu hình Kernel & Swap: ZRAM 1.9 GiB (`lz4`, uncap `mem_limit=0`, `swappiness=80`, `vfs_cache_pressure=100`)
   - Cơ chế bảo vệ: Smart Watchdog 60s, Storage Guard 15p (`/media/usb1/billiardclub`), Sysrq gỡ sạch 100%
-  - Trạng thái: Uptime >4 ngày, RAM khả dụng 887M–1.0G, 22/22 FFmpeg ghi 11 bàn liên tục
+  - Trạng thái: Uptime >4 ngày, RAM khả dụng 887M, 22/22 FFmpeg ghi 11 bàn liên tục
 
 - [x] **Node `inut_205_69`** (PHE Vietnam — `77.88.205.69`, group `phe`)
   - Phần cứng: Allwinner H313 (ARM64), RAM 1.9 GiB
@@ -73,11 +96,11 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
   - Cấu hình PM2 Memory Guard: `camera`: 170M | `inut`: 280M | `ota-mqtt`: 120M (log `/dev/null`)
   - Cấu hình Kernel & Swap: ZRAM 1.9 GiB (`lz4`, uncap `mem_limit=0`, `swappiness=80`, `vfs_cache_pressure=100`)
   - Cơ chế bảo vệ: Smart Watchdog 60s (tự restart nếu 0 FFmpeg), Storage Guard 15p (`/media/usb1/lionkingnd`), Sysrq gỡ sạch
-  - Trạng thái: Hồi sinh toàn bộ 6 camera (sau 8 tiếng bị đứng hình), RAM khả dụng 1.1 GB, 12/12 FFmpeg ghi đều
+  - Trạng thái: Hồi sinh toàn bộ 6 camera (sau 8 tiếng đứng hình), RAM khả dụng 1.1 GB, 12/12 FFmpeg ghi đều
 
 - [x] **Node `inut_205_56`** (King Kong Thái Nguyên — `77.88.205.56`, group `mp4`)
   - Phần cứng: Allwinner H313 (ARM64), RAM 1.9 GiB
-  - Số lượng camera: 9 camera Dahua chuẩn hóa 25fps 1536k VBR GOP 50 H.265 AAC
+  - Số lượng camera: 9 camera Dahua (chuẩn hóa 25fps 1536k VBR GOP 50 H.265 AAC)
   - Cấu hình PM2 Memory Guard: `camera`: 200M | `inut`: 280M | `ota-mqtt`: 120M (log `/dev/null`)
   - Cấu hình Kernel & Swap: ZRAM 1.9 GiB (`lz4`, uncap `mem_limit=0`, `swappiness=80`, `vfs_cache_pressure=100`)
   - Cơ chế bảo vệ: Smart Watchdog 60s, Storage Guard 15p (`/media/usb1/mp4`), Gỡ 5 node sysrq và `rm -rf /tmp`
@@ -130,3 +153,12 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
   - Cấu hình Kernel & Swap: ZRAM 1.9 GiB (`lz4`, uncap `mem_limit=0`, `swappiness=80`, `vfs_cache_pressure=100`)
   - Cơ chế bảo vệ: Smart Watchdog 60s, Storage Guard 15p (`/media/usb1/na`), Sysrq gỡ sạch
   - Trạng thái: RAM khả dụng 1.12 GB, 12/12 FFmpeg ghi hình ổn định
+
+- [x] **Node `inut_207_12`** (Poseidon Billiards — `77.88.207.12`, group `hk`)
+  - Phần cứng: ARMv7l (rk322x), 17 camera Dahua
+  - Cấu hình fix: Khắc phục camera16 chip T31N PTS crash-loop (chuyển H.264 Main 2048k, `rtsp_transport=tcp`)
+  - Trạng thái: 34/34 FFmpeg ghi 17 bàn liên tục, RAM khả dụng 1.0 GiB
+
+- [x] **Các node NVR Magic Arena Đà Nẵng** (`inut_205_122`, `inut_205_123`, `inut_205_124`)
+  - Chuẩn hóa toàn bộ 64 kênh NVR về 2560x1440 2048k VBR SmartCodec true
+  - ZRAM 2.8 GiB, 88 tiến trình FFmpeg ghi hình mượt mà trên cả 3 box
