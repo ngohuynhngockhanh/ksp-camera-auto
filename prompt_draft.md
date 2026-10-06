@@ -1,15 +1,15 @@
 # Teamwork Autonomous Execution Draft
 
 ## Description
-Khảo sát hiện trạng và triển khai quy trình tối ưu hóa toàn diện (ZRAM 100% không giới hạn, PM2 Memory Guard theo số lượng camera, Smart Watchdog, Storage Guard cron, gỡ sysrq Node-RED, xả log /dev/null) trên node `inut_205_87` (`77.88.205.87` — Heypick Pickleball), đồng thời tạo Master Watchlist `FLEET_WATCHLIST.md` quản lý 26 node toàn fleet.
+Điều tra nguyên nhân khách vào Wi-Fi không quét/truy cập được trên node `inut_204_141` (`77.88.204.141`), kiểm tra router gateway (pass: HWTCD2DC31B6, read-only), và tối ưu hóa hệ thống toàn diện (ZRAM 100%, PM2 Memory Guard, Smart Watchdog, Storage Guard, sysrq cleanup).
 
 ## Working Directory
 `/home/ksp/ksp-camera-auto`
 
 ## Status
-Completed — inut_205_87 successfully hardened with PM2 Memory Guard (camera 180M, inut 280M, ota-mqtt 120M) with /dev/null logs, ZRAM 100% unconstrained (swappiness 80, vfs_cache_pressure 100), Smart Watchdog active, Storage Guard cron active, all 7 Dahua cameras actively recording with 14 FFmpeg processes; Master Watchlist `FLEET_WATCHLIST.md` created with 26 nodes.
+In Progress — Phase 1: Deep Network & Diagnostic Survey on inut_204_141; Phase 2: Root Cause Identification (Wi-Fi access & routing); Phase 3: System Hardening & Optimization; Phase 4: Final Verification.
 
 ## Requirements Summary
-- R1: Tối ưu hóa toàn diện trên node `inut_205_87` -> [DONE]
-- R2: Tạo Master Watchlist `FLEET_WATCHLIST.md` theo dõi chi tiết 26 node -> [DONE]
-- R3: Nghiệm thu toàn diện hoạt động của kspcam và tiến trình ghi hình camera -> [DONE]
+- R1: Khảo sát hiện trạng mạng, router gateway, IP alias, firewall, listening ports, và tìm lý do khách không quét được trên `204_141`.
+- R2: Tối ưu hóa hệ thống toàn diện (ZRAM, PM2 Memory Guard, sysrq cleanup, Smart Watchdog, Storage Guard cron, kspcam update).
+- R3: Khắc phục sự cố trên iNut và nghiệm thu hoạt động.
