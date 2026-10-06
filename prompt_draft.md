@@ -1,16 +1,15 @@
 # Teamwork Autonomous Execution Draft
 
 ## Description
-Điều tra và khắc phục triệt để tình trạng cạn RAM (OOM / Out of Memory) trên node `inut_204_157` (`77.88.204.157` — Kely Pickleball).
+Khảo sát hiện trạng và triển khai quy trình tối ưu hóa toàn diện (ZRAM 100% không giới hạn, PM2 Memory Guard theo số lượng camera, Smart Watchdog, Storage Guard cron, gỡ sysrq Node-RED, xả log /dev/null) trên node `inut_205_72` (`77.88.205.72` — Master Billiards Club).
 
 ## Working Directory
 `/home/ksp/ksp-camera-auto`
 
 ## Status
-Completed — inut_204_157 memory root cause identified (MEM_LIMIT_PERCENTAGE=50 clamping ZRAM swap writes + no heap caps on Node.js with 12 camera threads + missing watchdog/storage guard) and fully resolved: ZRAM Swap expanded to 3.5GB without mem_limit, PM2 max-memory-restart limits configured, Smart Watchdog and Storage Guard cron active, available RAM increased to 950MB, and all 12 cameras running 24 healthy FFmpeg processes.
+Completed — inut_205_72 successfully configured with PM2 Memory Guard (camera 220M, inut 280M, ota-mqtt 120M) with /dev/null logs, ZRAM 100% unconstrained (swappiness 80, vfs_cache_pressure 100), Smart Watchdog active, Storage Guard cron active, and all 10 Dahua cameras actively recording with 20 FFmpeg processes.
 
 ## Requirements Summary
-- R1: Khảo sát hiện trạng RAM, dmesg OOM killer, và các tiến trình trên `204_157` -> [DONE]
-- R2: Khắc phục điểm nghẽn ZRAM mem_limit và giới hạn heap V8 -> [DONE]
-- R3: Cài đặt Smart Watchdog, Storage Guard cron, và chuẩn hóa Shinobi -> [DONE]
-- R4: Nghiệm thu toàn diện hoạt động của 12 camera và dung lượng RAM khả dụng -> [DONE]
+- R1: Khảo sát hiện trạng phần cứng, RAM/ZRAM, PM2, monitors, FFmpeg processes trên `205_72` -> [DONE]
+- R2: Triển khai ZRAM 100% (`mem_limit = 0`, `swappiness = 80`), PM2 Memory Guard (`--max-memory-restart`), xả log `/dev/null`, Smart Watchdog, Storage Guard cron -> [DONE]
+- R3: Nghiệm thu toàn diện hoạt động của kspcam và tiến trình ghi hình camera -> [DONE]

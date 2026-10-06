@@ -1,54 +1,54 @@
 # Original User Request
 
-## Request — 2026-10-04
+## Request — 2026-10-06
 User request:
-"4-157 vẫn bị hết ram ó"
+"Ok qua 5.72 caid vậy luoon check xem ok ko"
 
 Working directory: `/home/ksp/ksp-camera-auto`
 
 Target Node:
-- `inut_204_157` (`77.88.204.157`) — Kely Pickleball (group `kely`, 12 recorded cameras `camera01` .. `camera13`, `camera03` stop)
+- `inut_205_72` (`77.88.205.72`) — Master Billiards Club (group `master2`, 10 Dahua cameras)
 
-## Root Cause Analysis
-1. **Phân bổ tải bộ nhớ cực cao (12 Camera trên 1.8GB RAM)**:
-   - Box có 1.8 GiB RAM vật lý nhưng gánh tới **12 luồng camera** (24 tiến trình FFmpeg + 12 tiến trình `singleCamera.js` Node.js).
-   - Tổng bộ nhớ ẩn danh cơ sở (Anonymous RSS) của toàn bộ tiến trình:
-     - 12 tiến trình FFmpeg: ~520 MB
-     - 12 tiến trình `singleCamera.js`: ~600 MB
-     - Node-RED (`inut`): ~250 MB
-     - Shinobi master (`camera.js`): ~150 MB (ballooned to 327 MB)
-     - PM2, ota-mqtt, mariadb: ~200 MB
-     - **Tổng base memory: ~1,725 MB / 1,837 MB** (chiếm 95% RAM vật lý).
-2. **Khuyết tật ZRAM `MEM_LIMIT_PERCENTAGE=50` (Nguyên nhân cốt lõi gây OOM)**:
-   - Trong `/etc/default/armbian-zram-config`, `MEM_LIMIT_PERCENTAGE` bị để giá trị mặc định là **`50`**.
-   - Hậu quả: Khi ZRAM lưu được ~110 MB dữ liệu nén, driver ZRAM chạm trần và trả về mã lỗi **`-ENOMEM` (Swap write error)** cho kernel.
-   - Khi kernel không thể hoán đổi thêm trang nhớ ẩn danh vào Swap, cơ chế page reclaim thất bại hoàn toàn. Ngay lập tức kernel gọi OOM killer (lúc 15:38 hôm nay):
-     `Out of memory: Killed process 2157 (node /home/Shin) total-vm:52544412kB, anon-rss:326860kB`.
-3. **Không có ngưỡng giới hạn heap cho Node.js**:
-   - V8 mặc định cho phép heap phình lên 300MB–500MB trước khi thu gom rác. Chỉ cần `camera.js` hoặc `node-red` nở thêm 100MB là toàn bộ hệ thống bị cạn RAM.
-4. **Thiếu vắng Watchdog timer và Storage Guard**:
-   - Box hoàn toàn chưa có `shinobi-camera-watchdog.timer` và chưa có `shinobi-storage-guard`.
+## Requirements & Implementation Results
 
-## Remediation & Actions Taken
-1. **Mở khóa ZRAM Swap lên 100% & Gỡ bỏ `mem_limit`**:
-   - Cấu hình `ZRAM_PERCENTAGE=100`, `MEM_LIMIT_PERCENTAGE=100`, `SWAP_ALGORITHM=lz4`.
-   - Ghi `0` vào `/sys/block/zram0/mem_limit` để xóa bỏ hoàn toàn giới hạn dung lượng swap.
-   - Tăng `vm.swappiness = 80` và `vm.vfs_cache_pressure = 100` để kernel chủ động đẩy các trang nhớ tĩnh của Node.js sang ZRAM.
-   - Mở rộng tổng Swap lên **`3.5 GiB`**.
-2. **Thiết lập giới hạn bộ nhớ PM2 chủ động (`--max-memory-restart`)**:
-   - `camera`: giới hạn 220MB (ngăn chặn tình trạng balloon lên 327MB gây OOM).
-   - `inut` (node-red): giới hạn 280MB.
-   - `ota-mqtt`: giới hạn 120MB.
-3. **Cài đặt Smart Watchdog (`shinobi-camera-watchdog`)**:
-   - Kích hoạt timer `shinobi-camera-watchdog.timer` quét mỗi 60s, kiểm tra số lượng tiến trình FFmpeg thực tế (`pgrep -c ffmpeg`).
-4. **Cài đặt Storage Guard (`shinobi-storage-guard`)**:
-   - Kích hoạt cron 15 phút/lần bảo vệ thẻ nhớ `/media/usb1/kely/` (xả khi $\ge 85\%$).
-5. **Chuẩn hóa Shinobi**:
-   - Cập nhật `wall_clock_timestamp_ignore = '0'`, `hls_time = '2'`, `max_keep_days = '3'`, bật cờ dọn file mồ côi trong `conf.json`.
+### R1. Khảo sát hiện trạng & điều tra sức khỏe hệ thống trên `inut_205_72` [HOÀN THÀNH]
+- **Kiến trúc phần cứng**: Allwinner H313 (`aarch64`), kernel `6.6.44-current-sunxi64`.
+- **Uptime**: Uptime 19 ngày liên tục (`up 19 days, 20:24`).
+- **RAM & ZRAM ban đầu**:
+  - RAM vật lý 1.9 GiB (Used: 833 MiB, Avail: 1.1 GiB).
+  - Swap: 1.9 GiB ZRAM (`MEM_LIMIT_PERCENTAGE=100`, nhưng `swappiness` đang để mức thấp 60, chưa có `vfs_cache_pressure = 100`).
+- **PM2**:
+  - `camera` (pid 3255609), `inut` (pid 3253755), `ota-mqtt` (pid 3239619).
+  - Chưa được gán giới hạn `--max-memory-restart`.
+  - Tiến trình `camera` đang ghi log ra file đĩa `/root/.pm2/logs/camera-out.log` và `camera-error.log` (chưa chuyển sang `/dev/null` như `ota-mqtt`).
+- **Thẻ nhớ & Watchdog**:
+  - Thẻ nhớ 118 GB: Dùng 70 GB (60%), còn trống 48 GB.
+  - Đã có Smart Watchdog `shinobi-camera-watchdog.timer` và Storage Guard `shinobi-storage-guard` cron.
+  - Active `flow.json` Node-RED đã sạch hoàn toàn lệnh `sysrq` (chỉ còn trong các file backup cũ).
 
-## Acceptance Verification
-- [x] RAM khả dụng tăng từ mức báo động lên **`950 MiB`** (tăng thêm gần 300MB RAM khả dụng).
-- [x] Swap ZRAM hoạt động trơn tru với dung lượng mở rộng **`3.5 GiB`** (không còn bị chặn ở 50%).
-- [x] Toàn bộ 12 camera ghi hình đang chạy đủ **24 tiến trình FFmpeg** (12 stream HLS + 12 record MP4).
-- [x] File ghi hình MP4 sinh đều đặn trên cả 12 sân pickleball trong `/media/usb1/kely/`.
-- [x] Smart watchdog và Storage guard cron đã kích hoạt và hoạt động tự động.
+### R2. Đóng gói & Triển khai cấu hình tối ưu toàn diện như 4-157 [HOÀN THÀNH]
+1. **ZRAM Swap 100% & Tối ưu Kernel VM**:
+   - `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100` (đã lưu vào `/etc/sysctl.conf`).
+   - Xóa bỏ `mem_limit`: `echo 0 > /sys/block/zram0/mem_limit`.
+2. **PM2 Memory Guard theo số lượng camera (N=10)**:
+   - `camera`: `--max-memory-restart 220M --output /dev/null --error /dev/null`
+   - `inut`: `--max-memory-restart 280M --output /dev/null --error /dev/null`
+   - `ota-mqtt`: `--max-memory-restart 120M --output /dev/null --error /dev/null`
+   - Đã lưu cấu hình vĩnh viễn vào `/root/.pm2/dump.pm2` (`pm2 save`).
+   - Xóa sạch các file log cũ trong `/root/.pm2/logs/`, bảo vệ đĩa không bị mòn hay đầy dung lượng.
+3. **Smart Watchdog & Storage Guard**:
+   - `shinobi-camera-watchdog.timer` hoạt động quét mỗi 60 giây.
+   - `shinobi-storage-guard` cron hoạt động mỗi 15 phút (bảo vệ `/media/usb1/master2/`).
+
+### R3. Nghiệm thu & Kết quả đo đạc thực tế [HOÀN THÀNH]
+- **RAM khả dụng**: Đạt **`962 MiB – 1.1 GiB`** (rất thông thoáng).
+- **ZRAM Swap**: Sẵn sàng **`1.9 GiB`** (đang nén lưu 194 MB dữ liệu chỉ tốn 37 MB RAM thực).
+- **Tiến trình ghi hình**: Toàn bộ **20/20 tiến trình FFmpeg** (10 stream + 10 record) đang chạy mượt mà.
+- **File video mới**: Tất cả 10 camera đều đang sinh file video mới liên tục trong `/media/usb1/master2/` (`21:05:xx.mp4`, 3K 2880x1620 @ 30fps H.265, AAC).
+- **PM2 Log Paths**: Cả 3 tiến trình (`camera`, `inut`, `ota-mqtt`) đều xả log vào `/dev/null` chuẩn xác.
+
+## Acceptance Criteria
+- [x] C1: Node `205_72` được khảo sát và ghi nhận hiện trạng chi tiết.
+- [x] C2: ZRAM 100% không giới hạn và PM2 memory guard được cấu hình chuẩn xác.
+- [x] C3: Node-RED sysrq bị loại bỏ, Smart Watchdog và Storage guard cron được kích hoạt.
+- [x] C4: Tất cả các camera ghi hình ổn định, FFmpeg chạy mượt mà, RAM khả dụng thông thoáng.
