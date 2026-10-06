@@ -21,16 +21,16 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
 
 - [x] **Node `inut_204_141`** (789 Billiards — `77.88.204.141`, group `mia`)
   - Phần cứng: Allwinner H313 (ARM64), RAM 1.9 GiB, Thẻ nhớ 58 GB
-  - LAN Local: `192.168.1.10/24` (DHCP từ router Huawei `HG8041X6-12` `192.168.1.1`), Virtual IP `192.168.1.254/24` (`end0:1`)
+  - LAN Local: `192.168.1.10/24` (DHCP từ router Huawei `HG8041X6-12` `192.168.1.1`)
+  - Virtual IP mới: **`192.168.1.250/24`** (`end0:1`) -> Tránh triệt để xung đột IP với camera Imou (`30:24:50:f8:57:af`) đang chiếm `192.168.1.254`
   - Khắc phục lỗi khách quét QR:
-    - Sửa lỗi `eth0_virtual_ip` bị rỗng trong Node-RED khiến biến `eth0_ip` rỗng -> URL chuyển hướng trước đây bị lỗi thành `http://:8080/`. Đã đồng bộ `192.168.1.254` vào `eth0_virtual_ip`, `end0_virtual_ip`, `wifi_ip`, `qr_ip`.
-    - Đổi subnet mask của IP alias từ `/32` thành chuẩn `/24` (`192.168.1.254/24 brd 192.168.1.255 dev end0 label end0:1`), cấu hình `arp_ignore=0`, `arp_announce=0` triệt tiêu lỗi bất đối xứng routing.
-    - Cài đặt redirect iptables từ port 80 sang port 2023 (`PREROUTING` & `OUTPUT`), khách truy cập cả `http://192.168.1.254` lẫn `:2023` đều mở ngay lập tức.
-  - Khảo sát Router: Router Huawei ONT Wi-Fi 6 (`HG8041X6-12`), SSID `BILLIARDS 789` (2.4GHz & 5GHz, WPA2-PSK pass `00000000`). Tài khoản `admin` là userlevel 0 (Easy Setup) nên không có menu can thiệp DHCP binding trong Web GUI.
+    - Chuyển toàn bộ virtual IP sang `192.168.1.250` đồng bộ qua Redbida / `change_ok` (`eth0_virtual_ip`, `end0_virtual_ip`, `wifi_ip`, `qr_ip`).
+    - Cấu hình IP alias chuẩn `/24` (`192.168.1.250/24 brd 192.168.1.255 dev end0 label end0:1`) và `arp_ignore=0`, `arp_announce=0`.
+    - Chuyển tiếp cổng 80 sang cổng 2023 (`PREROUTING` & `OUTPUT`). Khách vào `http://192.168.1.250` hoặc `:2023` đều mở trang ngay lập tức.
   - Cấu hình PM2 Memory Guard (N=7): `camera`: 180M | `inut`: 280M | `ota-mqtt`: 120M (log `/dev/null`)
-  - Cấu hình Kernel & Swap: ZRAM 2.8 GiB (`lz4`, uncap `mem_limit=0`, `swappiness=80`, `vfs_cache_pressure=100`)
+  - Cấu hình Kernel & Swap: ZRAM 1.9 GiB (`lz4`, uncap `mem_limit=0`, `swappiness=80`, `vfs_cache_pressure=100`)
   - Cơ chế bảo vệ: Smart Watchdog 60s, Storage Guard 15p (`/media/usb1/mia`), Sysrq gỡ sạch 100%
-  - Trạng thái: RAM khả dụng 1.0 GiB, 13/14 FFmpeg ghi 7 bàn liên tục, file mới sinh đều đặn
+  - Trạng thái: RAM khả dụng 1.0 GiB, 14/14 FFmpeg ghi 7 bàn liên tục, file mới sinh đều đặn
 
 - [x] **Node `inut_204_150`** (99 Billiards - CS11 - 1 — `77.88.204.150`, group `99cs111`)
   - Phần cứng: Rockchip RK3528 (ARM64), RAM 1.8 GiB, Thẻ nhớ 118 GB
