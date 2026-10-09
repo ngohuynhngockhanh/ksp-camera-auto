@@ -209,3 +209,21 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
     - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
     - Kích hoạt Storage Guard 15p chuẩn 90% (`/media/usb1/job`), cấu hình Shinobi `deleteOld=true`, `max_keep_days=3`, `wallclock=0`
   - Trạng thái: Đủ 12/12 tiến trình FFmpeg ghi 6 bàn 3K liên tục, ZRAM 1.8 GiB đệm mượt, hết hoàn toàn nguy cơ treo bus
+
+- [x] **Node `inut_204_161`** (NTV Billiards — `77.88.204.161`, group `ntv`)
+  - Phần cứng: Amlogic S912 8-core Cortex-A53 (aarch64), RAM 1.8 GiB, Thẻ nhớ 117 GB
+  - Số lượng camera: 12 camera Dahua 3K (`192.168.1.211` - `222`), 2880x1620 25fps H.265 SmartCodec AAC
+  - Nguyên nhân hay treo trước đó:
+    - Dùng `/swapfile` trên eMMC flash kèm `vm.swappiness = 0` (swap không bao giờ hoạt động), ZRAM bị tắt (`ENABLED=false`) khiến 12 camera 3K ngốn cạn RAM (chỉ còn ~480MB trống)
+    - Bẫy sysrq: Node-RED có bẫy `load average > 12` gọi `echo b > /proc/sysrq-trigger`, trong khi `/etc/sysctl.d/` bật `kernel.sysrq = 1`
+    - Trên chip Amlogic S912, lệnh sysrq làm đơ cứng bus lưu trữ `meson-gx-mmc` khi đang ghi đồng thời 24 luồng video
+    - `change_ok` đặt ngưỡng restart RAM quá cao (`max_free_ram_restart_camera: 250`, `force_restart: 150`)
+    - Thẻ nhớ `/media/usb1` phình lên 74% (86 GB / 117 GB) do không có Storage Guard và Shinobi thiếu `deleteOld`
+  - Cấu hình đã xử lý:
+    - Xóa bỏ `/swapfile` eMMC, giải phóng 1GB flash; kích hoạt ZRAM Swap 1.8 GiB unconstrained (`lz4`)
+    - Cấu hình `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `sysctl kernel.sysrq = 0`
+    - Gỡ bỏ hoàn toàn lệnh sysrq trong flow Node-RED `ok2`
+    - PM2 Memory Guard: `camera: 220M` (12 cameras) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+    - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
+    - Kích hoạt Storage Guard 15p chuẩn 90% (`/media/usb1/ntv`), cấu hình Shinobi `deleteOld=true`, `max_keep_days=3`, `wallclock=0`
+  - Trạng thái: Đủ 24/24 tiến trình FFmpeg ghi 12 bàn 3K liên tục, RAM khả dụng tăng lên >690 MB, ZRAM 1.8 GiB đệm an toàn, triệt tiêu nguy cơ treo bus
