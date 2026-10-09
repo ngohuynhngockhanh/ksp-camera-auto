@@ -175,3 +175,20 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
 - [x] **Các node NVR Magic Arena Đà Nẵng** (`inut_205_122`, `inut_205_123`, `inut_205_124`)
   - Chuẩn hóa toàn bộ 64 kênh NVR về 2560x1440 2048k VBR SmartCodec true
   - ZRAM 2.8 GiB, 88 tiến trình FFmpeg ghi hình mượt mà trên cả 3 box
+
+- [x] **Node `inut_202_213`** (Núi Thành Billiards Center — `77.88.202.213`, group `nuithanh`)
+  - Phần cứng: Cortex-A7 sunxi (ARMv7l), RAM 1.0 GiB, Thẻ nhớ 30 GB (F2FS)
+  - LAN Local: `192.168.1.254/24` (eth0)
+  - Số lượng camera: 4 camera Dahua (`192.168.1.240` - `243`), trong đó Cam 3, 4 online 3K H.265 SmartCodec
+  - Nguyên nhân hay treo trước đó:
+    - `vm.swappiness = 0` và ZRAM chỉ 500MB khiến kernel không dùng swap, thiếu RAM dẫn đến đơ máy
+    - Node-RED `ok2` flow có bẫy `load average > 12` gọi `echo b > /proc/sysrq-trigger` gây sập nguồn tức thì
+    - `netwatch.service` ping router `192.168.1.1` lỗi 2 lần là kích hoạt `echo b > /proc/sysrq-trigger` (reboot lặp vào 22h-23h hàng đêm)
+    - Thẻ nhớ `/media/usb1` đầy 81% do không có Storage Guard và Shinobi thiếu `deleteOld`
+  - Cấu hình đã xử lý:
+    - Vô hiệu hóa toàn bộ `sysrq`: gỡ bẫy Node-RED, trung hòa netwatch, `sysctl kernel.sysrq = 0`
+    - Cấu hình ZRAM Swap 1.0 GiB unconstrained, `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`
+    - PM2 Memory Guard: `camera: 160M` | `inut: 240M` | `ota-mqtt: 100M` với log trỏ `/dev/null`
+    - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
+    - Kích hoạt Storage Guard 15p theo chuẩn mới 90% (`/media/usb1/nuithanh`), cấu hình `max_keep_days=3`
+  - Trạng thái: RAM khả dụng >520 MB, ZRAM 1.0 GB đệm an toàn, các luồng đang ghi hình ổn định
