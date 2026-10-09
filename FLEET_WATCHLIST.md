@@ -192,3 +192,20 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
     - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
     - Kích hoạt Storage Guard 15p theo chuẩn mới 90% (`/media/usb1/nuithanh`), cấu hình `max_keep_days=3`
   - Trạng thái: RAM khả dụng >520 MB, ZRAM 1.0 GB đệm an toàn, các luồng đang ghi hình ổn định
+
+- [x] **Node `inut_204_222`** (Hiếu Billiards Arena — `77.88.204.222`, group `job`)
+  - Phần cứng: Amlogic S912 8-core Cortex-A53 (aarch64), RAM 1.8 GiB, Thẻ nhớ 58 GB
+  - Số lượng camera: 6 camera Dahua 3K (`192.168.1.237` - `242`), 2880x1620 25fps H.265 SmartCodec AAC
+  - Nguyên nhân hay treo trước đó:
+    - ZRAM bị tắt hoàn toàn (`ENABLED=false`, Swap = 0B, `swappiness = 0`), khiến 6 camera 3K ngốn sạch RAM gây nghẽn
+    - Bẫy sysrq: Node-RED có bẫy `load average > 12`, `/usr/local/bin/force_reboot.sh`, và `netwatch.service` đều gọi `echo b > /proc/sysrq-trigger`
+    - Trên chip Amlogic S912, lệnh sysrq làm đơ cứng bus lưu trữ `meson-gx-mmc` khi đang ghi nhiều luồng video, khiến box bị treo cứng phải rút nguồn
+    - `change_ok` đặt ngưỡng restart quá cao (`max_free_ram_restart_camera: 300`) kết hợp lịch restart 03:30, 15:00, 23:00 làm `camera` restart liên tục 63 lần
+    - Thẻ nhớ `/media/usb1` phình lên 71% (41 GB) do không có Storage Guard và thiếu `deleteOld`
+  - Cấu hình đã xử lý:
+    - Kích hoạt ZRAM Swap 1.8 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`
+    - Khóa triệt để sysrq ở kernel (`sysctl kernel.sysrq = 0`), gỡ bỏ toàn bộ lệnh sysrq trong Node-RED, force_reboot và netwatch
+    - PM2 Memory Guard: `camera: 180M` | `inut: 280M` | `ota-mqtt: 120M` với log `/dev/null`
+    - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
+    - Kích hoạt Storage Guard 15p chuẩn 90% (`/media/usb1/job`), cấu hình Shinobi `deleteOld=true`, `max_keep_days=3`, `wallclock=0`
+  - Trạng thái: Đủ 12/12 tiến trình FFmpeg ghi 6 bàn 3K liên tục, ZRAM 1.8 GiB đệm mượt, hết hoàn toàn nguy cơ treo bus
