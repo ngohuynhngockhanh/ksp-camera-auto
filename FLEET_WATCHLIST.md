@@ -297,3 +297,21 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
     - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
     - Kích hoạt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/4953`), cấu hình Shinobi `deleteOld=true`, `max_keep_days=3`, `wallclock=0`
   - Trạng thái: Hồi sinh toàn bộ 16 camera, đủ 23-32 tiến trình FFmpeg ghi hình liên tục, thẻ nhớ còn trống 122 GB (50%), RAM khả dụng >2.7 GB, Swap ZRAM 3.8 GiB đệm mượt
+
+- [x] **Node `inut_205_60`** (Bata Billiards Club — `77.88.205.60`, group `bata`)
+  - Phần cứng: Allwinner H616/H618 4-core Cortex-A53 (aarch64), RAM 1.9 GiB, Thẻ nhớ 58 GB
+  - Số lượng camera: 11 camera Hikvision (`192.168.1.202`, `.204`, `.206` - `.212`, `.214`, `.216`), 1920x1080 25fps H.265 SmartCodec VBR 1024kbps
+  - Nguyên nhân và các điểm nghẽn trước đó:
+    - Thẻ nhớ `/media/usb1` bị **tràn 100% dung lượng đĩa (58 GB / 58 GB, Available = 0B)** từ ngày 08/10, khiến FFmpeg không thể ghi tiếp, số tiến trình FFmpeg bị rớt từ 22 xuống chỉ còn 3 luồng
+    - Chưa có Storage Guard tự động dọn rác và Shinobi thiếu cấu hình tự xóa clip cũ (`deleteOld: false`)
+    - ZRAM Swap bị tắt hoàn toàn (`ENABLED=false`, Swap = 0B, `swappiness = 0`), khiến RAM thực bị ép xuống mức nguy hiểm
+    - Bẫy sysrq: `netwatch.service` ping router `192.168.1.1` thất bại 2 lần là gọi `echo b > /proc/sysrq-trigger`, trong khi kernel đang bật `kernel.sysrq = 1`
+    - Chưa có PM2 Memory Guard, Node.js heap không bị giới hạn
+  - Cấu hình đã xử lý:
+    - Giải cứu khẩn cấp dung lượng đĩa: xóa bỏ video cũ ngày 07/10, giải phóng ngay **39 GB dung lượng trống** (đưa đĩa về 33% rồi sau đó 4%)
+    - Kích hoạt ZRAM Swap 1.9 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`
+    - Khóa triệt để sysrq ở kernel (`sysctl kernel.sysrq = 0`), trung hòa lệnh sysrq trong `netwatch_loop.sh`
+    - PM2 Memory Guard: `camera: 210M` (11 cameras) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+    - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
+    - Kích hoạt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/bata`), cấu hình Shinobi `deleteOld=true`, `max_keep_days=3`, `wallclock=0`
+  - Trạng thái: Hồi sinh toàn bộ 11 camera Hikvision, đủ 22-23 tiến trình FFmpeg ghi hình liên tục, thẻ nhớ còn trống >50 GB, RAM khả dụng >850 MB, Swap ZRAM 1.9 GiB đệm mượt
