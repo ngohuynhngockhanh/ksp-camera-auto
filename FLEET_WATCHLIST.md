@@ -315,3 +315,31 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
     - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
     - Kích hoạt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/bata`), cấu hình Shinobi `deleteOld=true`, `max_keep_days=3`, `wallclock=0`
   - Trạng thái: Hồi sinh toàn bộ 11 camera Hikvision, đủ 22-23 tiến trình FFmpeg ghi hình liên tục, thẻ nhớ còn trống >50 GB, RAM khả dụng >850 MB, Swap ZRAM 1.9 GiB đệm mượt
+
+- [x] **Node `inut_204_38`** (Top Billiards Thái Nguyên - Box 1 — `77.88.204.38`, group `ux0pAUigSn`)
+  - Phần cứng: Rockchip RK3528/RK3328 4-core Cortex-A53 (aarch64), RAM 3.9 GiB, Thẻ nhớ 115 GB
+  - Mạng LAN & IP: `192.168.1.133/24` (eth0 DHCP), IP ảo: **`192.168.1.133`** (`eth0:1`)
+  - Số lượng camera: 13 camera Dahua (`Camera01` .. `Camera13` tương ứng Bàn 01 đến Bàn 13 trên đầu ghi Dahua `192.168.1.73` channels 1..13)
+  - Cấu hình Onboarding & Golden Hardening:
+    - Cấu hình Shinobi REST API: 13 camera remux `vcodec=copy`, `acodec=no`, `cust_record="-tag:v hvc1"`, `wall_clock_timestamp_ignore="0"`, `cutoff=5`
+    - Cấu hình Branding: `ui_title`: "Top Billiards Thái Nguyên", `company_name`: "Billiard Live", logo header & hashtag chuẩn Bida
+    - Cấu hình IP ảo: gán `192.168.1.133` đồng bộ vào `change_ok` (`eth0_virtual_ip`, `end0_virtual_ip`, `wifi_ip`, `qr_ip`), chuyển tiếp iptables port 80 -> 2023
+    - Kích hoạt ZRAM Swap 3.8 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, `kernel.sysrq = 0`
+    - PM2 Memory Guard: `camera: 230M` (13 cameras) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+    - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
+    - Kích hoạt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/ux0pAUigSn`), cấu hình Shinobi `deleteOld=true`, `max_keep_days=3`
+  - Trạng thái: Đủ 26/26 tiến trình FFmpeg (13 stream + 13 record), video mới sinh đều đặn, RAM khả dụng >2.6 GB, ZRAM 3.8 GiB đệm mượt
+
+- [x] **Node `inut_204_83`** (Top Billiards Thái Nguyên - Box 2 — `77.88.204.83`, group `YZT7lO2CzM`)
+  - Phần cứng: Rockchip RK3528/RK3328 4-core Cortex-A53 (aarch64), RAM 3.9 GiB, Thẻ nhớ 58 GB
+  - Mạng LAN & IP: `192.168.1.239/24` (eth0 DHCP), IP ảo: **`192.168.1.239`** (`eth0:1`)
+  - Số lượng camera: 13 camera Dahua (`Camera01` .. `Camera13` tương ứng Bàn 14 đến Bàn 26 trên đầu ghi Dahua `192.168.1.73` channels 14..26)
+  - Cấu hình Onboarding & Golden Hardening:
+    - Cấu hình Shinobi REST API: 13 camera remux `vcodec=copy`, `acodec=no`, `cust_record="-tag:v hvc1"`, `wall_clock_timestamp_ignore="0"`, `cutoff=5`
+    - Cấu hình Branding: `ui_title`: "Top Billiards Thái Nguyên", `company_name`: "Billiard Live", logo header & hashtag chuẩn Bida
+    - Cấu hình IP ảo: gán `192.168.1.239` đồng bộ vào `change_ok` (`eth0_virtual_ip`, `end0_virtual_ip`, `wifi_ip`, `qr_ip`), chuyển tiếp iptables port 80 -> 2023
+    - Kích hoạt ZRAM Swap 3.8 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, `kernel.sysrq = 0`
+    - PM2 Memory Guard: `camera: 230M` (13 cameras) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+    - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
+    - Kích hoạt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/YZT7lO2CzM`), cấu hình Shinobi `deleteOld=true`, `max_keep_days=3`
+  - Trạng thái: Đủ 26/26 tiến trình FFmpeg (13 stream + 13 record), video mới sinh đều đặn, RAM khả dụng >2.6 GB, ZRAM 3.8 GiB đệm mượt
