@@ -319,6 +319,7 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
 - [x] **Node `inut_204_38`** (Top Billiards Thái Nguyên - Box 1 — `77.88.204.38`, group `ux0pAUigSn`)
   - Phần cứng: Rockchip RK3528/RK3328 4-core Cortex-A53 (aarch64), RAM 3.9 GiB, Thẻ nhớ 115 GB
   - Mạng LAN & IP: `192.168.1.133/24` (eth0 DHCP), IP ảo: **`192.168.1.133`** (`eth0:1`)
+  - FRP Subdomains: Store: **`http://store-toptn1.video.io.vn`** | C-Store: **`http://c-store-toptn1.video.io.vn`**
   - Số lượng camera: 13 camera Dahua (`Camera01` .. `Camera13` tương ứng Bàn 01 đến Bàn 13 trên đầu ghi Dahua `192.168.1.73` channels 1..13)
   - Cấu hình Onboarding & Golden Hardening:
     - Cấu hình Shinobi REST API: 13 camera remux `vcodec=copy`, `acodec=no`, `cust_record="-tag:v hvc1"`, `wall_clock_timestamp_ignore="0"`, `cutoff=5`
@@ -333,6 +334,7 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
 - [x] **Node `inut_204_83`** (Top Billiards Thái Nguyên - Box 2 — `77.88.204.83`, group `YZT7lO2CzM`)
   - Phần cứng: Rockchip RK3528/RK3328 4-core Cortex-A53 (aarch64), RAM 3.9 GiB, Thẻ nhớ 58 GB
   - Mạng LAN & IP: `192.168.1.239/24` (eth0 DHCP), IP ảo: **`192.168.1.239`** (`eth0:1`)
+  - FRP Subdomains: Store: **`http://store-toptn2.video.io.vn`** | C-Store: **`http://c-store-toptn2.video.io.vn`**
   - Số lượng camera: 13 camera Dahua (`Camera01` .. `Camera13` tương ứng Bàn 14 đến Bàn 26 trên đầu ghi Dahua `192.168.1.73` channels 14..26)
   - Cấu hình Onboarding & Golden Hardening:
     - Cấu hình Shinobi REST API: 13 camera remux `vcodec=copy`, `acodec=no`, `cust_record="-tag:v hvc1"`, `wall_clock_timestamp_ignore="0"`, `cutoff=5`
