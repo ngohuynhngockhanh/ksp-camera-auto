@@ -246,3 +246,20 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
     - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
     - Kích hoạt Storage Guard 15p chuẩn 90% (`/media/usb1/giaphong`), cấu hình Shinobi `deleteOld=true`, `max_keep_days=3`, `wallclock=0`
   - Trạng thái: Hồi sinh toàn bộ hệ thống ghi hình, đủ 8 tiến trình FFmpeg ghi 4 bàn liên tục, RAM khả dụng >650 MB, ZRAM 1.0 GB đệm an toàn
+
+- [x] **Node `inut_205_120`** (Viễn Đông Pickleball — `77.88.205.120`, group `tanminh`)
+  - Phần cứng: Allwinner H616/H618 4-core Cortex-A53 (aarch64), RAM 1.9 GiB, Thẻ nhớ 59 GB
+  - LAN Local: `192.168.20.204/24` (DHCP), Virtual IP: `192.168.20.252/32` (eth0)
+  - Số lượng camera: 4 camera Dahua 3K (`192.168.20.205`, `.206`, `.136`, `.137`), 2880x1620 30fps H.265 SmartCodec AAC
+  - Nguyên nhân và kết quả kiểm tra tính năng tải video:
+    - Khách tải clip đang trong quá trình ghi (chưa đóng container MP4 thiếu `moov atom`) sẽ báo lỗi; các file đã ghi xong hoàn tất tải mượt mà qua API `/cut-video-stream`
+    - Trước đó ZRAM bị tắt (`ENABLED=false`, Swap = 0B, `swappiness = 0`), khiến RAM thực bị ép xuống mức nguy hiểm khi nhiều khách tải video
+    - Node-RED `ok2` flow có bẫy `load average > 12` gọi `echo b > /proc/sysrq-trigger`, tiềm ẩn nguy cơ sập nguồn đột ngột
+    - Thẻ nhớ `/media/usb1` phình lên 74% (43 GB / 59 GB) do không có Storage Guard và Shinobi thiếu `deleteOld`
+  - Cấu hình đã xử lý:
+    - Kích hoạt ZRAM Swap 1.9 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`
+    - Khóa triệt để sysrq ở kernel (`sysctl kernel.sysrq = 0`), gỡ bỏ bẫy sysrq trong Node-RED
+    - PM2 Memory Guard: `camera: 180M` | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+    - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
+    - Kích hoạt Storage Guard 15p chuẩn 90% (`/media/usb1/tanminh`), cấu hình Shinobi `deleteOld=true`, `max_keep_days=3`, `wallclock=0`
+  - Trạng thái: 8/8 tiến trình FFmpeg ghi 4 sân Pickleball 3K liên tục, tải clip ổn định, RAM khả dụng >820 MB, ZRAM 1.9 GiB đệm mượt
