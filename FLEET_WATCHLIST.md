@@ -263,3 +263,19 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
     - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
     - Kích hoạt Storage Guard 15p chuẩn 90% (`/media/usb1/tanminh`), cấu hình Shinobi `deleteOld=true`, `max_keep_days=3`, `wallclock=0`
   - Trạng thái: 8/8 tiến trình FFmpeg ghi 4 sân Pickleball 3K liên tục, tải clip ổn định, RAM khả dụng >820 MB, ZRAM 1.9 GiB đệm mượt
+
+- [x] **Node `inut_205_55`** (Tuyết Linh Billiards Club — `77.88.205.55`, group `tuyetlinh`)
+  - Phần cứng: Allwinner H616/H618 4-core Cortex-A53 (aarch64), RAM 1.9 GiB, Thẻ nhớ 60 GB
+  - Số lượng camera: 11 camera Dahua (`192.168.1.171`, `.181` - `.186`, `.191`, `.194`, `.195`, `.199`), H.265 AAC
+  - Nguyên nhân và các điểm nghẽn trước đó:
+    - ZRAM bị bóp nghẽn bởi `MEM_LIMIT_PERCENTAGE=50`, swap đã dùng tới 439 MB sắp chạm trần nén, có nguy cơ gây lỗi kernel `-ENOMEM` và kích hoạt OOM killer
+    - Kernel bật cờ `kernel.sysrq = 176`, `vm.swappiness = 60` chưa tối ưu cho flash wear
+    - Node-RED `ok2` flow có bẫy `load average > 12` gọi `echo b > /proc/sysrq-trigger`, tiềm ẩn nguy cơ sập nguồn đột ngột khi quán đông khách
+    - Storage Guard cũ đặt ngưỡng 85% $\rightarrow$ 75%, chưa áp dụng chuẩn mới 90% $\rightarrow$ 80% (làm xóa bớt ngày lưu trữ của quán)
+  - Cấu hình đã xử lý:
+    - Mở trần hoàn toàn ZRAM Swap: `MEM_LIMIT_PERCENTAGE=100`, unconstrained `mem_limit=0`
+    - Cấu hình `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `sysctl kernel.sysrq = 0`
+    - Gỡ bỏ hoàn toàn lệnh sysrq trong flow Node-RED `ok2`, nâng ngưỡng kiểm tra tải an toàn
+    - PM2 Memory Guard: `camera: 210M` (11 cameras) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+    - Nâng cấp Storage Guard 15p lên chuẩn mới 90% $\rightarrow$ 80% (`/media/usb1/tuyetlinh`)
+  - Trạng thái: Đủ 22-23 tiến trình FFmpeg ghi 11 bàn liên tục, RAM khả dụng >960 MB, ZRAM 1.9 GiB đệm mượt mà không lo `-ENOMEM`
