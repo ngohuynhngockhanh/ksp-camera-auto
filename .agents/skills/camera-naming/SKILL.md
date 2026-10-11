@@ -85,6 +85,21 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 - `watchdog_reset`: `"1"`
 - `signal_check`: `"10"`
 
+### E. Kích Thước Ghi Hình, Cấu Trúc Input Map & Hạn Mức Dung Lượng (Critical Gotchas):
+1. **Bắt buộc cấu hình `input_map_choices` trong `details`**:
+   - Khi tạo Monitor JSON (qua API Shinobi hay nạp database), trường `details.input_map_choices` **BẮT BUỘC** phải có:
+     `"input_map_choices": {"stream": [], "snap": [], "record": [], "record_timelapse": [], "detector": [], "detector_object": [], "detector_sip_buffer": []}` và `"input_maps": ""`.
+   - *Lý do:* Trong Shinobi `libs/ffmpeg/builders.js:398:74`, code truy cập trực tiếp `e.details.input_map_choices.stream`. Nếu thiếu trường này, Node.js văng lỗi `TypeError: Cannot read properties of undefined (reading 'stream')`, crash-loop `camera.js` và toàn bộ camera ngừng ghi hình (FFmpeg = 0).
+2. **Kích thước độ phân giải ghi hình (`width` x `height`) chuẩn theo camera**:
+   - Bắt buộc cập nhật trường `width` và `height` trong bảng `Monitors` theo độ phân giải stream thực tế ($1920 \times 1080$ cho 2MP/1080p, $2880 \times 1620$ cho 3K, $2560 \times 1440$ cho 4MP).
+   - Trong `details`: gán `stream_scale_x: ""` và `stream_scale_y: ""` để passthrough video gốc không bị méo tỷ lệ, gán `detector_scale_x`/`detector_scale_y` bằng độ phân giải stream. Tuyệt đối không để sót mặc định `640x480`.
+3. **Cài đặt Dung lượng tối đa tài khoản Shinobi (`Users.details.size`)**:
+   - Shinobi mặc định chỉ cấp **10,000 MB (10 GB)** nếu user details thiếu trường `size`. Khi video đạt 10 GB, Shinobi báo đầy ổ đĩa và ngừng ghi hình dù thẻ nhớ còn trống hàng chục GB.
+   - Bắt buộc cập nhật `Users.details` trường `size` tương ứng với dung lượng thẻ:
+     - Thẻ 64 GB $\rightarrow$ `size: "50000"` (50 GB), `days: "3"`, `size_video_percent: "90"`
+     - Thẻ 128 GB $\rightarrow$ `size: "100000"` (100 GB), `days: "3"`, `size_video_percent: "90"`
+     - Thẻ 256 GB $\rightarrow$ `size: "210000"` (210 GB), `days: "3"`, `size_video_percent: "90"`
+
 ---
 
 ## 3. Danh sách 8 Camera Chuẩn hóa Mẫu

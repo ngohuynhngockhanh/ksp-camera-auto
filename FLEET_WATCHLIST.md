@@ -15,6 +15,29 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
 6. **Storage Guard 15p (Tiêu chuẩn mới 90%)**: Script `/usr/local/bin/shinobi-storage-guard.sh` targeting thư mục video của quán, dọn rác 0-byte và xoay vòng xả đĩa khi $\ge 90\%$ về mức $\le 80\%$ (do Shinobi đã tự động chừa lại 10% dung lượng an toàn).
 7. **Shinobi Zero-Transcode & Timestamp Fix**: `vcodec=copy`, `acodec=copy` (hoặc `no`), `wall_clock_timestamp_ignore=0` (hoặc passthrough), `hls_time=2`, `max_keep_days=3`, kích hoạt `deleteOld`/`deleteOrphans` trong `conf.json`.
 
+### 1.1 Quy Trình Onboarding Chuẩn & Phòng Chống Lỗi (Golden Onboarding SOP & Pitfall Prevention)
+
+Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera / đa box), BẮT BUỘC tuân thủ 5 nguyên tắc sau để không lặp lại sự cố:
+1. **Bắt buộc có `input_map_choices` trong Monitor details**:
+   - Khi tạo Monitor JSON qua Shinobi API (`configureMonitor`), trường `details.input_map_choices` **BẮT BUỘC** phải có:
+     `{"stream": [], "snap": [], "record": [], "record_timelapse": [], "detector": [], "detector_object": [], "detector_sip_buffer": []}` và `input_maps: ""`.
+   - *Hậu quả nếu thiếu:* Shinobi `builders.js:398` sẽ văng lỗi `TypeError: Cannot read properties of undefined (reading 'stream')`, làm crash-loop `camera.js` và khiến toàn bộ FFmpeg = 0.
+2. **Kích thước độ phân giải ghi hình (`width` x `height`) chuẩn theo camera**:
+   - Luôn cập nhật `width` và `height` trong bảng `Monitors` theo đúng độ phân giải thực tế của luồng camera/NVR ($1920 \times 1080$ cho 2MP/1080p, $2880 \times 1620$ cho 3K, $2560 \times 1440$ cho 4MP).
+   - Trong `details`: gán `stream_scale_x: ""` và `stream_scale_y: ""` để passthrough video gốc không bị bóp méo, gán `detector_scale_x`/`detector_scale_y` bằng độ phân giải stream. Tuyệt đối không để sót mặc định `640x480`.
+3. **Cài đặt Dung lượng tối đa tài khoản Shinobi (`Users.details.size`)**:
+   - Shinobi mặc định chỉ cấp hạn mức **10,000 MB (10 GB)** nếu user details thiếu trường `size`. Nếu không cấu hình, khi video đạt 10 GB Shinobi sẽ báo đầy ổ đĩa ảo và ngừng ghi hình dù thẻ nhớ còn trống hàng chục GB.
+   - Bắt buộc cập nhật `Users.details` trường `size` tương ứng với dung lượng thẻ nhớ thực tế:
+     - Thẻ 64 GB $\rightarrow$ `size: "50000"` (50 GB), `days: "3"`, `size_video_percent: "90"`
+     - Thẻ 128 GB $\rightarrow$ `size: "100000"` (100 GB), `days: "3"`, `size_video_percent: "90"`
+     - Thẻ 256 GB $\rightarrow$ `size: "210000"` (210 GB), `days: "3"`, `size_video_percent: "90"`
+4. **Cấu hình FRP Subdomain & IP ảo cho hệ thống Multi-Box cùng 1 quán**:
+   - Box 1: Subdomain `store-<tênquán>1`, `c-store-<tênquán>1`
+   - Box 2: Subdomain `store-<tênquán>2`, `c-store-<tênquán>2`
+   - Gán IP ảo chính là IP card `eth0` hiện tại, kèm chuyển tiếp iptables port 80 -> 2023.
+5. **Phân bổ kênh NVR tuần tự**:
+   - Chia đều số kênh camera bàn giữa các box (ví dụ quán 26 bàn: Box 1 kênh 1..13, Box 2 kênh 14..26).
+   - Audio codec nếu là `pcm_alaw`/`pcm_mulaw` phải đặt `acodec: "no"` để chống ngốn CPU phần mềm.
 ---
 
 ## 2. Danh Mục Các Node Đã Áp Dụng Chuẩn PM2 Memory Guard & Tối Ưu Toàn Diện
@@ -322,7 +345,8 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
   - FRP Subdomains: Store: **`http://store-toptn1.video.io.vn`** | C-Store: **`http://c-store-toptn1.video.io.vn`**
   - Số lượng camera: 13 camera Dahua (`Camera01` .. `Camera13` tương ứng Bàn 01 đến Bàn 13 trên đầu ghi Dahua `192.168.1.73` channels 1..13)
   - Cấu hình Onboarding & Golden Hardening:
-    - Cấu hình Shinobi REST API: 13 camera remux `vcodec=copy`, `acodec=no`, `cust_record="-tag:v hvc1"`, `wall_clock_timestamp_ignore="0"`, `cutoff=5`
+    - Cấu hình Shinobi REST API: 13 camera 1080p ($1920 \times 1080$) remux `vcodec=copy`, `acodec=no`, `cust_record="-tag:v hvc1"`, `wall_clock_timestamp_ignore="0"`, `cutoff=5`
+    - Cấu hình Dung lượng tối đa: Shinobi User `size: 100000` MB (100 GB / thẻ 128 GB), `days: 3`, `size_video_percent: 90`
     - Cấu hình Branding: `ui_title`: "Top Billiards Thái Nguyên", `company_name`: "Billiard Live", logo header & hashtag chuẩn Bida
     - Cấu hình IP ảo: gán `192.168.1.133` đồng bộ vào `change_ok` (`eth0_virtual_ip`, `end0_virtual_ip`, `wifi_ip`, `qr_ip`), chuyển tiếp iptables port 80 -> 2023
     - Kích hoạt ZRAM Swap 3.8 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, `kernel.sysrq = 0`
@@ -337,7 +361,8 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
   - FRP Subdomains: Store: **`http://store-toptn2.video.io.vn`** | C-Store: **`http://c-store-toptn2.video.io.vn`**
   - Số lượng camera: 13 camera Dahua (`Camera01` .. `Camera13` tương ứng Bàn 14 đến Bàn 26 trên đầu ghi Dahua `192.168.1.73` channels 14..26)
   - Cấu hình Onboarding & Golden Hardening:
-    - Cấu hình Shinobi REST API: 13 camera remux `vcodec=copy`, `acodec=no`, `cust_record="-tag:v hvc1"`, `wall_clock_timestamp_ignore="0"`, `cutoff=5`
+    - Cấu hình Shinobi REST API: 13 camera 1080p ($1920 \times 1080$) remux `vcodec=copy`, `acodec=no`, `cust_record="-tag:v hvc1"`, `wall_clock_timestamp_ignore="0"`, `cutoff=5`
+    - Cấu hình Dung lượng tối đa: Shinobi User `size: 50000` MB (50 GB / thẻ 64 GB), `days: 3`, `size_video_percent: 90`
     - Cấu hình Branding: `ui_title`: "Top Billiards Thái Nguyên", `company_name`: "Billiard Live", logo header & hashtag chuẩn Bida
     - Cấu hình IP ảo: gán `192.168.1.239` đồng bộ vào `change_ok` (`eth0_virtual_ip`, `end0_virtual_ip`, `wifi_ip`, `qr_ip`), chuyển tiếp iptables port 80 -> 2023
     - Kích hoạt ZRAM Swap 3.8 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, `kernel.sysrq = 0`
