@@ -227,3 +227,22 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
     - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
     - Kích hoạt Storage Guard 15p chuẩn 90% (`/media/usb1/ntv`), cấu hình Shinobi `deleteOld=true`, `max_keep_days=3`, `wallclock=0`
   - Trạng thái: Đủ 24/24 tiến trình FFmpeg ghi 12 bàn 3K liên tục, RAM khả dụng tăng lên >690 MB, ZRAM 1.8 GiB đệm an toàn, triệt tiêu nguy cơ treo bus
+
+- [x] **Node `inut_202_226`** (Queen Billiards Club — `77.88.202.226`, group `giaphong`)
+  - Phần cứng: Cortex-A7 sunxi (ARMv7l), RAM 1.0 GiB, Thẻ nhớ 59 GB
+  - LAN Local: `192.168.1.254/24` (eth0)
+  - Số lượng camera: 5 camera Dahua (`192.168.1.240` - `244`), 1920x1080 25fps H.265 SmartCodec AAC (Cam 1-4 online)
+  - Nguyên nhân chết luồng / treo máy trước đó:
+    - MariaDB 10.6 bị deadlock trong vòng lặp crash recovery với `liburing` trên nền kernel sunxi ARMv7l 32-bit (PID 838 ngốn 65% CPU liên tục suốt 1 ngày 2 giờ, socket `/run/mysqld/mysqld.sock` không thể mở)
+    - Shinobi không kết nối được MySQL nên không thể nạp danh sách monitor, dẫn đến FFmpeg = 0, camera đứng hình hoàn toàn từ đêm 09/10
+    - `vm.swappiness = 0` và ZRAM chỉ 500MB khiến kernel không dùng swap, cạn kiệt RAM
+    - Node-RED `ok2` flow có bẫy `load average > 12` gọi `echo b > /proc/sysrq-trigger` gây sập nguồn đột ngột, làm hỏng InnoDB log
+    - Thẻ nhớ chưa có Storage Guard và Shinobi thiếu `deleteOld`
+  - Cấu hình đã xử lý:
+    - Khắc phục triệt để lỗi MariaDB: cấu hình `/etc/mysql/mariadb.conf.d/99-innodb-aio.cnf` (`innodb_use_native_aio = 0`), MariaDB khởi động mượt mà trong 1 giây
+    - Kích hoạt ZRAM Swap 1.0 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`
+    - Khóa triệt để sysrq ở kernel (`sysctl kernel.sysrq = 0`), gỡ bỏ bẫy sysrq trong Node-RED
+    - PM2 Memory Guard: `camera: 160M` | `inut: 240M` | `ota-mqtt: 100M` với log trỏ `/dev/null`
+    - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
+    - Kích hoạt Storage Guard 15p chuẩn 90% (`/media/usb1/giaphong`), cấu hình Shinobi `deleteOld=true`, `max_keep_days=3`, `wallclock=0`
+  - Trạng thái: Hồi sinh toàn bộ hệ thống ghi hình, đủ 8 tiến trình FFmpeg ghi 4 bàn liên tục, RAM khả dụng >650 MB, ZRAM 1.0 GB đệm an toàn
