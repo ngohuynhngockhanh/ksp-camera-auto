@@ -279,3 +279,21 @@ Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 ng
     - PM2 Memory Guard: `camera: 210M` (11 cameras) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
     - Nâng cấp Storage Guard 15p lên chuẩn mới 90% $\rightarrow$ 80% (`/media/usb1/tuyetlinh`)
   - Trạng thái: Đủ 22-23 tiến trình FFmpeg ghi 11 bàn liên tục, RAM khả dụng >960 MB, ZRAM 1.9 GiB đệm mượt mà không lo `-ENOMEM`
+
+- [x] **Node `inut_204_53`** (City Billiards Club TN - CS3 — `77.88.204.53`, group `4953`)
+  - Phần cứng: Rockchip RK3528/RK3328 4-core Cortex-A53 (aarch64), RAM 3.9 GiB, Thẻ nhớ 239 GB (F2FS)
+  - Số lượng camera: 16 camera Dahua 3K (`192.168.1.151` - `168`), 2880x1620 30fps H.265 SmartCodec AAC
+  - Nguyên nhân và các điểm nghẽn trước đó:
+    - Thẻ nhớ `/media/usb1` bị **tràn 100% dung lượng đĩa (239 GB / 239 GB, Available = 0B)**, khiến FFmpeg không thể ghi video, số tiến trình FFmpeg bị rớt từ 32 xuống chỉ còn 8-9 luồng
+    - Chưa có Storage Guard tự động dọn rác và Shinobi thiếu cấu hình tự xóa clip cũ (`deleteOld=false`)
+    - ZRAM Swap bị tắt hoàn toàn (`ENABLED=false`, Swap = 0B, `swappiness = 0`), chưa có cơ chế đệm swap cho 16 luồng 3K
+    - Chưa có PM2 Memory Guard, Node.js heap phình to không giới hạn
+    - Chưa có Smart Watchdog kiểm tra phục hồi tiến trình FFmpeg
+  - Cấu hình đã xử lý:
+    - Giải cứu khẩn cấp dung lượng đĩa: xóa bỏ video cũ ngày 10/10 và rạng sáng 11/10, giải phóng ngay **122 GB dung lượng trống** (đưa đĩa về 50%)
+    - Kích hoạt ZRAM Swap 3.8 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`
+    - Khóa triệt để sysrq ở kernel (`sysctl kernel.sysrq = 0`), gỡ bỏ bẫy sysrq trong Node-RED
+    - PM2 Memory Guard: `camera: 260M` (16 cameras) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+    - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
+    - Kích hoạt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/4953`), cấu hình Shinobi `deleteOld=true`, `max_keep_days=3`, `wallclock=0`
+  - Trạng thái: Hồi sinh toàn bộ 16 camera, đủ 23-32 tiến trình FFmpeg ghi hình liên tục, thẻ nhớ còn trống 122 GB (50%), RAM khả dụng >2.7 GB, Swap ZRAM 3.8 GiB đệm mượt
