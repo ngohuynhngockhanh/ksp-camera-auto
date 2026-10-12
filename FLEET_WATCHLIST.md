@@ -370,3 +370,26 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
     - Kích hoạt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/YZT7lO2CzM`), cấu hình Shinobi `deleteOld=true`, `max_keep_days=3`
   - Trạng thái: Đủ 26/26 tiến trình FFmpeg (13 stream + 13 record), video mới sinh đều đặn, RAM khả dụng >2.6 GB, ZRAM 3.8 GiB đệm mượt
+
+- [x] **Node `inut_204_165`** (Nguyễn Huệ Pickleball — `77.88.204.165`, group `KT8zqe2yGq`)
+  - Phần cứng: Amlogic S912 8-core Cortex-A53 (aarch64), RAM 1.8 GiB, Thẻ nhớ 58 GB
+  - Mạng LAN & IP: `192.168.1.10/24` (eth0 DHCP), IP ảo: **`192.168.1.254/24`** (`eth0:1`)
+  - FRP Subdomains: Store: **`http://store-nguyenhue.video.io.vn`** | C-Store: **`http://c-store-nguyenhue.video.io.vn`**
+  - Số lượng camera: 4 camera Dahua 4MP (`192.168.1.201` .. `204`), 2688x1664 20fps H.265 AAC
+  - Các điểm nghẽn trước đó:
+    - ZRAM bị tắt hoàn toàn (`ENABLED=false`, Swap = 0B, `swappiness = 0`), nguy cơ cạn RAM khi stream/tải clip
+    - Bẫy sysrq: Node-RED `flow.json` cũ có bẫy sysrq, kernel bật `kernel.sysrq = 1`
+    - Watchdog cũ chỉ kiểm tra PID `camera.js`, không kiểm tra FFmpeg processes
+    - Chưa có Storage Guard 15p, Shinobi thiếu `deleteOld: true` và `deleteOrphans: true`
+    - Bảng `Monitors` có `width` và `height` là NULL, `Users.details` thiếu trường `size` hạn mức thẻ nhớ
+    - Chưa cấu hình redirect port 80 -> 2023 trên iptables
+  - Cấu hình đã xử lý:
+    - Kích hoạt ZRAM Swap 1.8 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
+    - Sanitized triệt để lệnh sysrq trong các flow Node-RED
+    - Cấu hình IP ảo `192.168.1.254/24` (`eth0:1`), chuyển tiếp iptables port 80 -> 2023 (`PREROUTING` & `OUTPUT`)
+    - PM2 Memory Guard: `camera: 180M` | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+    - Nâng cấp Smart Watchdog 60s kiểm tra `pgrep -c ffmpeg` (`shinobi-camera-watchdog.timer`)
+    - Kích hoạt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/KT8zqe2yGq`), dọn rác và folder rỗng
+    - Cấu hình Shinobi `deleteOld=true`, `deleteOrphans=true`, `max_keep_days=3`, `wallclock=0`
+    - Cập nhật độ phân giải chuẩn $2688 \times 1664$ (4MP) và user size `50000` MB (50 GB / thẻ 64 GB)
+  - Trạng thái: Đủ 8/8 tiến trình FFmpeg ghi 4 sân Pickleball 4MP liên tục, RAM khả dụng >990 MB, ZRAM 1.8 GiB đệm an toàn
