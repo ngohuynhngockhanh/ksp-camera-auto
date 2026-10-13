@@ -393,3 +393,25 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Cấu hình Shinobi `deleteOld=true`, `deleteOrphans=true`, `max_keep_days=3`, `wallclock=0`
     - Cập nhật độ phân giải chuẩn $2688 \times 1664$ (4MP) và user size `50000` MB (50 GB / thẻ 64 GB)
   - Trạng thái: Đủ 8/8 tiến trình FFmpeg ghi 4 sân Pickleball 4MP liên tục, RAM khả dụng >990 MB, ZRAM 1.8 GiB đệm an toàn
+
+- [x] **Node `inut_207_18`** (Câu Lạc Bộ Trí Nguyễn Café — `77.88.207.18`, group `tringuyen`)
+  - Phần cứng: Cortex-A7 sunxi/rockchip (ARMv7l), RAM 1.9 GiB, Thẻ nhớ 58 GB F2FS
+  - Mạng LAN & IP: `192.168.1.5/24` (end0 DHCP), IP ảo: **`192.168.1.252/24`** (`end0:1`)
+  - FRP Subdomains: Store: **`http://store-tringuyen.video.io.vn`** | C-Store: **`http://c-store-tringuyen.video.io.vn`**
+  - Số lượng camera: 10 camera Dahua 3K (`192.168.1.190` - `199`), 2880x1620 30fps H.265 SmartCodec AAC
+  - Các điểm nghẽn trước đó:
+    - Rò rỉ tiến trình FFmpeg nghiêm trọng: 28 tiến trình snapshot zombie tích tụ từ tháng 8/tháng 9 treo vĩnh viễn (tổng 48 FFmpeg), ngốn cạn RAM thực (chỉ còn 294 MiB trống)
+    - `camera.js` uptime 2 tháng không giới hạn heap, phình to lên tới 336.3 MB
+    - ZRAM bị tắt hoàn toàn (`ENABLED=false`, Swap = 0B, `swappiness = 0`)
+    - Thẻ nhớ `/media/usb1` phình lên 85% (49 GB / 58 GB) do chưa có Storage Guard và thiếu `deleteOld`
+    - Bảng `Monitors` lưu kích thước cũ `640x480` và thiếu `max_keep_days`, `Users.details` thiếu `days: 3`
+  - Cấu hình đã xử lý:
+    - Tiêu diệt toàn bộ 28 tiến trình snapshot zombie, phục hồi chuẩn xác 20 tiến trình FFmpeg (10 stream + 10 record)
+    - Kích hoạt ZRAM Swap 1.9 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
+    - PM2 Memory Guard: `camera: 210M` (10 cameras 3K) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+    - Cấu hình IP ảo `192.168.1.252/24` (`end0:1`), cố định trong `/etc/network/interfaces`
+    - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
+    - Kích hoạt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/tringuyen`)
+    - Cấu hình Shinobi `deleteOld=true`, `deleteOrphans=true`, `max_keep_days=3`, `wallclock=0`
+    - Cập nhật độ phân giải chuẩn $2880 \times 1620$ (3K) và user size `50000` MB (50 GB / thẻ 64 GB)
+  - Trạng thái: 20/20 tiến trình FFmpeg ghi 10 bàn 3K liên tục, RAM khả dụng tăng vọt từ 294 MB lên >1.1 GB (+800 MB), ZRAM 1.9 GiB đệm mượt
