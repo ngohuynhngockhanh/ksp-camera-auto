@@ -415,3 +415,25 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Cấu hình Shinobi `deleteOld=true`, `deleteOrphans=true`, `max_keep_days=3`, `wallclock=0`
     - Cập nhật độ phân giải chuẩn $2880 \times 1620$ (3K) và user size `50000` MB (50 GB / thẻ 64 GB)
   - Trạng thái: 20/20 tiến trình FFmpeg ghi 10 bàn 3K liên tục, RAM khả dụng tăng vọt từ 294 MB lên >1.1 GB (+800 MB), ZRAM 1.9 GiB đệm mượt
+
+- [x] **Node `inut_205_57`** (Zone+ Thái Nguyên — `77.88.205.57`, group `moi`)
+  - Phần cứng: Allwinner H616/H618 4-core Cortex-A53 (aarch64), RAM 1.9 GiB, Thẻ nhớ 58 GB exFAT
+  - Mạng LAN & IP: `192.168.1.240/24` (eth0 Static), IP ảo: **`192.168.1.240`** (`eth0:1`)
+  - FRP Subdomains: Store: **`http://store-zoneplus.video.io.vn`** | C-Store: **`http://c-store-zoneplus.video.io.vn`**
+  - Số lượng camera: 12 camera Dahua 2K (`192.168.1.221` .. `232`), 2304x1296 25fps H.264 AAC
+  - Các điểm nghẽn trước đó:
+    - ZRAM bị bóp nghẽn bởi `ZRAM_PERCENTAGE=50` và `vm.swappiness = 0` (swap không hoạt động dù 12 camera ngốn RAM)
+    - Bẫy sysrq: Node-RED `flow.json` có rule kiểm tra tải gọi `echo b > /proc/sysrq-trigger`, `netwatch.service` ping gateway lỗi là gọi sysrq, kernel bật `kernel.sysrq = 176`
+    - Chưa có Storage Guard 15p, Shinobi thiếu `deleteOld: true` và `deleteOrphans: true`
+    - Bảng `Monitors` lưu kích thước cũ `640x480` và `wall_clock_timestamp_ignore="1"`, `Users.details` thiếu `days: 3`
+    - Chưa có iptables redirect port 80 -> 2023
+  - Cấu hình đã xử lý:
+    - Kích hoạt ZRAM Swap 1.9 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
+    - Sanitized triệt để lệnh sysrq trong flow Node-RED và netwatch_loop.sh
+    - Cấu hình IP ảo `192.168.1.240/24` (`eth0:1`), cài đặt iptables redirect port 80 -> 2023 (`PREROUTING` & `OUTPUT`)
+    - PM2 Memory Guard: `camera: 220M` (12 cameras 2K) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+    - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
+    - Kích hoạt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/moi`)
+    - Cấu hình Shinobi `deleteOld=true`, `deleteOrphans=true`, `max_keep_days=3`, `wallclock=0`
+    - Cập nhật độ phân giải chuẩn $2304 \times 1296$ (2K) và user size `50000` MB (50 GB / thẻ 64 GB)
+  - Trạng thái: Đủ 24/24 tiến trình FFmpeg (12 stream + 12 record), video mới sinh đều đặn, RAM khả dụng >920 MB, ZRAM 1.9 GiB đệm an toàn
