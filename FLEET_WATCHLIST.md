@@ -414,7 +414,7 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Kích hoạt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/tringuyen`)
     - Cấu hình Shinobi `deleteOld=true`, `deleteOrphans=true`, `max_keep_days=3`, `wallclock=0`
     - Cập nhật độ phân giải chuẩn $2880 \times 1620$ (3K) và user size `50000` MB (50 GB / thẻ 64 GB)
-  - Trạng thái: 20/20 tiến trình FFmpeg ghi 10 bàn 3K liên tục, RAM khả dụng tăng vọt từ 294 MB lên >1.1 GB (+800 MB), ZRAM 1.9 GiB đệm mượt
+  - Trạng thái: Thẻ nhớ 58 GB `/dev/mmcblk0p1` đã format F2FS an toàn (cách ly ổ eMMC `/dev/mmcblk2p1`), mount bền vững qua `/etc/fstab`, 20/20 tiến trình FFmpeg ghi 10 bàn 3K liên tục, video mới sinh đều đặn, RAM khả dụng >1.1 GB, ZRAM 1.9 GiB đệm mượt
 
 - [x] **Node `inut_205_57`** (Zone+ Thái Nguyên — `77.88.205.57`, group `moi`)
   - Phần cứng: Allwinner H616/H618 4-core Cortex-A53 (aarch64), RAM 1.9 GiB, Thẻ nhớ 128 GB F2FS (mới thay và format)
@@ -437,3 +437,26 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Cấu hình Shinobi `deleteOld=true`, `deleteOrphans=true`, `max_keep_days=3`, `wallclock=0`
     - Cập nhật độ phân giải chuẩn $2304 \times 1296$ (2K) và user size `100000` MB (100 GB / thẻ 128 GB F2FS mới)
   - Trạng thái: Đủ 24/24 tiến trình FFmpeg (12 stream + 12 record), video mới sinh đều đặn, RAM khả dụng >920 MB, ZRAM 1.9 GiB đệm an toàn
+
+- [x] **Node `inut_205_31`** (Khét Billiards Club — `77.88.205.31`, group `khet`)
+  - Phần cứng: Cortex-A53 / ARMv8 (aarch64), RAM 1.9 GiB, Thẻ nhớ 58 GB
+  - Mạng LAN & IP: `192.168.1.254/24` (end0 Static, giữ nguyên theo yêu cầu)
+  - Số lượng camera: 6 camera Dahua/Imou 1080p (`camera01` .. `camera06`)
+  - Các điểm nghẽn trước đó:
+    - Kéo luồng kép (double-streaming): Shinobi kéo trực tiếp từ camera con `192.168.1.152`, `192.168.1.153`, `192.168.1.209` (Imou IPC-F22 Wi-Fi) trong khi đầu ghi NVR `192.168.1.212` cũng đang kéo $\rightarrow$ Quá tải DSP/Wi-Fi gây giật lag camera khi cắm box
+    - Chưa áp dụng bộ Golden Hardening (ZRAM unconstrained, PM2 Memory Guard, Smart Watchdog, Storage Guard 90%)
+  - Cấu hình đã xử lý:
+    - Chuyển hướng toàn bộ 6 camera kéo luồng qua đầu ghi NVR `192.168.1.212`:
+      - `camera01` $\rightarrow$ NVR Channel 2 (`192.168.1.152`, Pool 5+4)
+      - `camera02` $\rightarrow$ NVR Channel 5
+      - `camera03` $\rightarrow$ NVR Channel 4
+      - `camera04` $\rightarrow$ NVR Channel 6
+      - `camera05` $\rightarrow$ NVR Channel 7 (`192.168.1.153`, Pool 9+8)
+      - `camera06` $\rightarrow$ NVR Channel 8 (`192.168.1.209`, Pool 11+10)
+    - Giữ nguyên 100% cấu hình mạng và IP tĩnh `192.168.1.254` của box theo đúng chỉ thị
+    - Kích hoạt ZRAM Swap 1.9 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
+    - PM2 Memory Guard: `camera: 170M` | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+    - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
+    - Kích hoạt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/khet`)
+    - Cấu hình Shinobi `deleteOld=true`, `deleteOrphans=true`, `max_keep_days=3`, `wallclock=0`, user limit `50000` MB
+  - Trạng thái: Đủ 12/12 tiến trình FFmpeg (6 stream + 6 record), video mới sinh liên tục, luồng camera mượt mà qua NVR, không còn hiện tượng giật lag
