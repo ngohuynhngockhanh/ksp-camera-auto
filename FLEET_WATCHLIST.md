@@ -41,6 +41,10 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
 6. **Kỷ luật lưu trữ: CẤM TỰ Ý FORMAT KHI CHƯA HỎI KỸ**:
    - Tuyệt đối KHÔNG tự ý format thẻ nhớ/ổ đĩa.
    - Khi người dùng bảo format, BẮT BUỘC phải hỏi lại xác nhận kỹ càng: nêu rõ IP thiết bị, tên ổ đĩa (`/dev/mmcblk0p1` thẻ nhớ vs `/dev/mmcblk2` eMMC boot), dung lượng, và cảnh báo mất dữ liệu video. Chỉ thực hiện khi người dùng xác nhận lần hai.
+7. **Automount an toàn: CẤM đưa thẻ nhớ ngoài vào `/etc/fstab`**:
+   - Tuyệt đối **KHÔNG** đưa `/dev/mmcblk0p1` vào `/etc/fstab`. Nếu ghi vào fstab mà lỡ không có thẻ nhớ hoặc thẻ nhớ hỏng phân vùng, `systemd` sẽ block boot và văng vào Emergency Mode (treo máy hoàn toàn, mất mạng/SSH, brick từ xa).
+   - **Chuẩn an toàn**: Giữ `/etc/fstab` sạch (chỉ chứa `/` và `/tmp`). Sử dụng cơ chế udev automount kết hợp cấu hình `/etc/media-automount.d/{f2fs,ext4,auto}` với cờ `AUTOMOUNT_OPTS="errors=continue,noatime,users"`.
+   - *Hiệu quả:* Có thẻ nhớ thì tự mount vào `/media/usb1`, không có thẻ nhớ box vẫn boot vào Linux bình thường, mạng và SSH luôn online 100%.
 ---
 
 ## 2. Danh Mục Các Node Đã Áp Dụng Chuẩn PM2 Memory Guard & Tối Ưu Toàn Diện

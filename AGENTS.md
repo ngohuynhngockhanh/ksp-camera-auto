@@ -47,6 +47,9 @@
     3. Nêu rõ Định dạng và Dung lượng (ví dụ: F2FS, 58 GB).
     4. Cảnh báo rõ: Toàn bộ video clip ghi hình hiện có trong `/media/usb1` sẽ bị xóa hoàn toàn.
   - **CHỈ ĐƯỢC PHÉP THỰC HIỆN** sau khi người dùng đã đọc cảnh báo và phản hồi xác nhận lần 2 đồng ý tiến hành.
+- **CẤM ĐƯA THẺ NHỚ NGOÀI VÀO `/etc/fstab` (Zero External Storage in fstab)**:
+  - Tuyệt đối **KHÔNG ĐƯỢC** thêm phân vùng thẻ nhớ `/dev/mmcblk0p1` vào `/etc/fstab`. Nếu thiết bị thiếu thẻ nhớ hoặc thẻ nhớ lỗi sector phân vùng, `systemd` sẽ dừng quá trình khởi động và rơi vào Emergency Mode (treo boot hoàn toàn, mất mạng/SSH, brick từ xa).
+  - Luôn quản lý thẻ nhớ qua udev automount: Cấu hình `/etc/media-automount.d/{f2fs,ext4,auto}` với `AUTOMOUNT_OPTS="errors=continue,noatime,users"`. Box luôn boot an toàn 100% kể cả khi không cắm thẻ nhớ.
 ---
 
 ## 2. Bản đồ kiến trúc hệ thống (System Architecture)
