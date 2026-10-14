@@ -36,6 +36,17 @@
   - Luôn **tôn trọng và giữ nguyên** toàn bộ thông tin branding đã có sẵn của quán/sân (`ui_title`, `logo_livestream`, `logo_header`, `logo_header_text`, `ui_bg`, `custom_hashtags`).
   - CHỈ ghi đè khi người dùng **nói rõ từ khóa "ghi đè"** (hoặc yêu cầu reset/overwrite branding).
 
+
+### 1.3 Kỷ Luật An Toàn Lưu Trữ & Thẻ Nhớ (Storage Safety & Format Policy)
+- **CẤM TỰ Ý FORMAT DƯỚI MỌI HÌNH THỨC (Strictly Forbidden Self-Formatting)**:
+  - Tuyệt đối **KHÔNG ĐƯỢC tự ý** chạy lệnh format (`mkfs.f2fs`, `mkfs.ext4`, `mkfs.vfat`, `dd`, `fdisk`) trên bất kỳ ổ đĩa, thẻ nhớ hay phân vùng nào khi chưa có lệnh từ người dùng.
+- **QUY TRÌNH HỎI XÁC NHẬN KỸ CÀNG (Two-Step Confirmation with Risk Disclosure)**:
+  - Khi người dùng bảo "format" hoặc yêu cầu format thẻ nhớ, AI Agent **BẮT BUỘC PHẢI HỎI LẠI XÁC NHẬN KỸ CÀNG**, tuyệt đối không tự tiện format ngay:
+    1. Nêu rõ Tên node / IP thiết bị (ví dụ: `inut_207_18` - `77.88.207.18`).
+    2. Nêu rõ Thiết bị ổ đĩa và phân vùng mục tiêu (ví dụ: `/dev/mmcblk0p1` thẻ nhớ ngoài, cam kết cách ly hoàn toàn ổ boot eMMC `/dev/mmcblk2`).
+    3. Nêu rõ Định dạng và Dung lượng (ví dụ: F2FS, 58 GB).
+    4. Cảnh báo rõ: Toàn bộ video clip ghi hình hiện có trong `/media/usb1` sẽ bị xóa hoàn toàn.
+  - **CHỈ ĐƯỢC PHÉP THỰC HIỆN** sau khi người dùng đã đọc cảnh báo và phản hồi xác nhận lần 2 đồng ý tiến hành.
 ---
 
 ## 2. Bản đồ kiến trúc hệ thống (System Architecture)

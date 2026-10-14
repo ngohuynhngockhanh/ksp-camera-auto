@@ -38,6 +38,9 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
 5. **Phân bổ kênh NVR tuần tự**:
    - Chia đều số kênh camera bàn giữa các box (ví dụ quán 26 bàn: Box 1 kênh 1..13, Box 2 kênh 14..26).
    - Audio codec nếu là `pcm_alaw`/`pcm_mulaw` phải đặt `acodec: "no"` để chống ngốn CPU phần mềm.
+6. **Kỷ luật lưu trữ: CẤM TỰ Ý FORMAT KHI CHƯA HỎI KỸ**:
+   - Tuyệt đối KHÔNG tự ý format thẻ nhớ/ổ đĩa.
+   - Khi người dùng bảo format, BẮT BUỘC phải hỏi lại xác nhận kỹ càng: nêu rõ IP thiết bị, tên ổ đĩa (`/dev/mmcblk0p1` thẻ nhớ vs `/dev/mmcblk2` eMMC boot), dung lượng, và cảnh báo mất dữ liệu video. Chỉ thực hiện khi người dùng xác nhận lần hai.
 ---
 
 ## 2. Danh Mục Các Node Đã Áp Dụng Chuẩn PM2 Memory Guard & Tối Ưu Toàn Diện
