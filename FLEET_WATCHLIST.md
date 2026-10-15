@@ -6,15 +6,15 @@
 
 ## 1. Tiêu Chuẩn Vàng Khi Tối Ưu Hóa (Golden Hardening Checklist)
 
-Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 7 nguyên tắc cốt lõi:
-1. **ZRAM Swap 100% Unconstrained**: `ZRAM_PERCENTAGE=100`, `MEM_LIMIT_PERCENTAGE=100`, `echo 0 > /sys/block/zram0/mem_limit`, `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100` -> Triệt tiêu hoàn toàn lỗi `-ENOMEM` và OOM killer.
-2. **PM2 Memory Guard**: Giới hạn heap chủ động cho Node.js theo công thức số camera: `camera: (120 + N*8)M`, `inut: 280M`, `ota-mqtt: 120M`, tự tái sinh êm sau 1–2s mà không làm gián đoạn hệ thống.
-3. **Bảo toàn Log `/dev/null`**: Cả `pm_out_log_path` và `pm_err_log_path` đều trỏ vào `/dev/null` để chống mòn thẻ nhớ và chống đầy dung lượng `/var/log` / tmpfs.
-4. **Triệt tiêu ngòi nổ tự sát Node-RED**: Loại bỏ hoàn toàn các lệnh `echo b > /proc/sysrq-trigger`, `rm -rf /tmp`, và nhánh `[ "$CPU" -eq 8 ]`. Hạ ngưỡng cảnh báo RAM về `60 / 80 / 100`.
-5. **Smart Watchdog 60s**: Script `/usr/local/bin/shinobi-camera-watchdog.sh` kiểm tra số lượng tiến trình FFmpeg thực tế (`pgrep -c ffmpeg`). Nếu camera online $> 90\text{s}$ mà có 0 FFmpeg thì tự phục hồi ngay.
-6. **Storage Guard 15p (Tiêu chuẩn mới 90%)**: Script `/usr/local/bin/shinobi-storage-guard.sh` targeting thư mục video của quán, dọn rác 0-byte và xoay vòng xả đĩa khi $\ge 90\%$ về mức $\le 80\%$ (do Shinobi đã tự động chừa lại 10% dung lượng an toàn).
-7. **Shinobi Zero-Transcode & Timestamp Fix**: `vcodec=copy`, `acodec=copy` (hoặc `no`), `wall_clock_timestamp_ignore=0` (hoặc passthrough), `hls_time=2`, `max_keep_days=3`, kích hoạt `deleteOld`/`deleteOrphans` trong `conf.json`.
-
+Mọi node trong danh sách dưới đây đều tuân thủ nghiêm ngặt 8 nguyên tắc cốt lõi:
+ 1. **ZRAM Swap 100% Unconstrained**: `ZRAM_PERCENTAGE=100`, `MEM_LIMIT_PERCENTAGE=100`, `echo 0 > /sys/block/zram0/mem_limit`, `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100` -> Triệt tiêu hoàn toàn lỗi `-ENOMEM` và OOM killer.
+ 2. **PM2 Memory Guard**: Giới hạn heap chủ động cho Node.js theo công thức số camera: `camera: (120 + N*8)M`, `inut: 280M`, `ota-mqtt: 120M`, tự tái sinh êm sau 1–2s mà không làm gián đoạn hệ thống.
+ 3. **Bảo toàn Log `/dev/null`**: Cả `pm_out_log_path` và `pm_err_log_path` đều trỏ vào `/dev/null` để chống mòn thẻ nhớ và chống đầy dung lượng `/var/log` / tmpfs.
+ 4. **Triệt tiêu ngòi nổ tự sát Node-RED**: Loại bỏ hoàn toàn các lệnh `echo b > /proc/sysrq-trigger`, `rm -rf /tmp`, và nhánh `[ "$CPU" -eq 8 ]`. Hạ ngưỡng cảnh báo RAM về `60 / 80 / 100`.
+ 5. **Smart Watchdog 60s**: Script `/usr/local/bin/shinobi-camera-watchdog.sh` kiểm tra số lượng tiến trình FFmpeg thực tế (`pgrep -c ffmpeg`). Nếu camera online $> 90\text{s}$ mà có 0 FFmpeg thì tự phục hồi ngay.
+ 6. **Storage Guard 15p (Tiêu chuẩn mới 90%)**: Script `/usr/local/bin/shinobi-storage-guard.sh` targeting thư mục video của quán, dọn rác 0-byte và xoay vòng xả đĩa khi $\ge 90\%$ về mức $\le 80\%$ (do Shinobi đã tự động chừa lại 10% dung lượng an toàn).
+ 7. **Shinobi Zero-Transcode & Timestamp Fix**: `vcodec=copy`, `acodec=copy` (hoặc `no`), `wall_clock_timestamp_ignore=0` (hoặc passthrough), `hls_time=2`, `max_keep_days=3`, kích hoạt `deleteOld`/`deleteOrphans` trong `conf.json`.
+8. **Automount An Toàn & Bỏ Qua Lỗi Thẻ Nhớ (`errors=continue`) - Tuyệt Đối Không Dùng `/etc/fstab`**: CẤM đưa `/dev/mmcblk0p1` vào `/etc/fstab` để chống treo boot khi mất thẻ. Bắt buộc quản lý qua udev automount bằng 3 file profile `/etc/media-automount.d/{f2fs,ext4,auto}` với `AUTOMOUNT_OPTS="errors=continue,noatime,users"` và remount nóng trực tiếp `mount -o remount,noatime,errors=continue /media/usb1` mà **KHÔNG CẦN FORMAT THẺ**, bảo toàn trọn vẹn 100% video ghi hình.
 ### 1.1 Quy Trình Onboarding Chuẩn & Phòng Chống Lỗi (Golden Onboarding SOP & Pitfall Prevention)
 
 Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera / đa box), BẮT BUỘC tuân thủ 5 nguyên tắc sau để không lặp lại sự cố:
@@ -41,10 +41,13 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
 6. **Kỷ luật lưu trữ: CẤM TỰ Ý FORMAT KHI CHƯA HỎI KỸ**:
    - Tuyệt đối KHÔNG tự ý format thẻ nhớ/ổ đĩa.
    - Khi người dùng bảo format, BẮT BUỘC phải hỏi lại xác nhận kỹ càng: nêu rõ IP thiết bị, tên ổ đĩa (`/dev/mmcblk0p1` thẻ nhớ vs `/dev/mmcblk2` eMMC boot), dung lượng, và cảnh báo mất dữ liệu video. Chỉ thực hiện khi người dùng xác nhận lần hai.
-7. **Automount an toàn: CẤM đưa thẻ nhớ ngoài vào `/etc/fstab`**:
-   - Tuyệt đối **KHÔNG** đưa `/dev/mmcblk0p1` vào `/etc/fstab`. Nếu ghi vào fstab mà lỡ không có thẻ nhớ hoặc thẻ nhớ hỏng phân vùng, `systemd` sẽ block boot và văng vào Emergency Mode (treo máy hoàn toàn, mất mạng/SSH, brick từ xa).
-   - **Chuẩn an toàn**: Giữ `/etc/fstab` sạch (chỉ chứa `/` và `/tmp`). Sử dụng cơ chế udev automount kết hợp cấu hình `/etc/media-automount.d/{f2fs,ext4,auto}` với cờ `AUTOMOUNT_OPTS="errors=continue,noatime,users"`.
-   - *Hiệu quả:* Có thẻ nhớ thì tự mount vào `/media/usb1`, không có thẻ nhớ box vẫn boot vào Linux bình thường, mạng và SSH luôn online 100%.
+7. **Quy trình Automount fix `errors=continue` (CẤM dùng `/etc/fstab`)**:
+   - Tuyệt đối **KHÔNG** đưa `/dev/mmcblk0p1` vào `/etc/fstab`. Nếu đưa vào fstab mà lỡ không có thẻ nhớ hoặc thẻ hỏng phân vùng, `systemd` sẽ block boot và văng vào Emergency Mode (treo máy hoàn toàn, mất mạng/SSH, brick từ xa).
+   - **Quy trình chuẩn hóa udev automount**:
+     1. Tạo 3 file trong `/etc/media-automount.d/`: `f2fs`, `ext4`, `auto` chứa `AUTOMOUNT_OPTS="errors=continue,noatime,users"`.
+     2. Dọn sạch `/dev/mmcblk0p1` khỏi `/etc/fstab` (chỉ giữ `/` và `/tmp`).
+     3. Chạy lệnh remount nóng: `mount -o remount,noatime,errors=continue /media/usb1`.
+     4. *Tuyệt đối KHÔNG cần format lại thẻ nhớ*, toàn bộ video clip ghi hình hiện tại được giữ nguyên vẹn 100%.
 ---
 
 ## 2. Danh Mục Các Node Đã Áp Dụng Chuẩn PM2 Memory Guard & Tối Ưu Toàn Diện

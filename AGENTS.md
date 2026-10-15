@@ -49,7 +49,30 @@
   - **CHỈ ĐƯỢC PHÉP THỰC HIỆN** sau khi người dùng đã đọc cảnh báo và phản hồi xác nhận lần 2 đồng ý tiến hành.
 - **CẤM ĐƯA THẺ NHỚ NGOÀI VÀO `/etc/fstab` (Zero External Storage in fstab)**:
   - Tuyệt đối **KHÔNG ĐƯỢC** thêm phân vùng thẻ nhớ `/dev/mmcblk0p1` vào `/etc/fstab`. Nếu thiết bị thiếu thẻ nhớ hoặc thẻ nhớ lỗi sector phân vùng, `systemd` sẽ dừng quá trình khởi động và rơi vào Emergency Mode (treo boot hoàn toàn, mất mạng/SSH, brick từ xa).
-  - Luôn quản lý thẻ nhớ qua udev automount: Cấu hình `/etc/media-automount.d/{f2fs,ext4,auto}` với `AUTOMOUNT_OPTS="errors=continue,noatime,users"`. Box luôn boot an toàn 100% kể cả khi không cắm thẻ nhớ.
+- **QUY TRÌNH AUTOMOUNT FIX `errors=continue` CHO MỌI NODE (Bắt Buộc Trong Golden Hardening)**:
+  - Quản lý thẻ nhớ 100% qua udev automount, không phụ thuộc fstab:
+    1. Tạo 3 file cấu hình trong `/etc/media-automount.d/`:
+       - `/etc/media-automount.d/f2fs`:
+         ```sh
+         AUTOMOUNT_OPTS="errors=continue,noatime,users"
+         AUTOMOUNT_TYPE="f2fs"
+         ```
+       - `/etc/media-automount.d/ext4`:
+         ```sh
+         AUTOMOUNT_OPTS="errors=continue,noatime,users"
+         AUTOMOUNT_TYPE="ext4"
+         ```
+       - `/etc/media-automount.d/auto`:
+         ```sh
+         AUTOMOUNT_OPTS="errors=continue,noatime,users"
+         AUTOMOUNT_TYPE="auto"
+         ```
+    2. Kiểm tra và dọn sạch `/dev/mmcblk0p1` ra khỏi `/etc/fstab` (chỉ giữ lại `/` và `/tmp`).
+    3. Remount nóng trực tiếp mà **KHÔNG CẦN FORMAT THẺ, KHÔNG CẦN REBOOT MÁY, BẢO TOÀN 100% VIDEO**:
+       ```bash
+       mount -o remount,noatime,errors=continue /media/usb1
+       ```
+    4. *Hiệu quả:* Gặp bad sector vật lý thì kernel tự bỏ qua và tiếp tục ghi đè không bị remount-ro; rút thẻ ra thì box vẫn boot vào Linux bình thường, mạng và SSH luôn online.
 ---
 
 ## 2. Bản đồ kiến trúc hệ thống (System Architecture)
