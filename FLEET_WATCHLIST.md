@@ -538,3 +538,15 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Shinobi `deleteOld=true`, `deleteOrphans=true`
     - PM2 Memory Guard: `camera: 210M` | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
   - Trạng thái: Đủ 22/22 tiến trình FFmpeg (11 stream + 11 record), video mới sinh liên tục, bảo toàn trọn vẹn 101 GB video cũ
+
+- [x] **Node `inut_204_220`** (Khánh Hà Billiards — `77.88.204.220`, group `khanhha2`)
+  - Phần cứng: Allwinner / Rockchip (ARM64, kernel 6.1), RAM 1.8 GiB, Thẻ nhớ 115 GB ext4 (`/dev/mmcblk1p1`)
+  - Số lượng camera: 10 camera (`camera01` .. `camera10`)
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn 100% video cũ):
+    - Cấu hình automount profile `/etc/media-automount.d/{ext4,auto,f2fs}` với cờ `errors=continue,noatime,users` (an toàn, không ghi fstab)
+    - Remount nóng trực tiếp: `mount -o remount,noatime,errors=continue /media/usb1`
+    - Kích hoạt ZRAM Swap unconstrained, `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
+    - Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/khanhha2`) + Smart Watchdog 60s
+    - Shinobi `deleteOld=true`, `deleteOrphans=true`
+    - PM2 Memory Guard: `camera: 210M` | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+  - Trạng thái: Đủ 20/20 tiến trình FFmpeg (10 stream + 10 record), video mới sinh liên tục, bảo toàn trọn vẹn 90 GB video cũ
