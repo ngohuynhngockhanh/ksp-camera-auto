@@ -470,3 +470,25 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Kích hoạt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/khet`)
     - Cấu hình Shinobi `deleteOld=true`, `deleteOrphans=true`, `max_keep_days=3`, `wallclock=0`, user limit `50000` MB
   - Trạng thái: Đủ 12/12 tiến trình FFmpeg (6 stream + 6 record), video mới sinh liên tục, luồng camera mượt mà qua NVR, không còn hiện tượng giật lag
+
+- [x] **Node `inut_205_123`** (Magic Arena Đà Nẵng - Box 2 — `77.88.205.123`, group `magic2`)
+  - Phần cứng: ARMv8 (aarch64), RAM 1.9 GiB, Thẻ nhớ 58 GB F2FS
+  - Số lượng camera: 12 camera (`camera01` .. `camera12`)
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn 100% video cũ):
+    - Cấu hình automount profile `/etc/media-automount.d/{f2fs,ext4,auto}` với cờ `errors=continue,noatime,users` (an toàn, không ghi vào `/etc/fstab`)
+    - Remount nóng trực tiếp: `mount -o remount,noatime,errors=continue /media/usb1`
+    - Kích hoạt ZRAM Swap 1.9 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
+    - Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/magic2`)
+    - PM2 Memory Guard: `camera: 220M` | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+  - Trạng thái: Đủ 24/24 tiến trình FFmpeg (12 stream + 12 record), video mới sinh liên tục, bảo toàn trọn vẹn 38 GB video cũ
+
+- [x] **Node `inut_205_124`** (Magic Arena Đà Nẵng - Box 1 — `77.88.205.124`, group `magic1`)
+  - Phần cứng: ARMv8 (aarch64), RAM 1.9 GiB, Thẻ nhớ 128 GB (108 GB F2FS)
+  - Số lượng camera: 16 camera (`camera01` .. `camera16`)
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn 100% video cũ):
+    - Cấu hình automount profile `/etc/media-automount.d/{f2fs,ext4,auto}` với cờ `errors=continue,noatime,users` (an toàn, không ghi vào `/etc/fstab`)
+    - Remount nóng trực tiếp: `mount -o remount,noatime,errors=continue /media/usb1`
+    - Kích hoạt ZRAM Swap 1.9 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
+    - Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/magic1`)
+    - PM2 Memory Guard: `camera: 250M` | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+  - Trạng thái: Đủ 32/32 tiến trình FFmpeg (16 stream + 16 record), video mới sinh liên tục, bảo toàn trọn vẹn 71 GB video cũ
