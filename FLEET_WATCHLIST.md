@@ -492,3 +492,49 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/magic1`)
     - PM2 Memory Guard: `camera: 250M` | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
   - Trạng thái: Đủ 32/32 tiến trình FFmpeg (16 stream + 16 record), video mới sinh liên tục, bảo toàn trọn vẹn 71 GB video cũ
+
+- [x] **Node `inut_204_150`** (99 Billiards - CS11 - 1 — `77.88.204.150`, group `99cs111`)
+  - Phần cứng: Allwinner H6/H616 (ARM64, kernel 6.1), RAM 1.8 GiB, Thẻ nhớ 117 GB F2FS (`/dev/mmcblk1p1`)
+  - Số lượng camera: 11 camera (`camera01` .. `camera13`)
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn 100% video cũ):
+    - Cấu hình automount profile `/etc/media-automount.d/{f2fs,ext4,auto}` với cờ `noatime,users` (an toàn, không ghi fstab)
+    - Kích hoạt ZRAM Swap unconstrained, `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
+    - Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/99cs111`) + Smart Watchdog 60s
+    - Shinobi `deleteOld=true`, `deleteOrphans=true`
+    - PM2 Memory Guard: `camera: 210M` | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+  - Trạng thái: Shinobi camera process online, bảo toàn trọn vẹn dữ liệu video trên thẻ 117 GB F2FS
+
+- [x] **Node `inut_204_152`** (99 Billiards - CS11 - 2 — `77.88.204.152`, group `99cs112`)
+  - Phần cứng: Allwinner H6/H616 (ARM64, kernel 6.1), RAM 1.8 GiB, Thẻ nhớ 116 GB F2FS (`/dev/mmcblk1p1`)
+  - Số lượng camera: 12 camera (`camera01` .. `camera13`)
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn 100% video cũ):
+    - Cấu hình automount profile `/etc/media-automount.d/{f2fs,ext4,auto}` với cờ `noatime,users` (an toàn, không ghi fstab)
+    - Kích hoạt ZRAM Swap unconstrained, `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
+    - Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/99cs112`) + Smart Watchdog 60s
+    - Shinobi `deleteOld=true`, `deleteOrphans=true`
+    - PM2 Memory Guard: `camera: 220M` | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+  - Trạng thái: Shinobi camera process online, bảo toàn trọn vẹn dữ liệu video trên thẻ 116 GB F2FS
+
+- [x] **Node `inut_206_60`** (99 Billiards - CS11 - 3 — `77.88.206.60`, group `vip`)
+  - Phần cứng: Rockchip RK3568/RK3588 (ARM64, kernel 6.1), RAM 3.8 GiB, Ổ cứng ngoài 233 GB ext4 (`/dev/sda1`)
+  - Số lượng camera: 19 camera bàn VIP
+  - Cấu hình đã xử lý (Không format ổ cứng, bảo toàn 100% video cũ):
+    - Cấu hình automount profile `/etc/media-automount.d/{f2fs,ext4,auto}` với cờ `errors=continue,noatime,users` (an toàn, không ghi fstab)
+    - Remount nóng trực tiếp `errors=continue` trên ext4
+    - Kích hoạt ZRAM Swap unconstrained, `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
+    - Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/vip`) + Smart Watchdog 60s
+    - Shinobi `deleteOld=true`, `deleteOrphans=true`
+    - PM2 Memory Guard: `camera: 350M` (19 cameras) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+  - Trạng thái: Đủ ~70-95 tiến trình FFmpeg và go2rtc, video mới sinh liên tục, bảo toàn trọn vẹn ổ cứng 233 GB
+
+- [x] **Node `inut_205_24`** (Zone 9 Billiards - 2 — `77.88.205.24`, group `kao`)
+  - Phần cứng: Allwinner H616 (ARM64, kernel 6.6), RAM 1.9 GiB, Thẻ nhớ 119 GB F2FS (`/dev/mmcblk0p1`)
+  - Số lượng camera: 11 camera (`camera01` .. `camera11`)
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn 100% video cũ):
+    - Cấu hình automount profile `/etc/media-automount.d/{f2fs,ext4,auto}` với cờ `errors=continue,noatime,users` (an toàn, không ghi fstab)
+    - Remount nóng trực tiếp: `mount -o remount,noatime,errors=continue /media/usb1` (xác nhận `errors=continue` active)
+    - Kích hoạt ZRAM Swap 1.9 GiB unconstrained, `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
+    - Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/kao`) + Smart Watchdog 60s
+    - Shinobi `deleteOld=true`, `deleteOrphans=true`
+    - PM2 Memory Guard: `camera: 210M` | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+  - Trạng thái: Đủ 22/22 tiến trình FFmpeg (11 stream + 11 record), video mới sinh liên tục, bảo toàn trọn vẹn 101 GB video cũ
