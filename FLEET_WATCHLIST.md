@@ -586,3 +586,27 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Cài đặt iptables redirect port 80 -> 2023
     - PM2 Memory Guard: `camera: 170M` (6 camera) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
   - Trạng thái: Đủ 11 tiến trình FFmpeg và go2rtc, cả 6 camera đã phục hồi và đang ghi hình video mới liên tục, RAM khả dụng 1.3 GiB
+
+- [x] **Node `inut_207_44`** (MIAPool Arena — `77.88.207.44`, group `mia`)
+  - Phần cứng: Rockchip (armv7l, kernel 6.6), RAM 1.9 GiB, Thẻ nhớ 58 GB F2FS (`/dev/mmcblk0p1`), Cổng mạng 100Mb/s Fast Ethernet (`end0`)
+  - Số lượng camera: 13 camera Dahua 3K/2K/1080p (`camera01` .. `camera13`)
+  - Các điểm nghẽn trước đó:
+    - Băng thông mạng LAN bị quá tải nặng: 13 camera đều chạy bitrate 2048 Kbps @ 30fps dồn về cổng 100M, sinh ra lưu lượng ~27 – 35 Mbps và gây rớt hơn 440,000 gói tin (`dropped packets`)
+    - Kéo đôi (Double Streaming): 4 camera (`camera07`, `camera08`, `camera12`, `camera13`) bị kéo đồng thời 2 luồng 3K (vừa về đầu ghi NVR `192.168.1.88` vừa về Shinobi) làm quá tải DSP và mạng camera
+    - Cột `details` trong MySQL của các camera bị lỗi cú pháp JSON (`detector_filters`)
+    - Chưa có PM2 Memory Guard, chưa có ZRAM unconstrained, chưa có Storage Guard 15p, bẫy `kernel.sysrq = 1`
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn 100% video cũ):
+    - Điều chỉnh chuẩn toàn bộ 13 camera về **30 FPS & Bitrate 1536 Kbps CBR** có xác nhận đọc lại (Read-Back Verification 100%) $\rightarrow$ Giảm hơn **60% tải mạng LAN** (băng thông nhận hạ từ 35 Mbps xuống chỉ còn **~10 Mbps**)
+    - Chuyển hướng 4 camera kéo qua đầu ghi NVR `192.168.1.88`:
+      - `camera07` (`192.168.1.228`) $\rightarrow$ NVR Channel 5
+      - `camera08` (`192.168.1.62`)  $\rightarrow$ NVR Channel 6
+      - `camera12` (`192.168.1.253`) $\rightarrow$ NVR Channel 2
+      - `camera13` (`192.168.1.204`) $\rightarrow$ NVR Channel 4
+    - Cập nhật cả Shinobi MySQL `Monitors` và `/root/go2rtc.yaml`
+    - Sửa toàn bộ lỗi cú pháp JSON trong `details` MySQL, cập nhật độ phân giải chuẩn và `input_map_choices`
+    - Kích hoạt ZRAM Swap 1.9 GiB unconstrained, `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
+    - Cài đặt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/mia`) + Smart Watchdog 60s
+    - Cài đặt automount profile `/etc/media-automount.d/` (`noatime,users`, không dùng `/etc/fstab`)
+    - Cài đặt iptables redirect port 80 -> 2023
+    - PM2 Memory Guard: `camera: 230M` (13 cameras) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+  - Trạng thái: Đủ tiến trình FFmpeg ghi hình liên tục cho cả 13 camera, băng thông mạng LAN cực kỳ êm (~10 Mbps, giảm 60%), RAM khả dụng 1.1 GiB, hết hoàn toàn hiện tượng nghẽn rớt gói
