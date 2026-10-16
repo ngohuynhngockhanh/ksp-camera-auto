@@ -550,3 +550,21 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Shinobi `deleteOld=true`, `deleteOrphans=true`
     - PM2 Memory Guard: `camera: 210M` | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
   - Trạng thái: Đủ 20/20 tiến trình FFmpeg (10 stream + 10 record), video mới sinh liên tục, bảo toàn trọn vẹn 90 GB video cũ
+
+- [x] **Node `inut_207_13`** (TOP ONE / Axis Hải Phòng — `77.88.207.13`, group `hk`)
+  - Phần cứng: Cortex-A55 / Rockchip (ARM64, kernel 6.1), RAM 3.2 GiB, Thẻ nhớ 117 GB F2FS (`/dev/mmcblk1p1`)
+  - Số lượng camera: 16 camera (`camera01` .. `camera16`)
+  - Các điểm nghẽn trước đó:
+    - Chưa có Storage Guard: Thẻ nhớ phình lên 97% (112 GB / 117 GB) khiến F2FS bị lỗi I/O và treo tiến trình
+    - Chưa có Swap: ZRAM bị tắt (`ENABLED=false`, Swap = 0B)
+    - Bẫy sysrq: `kernel.sysrq = 1`
+    - PM2 chưa có Memory Guard và log chưa trỏ `/dev/null`
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn video):
+    - Cấu hình automount profile `/etc/media-automount.d/{f2fs,ext4,auto}` với cờ `noatime,users` (an toàn, không ghi fstab)
+    - Remount nóng `noatime`, chạy `fsck.f2fs` sửa lỗi SIT table thành công
+    - Cài đặt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/hk`), chạy xả đĩa tức thời giải phóng từ 97% xuống 39% (trống 72 GB)
+    - Kích hoạt ZRAM Swap 2.4 GiB unconstrained (`zstd`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
+    - Kích hoạt Smart Watchdog 60s (`shinobi-camera-watchdog.timer`)
+    - Shinobi `deleteOld=true`, `deleteOrphans=true`, user limit 100,000 MB
+    - PM2 Memory Guard: `camera: 250M` (16 camera) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+  - Trạng thái: Đủ 25-32 tiến trình FFmpeg (16 stream + 16 record), video mới sinh liên tục, RAM khả dụng 2.0 GiB, đĩa trống 72 GB
