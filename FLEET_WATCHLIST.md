@@ -568,3 +568,21 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Shinobi `deleteOld=true`, `deleteOrphans=true`, user limit 100,000 MB
     - PM2 Memory Guard: `camera: 250M` (16 camera) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
   - Trạng thái: Đủ 25-32 tiến trình FFmpeg (16 stream + 16 record), video mới sinh liên tục, RAM khả dụng 2.0 GiB, đĩa trống 72 GB
+
+- [x] **Node `inut_205_73`** (Pika Sun Pickleball — `77.88.205.73`, group `arenaTuoIL`)
+  - Phần cứng: Allwinner H616 (ARM64, kernel 6.6), RAM 1.9 GiB, Thẻ nhớ 58 GB F2FS (`/dev/mmcblk0p1`)
+  - Số lượng camera: 6 camera Dahua (`camera01` .. `camera06`)
+  - FRP Subdomains: Store: **`http://store-pika.video.io.vn`** | C-Store: **`http://c-store-pika.video.io.vn`** (đã đổi từ `lionking-2` sang `pika`)
+  - Các điểm nghẽn trước đó:
+    - Cấu hình frpc bị gán nhầm subdomain `store-lionking-2` và `c-store-lionking-2`
+    - Bảng `Monitors` trong MySQL bị lỗi cú pháp escape JSON tại cột `details` (`camera04`, `camera05`, `camera06`), khiến Shinobi không khởi động được luồng camera (FFmpeg = 0 từ ngày 12/10)
+    - Chưa có PM2 Memory Guard, chưa có Smart Watchdog, chưa có Storage Guard
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn 100% video cũ):
+    - Sửa toàn bộ cấu hình frpc trong `/root/ota-mqtt/change_ok/frpc_config` và `/tmp/frpc.ini`: `c-store-lionking-2` $\rightarrow$ `c-store-pika`, `store-lionking-2` $\rightarrow$ `store-pika`, proxy `pika_plugin_http_proxy`
+    - Kiểm tra xác nhận `store-pika.video.io.vn` và `c-store-pika.video.io.vn` trả về `200 OK`
+    - Chạy script sửa chữa triệt để cú pháp JSON cột `details` cho toàn bộ các camera trong MySQL, nạp `input_map_choices` đầy đủ
+    - Kích hoạt ZRAM Swap 1.9 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
+    - Cài đặt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/arenaTuoIL`) + Smart Watchdog 60s
+    - Cài đặt iptables redirect port 80 -> 2023
+    - PM2 Memory Guard: `camera: 170M` (6 camera) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+  - Trạng thái: Đủ 11 tiến trình FFmpeg và go2rtc, cả 6 camera đã phục hồi và đang ghi hình video mới liên tục, RAM khả dụng 1.3 GiB
