@@ -48,6 +48,14 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
      2. Dọn sạch `/dev/mmcblk0p1` khỏi `/etc/fstab` (chỉ giữ `/` và `/tmp`).
      3. Chạy lệnh remount nóng: `mount -o remount,noatime,errors=continue /media/usb1`.
      4. *Tuyệt đối KHÔNG cần format lại thẻ nhớ*, toàn bộ video clip ghi hình hiện tại được giữ nguyên vẹn 100%.
+8. **Chống Lỗi Lưu Clip (`moov atom not found`) Khi Có Camera Bị Rút Điện / Offline**:
+   - **Nguyên nhân**:
+     1. Mặc định Shinobi bật `doSnapshot = true`. Khi có camera bị rút điện/offline, mỗi 15s `monitor.js` lại tạo một `Worker` (`snapshot.js` + `ffmpeg -s 500x500`) trước khi ping. Do hàm `processKill(snapProcess)` kiểm tra `proc.pid` (vốn là `undefined` trên Node.js `Worker` thread), các `Worker` này không bị kill sau 5s mà treo suốt 130s, làm phình RAM `camera.js` vượt ngưỡng PM2 (`180M`) và khiến PM2 kill `camera.js` mỗi 90–110s.
+     2. Khi `camera.js` bị kill giữa chừng (trước khi hết chu kỳ cắt file 120s), tiến trình `ffmpeg` của các camera đang online bị ngắt đột ngột. Do cờ `-movflags +frag_keyframe...` đặt ở cấp ngoài bị muxer `-f segment` bỏ qua (và bị `-movflags +faststart` ghi đè), file `.mp4` đang ghi dở không có `moov` atom (`moov atom not found`). Khi khởi động lại, Shinobi lại quét và chèn các file hỏng này vào bảng `Videos`.
+   - **Giải pháp chuẩn bắt buộc**:
+     1. Đặt `"doSnapshot": false` trong `/home/Shinobi/conf.json` và vá `snapProcess.terminate()` trong `/home/Shinobi/libs/monitor.js`.
+     2. Đặt `cust_record`: `"-tag:v hvc1 -segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof"` để truyền thẳng `movflags` vào từng segment `.mp4` $\rightarrow$ Header `moov` được ghi ngay từ byte `0x20`, dù mất điện hay kill `-9` giữa chừng thì clip vẫn xem và tải được 100%.
+     3. Đặt ngưỡng PM2 `camera` tối thiểu `280M - 300M` trên kiến trúc 64-bit (`aarch64`) để tránh PM2 kill nhầm khi nhiều camera offline.
 ---
 
 ## 2. Danh Mục Các Node Đã Áp Dụng Chuẩn PM2 Memory Guard & Tối Ưu Toàn Diện
@@ -60,10 +68,14 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Chuyển toàn bộ virtual IP sang `192.168.1.250` đồng bộ qua Redbida / `change_ok` (`eth0_virtual_ip`, `end0_virtual_ip`, `wifi_ip`, `qr_ip`).
     - Cấu hình IP alias chuẩn `/24` (`192.168.1.250/24 brd 192.168.1.255 dev end0 label end0:1`) và `arp_ignore=0`, `arp_announce=0`.
     - Chuyển tiếp cổng 80 sang cổng 2023 (`PREROUTING` & `OUTPUT`). Khách vào `http://192.168.1.250` hoặc `:2023` đều mở trang ngay lập tức.
-  - Cấu hình PM2 Memory Guard (N=7): `camera`: 180M | `inut`: 280M | `ota-mqtt`: 120M (log `/dev/null`)
+  - Khắc phục triệt để lỗi lưu clip hỏng khi có 5/7 camera rút điện offline:
+    - Đặt `"doSnapshot": false` trong `/home/Shinobi/conf.json` & vá `snapProcess.terminate()` trong `libs/monitor.js` để chặn rò rỉ Worker thread khi camera offline.
+    - Cập nhật `cust_record`: `"-tag:v hvc1 -segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof"` cho toàn bộ 7 camera $\rightarrow$ File `.mp4` có `moov` atom ngay từ giây đầu tiên (`iso5` fragmented MP4), đọc/tải mượt kể cả khi đang ghi.
+    - Dọn sạch 1,447 file `.mp4` bị cụt `moov` atom trước đó trong `/media/usb1/mia/` và bảng `Videos`, giữ nguyên 1,357 file `.mp4` hợp lệ.
+  - Cấu hình PM2 Memory Guard (N=7): `camera`: 300M | `inut`: 280M | `ota-mqtt`: 120M (log `/dev/null`)
   - Cấu hình Kernel & Swap: ZRAM 1.9 GiB (`lz4`, uncap `mem_limit=0`, `swappiness=80`, `vfs_cache_pressure=100`)
   - Cơ chế bảo vệ: Smart Watchdog 60s, Storage Guard 15p (`/media/usb1/mia`), Sysrq gỡ sạch 100%
-  - Trạng thái: RAM khả dụng 1.0 GiB, 14/14 FFmpeg ghi 7 bàn liên tục, file mới sinh đều đặn
+  - Trạng thái: RAM `camera` ổn định ~144 MB (0 restart), các camera đang bật điện (`camera03`, `camera06`) ghi hình liên tục và xuất/lưu clip hợp lệ 100%
 
 - [x] **Node `inut_204_150`** (99 Billiards - CS11 - 1 — `77.88.204.150`, group `99cs111`)
   - Phần cứng: Rockchip RK3528 (ARM64), RAM 1.8 GiB, Thẻ nhớ 118 GB
