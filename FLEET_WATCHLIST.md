@@ -622,3 +622,22 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Cài đặt iptables redirect port 80 -> 2023
     - PM2 Memory Guard: `camera: 230M` (13 cameras) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
   - Trạng thái: Đủ tiến trình FFmpeg ghi hình liên tục cho cả 13 camera, băng thông mạng LAN cực kỳ êm (~10 Mbps, giảm 60%), RAM khả dụng 1.1 GiB, hết hoàn toàn hiện tượng nghẽn rớt gói
+
+- [x] **Node `inut_204_167`** (OnePiece — `77.88.204.167`, group `3ejN83HASs`)
+  - Phần cứng: Rockchip / Ophub (ARM64, kernel 6.1), RAM 1.8 GiB, Thẻ nhớ 58 GB F2FS (`/dev/mmcblk1p1`)
+  - Số lượng camera: 6 camera Dahua 2K ($2304 \times 1296$, H.265) (`camera01` .. `camera06`)
+  - Các lỗ hổng trước khi xử lý:
+    - Máy vừa tự sập/reboot (uptime mới 43 phút) do chưa có ZRAM Swap (`Swap = 0B`), chưa có PM2 Memory Guard, bẫy `kernel.sysrq = 1`
+    - Thẻ nhớ đã dùng 71% (42 GB / 58 GB) nhưng chưa có Storage Guard 15p và `Users.details.days` đang bị rỗng `""`
+    - Cả 6 camera trong MySQL bị để trống `width = NULL, height = NULL` và chưa có cờ `-segment_format_options` chống lỗi cụt `moov` atom
+    - Chưa có Smart Watchdog 60s, chưa có iptables redirect port 80 $\rightarrow$ 2023
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn 100% 42 GB video cũ):
+    - Kích hoạt ZRAM Swap 1.8 GiB unconstrained (`zstd`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
+    - Cài đặt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/3ejN83HASs`) + Smart Watchdog 60s
+    - Cài đặt automount profile `/etc/media-automount.d/` (`noatime,users`, không dùng `/etc/fstab`)
+    - Đặt `"doSnapshot": false` trong `/home/Shinobi/conf.json` & vá `snapProcess.terminate()` trong `libs/monitor.js`
+    - Cập nhật `width = 2304, height = 1296` và `cust_record`: `"-tag:v hvc1 -segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof"` cho toàn bộ 6 camera
+    - Dọn 6 file `.mp4` bị cụt `moov` atom do lần sập nguồn trước đó, giữ nguyên 820 file `.mp4` hợp lệ
+    - Cài đặt iptables redirect port 80 -> 2023
+    - PM2 Memory Guard: `camera: 280M` (6 cameras aarch64) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
+  - Trạng thái: Đủ 12/12 tiến trình FFmpeg (6 stream + 6 record), file `.mp4` mới ghi chuẩn `iso5` fragmented (`moov` ngay tại byte `0x20`), RAM khả dụng 972 MiB + 1.8 GiB ZRAM
