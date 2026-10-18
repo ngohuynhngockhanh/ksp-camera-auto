@@ -78,7 +78,7 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 ### C. Quy tắc Flags (FFmpeg Flags Standard):
 - `cust_input`: `""` (**BẮT BUỘC ĐỂ TRỐNG** — không chèn cờ `-fflags nobuffer...` hay `-flags low_delay...`).
 - `cust_stream`: `""` (**BẮT BUỘC ĐỂ TRỐNG** — không chèn cờ `-hls_flags program_date_time...`).
-- `cust_record`: `"-tag:v hvc1"` (**BẮT BUỘC** cho chuẩn H.265 để container MP4 gắn đúng fourcc `hvc1` phát mượt trên Apple/Web).
+- `cust_record`: `"-tag:v hvc1 -segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof"` (**BẮT BUỘC**: `-tag:v hvc1` cho chuẩn H.265 để container MP4 gắn đúng fourcc `hvc1` phát mượt trên Apple/Web; `-segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof` truyền `movflags` vào từng segment `.mp4` con của `-f segment`, ghi `moov` atom ngay từ byte `0x20` đầu file giúp clip không bao giờ bị lỗi `moov atom not found` khi mất điện hoặc tiến trình `ffmpeg` bị ngắt giữa chừng).
 - `wall_clock_timestamp_ignore`: `"0"` (**BẮT BUỘC: luôn gán "0"** để Shinobi tự động chèn cờ `-use_wallclock_as_timestamps 1`, ngăn ngừa lỗi trượt timescale `1/12800` khiến FPS nhảy vọt 11,983 fps khi mạng LAN camera bị nghẽn gói).
 
 ### D. Watchdog & Giám sát:
@@ -100,6 +100,10 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
      - Thẻ 128 GB $\rightarrow$ `size: "100000"` (100 GB), `days: "3"`, `size_video_percent: "90"`
      - Thẻ 256 GB $\rightarrow$ `size: "210000"` (210 GB), `days: "3"`, `size_video_percent: "90"`
 
+4. **Chống Rò Rỉ Worker & Đứt Clip Khi Có Camera Offline / Rút Điện (`doSnapshot: false`)**:
+   - Đặt `"doSnapshot": false` trong `/home/Shinobi/conf.json` và `"snap": "0"` trong monitor `details`.
+   - Vá `/home/Shinobi/libs/monitor.js` gọi `if(snapProcess && typeof snapProcess.terminate === 'function'){snapProcess.terminate()}` trước `processKill(snapProcess)` để chặn rò rỉ Node.js `Worker` thread khi có camera bị rút điện.
+   - Đặt PM2 `camera` `max_memory_restart` $\ge$ `280M–300M` trên kiến trúc 64-bit (`aarch64`).
 ---
 
 ## 3. Danh sách 8 Camera Chuẩn hóa Mẫu
