@@ -197,12 +197,18 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
   - Trạng thái: RAM khả dụng 1.0 GB, 16/16 FFmpeg ghi 8 bàn liên tục
 
 - [x] **Node `inut_205_77`** (ZONE+ Billiards Center — `77.88.205.77`, group `toktok3`)
-  - Phần cứng: Allwinner H313 (ARM64), RAM 1.9 GiB
-  - Số lượng camera: 12 camera Dahua
-  - Cấu hình PM2 Memory Guard: `camera`: 220M | `inut`: 280M | `ota-mqtt`: 120M (log `/dev/null`)
-  - Cấu hình Kernel & Swap: ZRAM 1.9 GiB (`lz4`, uncap `mem_limit=0`, `swappiness=80`, `vfs_cache_pressure=100`)
-  - Cơ chế bảo vệ: Smart Watchdog 60s, Storage Guard 15p (`/media/usb1/toktok3`), Sysrq gỡ sạch
-  - Trạng thái: RAM khả dụng 1.17 GB, 24/24 FFmpeg ghi 12 bàn liên tục
+  - Phần cứng: Allwinner H313 (ARM64, kernel 6.6), RAM 1.9 GiB, Thẻ nhớ 60 GB F2FS (`/dev/mmcblk0p1`)
+  - Số lượng camera: 12 camera Dahua 3K ($2880 \times 1620$ @ 30fps, H.265) (`camera01`..`camera11`, `camera13`)
+  - Nguyên nhân lỗi lưu clip & tự khởi động lại `camera.js` liên tục trước đó:
+    1. Watchdog cũ gọi `timeout 15s pm2 pid camera` (khởi chạy Node.js V8 CLI tốn >15s khi CPU H313 gánh 12 luồng 3K), bị timeout trả về rỗng nên tưởng nhầm `camera` chết và tự chạy `pm2 restart camera` hơn 30 lần/ngày, cắt ngang toàn bộ 12 file `.mp4` đang ghi.
+    2. `cust_record` chỉ có `-tag:v hvc1` (thiếu `-segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof`), khiến mỗi lần bị restart giữa chu kỳ 5 phút đều sinh ra 12 file `.mp4` cụt `moov` atom (`00000000 mdat`).
+    3. `camera13` bị lỗi cú pháp JSON trong `Monitors.details` (`detector_filters`), `/home/Shinobi/conf.json` thiếu `"doSnapshot": false`, `monitor.js` chưa vá `snapProcess.terminate()`, `kernel.sysrq = 1`, thiếu `/etc/media-automount.d/{f2fs,ext4}` (`errors=continue,noatime,users`).
+  - Các bước đã xử lý triệt để (Không format thẻ nhớ, bảo toàn 675 file `.mp4` hợp lệ):
+    1. Thay thế Watchdog bằng bản tra bảng tiến trình kernel trực tiếp (`pgrep -f '/home/Shinobi/camera\.js'`, tốn `0.001s`, 0% CPU, không bao giờ timeout giả).
+    2. Đặt `"doSnapshot": false` trong `conf.json`, vá `snapProcess.terminate()` trong `libs/monitor.js`, sửa JSON `camera13` và cập nhật `width=2880, height=1620` + `cust_record: "-tag:v hvc1 -segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof"` cho toàn bộ 12 camera.
+    3. Dọn sạch **311 file `.mp4` bị cụt `moov` atom (`00000000 mdat`)** và các dòng DB lỗi tương ứng trong `Videos`, giữ nguyên **675 file `.mp4` hợp lệ**.
+    4. Cấu hình PM2 Memory Guard: `camera`: 300M | `inut`: 280M | `ota-mqtt`: 120M (log `/dev/null`), Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/toktok3`), Automount `errors=continue,noatime,users`, khóa `kernel.sysrq = 0`, thêm `iptables` redirect `80 -> 2023`.
+  - Trạng thái: Đủ 24/24 tiến trình FFmpeg ghi 12 bàn liên tục, file `.mp4` đang ghi có `moov` atom ngay tại byte `0x20` (`iso5`), RAM `camera.js` ~146 MB (0 restart).
 
 - [x] **Node `inut_204_148`** (Ruby Billiard Club — `77.88.204.148`, group `na`)
   - Phần cứng: Allwinner H313 (ARM64), RAM 1.9 GiB
@@ -641,3 +647,32 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Cài đặt iptables redirect port 80 -> 2023
     - PM2 Memory Guard: `camera: 280M` (6 cameras aarch64) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
   - Trạng thái: Đủ 12/12 tiến trình FFmpeg (6 stream + 6 record), file `.mp4` mới ghi chuẩn `iso5` fragmented (`moov` ngay tại byte `0x20`), RAM khả dụng 972 MiB + 1.8 GiB ZRAM
+
+- [x] **Node `inut_204_155`** (Bảo Anh Billiards Club — `77.88.204.155`, group `baoanh2`)
+  - Phần cứng: Rockchip / Ophub (ARM64, kernel 6.1.155-ophub), RAM 1.8 GiB, Thẻ nhớ 59 GB F2FS (`/dev/mmcblk1p1`)
+  - Số lượng camera: 8 camera Dahua (`camera01` .. `camera08`, `192.168.1.190` .. `192.168.1.197`)
+  - Các lỗ hổng trước khi xử lý:
+    - Dịch vụ `/lib/systemd/system/media-automount@.service` để `Type=forking` khiến systemd timeout sau 90s và tự động `umount` thẻ nhớ `/media/usb1`, làm cả 8 camera chỉ phát HLS mà không ghi file `.mp4`
+    - Cột `details` trong MySQL của cả 8 camera bị lỗi JSON `detector_filters` và thiếu `-segment_format_options`
+    - Chưa có Storage Guard, Smart Watchdog, PM2 Memory Guard, chưa cài `inut-bida-agent`
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn 100% 41 GB video cũ):
+    - Tạo drop-in `/etc/systemd/system/media-automount@.service.d/override.conf` (`Type=oneshot`, `RemainAfterExit=yes`) và cấu hình `/etc/media-automount.d/` (`noatime,users`), giữ sạch `/etc/fstab`
+    - Sửa toàn bộ JSON `Monitors.details`, bật Fragmented MP4 (`-tag:v hvc1 -segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof`), đặt `"doSnapshot": false`, `"deleteOrphans": false`
+    - Cài đặt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/baoanh2`) + Smart Watchdog 60s + PM2 Memory Guard (`camera: 200M`) + `inut-bida-agent.service` (Yamux)
+  - Trạng thái: Đủ 16/16 tiến trình FFmpeg, cả 8 camera ghi hình `.mp4` mới liên tục trên `/media/usb1/baoanh2`, Yamux ONLINE (`rtt_ms: 64 ms`)
+
+- [x] **Node `inut_204_48`** (Job Billiards — `77.88.204.48`, group `job`)
+  - Phần cứng: Rockchip RK322x (armv7l, kernel 4.4.194-rk322x), RAM 1.9 GiB, Thẻ nhớ 58 GB **ext4** (`/dev/mmcblk0p1`)
+  - Số lượng camera: 13 camera Hikvision 1080p H.265 (`camera01` .. `camera13`, `192.168.1.101` .. `192.168.1.113`)
+  - Các lỗ hổng trước khi xử lý:
+    - Thẻ nhớ `ext4` báo đầy **100% (`0 B` trống)** mặc dù `du -sh /media/usb1/job` chỉ có `41 GB`: nguyên nhân do lỗi rò rỉ File Descriptor trong `/home/Shinobi/libs/videos.js` (`file.close()` không tồn tại trên `ReadStream` của Node.js cũ, khiến tiến trình `camera.js` giữ mở **1,227 file `.mp4 (deleted)`** chiếm cứng **~16 GB** dung lượng đĩa và tạo ra **5,467 file `.mp4` rỗng `0 byte`**)
+    - Chỉ còn `2` tiến trình FFmpeg chạy, 12/13 bàn ngừng ghi hình từ 16:47 ngày 21/10
+    - `Swap = 0B` (chưa kích hoạt `/dev/zram0`), `media-automount@.service` để `Type=forking`, cả 13 monitor trong MySQL bị lỗi JSON `detector_filters`
+  - Cấu hình đã xử lý (Giữ nguyên chuẩn **ext4**, không format thẻ nhớ, bảo toàn 100% 41 GB video hợp lệ):
+    - Vá trực tiếp `/home/Shinobi/libs/videos.js` đổi `file.close()` $\rightarrow$ `file.destroy()` để đóng dứt điểm File Descriptor khi stream HTTP kết thúc, khởi động lại `camera.js` giải phóng ngay **16 GB** dung lượng bị ngâm (thẻ nhớ hạ từ **100% xuống 72%**, trống **15 GB**)
+    - Dọn sạch 5,467 file `.mp4` `0 byte` do lúc đầy đĩa tạo ra, giữ nguyên 4,312 file `.mp4` (`41 GB`) hợp lệ
+    - Giữ nguyên định dạng **ext4** theo đúng đặc thù kernel `4.4.194-rk322x`, cấu hình `/etc/media-automount.d/ext4` (`errors=continue,noatime,users`), remount nóng `/media/usb1` với `errors=continue,noatime`
+    - Kích hoạt ZRAM Swap `1.9 GiB` (`lz4`) qua dịch vụ `inut-zram.service`, khóa `kernel.sysrq = 0`, `vm.swappiness = 80`
+    - Sửa lỗi JSON `Monitors.details` cho cả 13 camera, bật Fragmented MP4, áp cấu hình H.265 / SmartCodec / 30 FPS / 1536 Kbps cho toàn bộ 13 camera Hikvision
+    - Cài đặt Storage Guard 15p (`90% -> 80%`), Smart Watchdog 60s, PM2 Memory Guard (`camera: 250M`), và `inut-bida-agent.service` (Yamux)
+  - Trạng thái: Đủ **26/26 tiến trình FFmpeg**, cả 13/13 bàn đang ghi hình `.mp4` mới liên tục trên `/media/usb1/job`, 0 file `(deleted)` bị rò rỉ, Yamux ONLINE (`rtt_ms: 70 ms`)
