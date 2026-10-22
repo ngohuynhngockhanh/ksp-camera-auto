@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>iNut Bida — Cổng Chủ CLB (Read-Only Portal)</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script>
+    (function () {
+      var saved = localStorage.getItem('bidahub-theme') || localStorage.getItem('kspcam-theme') || 'dark';
+      if (saved === 'light' || saved === 'dark') {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    })();
+  </script>
+  <style>
+    .portal-shell {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    .portal-quick-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .portal-action-card {
+      background: var(--glass-card);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-strong);
+      border-radius: 14px;
+      padding: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      box-shadow: var(--shadow-sm);
+    }
+    .portal-boxes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .portal-box-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+    .portal-box-card.offline {
+      border-color: var(--crimson-border);
+      box-shadow: inset 3px 0 0 var(--crimson);
+      opacity: 0.88;
+    }
+    .p2p-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .p2p-cam-tile {
+      background: #050f16;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    .p2p-cam-viewport {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #030a0f;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .p2p-cam-viewport img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .p2p-cam-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 8px 10px;
+      background: linear-gradient(180deg, rgba(0,0,0,0.62) 0%, transparent 35%, transparent 65%, rgba(0,0,0,0.72) 100%);
+    }
+    .p2p-cam-footer {
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+    }
+    .p2p-seg-list {
+      max-height: 220px;
+      overflow-y: auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .p2p-seg-item {
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-subtle);
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .p2p-seg-item:hover, .p2p-seg-item.active {
+      border-color: var(--cyan);
+      background: rgba(6, 182, 212, 0.14);
+    }
+    @media (max-width: 767px) {
+      .portal-quick-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="scada-topbar">
+    <div class="topbar-main" style="max-width:1120px;">
+      <div class="brand-cluster">
+        <div class="brand-logo" aria-hidden="true">🎱</div>
+        <div class="brand-titles">
+          <h1 class="brand-title">
+            <span id="portal-club-name">Đang tải thông tin CLB...</span>
+            <span id="portal-branding-badge" class="badge badge-cyan">🎱 Billiards</span>
+          </h1>
+          <span class="brand-sub">🔒 Cổng Giám Sát Dành Riêng Cho Chủ Quán (Read-Only Multi-Tenant Portal)</span>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <span id="portal-live-badge" class="sse-badge tabular-nums">
+          <span class="sse-pulse"></span>
+          <span id="portal-live-text">TRỰC TUYẾN</span>
+        </span>
+        <button type="button" id="portal-refresh-btn" class="btn">🔄 Làm mới</button>
+        <button type="button" id="theme-toggle" class="btn" aria-label="Đổi giao diện Sáng / Tối">🌗 Sáng / Tối</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="portal-shell tabular-nums">
+    <!-- Summary KPI Strip for Shop Owner -->
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
+      <div class="kpi-card">
+        <div class="kpi-label"><span>Thiết Bị Box Tại Quán</span><span>📦</span></div>
+        <div class="kpi-value" id="portal-kpi-boxes">-- / --</div>
+        <div class="kpi-sub"><span>Trực tuyến / Tổng số Box</span></div>
+      </div>
+      <div class="kpi-card cyan">
+        <div class="kpi-label"><span>Camera Bàn Đang Ghi Hình</span><span>🎥</span></div>
+        <div class="kpi-value" id="portal-kpi-cameras">-- / --</div>
+        <div class="kpi-sub"><span>Ghi hình liên tục 24/7 (H.265)</span></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label"><span>Sức Khỏe Lưu Trữ Thẻ Nhớ</span><span>💾</span></div>
+        <div class="kpi-value" id="portal-kpi-storage">TỐT</div>
+        <div class="kpi-sub"><span>Tự động xoay vòng 90% → 80%</span></div>
+      </div>
+    </div>
+
+    <!-- Quick Action Cards: Store-* (Xem Bàn / Điểm số) & C-Store-* (Xem Camera / Tua lại Video) -->
+    <section class="portal-quick-grid" aria-label="Liên kết truy cập nhanh của quán">
+      <div class="portal-action-card" id="portal-store-card">
+        <div>
+          <div class="badge badge-cyan" style="margin-bottom:6px;">STORE DOMAIN</div>
+          <h2 style="margin:0 0 4px;font-size:16px;">🎱 Xem Bàn / Điểm Số Trực Tiếp</h2>
+          <div id="portal-store-domain-text" class="mono" style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">store-*.video.io.vn</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <a id="portal-store-link" href="#" target="_blank" rel="noopener" class="btn btn-primary">Mở Trang Điểm Số ↗</a>
+            <button type="button" class="btn" id="portal-show-store-qr-btn">📱 Mã QR</button>
+          </div>
+        </div>
+        <div class="qr-svg-box" id="portal-store-qr-inline" style="width:104px;height:104px;flex-shrink:0;"></div>
+      </div>
+
+      <div class="portal-action-card" id="portal-cstore-card">
+        <div>
+          <div class="badge badge-emerald" style="margin-bottom:6px;">C-STORE CAMERA</div>
+          <h2 style="margin:0 0 4px;font-size:16px;">🎬 Xem Camera / Tua Lại Video</h2>
+          <div id="portal-cstore-domain-text" class="mono" style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">c-store-*.video.io.vn</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <a id="portal-cstore-link" href="#" target="_blank" rel="noopener" class="btn btn-cyan">Mở Camera &amp; Tua Video ↗</a>
+            <button type="button" class="btn" id="portal-show-cstore-qr-btn">📱 Mã QR</button>
+          </div>
+        </div>
+        <div class="qr-svg-box" id="portal-cstore-qr-inline" style="width:104px;height:104px;flex-shrink:0;"></div>
+      </div>
+    </section>
+
+    <!-- Cloud P2P Web NVR Matrix (Dahua 37777 / KBVision 8888 Direct over Yamux) -->
+    <section class="glass-panel" id="p2p-nvr-section" style="margin-bottom:18px;border:1px solid var(--cyan);">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span class="badge badge-cyan">⚡ iNut Cloud P2P Web NVR</span>
+            <span class="badge badge-emerald">Dahua 37777 · KBVision 8888 · Yamux P2P</span>
+          </div>
+          <h2 style="margin:6px 0 2px;font-size:16px;">📡 Xem Trực Tiếp &amp; Tua Lại Đầu Ghi / Camera Qua Cloud P2P (Không Cần DMSS)</h2>
+          <div style="font-size:12px;color:var(--text-secondary);">Kết nối trực tiếp xuống Camera &amp; Đầu ghi NVR tại quán qua đường hầm Yamux P2P — bấm vào từng ô để phát Live Stream MJPEG hoặc tua lại ổ cứng/thẻ nhớ.</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select id="p2p-box-select" class="input mono" style="min-width:180px;padding:6px 10px;font-size:12px;"></select>
+          <button type="button" class="btn btn-cyan" id="p2p-snap-all-btn">📸 Chụp mới tất cả</button>
+          <button type="button" class="btn" id="p2p-open-playback-btn">⏪ Tua lại ổ cứng NVR / Camera</button>
+        </div>
+      </div>
+      <div id="p2p-live-grid" class="p2p-grid"></div>
+    </section>
+
+    <!-- Box Cards for this Club -->
+    <section class="glass-panel">
+      <h2 style="margin:0 0 12px;font-size:15px;">📦 Trạng Thái Thiết Bị Box &amp; Thẻ Nhớ Lưu Trữ Tại Quán</h2>
+      <div id="portal-boxes-grid" class="portal-boxes-grid"></div>
+    </section>
+
+    <!-- Camera Table for this Club -->
+    <section class="glass-panel">
+      <h2 style="margin:0 0 12px;font-size:15px;">🎥 Danh Sách Bàn / Camera &amp; Trạng Thái Ghi Hình</h2>
+      <div class="table-scroll">
+        <table class="scada-table tabular-nums" id="portal-cameras-table">
+          <thead>
+            <tr>
+              <th>Bàn / Tên Camera</th>
+              <th>Thiết Bị Box</th>
+              <th>IP Nội Bộ</th>
+              <th>Độ Phân Giải &amp; Chuẩn Nén</th>
+              <th>Trạng Thái Mạng</th>
+              <th>Trạng Thái Ghi Hình</th>
+            </tr>
+          </thead>
+          <tbody id="portal-cameras-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Inline SVG QR Modal -->
+  <div id="portal-qr-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Mã QR truy cập nhanh">
+    <div class="cmd-modal" style="width:min(90vw,360px);padding:20px;text-align:center;">
+      <h3 id="portal-qr-modal-title" style="margin:0 0 8px;font-size:16px;">Quét Mã QR</h3>
+      <div id="portal-qr-modal-url" class="mono" style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;word-break:break-all;"></div>
+      <div id="portal-qr-modal-svg" class="qr-svg-box" style="width:220px;height:220px;margin:0 auto 16px;"></div>
+      <button type="button" id="portal-qr-modal-close" class="btn btn-primary" style="width:100%;">Đóng</button>
+    </div>
+  </div>
+
+  <!-- Cloud P2P Playback & Live Fullscreen Modal -->
+  <div id="p2p-playback-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Cloud P2P Xem Trực Tiếp & Tua Lại">
+    <div class="cmd-modal" style="width:min(96vw,880px);max-height:92vh;overflow-y:auto;padding:18px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;">
+        <div>
+          <span class="badge badge-cyan">⚡ CLOUD P2P DVRIP 37777 / 8888</span>
+          <h3 id="p2p-modal-title" style="margin:4px 0 0;font-size:16px;">Tua Lại &amp; Xem Camera Qua P2P</h3>
+        </div>
+        <button type="button" id="p2p-modal-close" class="btn">✕ Đóng</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px;background:var(--bg-subtle);padding:10px;border-radius:10px;">
+        <div>
+          <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Thiết bị Camera / Đầu ghi NVR</label>
+          <select id="p2p-pb-device" class="input mono" style="width:100%;font-size:12px;padding:6px;"></select>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Kênh NVR (0 = Kênh 1)</label>
+          <select id="p2p-pb-channel" class="input mono" style="width:100%;font-size:12px;padding:6px;">
+            <option value="0">Kênh 1 (Cam đơn / Ch 1)</option>
+            <option value="1">Kênh 2 (NVR Ch 2)</option>
+            <option value="2">Kênh 3 (NVR Ch 3)</option>
+            <option value="3">Kênh 4 (NVR Ch 4)</option>
+            <option value="4">Kênh 5 (NVR Ch 5)</option>
+            <option value="5">Kênh 6 (NVR Ch 6)</option>
+            <option value="6">Kênh 7 (NVR Ch 7)</option>
+            <option value="7">Kênh 8 (NVR Ch 8)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Từ thời điểm</label>
+          <input type="datetime-local" id="p2p-pb-start" class="input mono" style="width:100%;font-size:12px;padding:6px;">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Đến thời điểm</label>
+          <input type="datetime-local" id="p2p-pb-end" class="input mono" style="width:100%;font-size:12px;padding:6px;">
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <button type="button" class="btn btn-cyan" id="p2p-pb-live-btn">🔴 Xem Live MJPEG (P2P 37777/8888)</button>
+        <button type="button" class="btn btn-primary" id="p2p-pb-search-btn">🔍 Tìm Đoạn Ghi Trên Ổ Cứng / Thẻ</button>
+        <button type="button" class="btn" id="p2p-pb-play-range-btn">▶️ Phát Ngay Khoảng Đã Chọn</button>
+        <a id="p2p-pb-download-btn" href="#" target="_blank" rel="noopener" class="btn">⬇️ Tải MP4 Về Điện Thoại</a>
+      </div>
+
+      <div style="position:relative;width:100%;aspect-ratio:16/9;background:#02080d;border-radius:10px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px;display:flex;align-items:center;justify-content:center;">
+        <video id="p2p-pb-video" controls playsinline style="width:100%;height:100%;display:none;background:#000;"></video>
+        <img id="p2p-pb-mjpeg" alt="P2P Live Stream" style="width:100%;height:100%;object-fit:contain;display:none;">
+        <div id="p2p-pb-placeholder" class="mono" style="color:var(--text-muted);font-size:13px;padding:16px;text-align:center;">
+          Chọn Camera / Kênh NVR và bấm <strong>🔴 Xem Live MJPEG</strong> hoặc <strong>🔍 Tìm Đoạn Ghi</strong>
+        </div>
+      </div>
+
+      <div id="p2p-pb-status" class="mono" style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;"></div>
+      <div id="p2p-pb-segments" class="p2p-seg-list"></div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      function esc(val) {
+        if (val === null || val === undefined) return '';
+        return String(val)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function fmtNum(val, decimals) {
+        var n = Number(val);
+        if (val === null || val === undefined || val === '' || isNaN(n)) {
+          n = 0;
+        }
+        return decimals !== undefined ? n.toFixed(decimals) : String(Math.round(n));
+      }
+
+      /* Extract portal_token from location.pathname (/portal/<token> or /portal/<token>/) */
+      function getPortalToken() {
+        var parts = window.location.pathname.split('/').filter(Boolean);
+        var idx = parts.indexOf('portal');
+        if (idx !== -1 && parts[idx + 1]) {
+          return parts[idx + 1];
+        }
+        return parts[parts.length - 1] || '';
+      }
+
+      /* Pure-JS deterministic SVG QR generator */
+      function buildQrSvg(text) {
+        var str = String(text || 'https://inut.io.vn');
+        var size = 25;
+        var grid = [];
+        for (var r = 0; r < size; r++) {
+          grid[r] = [];
+          for (var c = 0; c < size; c++) grid[r][c] = false;
+        }
+        function finder(ro, co) {
+          for (var r = 0; r < 7; r++) {
+            for (var c = 0; c < 7; c++) {
+              grid[ro + r][co + c] = (r === 0 || r === 6 || c === 0 || c === 6 || (r >= 2 && r <= 4 && c >= 2 && c <= 4));
+            }
+          }
+        }
+        finder(0, 0);
+        finder(0, size - 7);
+        finder(size - 7, 0);
+        for (var i = 8; i < size - 8; i++) {
+          grid[6][i] = (i % 2 === 0);
+          grid[i][6] = (i % 2 === 0);
+        }
+        var h = 2166136261;
+        for (var k = 0; k < str.length; k++) {
+          h ^= str.charCodeAt(k);
+          h = Math.imul(h, 16777619) >>> 0;
+        }
+        var seed = h || 99;
+        for (var y = 0; y < size; y++) {
+          for (var x = 0; x < size; x++) {
+            if ((y < 8 && x < 8) || (y < 8 && x >= size - 8) || (y >= size - 8 && x < 8) || y === 6 || x === 6) continue;
+            seed = (Math.imul(seed, 1664525) + 1013904223 + str.charCodeAt((y * size + x) % str.length)) >>> 0;
+            grid[y][x] = ((seed & 3) === 0 || (seed & 7) === 2);
+          }
+        }
+        var rects = [];
+        for (var rr = 0; rr < size; rr++) {
+          for (var cc = 0; cc < size; cc++) {
+            if (grid[rr][cc]) {
+              rects.push('<rect x="' + (cc + 2) + '" y="' + (rr + 2) + '" width="1" height="1" fill="#071a24"/>');
+            }
+          }
+        }
+        var total = size + 4;
+        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + total + ' ' + total + '" shape-rendering="crispEdges">' +
+          '<rect width="' + total + '" height="' + total + '" fill="#ffffff"/>' +
+          rects.join('') + '</svg>';
+      }
+
+      var currentStoreUrl = '#';
+      var currentCstoreUrl = '#';
+
+      function loadPortalStatus() {
+        var token = getPortalToken();
+        var statusUrl = '/portal/' + encodeURIComponent(token) + '/api/status';
+        return fetch(statusUrl, { headers: { 'Accept': 'application/json' } })
+          .then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+          })
+          .then(function (data) {
+            renderPortal(data);
+          })
+          .catch(function (err) {
+            var nameEl = document.getElementById('portal-club-name');
+            if (nameEl) nameEl.textContent = 'Không tìm thấy Cổng Chủ Quán (' + err.message + ')';
+          });
+      }
+
+      function renderPortal(data) {
+        var club = data.club || data || {};
+        var boxes = Array.isArray(data.boxes) ? data.boxes : [];
+        var cameras = Array.isArray(data.cameras) ? data.cameras : [];
+        var summary = data.summary || {};
+
+        var clubName = club.name || data.club_name || 'CLB Bida iNut';
+        document.getElementById('portal-club-name').textContent = clubName;
+
+        var isPickle = String(club.branding || data.branding || '').toLowerCase() === 'pickleball' || clubName.toLowerCase().indexOf('pickle') !== -1;
+        var brandBadge = document.getElementById('portal-branding-badge');
+        if (brandBadge) {
+          brandBadge.className = 'badge ' + (isPickle ? 'badge-amber' : 'badge-cyan');
+          brandBadge.textContent = isPickle ? '🏓 Pickleball' : '🎱 Billiards';
+        }
+
+        var firstBox = boxes[0] || {};
+        currentStoreUrl = club.store_url || data.store_url || (firstBox.store_domain ? ('https://' + firstBox.store_domain) : 'https://store-bida.video.io.vn');
+        currentCstoreUrl = club.cstore_url || data.cstore_url || (firstBox.cstore_domain ? ('https://' + firstBox.cstore_domain) : 'https://c-store-bida.video.io.vn');
+
+        document.getElementById('portal-store-domain-text').textContent = currentStoreUrl;
+        document.getElementById('portal-cstore-domain-text').textContent = currentCstoreUrl;
+        document.getElementById('portal-store-link').href = currentStoreUrl;
+        document.getElementById('portal-cstore-link').href = currentCstoreUrl;
+
+        document.getElementById('portal-store-qr-inline').innerHTML = buildQrSvg(currentStoreUrl);
+        document.getElementById('portal-cstore-qr-inline').innerHTML = buildQrSvg(currentCstoreUrl);
+
+        var onlineBoxes = summary.boxes_online !== undefined ? summary.boxes_online : boxes.filter(function (b) { return b.online !== false; }).length;
+        var totalBoxes = summary.boxes_total !== undefined ? summary.boxes_total : boxes.length;
+        var offlineBoxes = Math.max(0, totalBoxes - onlineBoxes);
+        var recCams = summary.cameras_recording !== undefined ? summary.cameras_recording : cameras.filter(function (c) { return c.recording !== false; }).length;
+        var totalCams = summary.cameras_total !== undefined ? summary.cameras_total : cameras.length;
+
+        document.getElementById('portal-kpi-boxes').textContent = onlineBoxes + ' / ' + totalBoxes + ' Box Online' + (offlineBoxes > 0 ? (' (' + offlineBoxes + ' Offline)') : '');
+        document.getElementById('portal-kpi-cameras').textContent = recCams + ' / ' + totalCams + ' Camera';
+
+        var maxSd = boxes.reduce(function (m, b) { return Math.max(m, b.sd_used_pct || 40); }, 0);
+        document.getElementById('portal-kpi-storage').textContent = (maxSd < 88 ? 'TỐT (' + maxSd + '%)' : 'CẢNH BÁO (' + maxSd + '%)');
+
+        /* Render Boxes */
+        var boxesGrid = document.getElementById('portal-boxes-grid');
+        if (boxesGrid) {
+          boxesGrid.innerHTML = boxes.map(function (b) {
+            var isOnline = b.online !== false;
+            var sdPct = b.sd_used_pct !== undefined ? b.sd_used_pct : 42;
+            var barCls = sdPct >= 88 ? 'danger' : (sdPct >= 75 ? 'warn' : '');
+
+            var ramTotal = b.ram_total_mb || 1945;
+            var ramUsed = b.ram_used_mb || (b.ram_available_mb > 0 && ramTotal > b.ram_available_mb ? (ramTotal - b.ram_available_mb) : 0);
+            var ramAvail = b.ram_available_mb || Math.max(0, ramTotal - ramUsed);
+            var ramPct = b.ram_used_pct || b.ram_pct || (ramTotal > 0 ? Math.round((ramUsed * 100) / ramTotal) : 0);
+
+            var swapTotal = b.swap_total_mb || b.zram_total_mb || 1945;
+            var swapUsed = b.swap_used_mb !== undefined ? b.swap_used_mb : (b.zram_used_mb || 0);
+            var swapFree = b.swap_free_mb || Math.max(0, swapTotal - swapUsed);
+
+            return '<article class="portal-box-card' + (isOnline ? '' : ' offline row-offline') + '">' +
+              '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">' +
+                '<div>' +
+                  '<strong class="mono" style="font-size:14px;">' + esc(b.name || b.id) + '</strong>' +
+                  '<div class="mono" style="font-size:11px;color:var(--text-muted);">Mã trạm: ' + esc(b.id) + (b.uptime_human ? (' · ' + esc(b.uptime_human)) : '') + '</div>' +
+                '</div>' +
+                (isOnline
+                  ? '<span class="badge badge-emerald emerald"><span class="led-dot led emerald"></span>ONLINE · TRỰC TUYẾN' + (b.rtt_ms ? (' · ' + esc(b.rtt_ms) + 'ms') : '') + '</span>'
+                  : '<span class="badge badge-crimson crimson"><span class="led-dot led crimson"></span>OFFLINE · MẤT KẾT NỐI</span>') +
+              '</div>' +
+              '<div class="mono" style="font-size:12px;color:var(--text-secondary);background:var(--bg-subtle);padding:8px 10px;border-radius:8px;margin-bottom:10px;display:flex;flex-direction:column;gap:4px;">' +
+                '<div style="display:flex;justify-content:space-between;">' +
+                  '<span>CPU: <strong>' + fmtNum(b.cpu_pct, 1) + '%</strong> (Load ' + fmtNum(b.load_avg_1m, 2) + ')</span>' +
+                  '<span>Heap: <strong>' + fmtNum(b.heap_alloc_mb, 1) + ' MB</strong></span>' +
+                '</div>' +
+                '<div style="display:flex;justify-content:space-between;">' +
+                  '<span>RAM: <strong>' + esc(ramUsed) + '/' + esc(ramTotal) + ' MB</strong> (' + esc(ramPct) + '%)</span>' +
+                  '<span>Avail: <strong>' + esc(ramAvail) + ' MB</strong></span>' +
+                '</div>' +
+                '<div style="display:flex;justify-content:space-between;">' +
+                  '<span>Swap: <strong>' + esc(swapUsed) + '/' + esc(swapTotal) + ' MB</strong></span>' +
+                  '<span>Free: <strong>' + esc(swapFree) + ' MB</strong></span>' +
+                '</div>' +
+              '</div>' +
+              '<div style="font-size:12px;color:var(--text-secondary);display:flex;justify-content:space-between;">' +
+                '<span>Dung lượng Thẻ Nhớ Video (' + esc(b.sd_fs_type || 'f2fs') + ')</span>' +
+                '<strong class="mono">sd_used_pct: ' + esc(sdPct) + '%</strong>' +
+              '</div>' +
+              '<div class="mini-meter" style="width:100%;height:8px;margin:6px 0 8px;">' +
+                '<div class="mini-meter-fill ' + barCls + '" style="width:' + Math.min(100, sdPct) + '%"></div>' +
+              '</div>' +
+              '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);" class="mono">' +
+                '<span>Camera: ' + esc(b.cameras_count || 0) + ' bàn</span>' +
+                '<span>FFmpeg: ' + esc(b.ffmpeg_count !== undefined ? b.ffmpeg_count : (b.shinobi_monitors_recording || 0)) + ' luồng</span>' +
+              '</div>' +
+            '</article>';
+          }).join('');
+        }
+
+        /* Render Cameras Table */
+        var camTbody = document.getElementById('portal-cameras-tbody');
+        if (camTbody) {
+          camTbody.innerHTML = cameras.map(function (c) {
+            return '<tr>' +
+              '<td><strong>' + esc(c.table_name || c.name || 'Bàn Bida') + '</strong></td>' +
+              '<td class="mono">' + esc(c.box_id || '--') + '</td>' +
+              '<td class="mono">' + esc(c.host || '192.168.1.x') + '</td>' +
+              '<td class="mono"><span class="badge badge-emerald">' + esc(c.codec || 'H.265') + '</span> ' + esc(c.resolution || '1080p') + ' · ' + esc(c.fps || 30) + 'fps</td>' +
+              '<td>' + (c.online !== false ? '<span class="badge badge-emerald">ONLINE</span>' : '<span class="badge badge-crimson">OFFLINE</span>') + '</td>' +
+              '<td>' + (c.recording !== false ? '<span class="badge badge-emerald">● ĐANG GHI HÌNH</span>' : '<span class="badge badge-amber">TẠM DỪNG</span>') + '</td>' +
+            '</tr>';
+          }).join('');
+        initP2PNVR(boxes, cameras);
+      }
+
+      var p2pState = {
+        selectedBoxId: '',
+        devicesByBox: {},
+        liveTileMap: {}
+      };
+
+      function toLocalInputValue(d) {
+        var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+          'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+      }
+
+      function initDefaultTimeInputs() {
+        var startEl = document.getElementById('p2p-pb-start');
+        var endEl = document.getElementById('p2p-pb-end');
+        if (startEl && !startEl.value) {
+          var now = new Date();
+          var twoHoursAgo = new Date(now.getTime() - 2 * 3600 * 1000);
+          startEl.value = toLocalInputValue(twoHoursAgo);
+          endEl.value = toLocalInputValue(now);
+        }
+      }
+
+      function initP2PNVR(boxes, cameras) {
+        initDefaultTimeInputs();
+        var boxSel = document.getElementById('p2p-box-select');
+        if (!boxSel || !boxes.length) return;
+
+        if (!p2pState.selectedBoxId || !boxes.some(function (b) { return b.id === p2pState.selectedBoxId; })) {
+          p2pState.selectedBoxId = boxes[0].id;
+        }
+        boxSel.innerHTML = boxes.map(function (b) {
+          return '<option value="' + esc(b.id) + '"' + (b.id === p2pState.selectedBoxId ? ' selected' : '') + '>' +
+            esc(b.name || b.id) + ' (' + esc(b.id) + ')' + (b.nvr_host ? (' · NVR ' + esc(b.nvr_host)) : '') + '</option>';
+        }).join('');
+
+        loadP2PDevicesForBox(p2pState.selectedBoxId, cameras);
+      }
+
+      function loadP2PDevicesForBox(boxId, fallbackCameras) {
+        var token = getPortalToken();
+        var url = '/portal/' + encodeURIComponent(token) + '/api/p2p/devices?box_id=' + encodeURIComponent(boxId);
+        fetch(url, { headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            var devs = (data && Array.isArray(data.devices) && data.devices.length) ? data.devices : [];
+            if (!devs.length && Array.isArray(fallbackCameras)) {
+              devs = fallbackCameras.filter(function (c) { return c.box_id === boxId; }).map(function (c) {
+                return {
+                  id: c.device_id || (c.host + ':' + (c.port || 37777)),
+                  name: c.table_name || c.name,
+                  host: c.host,
+                  port: c.port || 37777,
+                  vendor: c.vendor || 'dahua',
+                  nvrChannel: c.nvr_channel || 1,
+                  isNvr: false
+                };
+              });
+            }
+            p2pState.devicesByBox[boxId] = devs;
+            renderP2PGrid(boxId, devs);
+            populatePlaybackDevices(boxId, devs);
+          })
+          .catch(function () {
+            var devs = (fallbackCameras || []).filter(function (c) { return c.box_id === boxId; }).map(function (c) {
+              return {
+                id: c.device_id || (c.host + ':' + (c.port || 37777)),
+                name: c.table_name || c.name,
+                host: c.host,
+                port: c.port || 37777,
+                vendor: c.vendor || 'dahua'
+              };
+            });
+            p2pState.devicesByBox[boxId] = devs;
+            renderP2PGrid(boxId, devs);
+            populatePlaybackDevices(boxId, devs);
+          });
+      }
+
+      function renderP2PGrid(boxId, devs) {
+        var grid = document.getElementById('p2p-live-grid');
+        if (!grid) return;
+        var token = getPortalToken();
+        var ts = Date.now();
+        grid.innerHTML = devs.map(function (d, idx) {
+          var devId = d.id || (d.host + ':' + (d.port || 37777));
+          var snapUrl = '/portal/' + encodeURIComponent(token) + '/api/p2p/snapshot?box_id=' +
+            encodeURIComponent(boxId) + '&id=' + encodeURIComponent(devId) + '&channel=0&_r=' + ts;
+          var badge = d.isNvr ? '🗄️ NVR ' + (d.port || 37777) : ('📹 ' + (d.vendor || 'dahua').toUpperCase() + ' :' + (d.port || 37777));
+          return '<div class="p2p-cam-tile" data-dev-id="' + esc(devId) + '" data-dev-name="' + esc(d.name || devId) + '" data-is-nvr="' + (d.isNvr ? '1' : '0') + '">' +
+            '<div class="p2p-cam-viewport" data-action="toggle-live" data-idx="' + idx + '">' +
+              '<img id="p2p-img-' + idx + '" src="' + esc(snapUrl) + '" loading="lazy" alt="' + esc(d.name || devId) + '">' +
+              '<div class="p2p-cam-overlay">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                  '<span class="badge badge-cyan mono" style="font-size:10px;">' + esc(badge) + '</span>' +
+                  '<span id="p2p-mode-badge-' + idx + '" class="badge badge-emerald mono" style="font-size:10px;">SNAPSHOT P2P</span>' +
+                '</div>' +
+                '<div style="display:flex;justify-content:space-between;align-items:flex-end;">' +
+                  '<strong style="font-size:13px;color:#fff;text-shadow:0 1px 3px #000;">' + esc(d.name || devId) + '</strong>' +
+                  '<span class="mono" style="font-size:11px;color:#cbd5e1;">' + esc(d.host) + '</span>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="p2p-cam-footer">' +
+              '<button type="button" class="btn btn-cyan" style="padding:4px 8px;font-size:11px;" data-action="live" data-idx="' + idx + '">🔴 Live MJPEG</button>' +
+              '<button type="button" class="btn" style="padding:4px 8px;font-size:11px;" data-action="snap" data-idx="' + idx + '">📸 Làm mới</button>' +
+              '<button type="button" class="btn btn-primary" style="padding:4px 8px;font-size:11px;" data-action="playback" data-idx="' + idx + '">⏪ Tua Lại</button>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+      }
+
+      function populatePlaybackDevices(boxId, devs) {
+        var sel = document.getElementById('p2p-pb-device');
+        if (!sel) return;
+        sel.innerHTML = devs.map(function (d) {
+          var devId = d.id || (d.host + ':' + (d.port || 37777));
+          var label = (d.isNvr ? '[ĐẦU GHI NVR] ' : '') + (d.name || devId) + ' (' + devId + ')';
+          return '<option value="' + esc(devId) + '">' + esc(label) + '</option>';
+        }).join('');
+      }
+
+      document.getElementById('p2p-box-select').addEventListener('change', function (e) {
+        p2pState.selectedBoxId = e.target.value;
+        loadP2PDevicesForBox(p2pState.selectedBoxId, []);
+      });
+
+      document.getElementById('p2p-snap-all-btn').addEventListener('click', function () {
+        var boxId = p2pState.selectedBoxId;
+        var devs = p2pState.devicesByBox[boxId] || [];
+        renderP2PGrid(boxId, devs);
+      });
+
+      document.getElementById('p2p-live-grid').addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        var action = btn.getAttribute('data-action');
+        var idx = Number(btn.getAttribute('data-idx'));
+        var boxId = p2pState.selectedBoxId;
+        var devs = p2pState.devicesByBox[boxId] || [];
+        var dev = devs[idx];
+        if (!dev) return;
+        var devId = dev.id || (dev.host + ':' + (dev.port || 37777));
+        var token = getPortalToken();
+        var imgEl = document.getElementById('p2p-img-' + idx);
+        var badgeEl = document.getElementById('p2p-mode-badge-' + idx);
+
+        if (action === 'live' || action === 'toggle-live') {
+          var isLive = p2pState.liveTileMap[idx];
+          if (isLive) {
+            p2pState.liveTileMap[idx] = false;
+            imgEl.src = '/portal/' + encodeURIComponent(token) + '/api/p2p/snapshot?box_id=' +
+              encodeURIComponent(boxId) + '&id=' + encodeURIComponent(devId) + '&channel=0&nocache=1&_r=' + Date.now();
+            if (badgeEl) {
+              badgeEl.textContent = 'SNAPSHOT P2P';
+              badgeEl.className = 'badge badge-emerald mono';
+            }
+          } else {
+            p2pState.liveTileMap[idx] = true;
+            imgEl.src = '/portal/' + encodeURIComponent(token) + '/api/p2p/live?box_id=' +
+              encodeURIComponent(boxId) + '&id=' + encodeURIComponent(devId) + '&channel=0&fps=6&_r=' + Date.now();
+            if (badgeEl) {
+              badgeEl.textContent = '● LIVE MJPEG P2P';
+              badgeEl.className = 'badge badge-crimson mono';
+            }
+          }
+        } else if (action === 'snap') {
+          p2pState.liveTileMap[idx] = false;
+          imgEl.src = '/portal/' + encodeURIComponent(token) + '/api/p2p/snapshot?box_id=' +
+            encodeURIComponent(boxId) + '&id=' + encodeURIComponent(devId) + '&channel=0&nocache=1&_r=' + Date.now();
+          if (badgeEl) {
+            badgeEl.textContent = 'SNAPSHOT P2P';
+            badgeEl.className = 'badge badge-emerald mono';
+          }
+        } else if (action === 'playback') {
+          openP2PModal(devId, dev.name || devId);
+        }
+      });
+
+      function openP2PModal(devId, devName) {
+        initDefaultTimeInputs();
+        var sel = document.getElementById('p2p-pb-device');
+        if (sel && devId) sel.value = devId;
+        document.getElementById('p2p-modal-title').textContent = 'Cloud P2P — ' + (devName || devId || 'Camera / NVR');
+        document.getElementById('p2p-playback-modal').classList.add('open');
+        updateDownloadHref();
+      }
+
+      function stopModalMedia() {
+        var vid = document.getElementById('p2p-pb-video');
+        var mjpeg = document.getElementById('p2p-pb-mjpeg');
+        if (vid) {
+          vid.pause();
+          vid.removeAttribute('src');
+          vid.style.display = 'none';
+        }
+        if (mjpeg) {
+          mjpeg.src = '';
+          mjpeg.style.display = 'none';
+        }
+        var ph = document.getElementById('p2p-pb-placeholder');
+        if (ph) ph.style.display = 'block';
+      }
+
+      function buildPlaybackUrl(startIso, endIso, download) {
+        var token = getPortalToken();
+        var boxId = p2pState.selectedBoxId;
+        var devId = document.getElementById('p2p-pb-device').value;
+        var ch = document.getElementById('p2p-pb-channel').value || '0';
+        var s = startIso || document.getElementById('p2p-pb-start').value;
+        var e = endIso || document.getElementById('p2p-pb-end').value;
+        return '/portal/' + encodeURIComponent(token) + '/api/p2p/playback?box_id=' + encodeURIComponent(boxId) +
+          '&id=' + encodeURIComponent(devId) + '&channel=' + encodeURIComponent(ch) +
+          '&start=' + encodeURIComponent(s) + '&end=' + encodeURIComponent(e) +
+          (download ? '&download=1' : '');
+      }
+
+      function updateDownloadHref() {
+        var dlBtn = document.getElementById('p2p-pb-download-btn');
+        if (dlBtn) dlBtn.href = buildPlaybackUrl(null, null, true);
+      }
+
+      document.getElementById('p2p-open-playback-btn').addEventListener('click', function () {
+        var sel = document.getElementById('p2p-pb-device');
+        openP2PModal(sel ? sel.value : '', 'Tua Lại Ổ Cứng NVR / Camera');
+      });
+
+      document.getElementById('p2p-modal-close').addEventListener('click', function () {
+        stopModalMedia();
+        document.getElementById('p2p-playback-modal').classList.remove('open');
+      });
+
+      document.getElementById('p2p-pb-live-btn').addEventListener('click', function () {
+        stopModalMedia();
+        var token = getPortalToken();
+        var boxId = p2pState.selectedBoxId;
+        var devId = document.getElementById('p2p-pb-device').value;
+        var ch = document.getElementById('p2p-pb-channel').value || '0';
+        var mjpeg = document.getElementById('p2p-pb-mjpeg');
+        var ph = document.getElementById('p2p-pb-placeholder');
+        if (ph) ph.style.display = 'none';
+        mjpeg.style.display = 'block';
+        mjpeg.src = '/portal/' + encodeURIComponent(token) + '/api/p2p/live?box_id=' + encodeURIComponent(boxId) +
+          '&id=' + encodeURIComponent(devId) + '&channel=' + encodeURIComponent(ch) + '&fps=8&_r=' + Date.now();
+        document.getElementById('p2p-pb-status').textContent = '🔴 Đang truyền luồng Live MJPEG trực tiếp qua DVRIP P2P (' + devId + ' · Kênh ' + (Number(ch) + 1) + ')';
+      });
+
+      document.getElementById('p2p-pb-play-range-btn').addEventListener('click', function () {
+        stopModalMedia();
+        updateDownloadHref();
+        var vid = document.getElementById('p2p-pb-video');
+        var ph = document.getElementById('p2p-pb-placeholder');
+        if (ph) ph.style.display = 'none';
+        vid.style.display = 'block';
+        vid.src = buildPlaybackUrl(null, null, false);
+        vid.play().catch(function () {});
+        document.getElementById('p2p-pb-status').textContent = '▶️ Đang remux trực tiếp luồng RTSP Playback sang Fragmented MP4 qua Yamux P2P...';
+      });
+
+      document.getElementById('p2p-pb-search-btn').addEventListener('click', function () {
+        updateDownloadHref();
+        var token = getPortalToken();
+        var boxId = p2pState.selectedBoxId;
+        var devId = document.getElementById('p2p-pb-device').value;
+        var ch = document.getElementById('p2p-pb-channel').value || '0';
+        var s = document.getElementById('p2p-pb-start').value;
+        var e = document.getElementById('p2p-pb-end').value;
+        var statusEl = document.getElementById('p2p-pb-status');
+        var segEl = document.getElementById('p2p-pb-segments');
+        statusEl.textContent = '🔍 Đang truy vấn mediaFileFind trên thiết bị ' + devId + ' (Kênh ' + (Number(ch) + 1) + ')...';
+        segEl.innerHTML = '';
+
+        var url = '/portal/' + encodeURIComponent(token) + '/api/p2p/recordings?box_id=' + encodeURIComponent(boxId) +
+          '&id=' + encodeURIComponent(devId) + '&channel=' + encodeURIComponent(ch) +
+          '&start=' + encodeURIComponent(s) + '&end=' + encodeURIComponent(e);
+        fetch(url, { headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data && data.error) {
+              statusEl.textContent = '⚠️ ' + data.error;
+              return;
+            }
+            var list = (data && Array.isArray(data.recordings)) ? data.recordings : [];
+            if (!list.length) {
+              statusEl.textContent = 'Không tìm thấy đoạn ghi hình nào trên ổ cứng/thẻ của thiết bị trong khoảng này (hoặc thiết bị không gắn thẻ nhớ riêng — hãy chọn Đầu ghi NVR ở ô Thiết bị).';
+              return;
+            }
+            statusEl.textContent = '✅ Tìm thấy ' + list.length + ' đoạn video trên thiết bị — bấm vào từng đoạn để phát ngay:';
+            segEl.innerHTML = list.slice(0, 60).map(function (seg, i) {
+              var kb = Math.round((seg.length || 0) / 1024 / 1024 * 10) / 10;
+              return '<div class="p2p-seg-item mono" data-start="' + esc(seg.startTime) + '" data-end="' + esc(seg.endTime) + '">' +
+                '<span>🎬 ' + esc((seg.startTime || '').slice(11)) + ' → ' + esc((seg.endTime || '').slice(11)) + '</span>' +
+                '<span class="badge badge-cyan">' + kb + ' MB</span>' +
+              '</div>';
+            }).join('');
+          })
+          .catch(function (err) {
+            statusEl.textContent = '⚠️ Lỗi truy vấn P2P: ' + err.message;
+          });
+      });
+
+      document.getElementById('p2p-pb-segments').addEventListener('click', function (e) {
+        var item = e.target.closest('.p2p-seg-item');
+        if (!item) return;
+        var s = item.getAttribute('data-start').replace(' ', 'T');
+        var end = item.getAttribute('data-end').replace(' ', 'T');
+        stopModalMedia();
+        var vid = document.getElementById('p2p-pb-video');
+        var ph = document.getElementById('p2p-pb-placeholder');
+        if (ph) ph.style.display = 'none';
+        vid.style.display = 'block';
+        vid.src = buildPlaybackUrl(s, end, false);
+        vid.play().catch(function () {});
+        var dlBtn = document.getElementById('p2p-pb-download-btn');
+        if (dlBtn) dlBtn.href = buildPlaybackUrl(s, end, true);
+        document.getElementById('p2p-pb-status').textContent = '▶️ Đang phát đoạn ' + s + ' → ' + end + ' qua Yamux P2P...';
+      });
+
+      function showQrModal(title, url) {
+        document.getElementById('portal-qr-modal-title').textContent = title;
+        document.getElementById('portal-qr-modal-url').textContent = url;
+        document.getElementById('portal-qr-modal-svg').innerHTML = buildQrSvg(url);
+        document.getElementById('portal-qr-modal').classList.add('open');
+      }
+
+      document.getElementById('portal-show-store-qr-btn').addEventListener('click', function () {
+        showQrModal('Mã QR Xem Bàn & Điểm Số', currentStoreUrl);
+      });
+      document.getElementById('portal-show-cstore-qr-btn').addEventListener('click', function () {
+        showQrModal('Mã QR Xem Camera & Tua Video', currentCstoreUrl);
+      });
+      document.getElementById('portal-qr-modal-close').addEventListener('click', function () {
+        document.getElementById('portal-qr-modal').classList.remove('open');
+      });
+      document.getElementById('portal-refresh-btn').addEventListener('click', loadPortalStatus);
+
+      document.getElementById('theme-toggle').addEventListener('click', function () {
+        var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+        var next = cur === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('bidahub-theme', next);
+      });
+
+      loadPortalStatus();
+      setInterval(loadPortalStatus, 20000);
+    })();
+  </script>
+</body>
+</html>

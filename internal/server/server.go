@@ -137,6 +137,7 @@ func (s *Server) routes() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	s.mux.HandleFunc("/api/system/metrics", s.handleSystemMetrics)
 
 	// MCP (Model Context Protocol) Server endpoints.
 	mcpHandler := s.mcp.HTTPHandler()
@@ -358,11 +359,23 @@ func (s *Server) authed(r *http.Request) bool { return s.sessionRole(r) != "" }
 
 // sessionRole returns the request's session role ("admin"/"viewer") or "".
 func (s *Server) sessionRole(r *http.Request) string {
-	c, err := r.Cookie(sessionCookie)
-	if err != nil {
-		return ""
+	if c, err := r.Cookie(sessionCookie); err == nil {
+		if role := s.session.role(c.Value); role != "" {
+			return role
+		}
 	}
-	return s.session.role(c.Value)
+	// Trusted local Yamux reverse-proxy from inut-bida-agent on loopback.
+	if r.Header.Get("X-Inut-Staff-Sig") != "" {
+		ip := clientIP(r)
+		if ip == "127.0.0.1" || ip == "::1" || ip == "localhost" {
+			role := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Inut-SSO-Role")))
+			if role == "viewer" {
+				return "viewer"
+			}
+			return "admin"
+		}
+	}
+	return ""
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {

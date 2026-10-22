@@ -1212,6 +1212,12 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), to)
 		defer cancel()
 		cam, err := camera.Open(ctx, src, to)
+		if err != nil && d.NVRID != "" && src.ID == d.ID {
+			if nvr, ok := s.inv.Get(d.NVRID); ok {
+				src, ch = nvr, d.NVRChannel-1
+				cam, err = camera.Open(ctx, src, to)
+			}
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -2340,6 +2346,11 @@ func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
 		liveErr = tiandy.StreamMJPEG(ctx, w, flush, d.Host, d.Username, d.Password, channel, fps, boundary)
 	} else {
 		liveErr = dahua.StreamMJPEG(ctx, w, flush, d.Host, d.Port, d.Username, d.Password, channel, fps, boundary)
+		if liveErr != nil && d.NVRID != "" {
+			if nvr, ok := s.inv.Get(d.NVRID); ok {
+				liveErr = dahua.StreamMJPEG(ctx, w, flush, nvr.Host, nvr.Port, nvr.Username, nvr.Password, d.NVRChannel-1, fps, boundary)
+			}
+		}
 	}
 	if liveErr != nil {
 		log.Printf("live %s ch%d: %v", q.Get("id"), channel, liveErr)

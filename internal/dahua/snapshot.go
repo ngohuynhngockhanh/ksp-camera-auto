@@ -70,21 +70,22 @@ func GetSnapshot(ctx context.Context, host string, port int, user, pass string, 
 	return snapshotFallback(ctx, host, user, pass, channel, timeout, nil)
 }
 
-// snapshotFallback tries RTSP (ffmpeg) then CGI, threading through any prior
-// DVRIP error for the combined message.
+// snapshotFallback tries HTTP CGI first (fast, zero-ffmpeg HTTP GET on port 80,
+// especially important for multi-channel NVRs where channel > 0 skips DVRIP),
+// then RTSP (ffmpeg) if CGI fails.
 func snapshotFallback(ctx context.Context, host, user, pass string, channel int, timeout time.Duration, dvripErr error) ([]byte, error) {
+	data, cgiErr := GetSnapshotCGI(ctx, host, user, pass, channel, timeout)
+	if cgiErr == nil && len(data) >= 2 && data[0] == 0xff && data[1] == 0xd8 {
+		return data, nil
+	}
 	data, rtspErr := GetSnapshotRTSP(ctx, host, user, pass, channel, timeout)
 	if rtspErr == nil {
 		return data, nil
 	}
-	data, cgiErr := GetSnapshotCGI(ctx, host, user, pass, channel, timeout)
-	if cgiErr == nil {
-		return data, nil
-	}
 	if dvripErr != nil {
-		return nil, fmt.Errorf("dahua: snapshot %s: dvrip: %v; rtsp: %v; cgi: %v", host, dvripErr, rtspErr, cgiErr)
+		return nil, fmt.Errorf("dahua: snapshot %s: dvrip: %v; cgi: %v; rtsp: %v", host, dvripErr, cgiErr, rtspErr)
 	}
-	return nil, fmt.Errorf("dahua: snapshot %s: rtsp: %v; cgi: %v", host, rtspErr, cgiErr)
+	return nil, fmt.Errorf("dahua: snapshot %s: cgi: %v; rtsp: %v", host, cgiErr, rtspErr)
 }
 
 // GetSnapshotRTSP grabs one JPEG frame from the camera's RTSP stream
@@ -185,24 +186,26 @@ func GetSnapshotRTSP(ctx context.Context, host, user, pass string, channel int, 
 func GetSnapshotCGI(ctx context.Context, host, user, pass string, channel int, timeout time.Duration) ([]byte, error) {
 	digest := isapi.NewDigestTransport(user, pass, nil)
 	client := &http.Client{Transport: digest, Timeout: timeout}
-	url := fmt.Sprintf("http://%s:80/cgi-bin/snapshot.cgi?channel=%d", host, channel)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("dahua: build snapshot request: %w", err)
+	for _, chParam := range []int{channel + 1, channel} {
+		u := fmt.Sprintf("http://%s:80/cgi-bin/snapshot.cgi?channel=%d", host, chParam)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			return nil, fmt.Errorf("dahua: build snapshot request: %w", err)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("dahua: snapshot %s: %w", host, err)
+		}
+		data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+		resp.Body.Close()
+		if err == nil && resp.StatusCode == http.StatusOK && len(data) >= 2 && data[0] == 0xff && data[1] == 0xd8 {
+			return data, nil
+		}
+		if chParam == channel {
+			return nil, fmt.Errorf("dahua: snapshot %s: HTTP %d: %s", host, resp.StatusCode, snapshotTruncate(data, 200))
+		}
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("dahua: snapshot %s: %w", host, err)
-	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if err != nil {
-		return nil, fmt.Errorf("dahua: read snapshot %s: %w", host, err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("dahua: snapshot %s: HTTP %d: %s", host, resp.StatusCode, snapshotTruncate(data, 200))
-	}
-	return data, nil
+	return nil, fmt.Errorf("dahua: snapshot %s: failed", host)
 }
 
 func snapshotTruncate(b []byte, n int) string {

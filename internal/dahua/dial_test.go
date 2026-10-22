@@ -90,3 +90,47 @@ func TestDialLoginFailureNotWrappedAsUnreachable(t *testing.T) {
 		t.Errorf("login failure must not be classified as unreachable: %v", err)
 	}
 }
+
+// TestDialNVRLoginSuccess0x080800 verifies that a Dahua NVR returning
+// 0x080800 in header[8:12] (errCode[1]==0x08, errCode[2]==0x08) is accepted
+// as a successful DVRIP login.
+func TestDialNVRLoginSuccess0x080800(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go func() {
+		defer ln.Close()
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		hdr := make([]byte, headerLen)
+		if _, err := io.ReadFull(conn, hdr); err != nil {
+			return
+		}
+		body := []byte("Realm:Login to NVRREALM\r\nRandom:987654\r\n\r\n")
+		resp := make([]byte, headerLen)
+		binary.LittleEndian.PutUint32(resp[4:8], uint32(len(body)))
+		_, _ = conn.Write(append(resp, body...))
+
+		hdr2 := make([]byte, headerLen)
+		if _, err := io.ReadFull(conn, hdr2); err != nil {
+			return
+		}
+		chunk := binary.LittleEndian.Uint32(hdr2[4:8])
+		if chunk > 0 {
+			_, _ = io.CopyN(io.Discard, conn, int64(chunk))
+		}
+		loginResp := make([]byte, headerLen)
+		loginResp[8], loginResp[9], loginResp[10] = 0x00, 0x08, 0x08
+		binary.LittleEndian.PutUint32(loginResp[16:20], 99887766)
+		_, _ = conn.Write(loginResp)
+	}()
+	c, err := Dial(ln.Addr().String(), "live", "inut123@", 3*time.Second)
+	if err != nil {
+		t.Fatalf("expected 0x080800 NVR login to succeed, got: %v", err)
+	}
+	defer c.Close()
+}
