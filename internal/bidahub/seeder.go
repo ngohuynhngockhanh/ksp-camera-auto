@@ -448,6 +448,26 @@ var builtInFleetSpecs = []seedBoxSpec{
 		ShinobiGroupKey: "job", StoreDomain: "store-job.video.io.vn", CStoreDomain: "c-store-job.video.io.vn",
 		PM2CameraMB: 250, HardeningScore: 8, Notes: "13 camera Hikvision, ext4 SD card, fixed videos.js file.destroy() FD leak, 26/26 FFmpeg",
 	},
+	{
+		ID: "inut_205_50", ClubID: "club_skyline_pool", ClubName: "Skyline Pool Club", BoxName: "Skyline Pool Club - Box 1",
+		Branding: "billiards", VPNIP: "77.88.205.50", LANIP: "192.168.1.254", VirtualIP: "192.168.1.254",
+		SoCModel: "Allwinner H616", Arch: "aarch64", RAMTotalMB: 1945, RAMAvailableMB: 814, ZRAMTotalMB: 1945, ZRAMAlgo: "lz4",
+		SDTotalGB: 119, SDUsedPct: 69, SDFSType: "f2fs", SDMountOpts: "rw,noatime,errors=continue,users",
+		CamerasCount: 9, Vendor: "Dahua", Resolution: "2560x1440", Width: 2560, Height: 1440, FPS: 30, BitrateKbps: 1536, Codec: "H.265",
+		NVRHost: "192.168.1.246",
+		ShinobiGroupKey: "sun", StoreDomain: "store-skyline.video.io.vn", CStoreDomain: "c-store-skyline.video.io.vn",
+		PM2CameraMB: 220, HardeningScore: 8, Notes: "9 camera Dahua, NVR 192.168.1.246 (DHI-NVR1108HS-S3/H-VN) rebooted, 18/18 FFmpeg",
+	},
+	{
+		ID: "inut_205_54", ClubID: "club_skyline_pool", ClubName: "Skyline Pool Club", BoxName: "Skyline Pool Club - Box 2",
+		Branding: "billiards", VPNIP: "77.88.205.54", LANIP: "192.168.1.254", VirtualIP: "192.168.1.254",
+		SoCModel: "Allwinner H616", Arch: "aarch64", RAMTotalMB: 1945, RAMAvailableMB: 1126, ZRAMTotalMB: 1945, ZRAMAlgo: "lz4",
+		SDTotalGB: 58, SDUsedPct: 76, SDFSType: "f2fs", SDMountOpts: "rw,noatime,errors=continue,users",
+		CamerasCount: 9, Vendor: "Dahua", Resolution: "2560x1440", Width: 2560, Height: 1440, FPS: 30, BitrateKbps: 1536, Codec: "H.265",
+		NVRHost: "192.168.1.200",
+		ShinobiGroupKey: "ultrapool2", StoreDomain: "store-skyline2.video.io.vn", CStoreDomain: "c-store-skyline2.video.io.vn",
+		PM2CameraMB: 220, HardeningScore: 8, Notes: "9 camera Dahua, NVR 192.168.1.200 (DH-NVR2108HS-4KS2) rebooted, 18/18 FFmpeg",
+	},
 }
 
 func randomHex(nBytes int, seedFallback string) string {

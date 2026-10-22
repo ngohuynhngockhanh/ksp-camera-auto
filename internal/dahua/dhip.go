@@ -141,9 +141,10 @@ func (c *Client) login(username, password string) error {
 	if err != nil {
 		return fmt.Errorf("login response: %w", err)
 	}
-	// ErrorCode lives in header[8:12]; 0x0008 = success. SessionID in header[16:20].
+	// ErrorCode lives in header[8:12]; errCode[1] == 0x08 (e.g. 0x0008 on IPCs,
+	// 0x080800 on some Dahua NVRs) indicates login success. SessionID in header[16:20].
 	errCode := hdr[8:12]
-	if !(errCode[0] == 0x00 && errCode[1] == 0x08) {
+	if errCode[1] != 0x08 {
 		return fmt.Errorf("login failed: %s", dvripErrString(errCode))
 	}
 	c.sessionID = binary.LittleEndian.Uint32(hdr[16:20])

@@ -676,3 +676,19 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Sửa lỗi JSON `Monitors.details` cho cả 13 camera, bật Fragmented MP4, áp cấu hình H.265 / SmartCodec / 30 FPS / 1536 Kbps cho toàn bộ 13 camera Hikvision
     - Cài đặt Storage Guard 15p (`90% -> 80%`), Smart Watchdog 60s, PM2 Memory Guard (`camera: 250M`), và `inut-bida-agent.service` (Yamux)
   - Trạng thái: Đủ **26/26 tiến trình FFmpeg**, cả 13/13 bàn đang ghi hình `.mp4` mới liên tục trên `/media/usb1/job`, 0 file `(deleted)` bị rò rỉ, Yamux ONLINE (`rtt_ms: 70 ms`)
+
+- [x] **Node `inut_205_50` & `inut_205_54`** (Skyline Pool Club Box 1 & Box 2 — `77.88.205.50` group `sun` & `77.88.205.54` group `ultrapool2`)
+  - Phần cứng: Allwinner H616 (aarch64, kernel 6.6.44-current-sunxi64), RAM 1.9 GiB; `205.50` dùng thẻ 120 GB F2FS (`83 GB / 69%`), `205.54` dùng thẻ 58 GB F2FS (`44 GB / 76%`)
+  - Số lượng camera & Đầu ghi NVR:
+    - `inut_205_50` (Box 1): 9 camera Dahua 2K (`192.168.1.227` .. `192.168.1.238`) + Đầu ghi Dahua NVR `192.168.1.246` (`DHI-NVR1108HS-S3/H-VN`, SN `AD08EEAPCF17F3A`, user `live`/`inut123@`)
+    - `inut_205_54` (Box 2): 9 camera Dahua 2K (`192.168.1.203` .. `192.168.1.214`) + Đầu ghi Dahua NVR `192.168.1.200` (`DH-NVR2108HS-4KS2`, SN `8H06BQ9PBC03612`, user `live`/`inut123@`)
+  - Các lỗ hổng trước khi xử lý:
+    - Mất kết nối OpenVPN `tun1` từ máy chủ `172.16.5.180` (phải đi qua FRPS HTTP Proxy `50206` và `50205`), chưa cài `inut-bida-agent` (Yamux)
+    - Đầu ghi Dahua NVR `192.168.1.246` và `192.168.1.200` bị treo kết nối đám mây Dahua P2P (`Easy4ip / T2UServer`); khi đăng nhập DVRIP cổng `37777` vào đầu ghi Dahua NVR trả mã `0x080800` thay vì `0x0008`
+    - Cả 2 box đều đang `Swap = 0B` (chưa kích hoạt ZRAM), chưa có PM2 Memory Guard, chưa có Storage Guard 15p, chưa có Smart Watchdog 60s, lỗi JSON `detector_filters` trong MySQL và thiếu `-segment_format_options`
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn 100% 83 GB + 44 GB video cũ):
+    - Mở rộng `internal/dahua/dhip.go` chấp nhận mã `errCode[1] == 0x08` (`0x080800`) của đầu ghi Dahua NVR, thêm cả 2 đầu ghi (`192.168.1.246:37777` và `192.168.1.200:37777`) vào `cameras.yaml` và thực thi lệnh `magicBox.reboot` khởi động lại cả 2 đầu ghi NVR thành công $\rightarrow$ Cả 2 NVR đã boot lại và kích hoạt lại `T2UServer` (`www.easy4ipcloud.com`)
+    - Kích hoạt ZRAM Swap `1.9 GiB` (`lz4`) qua dịch vụ `inut-zram.service`, khóa `kernel.sysrq = 0`, `vm.swappiness = 80`
+    - Vá `videos.js` (`file.destroy()`) và `monitor.js` (`snapProcess.terminate()`), sửa lỗi JSON `Monitors.details` và bật Fragmented MP4 cho toàn bộ 18 camera trên 2 box
+    - Cài đặt Storage Guard 15p (`90% -> 80%`), Smart Watchdog 60s, PM2 Memory Guard (`camera: 220M`), và `inut-bida-agent.service` (Yamux)
+  - Trạng thái: Cả 2 box đạt **18/18 tiến trình FFmpeg** (`9/9` bàn mỗi box đang ghi hình `.mp4` mới liên tục), cả 2 đầu ghi Dahua NVR đã khởi động lại sạch sẽ, Yamux ONLINE (`rtt_ms: 33 ms` & `35 ms`)
