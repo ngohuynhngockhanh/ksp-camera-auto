@@ -475,7 +475,7 @@ var builtInFleetSpecs = []seedBoxSpec{
 		SDTotalGB: 58, SDUsedPct: 68, SDFSType: "f2fs", SDMountOpts: "rw,noatime,errors=continue,users",
 		CamerasCount: 6, Vendor: "Hikvision", Resolution: "2560x1440", Width: 2560, Height: 1440, FPS: 20, BitrateKbps: 1536, Codec: "H.265",
 		ShinobiGroupKey: "b389", StoreDomain: "store-htppickleball.video.io.vn", CStoreDomain: "c-store-htppickleball.video.io.vn",
-		PM2CameraMB: 220, HardeningScore: 8, Notes: "6 camera Hikvision 2K, enabled AAC audio + 2.5 days (60h) clip download range, 12/12 FFmpeg",
+		PM2CameraMB: 220, HardeningScore: 8, Notes: "6 camera Hikvision 2K, enabled AAC audio + 2.5h (range=2.5) clip download range, 12/12 FFmpeg",
 	},
 }
 
