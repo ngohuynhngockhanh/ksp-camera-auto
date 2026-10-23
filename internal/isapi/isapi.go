@@ -685,13 +685,25 @@ func replaceXMLTagInBlock(doc []byte, block, tag, value string) []byte {
 	return out
 }
 
-// SetAudioAAC forces the stream's audio codec to AAC, preserving other device
-// fields. (Audio must already be enabled on the channel; the audio input codec
-// lives in the StreamingChannel document as audioCompressionType.)
+// SetAudioAAC enables the stream's <Audio><enabled>true</enabled> and forces
+// its codec to AAC (<audioCompressionType>AAC</audioCompressionType>),
+// preserving all other device fields.
 func (c *Client) SetAudioAAC(ctx context.Context, ch, stream int) error {
-	return c.mutateStreamChannel(ctx, channelID(ch, stream), map[string]string{
-		"audioCompressionType": "AAC",
-	})
+	path := streamPath(channelID(ch, stream))
+	raw, err := c.do(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return err
+	}
+	mutated := replaceXMLTagInBlock(raw, "Audio", "enabled", "true")
+	mutated = replaceXMLTag(mutated, "audioCompressionType", "AAC")
+	resp, err := c.do(ctx, http.MethodPut, path, mutated)
+	if err != nil {
+		return err
+	}
+	if err := checkResponseStatus(resp); err != nil {
+		return fmt.Errorf("isapi: PUT %s: %w", path, err)
+	}
+	return nil
 }
 
 // GetSnapshot fetches a single JPEG frame for one channel/stream via

@@ -468,6 +468,15 @@ var builtInFleetSpecs = []seedBoxSpec{
 		ShinobiGroupKey: "ultrapool2", StoreDomain: "store-skyline2.video.io.vn", CStoreDomain: "c-store-skyline2.video.io.vn",
 		PM2CameraMB: 220, HardeningScore: 8, Notes: "9 camera Dahua, NVR 192.168.1.200 (DH-NVR2108HS-4KS2) rebooted, 18/18 FFmpeg",
 	},
+	{
+		ID: "inut_204_135", ClubID: "club_htp_pickleball", ClubName: "HTP Pickleball", BoxName: "HTP Pickleball",
+		Branding: "pickleball", VPNIP: "77.88.204.135", LANIP: "192.168.1.253", VirtualIP: "192.168.1.253",
+		SoCModel: "Allwinner H616", Arch: "aarch64", RAMTotalMB: 1945, RAMAvailableMB: 620, ZRAMTotalMB: 1945, ZRAMAlgo: "lz4",
+		SDTotalGB: 58, SDUsedPct: 68, SDFSType: "f2fs", SDMountOpts: "rw,noatime,errors=continue,users",
+		CamerasCount: 6, Vendor: "Hikvision", Resolution: "2560x1440", Width: 2560, Height: 1440, FPS: 20, BitrateKbps: 1536, Codec: "H.265",
+		ShinobiGroupKey: "b389", StoreDomain: "store-htppickleball.video.io.vn", CStoreDomain: "c-store-htppickleball.video.io.vn",
+		PM2CameraMB: 220, HardeningScore: 8, Notes: "6 camera Hikvision 2K, enabled AAC audio + 2.5 days (60h) clip download range, 12/12 FFmpeg",
+	},
 }
 
 func randomHex(nBytes int, seedFallback string) string {

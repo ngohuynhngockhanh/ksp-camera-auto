@@ -334,10 +334,8 @@ func TestSetAudioAAC(t *testing.T) {
 	fake.mu.Lock()
 	sc := fake.channels[101]
 	fake.mu.Unlock()
-	// SetAudioAAC changes only the audio codec (audioCompressionType); it does
-	// not force the enabled flag, matching the raw-mutation behaviour.
-	if sc.Audio == nil || sc.Audio.AudioCompressionType != "AAC" {
-		t.Fatalf("audio not set to AAC: %+v", sc.Audio)
+	if sc.Audio == nil || !sc.Audio.Enabled || sc.Audio.AudioCompressionType != "AAC" {
+		t.Fatalf("audio not enabled+AAC: %+v", sc.Audio)
 	}
 }
 

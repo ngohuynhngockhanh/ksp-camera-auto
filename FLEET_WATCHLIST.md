@@ -692,3 +692,16 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Vá `videos.js` (`file.destroy()`) và `monitor.js` (`snapProcess.terminate()`), sửa lỗi JSON `Monitors.details` và bật Fragmented MP4 cho toàn bộ 18 camera trên 2 box
     - Cài đặt Storage Guard 15p (`90% -> 80%`), Smart Watchdog 60s, PM2 Memory Guard (`camera: 220M`), và `inut-bida-agent.service` (Yamux)
   - Trạng thái: Cả 2 box đạt **18/18 tiến trình FFmpeg** (`9/9` bàn mỗi box đang ghi hình `.mp4` mới liên tục), cả 2 đầu ghi Dahua NVR đã khởi động lại sạch sẽ, Yamux ONLINE (`rtt_ms: 33 ms` & `35 ms`)
+
+- [x] **Node `inut_204_135`** (HTP Pickleball — `77.88.204.135`, group `b389`)
+  - Phần cứng: Allwinner H616 (aarch64, kernel 6.6.44-current-sunxi64), RAM 1.9 GiB, Thẻ nhớ 58 GB F2FS (`/dev/mmcblk0p1`)
+  - Số lượng camera: 6 camera Hikvision 2K ($2560 \times 1440$, H.265) (`camera01` .. `camera06`, `192.168.1.120` .. `192.168.1.125`)
+  - Các vấn đề trước khi xử lý:
+    - Toàn bộ 6 monitor trong Shinobi (`camera01..06`) đang bị tắt tiếng (`acodec: "no"`, `stream_acodec: "no"`), khiến FFmpeg sinh cờ `-an` làm mất hoàn toàn âm thanh khi xem live và tải clip; riêng `camera01` (`192.168.1.120` — `SAN 2B`) còn bị tắt `<Audio><enabled>false</enabled>` ngay trên encoder của camera
+    - Cấu hình giới hạn tải/xem lại clip đang để lệch (`video_config: range=72`, `db_check_range: 730`) thay vì **2.5 ngày (`60 giờ`)**
+    - Chưa có Golden Hardening (`kernel.sysrq = 1`, `vm.swappiness = 0`, ZRAM mới 961 MiB, PM2 chưa giới hạn RAM khiến `camera` restart 236 lần, chưa có Storage Guard 15p, chưa có Smart Watchdog 60s, chưa cài `inut-bida-agent`)
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn 100% 39 GB video):
+    - Bật `<Audio><enabled>true</enabled>` + `<audioCompressionType>AAC</audioCompressionType>` trên cả 6 camera Hikvision (`192.168.1.120..125`, đồng thời nâng cấp `isapi.Client.SetAudioAAC` luôn bật `enabled=true`), và mở `acodec: "copy"`, `stream_acodec: "copy"`, `record_acodec: "aac"` trên cả 6 monitor Shinobi $\rightarrow$ Kiểm tra `ffprobe` trên cả 6 file `.mp4` mới đều có đủ 2 luồng `hevc,video` + `aac,audio,16000Hz`
+    - Chỉnh thời gian lưu & tải clip về **2.5 ngày (`60 giờ`)**: cập nhật `video_config = range=60`, `db_check_range = 60`, `max_review_hours: 60` và khởi động lại `ota-mqtt` + `inut` (Node-RED)
+    - Triển khai đầy đủ bộ Golden Hardening (ZRAM `1.9 GiB`, `sysrq = 0`, `swappiness = 80`, `videos.js` `file.destroy()`, `monitor.js` `snapProcess.terminate()`, Fragmented MP4, Storage Guard 15p `90% -> 80%`, Smart Watchdog 60s, PM2 Memory Guard `camera: 220M`, `inut-bida-agent.service` Yamux)
+  - Trạng thái: Đủ **12/12 tiến trình FFmpeg**, cả 6/6 sân đang ghi hình `.mp4` mới có âm thanh **AAC 16kHz** rõ nét, giới hạn tải clip **2.5 ngày (`range=60`)**, Yamux ONLINE (`rtt_ms: 59 ms`)
