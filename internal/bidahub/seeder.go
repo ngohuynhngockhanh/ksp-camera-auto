@@ -477,6 +477,15 @@ var builtInFleetSpecs = []seedBoxSpec{
 		ShinobiGroupKey: "b389", StoreDomain: "store-htppickleball.video.io.vn", CStoreDomain: "c-store-htppickleball.video.io.vn",
 		PM2CameraMB: 220, HardeningScore: 8, Notes: "6 camera Hikvision 2K, enabled AAC audio + 2.5h (range=2.5) clip download range, 12/12 FFmpeg",
 	},
+	{
+		ID: "inut_205_75", ClubID: "club_49_billiards_ninh_hoa", ClubName: "49 Billiards Carom Club Ninh Hòa", BoxName: "49 Billiards Carom Club Ninh Hòa",
+		Branding: "billiards", VPNIP: "77.88.205.75", LANIP: "192.168.1.254", VirtualIP: "192.168.1.254",
+		SoCModel: "Allwinner H616", Arch: "aarch64", RAMTotalMB: 1945, RAMAvailableMB: 846, ZRAMTotalMB: 1945, ZRAMAlgo: "lz4",
+		SDTotalGB: 118, SDUsedPct: 59, SDFSType: "exfat", SDMountOpts: "rw,noatime,errors=continue,users",
+		CamerasCount: 10, Vendor: "Dahua", Resolution: "1920x1080", Width: 1920, Height: 1080, FPS: 25, BitrateKbps: 1536, Codec: "H.265",
+		ShinobiGroupKey: "49", StoreDomain: "store-49-2.video.io.vn", CStoreDomain: "c-store-49-2.video.io.vn",
+		PM2CameraMB: 230, HardeningScore: 8, Notes: "10 camera Dahua 1080p, 118GB exFAT SD card, 20/20 FFmpeg",
+	},
 }
 
 func randomHex(nBytes int, seedFallback string) string {

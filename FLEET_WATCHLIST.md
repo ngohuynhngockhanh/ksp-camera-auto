@@ -705,3 +705,17 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Chỉnh thời gian xem & tải clip về đúng **2.5 giờ (`150 phút`)**: cập nhật `/root/ota-mqtt/change_ok/video_config` = `range=2.5` (giữ `db_check_range = 730` cho thẻ nhớ) và khởi động lại `ota-mqtt` + `inut` (Node-RED)
     - Triển khai đầy đủ bộ Golden Hardening (ZRAM `1.9 GiB`, `sysrq = 0`, `swappiness = 80`, `videos.js` `file.destroy()`, `monitor.js` `snapProcess.terminate()`, Fragmented MP4, Storage Guard 15p `90% -> 80%`, Smart Watchdog 60s, PM2 Memory Guard `camera: 220M`, `inut-bida-agent.service` Yamux)
   - Trạng thái: Đủ **12/12 tiến trình FFmpeg**, cả 6/6 sân đang ghi hình `.mp4` mới có âm thanh **AAC 16kHz** rõ nét, giới hạn tải clip **2.5 giờ (`range=2.5`)**, Yamux ONLINE (`rtt_ms: 59 ms`)
+
+- [x] **Node `inut_205_75`** (49 Billiards Carom Club Ninh Hòa — `77.88.205.75`, group `49`)
+  - Phần cứng: Allwinner H616 (aarch64, kernel 6.6.44-current-sunxi64), RAM 1.9 GiB, Thẻ nhớ 118 GB **exFAT** (`/dev/mmcblk0p1`)
+  - Số lượng camera: 10 camera Dahua 1080p H.265 (`camera01` .. `camera10`, `192.168.1.251` .. `253`, `192.168.1.230` .. `236`)
+  - Các lỗ hổng trước khi xử lý:
+    - Máy vừa tự khởi động lại lúc 08:16 sáng (uptime 22 phút) do chưa khóa `kernel.sysrq = 0`, PM2 chưa giới hạn RAM (`max_memory_restart: null`), và thẻ `exFAT` bị báo `Volume was not properly unmounted` kèm `errors=remount-ro`
+    - Toàn bộ 10 monitor (`camera01..10`) trong MySQL đều bị lỗi cú pháp JSON ở trường `detector_filters` và chỉ có `cust_record: "-tag:v hvc1"` (thiếu `-segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof`), `"deleteOrphans": true`
+    - Cả 10 camera Dahua đang tắt `SmartCodec: false`, bitrate 1280 kbps; `shinobi-storage-guard.sh` đang đặt ngưỡng cũ `85% -> 75%` không xóa bản ghi MySQL `Videos`; chưa cài `inut-bida-agent` (Yamux)
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn 100% 69 GB video):
+    - Cấu hình `/etc/media-automount.d/{f2fs,ext4,exfat,auto}` với `errors=continue,noatime,users` + drop-in `Type=oneshot` cho `media-automount@.service`, giữ sạch `/etc/fstab`
+    - Khóa `kernel.sysrq = 0`, `vm.swappiness = 80`, vá `videos.js` (`file.destroy()`) và `monitor.js` (`snapProcess.terminate()`), đặt `"doSnapshot": false`, `"deleteOrphans": false`
+    - Sửa lỗi JSON `Monitors.details` và bật Fragmented MP4 cho toàn bộ 10 camera; đồng thời áp cấu hình **H.265 + SmartCodec + 25 FPS + 1536 Kbps CBR + Audio AAC** cho cả 10 camera Dahua
+    - Chuẩn hóa Storage Guard 15p (`90% -> 80%`) có đồng bộ MySQL `Videos`, Smart Watchdog 60s, PM2 Memory Guard (`camera: 230M`), và cài đặt `inut-bida-agent.service` (Yamux)
+  - Trạng thái: Đủ **20/20 tiến trình FFmpeg**, cả 10/10 bàn đang ghi hình `.mp4` mới liên tục trên `/media/usb1/49` (`69 GB / 118 GB`, `59%`), Yamux ONLINE (`rtt_ms: 52 ms`)
