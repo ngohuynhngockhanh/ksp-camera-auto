@@ -533,6 +533,15 @@ var builtInFleetSpecs = []seedBoxSpec{
 		ShinobiGroupKey: "zoneplus1", StoreDomain: "store-zoneplus1.video.io.vn", CStoreDomain: "c-store-zoneplus1.video.io.vn",
 		PM2CameraMB: 230, HardeningScore: 8, Notes: "10 camera, HLS live 20/20 FFmpeg active; SD card hardware dead on mmc0 (needs physical SD card replacement)",
 	},
+	{
+		ID: "inut_200_81", ClubID: "club_billiards_b51", ClubName: "Billiards B51", BoxName: "Billiards B51",
+		Branding: "billiards", VPNIP: "77.88.200.81", LANIP: "192.168.1.254", VirtualIP: "192.168.1.254",
+		SoCModel: "Allwinner H3/H2+ ARMv7", Arch: "armv7l", RAMTotalMB: 999, RAMAvailableMB: 405, ZRAMTotalMB: 960, ZRAMAlgo: "lz4",
+		SDTotalGB: 59, SDUsedPct: 70, SDFSType: "f2fs", SDMountOpts: "rw,noatime,users",
+		CamerasCount: 5, Vendor: "Dahua", Resolution: "2880x1620", Width: 2880, Height: 1620, FPS: 30, BitrateKbps: 1536, Codec: "H.265",
+		ShinobiGroupKey: "fecredit", StoreDomain: "store-b51.video.io.vn", CStoreDomain: "c-store-b51.video.io.vn",
+		PM2CameraMB: 180, HardeningScore: 8, Notes: "5 camera Dahua DH-C5A, fixed camera04 AAC transcoding CPU burn -> acodec copy, ZRAM 960M",
+	},
 }
 
 func randomHex(nBytes int, seedFallback string) string {

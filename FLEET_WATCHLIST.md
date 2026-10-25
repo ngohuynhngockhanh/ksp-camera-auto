@@ -748,3 +748,17 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
   - **`inut_204_133` (Zone+ Thái Nguyên 1 — `77.88.204.133`, group `zoneplus1`, 10 camera)**:
     - Chẩn đoán phần cứng: Thẻ nhớ MicroSD trên khe `mmc0` (`4020000.mmc`) đã chết chip điều khiển flash vật lý (`F2FS-fs: Issue discard failed, ret: -5`, `f2fs_commit_super fails to record err:-5`, mất hoàn toàn block device `/dev/mmcblk0` kể cả sau khi rebind `sunxi-mmc` và reboot).
     - Đã xử lý: Áp dụng đầy đủ bộ Golden Hardening (ZRAM 1.9 GiB, `nodiscard` trong `/etc/media-automount.d/f2fs`, sửa JSON 10 monitor, Smart Watchdog 60s, PM2 Guard `230M`, `inut-bida-agent`). Hiện tại **20/20 tiến trình FFmpeg** đang chạy phát Live HLS bình thường cho cả 10 bàn (`store-zoneplus1.video.io.vn`); cần thay thẻ nhớ vật lý mới tại quán để ghi hình `.mp4` trở lại.
+
+- [x] **Node `inut_200_81`** (Billiards B51 — `77.88.200.81`, group `fecredit`)
+  - Phần cứng: Allwinner Sunxi (armv7l, kernel 5.15.93-sunxi), RAM **999 MiB (1 GB)**, Thẻ nhớ 60 GB F2FS (`/dev/mmcblk0p1`)
+  - Số lượng camera: 5 camera Dahua `DH-C5A` (`camera01` .. `camera05`)
+  - Các lỗ hổng trước khi xử lý:
+    - `camera04` (`192.168.1.165`) bị cấu hình `acodec: "aac"` thay vì `"copy"`, khiến tiến trình `ffmpeg` phải transcode âm thanh bằng CPU (`-c:a aac`) ngốn **19% CPU** liên tục mặc dù bản thân camera đã phát sẵn âm thanh chuẩn `AAC`
+    - Box chỉ có 1 GB RAM nhưng ZRAM mới để `499 MiB`, chưa có PM2 Memory Guard, chưa có Storage Guard 15p (thẻ đã dùng 77%), chưa có Smart Watchdog 60s, cả 5 monitor bị lỗi JSON `detector_filters` và thiếu `-segment_format_options`
+    - `camera01` (`192.168.1.240`) đang tắt nguồn tại quán từ 20:20 tối 24/10; `camera05` (`192.168.1.9` — chạy qua Wi-Fi `wlan0`) bị lỗi daemon RTSP `554` trả `Connection reset by peer` dù cổng DVRIP `37777` vẫn chụp ảnh Snapshot bình thường
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn 100% 42 GB video):
+    - Sửa toàn bộ 5 monitor (`camera01..05`) về `acodec: "copy"`, `stream_acodec: "copy"`, `vcodec: "copy"` (Zero-transcoding) và bật Fragmented MP4 $\rightarrow$ Giảm ngay tải CPU của `camera04` từ 19% xuống ~3%
+    - Áp cấu hình chuẩn **H.265 + SmartCodec + 1536 Kbps CBR + GOP 50 + Audio AAC** cho các camera online (`192.168.1.165`, `167`, `169`, `9`)
+    - Nâng ZRAM Swap từ `499 MiB` lên **`960 MiB` (`lz4`)**, khóa `kernel.sysrq = 0`, `vm.swappiness = 80`, cấu hình `/etc/media-automount.d/` (`noatime,users` cho kernel 5.15)
+    - Cài đặt Storage Guard 15p (`90% -> 80%`), Smart Watchdog 60s, PM2 Memory Guard (`camera: 180M`, `inut: 200M`, `ota-mqtt: 100M`), và `inut-bida-agent.service` (Yamux)
+  - Trạng thái: `ONLINE` qua Yamux (`rtt_ms: 55 ms`), thẻ nhớ `42 GB / 59 GB (70%)`, RAM trống khả dụng `405 MiB / 999 MiB` + `960 MiB` ZRAM; 3 bàn (`camera02`, `03`, `04`) đang ghi hình `.mp4` mới liên tục, riêng `camera01` (`192.168.1.240` mất ping) và `camera05` (`192.168.1.9` lỗi RTSP 554 trên cam Wi-Fi, nhưng xem ảnh Snapshot P2P qua cổng `37777` vẫn lên hình bình thường)
