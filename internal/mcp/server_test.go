@@ -141,6 +141,8 @@ func TestServer_ToolsList(t *testing.T) {
 		"kspcam_set_anti_a_config",
 		"kspcam_trigger_anti_a",
 		"kspcam_get_network_traffic",
+		"kspcam_inspect_firmware",
+		"kspcam_upgrade_firmware",
 	}
 
 	if len(toolsList.Tools) != len(expectedTools) {
@@ -324,9 +326,11 @@ func TestServer_SSETransport(t *testing.T) {
 
 	sseReq := httptest.NewRequest(http.MethodGet, "/mcp?key=test_mcp_secret_key", nil).WithContext(ctx)
 	sseReq.RemoteAddr = "192.168.1.50:54321"
-	sseRec := httptest.NewRecorder()
+	sseRec := newSyncSSEWriter()
 
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		handler.ServeHTTP(sseRec, sseReq)
 	}()
 
@@ -334,7 +338,7 @@ func TestServer_SSETransport(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Extract endpoint event and session ID from SSE output
-	output := sseRec.Body.String()
+	output := sseRec.String()
 	if !strings.Contains(output, "event: endpoint") {
 		t.Fatalf("expected 'event: endpoint' in SSE output, got: %s", output)
 	}
@@ -364,8 +368,10 @@ func TestServer_SSETransport(t *testing.T) {
 
 	// Give SSE goroutine a moment to stream the message
 	time.Sleep(50 * time.Millisecond)
+	cancel()
+	<-done
 
-	sseFinalOutput := sseRec.Body.String()
+	sseFinalOutput := sseRec.String()
 	if !strings.Contains(sseFinalOutput, "event: message") || !strings.Contains(sseFinalOutput, `"id":100`) {
 		t.Errorf("expected event: message containing id:100 in SSE output, got:\n%s", sseFinalOutput)
 	}

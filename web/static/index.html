@@ -323,7 +323,7 @@
               <button class="btn btn-primary" type="button" id="bulk-golden-template-btn" data-testid="bulk-golden-template">
                 ⚡ Áp dụng Chuẩn Bida (Golden Template)
               </button>
-              <span class="muted">Tự động nạp: H.264 Main, 1080p, GOP 50, Bitrate 2048 CBR, Bật Audio AAC</span>
+              <span class="muted">Tự động nạp: H.265 Main, 1080p, GOP 50, Bitrate 2048 CBR, Bật Audio AAC</span>
             </div>
 
             <div id="bulk-selection">
@@ -476,6 +476,62 @@
               <button class="btn btn-secondary" id="pw-restore-btn" data-testid="bulk-password-restore" style="display:none;">Khôi phục mật khẩu cũ</button>
             </div>
             <p class="muted" id="pw-backup-hint">Đổi xong tool tự động sao lưu mật khẩu cũ và cập nhật kho để không bị khóa ngoài.</p>
+          </details>
+
+          <details class="card danger-zone" data-camera-panel="bulk" data-testid="bulk-firmware" id="bulk-firmware-card">
+            <summary class="card-title">📦 Nạp / Hạ Cấp Firmware (Dahua / Imou / KBVision — DVRIP 37777)</summary>
+            <p class="card-sub">Kiểm tra chữ ký CRC32, đối chiếu chính xác mã phần cứng <code>hwid</code> từ <code>upgrader.getUpdateSerial</code>, sao lưu cấu hình tự động và khôi phục cổng RTSP 554 sau khi khởi động lại.</p>
+
+            <div class="row section-gap" style="align-items: flex-end; gap: 0.75rem; flex-wrap: wrap;">
+              <div class="field" style="min-width: 240px;">
+                <label for="fw-file-input">1. Chọn gói Firmware (<code>.bin</code> / <code>.pkg</code>)</label>
+                <input id="fw-file-input" type="file" accept=".bin,.pkg,.zip" data-testid="fw-file-input">
+              </div>
+              <button class="btn btn-secondary" id="fw-inspect-btn" type="button" data-testid="fw-inspect-btn">🔍 Phân tích gói Firmware</button>
+              <button class="btn btn-secondary" id="fw-preflight-btn" type="button" data-testid="fw-preflight-btn" disabled>📡 Kiểm tra tương thích (Các cam đã chọn)</button>
+            </div>
+
+            <div class="msg" id="fw-msg" data-testid="fw-msg"></div>
+
+            <div id="fw-package-summary" class="section-gap" hidden style="padding: 0.75rem; border-radius: var(--radius); background: var(--glass-bg-subtle, rgba(148,163,184,0.08)); border: 1px solid var(--border, #334155);">
+              <div style="display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.85rem;">
+                <div><strong>Phiên bản gói:</strong> <span id="fw-sum-version">—</span></div>
+                <div><strong>Build:</strong> <span id="fw-sum-build">—</span></div>
+                <div><strong>Security Baseline:</strong> <span id="fw-sum-sec">—</span></div>
+                <div><strong>SHA-256:</strong> <code id="fw-sum-sha" style="font-size: 0.78rem;">—</code></div>
+              </div>
+              <div style="margin-top: 0.4rem; font-size: 0.82rem;">
+                <strong>Model / HWID hỗ trợ:</strong> <span id="fw-sum-hwids">—</span>
+              </div>
+              <div id="fw-bootloader-warning" class="bulk-safety-alert" hidden style="margin-top: 0.5rem;">
+                ⚠️ <strong>Cảnh báo Bootloader / Khôi phục mặc định:</strong> Gói firmware này có ghi phân vùng <code>dhboot.bin.img</code> (Bootloader) hoặc đặt lại cấu hình mặc định. Bắt buộc đảm bảo nguồn điện ổn định tuyệt đối trong suốt quá trình nạp.
+                <div class="checkbox-row" style="margin-top: 0.4rem;">
+                  <input type="checkbox" id="fw-confirm-bootloader" data-testid="fw-confirm-bootloader">
+                  <label for="fw-confirm-bootloader">Tôi xác nhận đã kiểm tra nguồn điện và chấp nhận rủi ro ghi Bootloader / hạ cấp</label>
+                </div>
+              </div>
+            </div>
+
+            <div class="table-wrap section-gap" id="fw-preflight-wrap" hidden>
+              <table class="reflow" id="fw-preflight-table">
+                <thead>
+                  <tr>
+                    <th>Camera</th>
+                    <th>Host</th>
+                    <th>SN</th>
+                    <th>HWID thực tế</th>
+                    <th>FW hiện tại → Đích</th>
+                    <th>Tương thích</th>
+                  </tr>
+                </thead>
+                <tbody id="fw-preflight-tbody" data-testid="fw-preflight-tbody"></tbody>
+              </table>
+            </div>
+
+            <div class="row section-gap" style="gap: 0.75rem; flex-wrap: wrap;">
+              <button class="btn btn-secondary" id="fw-dryrun-btn" type="button" data-testid="fw-dryrun-btn" disabled>🧪 Kiểm chứng truyền thử 100% (Dry-Run, không ghi Flash)</button>
+              <button class="btn btn-danger" id="fw-execute-btn" type="button" data-testid="fw-execute-btn" disabled>🚀 Nạp Firmware Chính Thức (Ghi Flash & Reboot)</button>
+            </div>
           </details>
 
           <div class="card" data-camera-panel="results">

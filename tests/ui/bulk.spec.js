@@ -61,7 +61,7 @@ test('the password change is folded away behind a disclosure', async ({ page }) 
   await expect(zone.getByTestId('bulk-password-apply')).toBeVisible();
 });
 
-test('golden template 1-click populates H.264 1080p GOP 50 Bitrate 2048 and AAC audio', async ({ page }) => {
+test('golden template 1-click populates H.265 1080p GOP 50 Bitrate 2048 and AAC audio', async ({ page }) => {
   await openApp(page, { hash: 'cameras/bulk' });
   const goldenBtn = page.getByTestId('bulk-golden-template');
   await expect(goldenBtn).toBeVisible();
@@ -69,7 +69,7 @@ test('golden template 1-click populates H.264 1080p GOP 50 Bitrate 2048 and AAC 
 
   // Codec
   await expect(page.locator('#p-codec-enable')).toBeChecked();
-  await expect(page.locator('#p-codec-value')).toHaveValue('H.264');
+  await expect(page.locator('#p-codec-value')).toHaveValue('H.265');
 
   // Res
   await expect(page.locator('#p-res-enable')).toBeChecked();
@@ -90,10 +90,42 @@ test('golden template 1-click populates H.264 1080p GOP 50 Bitrate 2048 and AAC 
 
   // Summary chips
   const summary = page.getByTestId('bulk-summary');
-  await expect(summary).toContainText('Codec H.264');
+  await expect(summary).toContainText('Codec H.265');
   await expect(summary).toContainText('1920x1080');
   await expect(summary).toContainText('GOP 50');
   await expect(summary).toContainText('Bitrate 2048 Kbps CBR');
   await expect(summary).toContainText('AAC');
+});
+
+test('firmware upgrade/downgrade disclosure inspects package, checks HWID preflight, and gates bootloader write', async ({ page }) => {
+  await openApp(page, { hash: 'cameras/list' });
+  await page.locator('.cam-cb').first().check();
+  await page.getByTestId('task-tab-bulk').click();
+
+  const fwZone = page.getByTestId('bulk-firmware');
+  await expect(fwZone.getByTestId('fw-inspect-btn')).toBeHidden();
+  await fwZone.locator('summary').click();
+  await expect(fwZone.getByTestId('fw-inspect-btn')).toBeVisible();
+
+  await fwZone.getByTestId('fw-file-input').setInputFiles({
+    name: 'DH_IPC-HX3XXX_20240402.bin',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from('DH\x03\x04mockfirmware'),
+  });
+
+  await expect(page.locator('#fw-sum-version')).toContainText('2.860.0000000.3.R');
+  await expect(fwZone.getByTestId('fw-dryrun-btn')).toBeEnabled();
+  // Bootloader package requires explicit checkbox confirmation before execute is enabled
+  await expect(fwZone.getByTestId('fw-execute-btn')).toBeDisabled();
+
+  await fwZone.getByTestId('fw-preflight-btn').click();
+  await expect(fwZone.getByTestId('fw-preflight-tbody')).toContainText('KHỚP HWID');
+  await expect(fwZone.getByTestId('fw-preflight-tbody')).toContainText('AD0786FPAG01146');
+
+  await fwZone.getByTestId('fw-confirm-bootloader').check();
+  await expect(fwZone.getByTestId('fw-execute-btn')).toBeEnabled();
+
+  await fwZone.getByTestId('fw-dryrun-btn').click();
+  await expect(page.locator('#apply-log')).toContainText('Kiểm chứng truyền tải 100% thành công');
 });
 

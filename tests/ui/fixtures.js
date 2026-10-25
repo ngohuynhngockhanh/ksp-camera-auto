@@ -84,7 +84,12 @@ const DEFAULTS = {
   },
   '/api/ptz': { ok: true },
   '/api/reboot': { ok: true, note: 'đã gửi lệnh khởi động lại.' },
-  '/api/nvr/channels': { channels: [{ channel: 1, name: 'Kênh 1' }, { channel: 2, name: 'Kênh 2' }] },
+  '/api/nvr/channels': (route, url) => {
+    const id = url.searchParams.get('id');
+    const dev = CAMERAS.find(c => c.id === id);
+    const channels = dev && dev.isNvr ? [{ channel: 1, name: 'Kênh 1' }, { channel: 2, name: 'Kênh 2' }] : [];
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ channels }) });
+  },
   '/api/nvr/health': {
     id: 'nvr-1', status: 'healthy', reasons: [], reachable: true,
     watchdogEnabled: true, syncTimeFromHost: true, hostTimeTrusted: true,
@@ -143,6 +148,45 @@ const DEFAULTS = {
   '/api/redbida/time-status': {
     hostTime: '2026-08-24 15:00:00', ntpSynchronized: true, nodeRedReadOnly: true, driftThresholdSeconds: 60,
   },
+  '/api/firmware/inspect': {
+    fwId: 'fw_mock12345678',
+    fileName: 'DH_IPC-HX3XXX_20240402.bin',
+    info: {
+      sha256: '2566ff2bd5ab9d02beca583b506c3fba32a16eca31372a1f694d5fb132e79da6',
+      sizeBytes: 12718567,
+      magicHeader: 'DH',
+      hwids: ['IPC-C5AP:01:02:00:100:68:00:01:10:01:01:04:4B0:00:02:00:00:00:01:00:00:40'],
+      models: ['IPC-C5AP', 'IPC-HX3XXX'],
+      vendor: 'Dahua',
+      productVersion: '2.860.0000000.3.R',
+      build: '2024-04-02',
+      buildDateTime: '2024-04-02 11:47:09',
+      securityBaselineVersion: 'V2.4',
+      touchesBootloader: true,
+      restoresDefault: true,
+      hasSignature: true,
+      signatureBytes: 256,
+      members: [{ name: 'kernel.img', size: 2299552, crc32: '66024603' }],
+    },
+  },
+  '/api/firmware/preflight': {
+    fwId: 'fw_mock12345678',
+    fileName: 'DH_IPC-HX3XXX_20240402.bin',
+    devices: [
+      {
+        deviceId: 'cam-1', name: 'Cổng chính', host: '192.168.1.10', port: 37777, vendor: 'dahua',
+        reachable: true, compatible: true,
+        hwid: 'IPC-C5AP:01:02:00:100:68:00:01:10:01:01:04:4B0:00:02:00:00:00:01:00:00:40',
+        sn: 'AD0786FPAG01146', currentVersion: '2.860.0000000.26.R', targetVersion: '2.860.0000000.3.R',
+        reason: 'Khớp chính xác HWID',
+      },
+      {
+        deviceId: 'cam-2', name: 'Kho hàng', host: '192.168.1.11', port: 80, vendor: 'hikvision',
+        reachable: false, compatible: false,
+        reason: 'Chỉ hỗ trợ Dahua/KBVision/Imou DVRIP (hiện tại: hikvision)',
+      },
+    ],
+  },
 };
 
 // ndjson builds the "data: {...}\n\n" frame stream that /api/apply and
@@ -190,6 +234,32 @@ async function mockApi(page, overrides = {}) {
         status: 200,
         contentType: 'text/event-stream',
         body: typeof custom === 'string' ? custom : applyStream(devices),
+      });
+    }
+    if (path === '/api/firmware/apply') {
+      const custom = table[path];
+      if (typeof custom === 'function') return custom(route, url);
+      const body = JSON.parse(route.request().postData() || '{}');
+      const ids = body.deviceIds || [];
+      const events = [];
+      ids.forEach((id, i) => {
+        const d = CAMERAS.find(c => c.id === id) || { id, name: id, host: id };
+        events.push({ type: 'device_start', deviceId: d.id, name: d.name, host: d.host, index: i + 1, total: ids.length });
+        events.push({ type: 'phase', deviceId: d.id, name: d.name, host: d.host, phase: 'backup', progress: 100, message: 'Đã sao lưu cấu hình Network/Encode/RTSP' });
+        events.push({ type: 'phase', deviceId: d.id, name: d.name, host: d.host, phase: 'upload', progress: 100, message: 'Đã truyền 12420 / 12420 KB (100%)' });
+        if (body.dryRun) {
+          events.push({ type: 'phase', deviceId: d.id, name: d.name, host: d.host, phase: 'dry_run_done', progress: 100, message: 'Kiểm chứng truyền tải 100% thành công' });
+          events.push({ type: 'device_done', deviceId: d.id, name: d.name, host: d.host, ok: true, message: 'Dry-Run hoàn tất' });
+        } else {
+          events.push({ type: 'phase', deviceId: d.id, name: d.name, host: d.host, phase: 'verify_and_restore', progress: 100, message: 'Xác nhận sau khởi động: 2.860.0000000.26.R → 2.860.0000000.3.R' });
+          events.push({ type: 'device_done', deviceId: d.id, name: d.name, host: d.host, ok: true, message: 'Hoàn tất: 2.860.0000000.26.R → 2.860.0000000.3.R' });
+        }
+      });
+      events.push({ type: 'done' });
+      return route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: ndjson(events),
       });
     }
 

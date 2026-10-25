@@ -1675,7 +1675,7 @@ function applyGoldenTemplate() {
   if (cEnable) {
     cEnable.checked = true;
     if (cFields) cFields.hidden = false;
-    if (cVal) cVal.value = 'H.264';
+    if (cVal) cVal.value = 'H.265';
   }
 
   const rEnable = document.getElementById('p-res-enable');
@@ -3864,6 +3864,22 @@ function wireShinobiTabEvents() {
           acodec: 'copy',
           record_vcodec: vcodec,
           record_acodec: 'aac',
+          cust_input: '',
+          cust_stream: '',
+          cust_record: '-tag:v hvc1 -segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof',
+          wall_clock_timestamp_ignore: '0',
+          snap: '0',
+          detector: '0',
+          input_maps: '',
+          input_map_choices: {
+            stream: [],
+            snap: [],
+            record: [],
+            record_timelapse: [],
+            detector: [],
+            detector_object: [],
+            detector_sip_buffer: [],
+          },
         },
       };
 
@@ -3929,6 +3945,7 @@ async function init() {
   renderBulkSummary();
   wireAntiAGuardian();
   wireTrafficInspector();
+  wireFirmwareUpgrader();
 
   window.addEventListener('hashchange', setRoute);
   setRoute();
@@ -4384,6 +4401,221 @@ function wireTrafficInspector() {
     }
     startTrafficStream();
   });
+}
+
+// ---------- Firmware Upgrade / Downgrade Logic ----------
+
+let currentStagedFirmware = null;
+
+function setFwMsg(text, cls) {
+  const el = document.getElementById('fw-msg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'msg' + (cls ? ' ' + cls : '');
+}
+
+function updateFirmwareButtonsState() {
+  const preBtn = document.getElementById('fw-preflight-btn');
+  const dryBtn = document.getElementById('fw-dryrun-btn');
+  const execBtn = document.getElementById('fw-execute-btn');
+  const confirmCb = document.getElementById('fw-confirm-bootloader');
+
+  const hasFw = !!(currentStagedFirmware && currentStagedFirmware.fwId);
+  if (preBtn) preBtn.disabled = !hasFw;
+  if (dryBtn) dryBtn.disabled = !hasFw;
+
+  const touchesBoot = !!(currentStagedFirmware && currentStagedFirmware.info && currentStagedFirmware.info.touchesBootloader);
+  const confirmed = !touchesBoot || !!(confirmCb && confirmCb.checked);
+  if (execBtn) execBtn.disabled = !(hasFw && confirmed);
+}
+
+async function inspectSelectedFirmwareFile() {
+  const fileInput = document.getElementById('fw-file-input');
+  const file = fileInput && fileInput.files && fileInput.files[0];
+  if (!file) {
+    setFwMsg('Vui lòng chọn file firmware (.bin hoặc .pkg) trước.', 'err');
+    return;
+  }
+  setFwMsg('Đang kiểm tra cấu trúc gói & CRC32...', '');
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const resp = await fetch('/api/firmware/inspect', {
+      method: 'POST',
+      body: fd,
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      let msg = errText;
+      try { const j = JSON.parse(errText); if (j.error) msg = j.error; } catch (e) {}
+      throw new Error(msg);
+    }
+    const staged = await resp.json();
+    currentStagedFirmware = staged;
+    const info = staged.info || {};
+
+    const sumBox = document.getElementById('fw-package-summary');
+    if (sumBox) sumBox.hidden = false;
+    document.getElementById('fw-sum-version').textContent = info.productVersion || '—';
+    document.getElementById('fw-sum-build').textContent = info.buildDateTime || info.build || '—';
+    document.getElementById('fw-sum-sec').textContent = info.securityBaselineVersion || '—';
+    document.getElementById('fw-sum-sha').textContent = (info.sha256 || '').slice(0, 24) + '…';
+    document.getElementById('fw-sum-hwids').textContent = (info.models && info.models.length ? info.models.join(', ') : (info.hwids || []).join(', ')) || '—';
+
+    const bootWarn = document.getElementById('fw-bootloader-warning');
+    const confirmCb = document.getElementById('fw-confirm-bootloader');
+    if (confirmCb) confirmCb.checked = false;
+    if (bootWarn) bootWarn.hidden = !(info.touchesBootloader || info.restoresDefault);
+
+    setFwMsg(`✓ Gói hợp lệ: ${staged.fileName} (${Math.round((info.sizeBytes || 0) / 1024)} KB, ${info.members ? info.members.length : 0} phân vùng).`, 'ok');
+    updateFirmwareButtonsState();
+  } catch (err) {
+    currentStagedFirmware = null;
+    updateFirmwareButtonsState();
+    setFwMsg('Lỗi phân tích gói firmware: ' + err.message, 'err');
+  }
+}
+
+async function runFirmwarePreflight() {
+  if (!currentStagedFirmware || !currentStagedFirmware.fwId) return;
+  const ids = selectedCameraIds();
+  setFwMsg('Đang truy vấn upgrader.getUpdateSerial trên các camera...', '');
+  try {
+    const data = await api('/api/firmware/preflight', {
+      method: 'POST',
+      body: JSON.stringify({
+        fwId: currentStagedFirmware.fwId,
+        deviceIds: ids,
+        timeoutSeconds: timeoutSec(),
+      }),
+    });
+    const rows = data.devices || [];
+    const wrap = document.getElementById('fw-preflight-wrap');
+    const tbody = document.getElementById('fw-preflight-tbody');
+    if (wrap) wrap.hidden = false;
+    if (tbody) {
+      tbody.innerHTML = rows.map(r => {
+        const badge = r.compatible
+          ? '<span class="badge ok">✓ KHỚP HWID</span>'
+          : `<span class="badge err">✗ KHÔNG KHỚP</span>`;
+        return `<tr>
+          <td data-label="Camera"><strong>${escapeHtml(r.name || r.deviceId)}</strong></td>
+          <td data-label="Host">${escapeHtml(r.host || '')}:${r.port || ''}</td>
+          <td data-label="SN"><code>${escapeHtml(r.sn || '—')}</code></td>
+          <td data-label="HWID thực tế"><code style="font-size:0.75rem">${escapeHtml(r.hwid || '—')}</code></td>
+          <td data-label="FW hiện tại → Đích">${escapeHtml(r.currentVersion || '—')} → <strong>${escapeHtml(r.targetVersion || '—')}</strong></td>
+          <td data-label="Tương thích">${badge} <div class="muted" style="font-size:0.76rem">${escapeHtml(r.reason || '')}</div></td>
+        </tr>`;
+      }).join('');
+    }
+    const matchCount = rows.filter(r => r.compatible).length;
+    setFwMsg(`Hoàn tất kiểm tra: ${matchCount}/${rows.length} camera khớp mã phần cứng HWID.`, matchCount > 0 ? 'ok' : 'err');
+  } catch (err) {
+    setFwMsg('Lỗi kiểm tra tương thích: ' + err.message, 'err');
+  }
+}
+
+async function executeFirmwareAction(dryRun) {
+  if (!currentStagedFirmware || !currentStagedFirmware.fwId) return;
+  const ids = selectedCameraIds();
+  if (ids.length === 0) {
+    setFwMsg('Vui lòng tick chọn ít nhất 1 camera trong danh sách để thực hiện.', 'err');
+    return;
+  }
+  const confirmCb = document.getElementById('fw-confirm-bootloader');
+  const confirmBootloaderWrite = !!(confirmCb && confirmCb.checked);
+
+  const msg = document.getElementById('apply-msg');
+  setCameraTask('results');
+  clearLog();
+  if (msg) {
+    msg.textContent = dryRun ? 'Đang kiểm chứng truyền tải gói firmware (Dry-Run)...' : 'Đang nạp gói firmware và theo dõi tiến trình ghi Flash...';
+    msg.className = 'msg';
+  }
+  try {
+    const resp = await fetch('/api/firmware/apply', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        fwId: currentStagedFirmware.fwId,
+        deviceIds: ids,
+        dryRun: !!dryRun,
+        confirmBootloaderWrite,
+        timeoutSeconds: timeoutSec(),
+      }),
+    });
+    if (!resp.ok || !resp.body) {
+      const txt = await resp.text();
+      let msg = txt;
+      try { const j = JSON.parse(txt); if (j.error) msg = j.error; } catch (e) {}
+      throw new Error(msg);
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    const results = [];
+    const byId = {};
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split('\n\n');
+      buf = parts.pop();
+      for (const part of parts) {
+        const line = part.split('\n').find(l => l.startsWith('data: '));
+        if (!line) continue;
+        let ev;
+        try { ev = JSON.parse(line.slice(6)); } catch (e) { continue; }
+        if (ev.type === 'device_start') {
+          setProgress(ev.index, ev.total, `[${ev.index}/${ev.total}] ${ev.name || ev.deviceId}`);
+          logLine(`▶ [${ev.index}/${ev.total}] ${escapeHtml(ev.name || ev.deviceId)} (${escapeHtml(ev.host || '')}) — bắt đầu phiên Firmware`, 'l-info');
+          const r = { deviceId: ev.deviceId, name: ev.name, host: ev.host, ok: true, steps: [] };
+          byId[ev.deviceId] = r;
+          results.push(r);
+        } else if (ev.type === 'phase') {
+          logLine(`&nbsp;&nbsp;&nbsp;• [${escapeHtml(ev.phase)}] ${escapeHtml(ev.message || '')}`, 'l-info');
+          const r = byId[ev.deviceId];
+          if (r && (ev.phase === 'backup' || ev.phase === 'dry_run_done' || ev.phase === 'verify_and_restore')) {
+            r.steps.push({ step: ev.phase, detail: ev.message, ok: true });
+          }
+        } else if (ev.type === 'device_done') {
+          const r = byId[ev.deviceId] || { deviceId: ev.deviceId, name: ev.name, host: ev.host, steps: [] };
+          r.ok = ev.ok;
+          r.err = ev.err;
+          if (ev.ok) {
+            logLine(`✓ ${escapeHtml(ev.name || ev.deviceId)}: ${escapeHtml(ev.message || 'HOÀN TẤT')}`, 'l-ok');
+          } else {
+            logLine(`✗ ${escapeHtml(ev.name || ev.deviceId)}: LỖI — ${escapeHtml(ev.err || '')}`, 'l-err');
+          }
+        } else if (ev.type === 'done') {
+          logLine('— Hoàn tất phiên Firmware —', 'l-info');
+          setProgress(null);
+        }
+      }
+    }
+    renderResults(results);
+    const okCount = results.filter(r => r.ok).length;
+    if (msg) {
+      msg.textContent = `Hoàn tất: ${okCount}/${results.length} camera thành công.`;
+      msg.className = 'msg ' + (okCount === results.length ? 'ok' : 'err');
+    }
+  } catch (err) {
+    setProgress(null);
+    if (msg) {
+      msg.textContent = 'Lỗi phiên Firmware: ' + err.message;
+      msg.className = 'msg err';
+    }
+  }
+}
+
+function wireFirmwareUpgrader() {
+  document.getElementById('fw-inspect-btn')?.addEventListener('click', inspectSelectedFirmwareFile);
+  document.getElementById('fw-file-input')?.addEventListener('change', inspectSelectedFirmwareFile);
+  document.getElementById('fw-preflight-btn')?.addEventListener('click', runFirmwarePreflight);
+  document.getElementById('fw-confirm-bootloader')?.addEventListener('change', updateFirmwareButtonsState);
+  document.getElementById('fw-dryrun-btn')?.addEventListener('click', () => executeFirmwareAction(true));
+  document.getElementById('fw-execute-btn')?.addEventListener('click', () => executeFirmwareAction(false));
 }
 
 init();

@@ -208,6 +208,69 @@ func (c *Client) CallObject(method string, object int64, params any) (rpcResp, e
 	return c.callEnv(method, params, &object)
 }
 
+// CallObjectWithBinary issues an object-scoped JSON-RPC method with an attached
+// binary payload in the same \xf6 frame (header[16:20] = JSON length including
+// newline+null terminator, header[20:24] = binary length, header[4:8] = total length).
+// Verified against Dahua sonia F6Services_Req and RpcUpgrader.appendData.
+func (c *Client) CallObjectWithBinary(method string, object int64, params any, binData []byte) (rpcResp, error) {
+	c.id++
+	env := map[string]any{
+		"method":  method,
+		"id":      c.id,
+		"session": c.sessionID,
+		"object":  object,
+	}
+	if params != nil {
+		env["params"] = params
+	}
+	jsonBytes, err := json.Marshal(env)
+	if err != nil {
+		return rpcResp{}, err
+	}
+	// Sonia's F6Services_Req invokes cJSON_Parse directly on the frame buffer
+	// before reading binary attachment bytes at offset header[16:20]. Appending
+	// "\n\x00" guarantees clean null termination between JSON and binary bytes.
+	jsonPayload := make([]byte, 0, len(jsonBytes)+2)
+	jsonPayload = append(jsonPayload, jsonBytes...)
+	jsonPayload = append(jsonPayload, '\n', 0)
+
+	totalLen := len(jsonPayload) + len(binData)
+	frame := make([]byte, headerLen+totalLen)
+	binary.BigEndian.PutUint32(frame[0:4], 0xf6000000)
+	binary.LittleEndian.PutUint32(frame[4:8], uint32(totalLen))
+	binary.LittleEndian.PutUint32(frame[8:12], c.id)
+	binary.LittleEndian.PutUint32(frame[16:20], uint32(len(jsonPayload)))
+	binary.LittleEndian.PutUint32(frame[20:24], uint32(len(binData)))
+	binary.LittleEndian.PutUint32(frame[24:28], c.sessionID)
+	copy(frame[headerLen:], jsonPayload)
+	copy(frame[headerLen+len(jsonPayload):], binData)
+
+	if err := c.writeRaw(frame); err != nil {
+		return rpcResp{}, err
+	}
+	for {
+		_, body, err := c.readFrame()
+		if err != nil {
+			return rpcResp{}, err
+		}
+		body = bytesTrimNull(body)
+		var resp rpcResp
+		if err := json.Unmarshal(body, &resp); err != nil {
+			return rpcResp{}, fmt.Errorf("decode response: %w (raw: %.200s)", err, body)
+		}
+		if uint32(resp.ID) == c.id || resp.ID == 0 {
+			return resp, nil
+		}
+	}
+}
+
+func bytesTrimNull(b []byte) []byte {
+	for len(b) > 0 && b[len(b)-1] == 0 {
+		b = b[:len(b)-1]
+	}
+	return b
+}
+
 func (c *Client) callEnv(method string, params any, object *int64) (rpcResp, error) {
 	c.id++
 	env := map[string]any{

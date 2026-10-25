@@ -52,6 +52,41 @@ func (m *mockBroker) Write(ctx context.Context, changes map[string]any) (map[str
 	return acks, nil
 }
 
+type syncSSEWriter struct {
+	mu      sync.Mutex
+	headers http.Header
+	code    int
+	buf     bytes.Buffer
+}
+
+func newSyncSSEWriter() *syncSSEWriter {
+	return &syncSSEWriter{headers: make(http.Header), code: http.StatusOK}
+}
+
+func (w *syncSSEWriter) Header() http.Header {
+	return w.headers
+}
+
+func (w *syncSSEWriter) WriteHeader(statusCode int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.code = statusCode
+}
+
+func (w *syncSSEWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.Write(p)
+}
+
+func (w *syncSSEWriter) Flush() {}
+
+func (w *syncSSEWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
 // setupTestServer creates an MCP Server with mock redbida service for adversarial testing.
 func setupTestServer(t *testing.T) (*Server, *mockBroker) {
 	cfg := config.Default()
@@ -118,7 +153,7 @@ func TestAdversarialChallenge_RedbidaJSONRPC_AllTools(t *testing.T) {
 		}
 	})
 
-	t.Run("2. tools/list contains all 6 redbida tools and total 35 tools", func(t *testing.T) {
+	t.Run("2. tools/list contains all 6 redbida tools and total 37 tools", func(t *testing.T) {
 		req := JSONRPCRequest{
 			JSONRPC: "2.0",
 			ID:      2,
@@ -132,8 +167,8 @@ func TestAdversarialChallenge_RedbidaJSONRPC_AllTools(t *testing.T) {
 		if !ok {
 			t.Fatalf("invalid result type: %T", resp.Result)
 		}
-		if len(listRes.Tools) != 35 {
-			t.Errorf("expected 35 tools, got %d", len(listRes.Tools))
+		if len(listRes.Tools) != 37 {
+			t.Errorf("expected 37 tools, got %d", len(listRes.Tools))
 		}
 
 		expectedRedbida := []string{
@@ -604,9 +639,11 @@ func TestAdversarialChallenge_HTTPAndSSETransports(t *testing.T) {
 
 		sseReq := httptest.NewRequest(http.MethodGet, "/mcp?key=test_mcp_key", nil).WithContext(ctx)
 		sseReq.RemoteAddr = "192.168.1.50:54321"
-		sseRec := httptest.NewRecorder()
+		sseRec := newSyncSSEWriter()
 
+		done := make(chan struct{})
 		go func() {
+			defer close(done)
 			handler.ServeHTTP(sseRec, sseReq)
 		}()
 
@@ -614,7 +651,7 @@ func TestAdversarialChallenge_HTTPAndSSETransports(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 
 		// Extract endpoint event and session ID from SSE output
-		output := sseRec.Body.String()
+		output := sseRec.String()
 		if !strings.Contains(output, "event: endpoint") {
 			t.Fatalf("expected 'event: endpoint' in SSE output, got: %s", output)
 		}
@@ -646,8 +683,9 @@ func TestAdversarialChallenge_HTTPAndSSETransports(t *testing.T) {
 		// Give SSE goroutine a moment to stream the message
 		time.Sleep(50 * time.Millisecond)
 		cancel() // close SSE stream
+		<-done
 
-		sseFinalOutput := sseRec.Body.String()
+		sseFinalOutput := sseRec.String()
 		if !strings.Contains(sseFinalOutput, "event: message") || !strings.Contains(sseFinalOutput, `"id":200`) {
 			t.Errorf("expected event: message containing id:200 in SSE output, got:\n%s", sseFinalOutput)
 		}

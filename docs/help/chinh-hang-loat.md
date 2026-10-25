@@ -3,9 +3,9 @@ id: chinh-hang-loat
 title: "Chỉnh thông số hàng loạt"
 section: bulk
 order: 10
-keywords: [chỉnh hàng loạt, áp dụng, độ phân giải, codec, H.264, H.265, MJPEG, smart codec, H.265+, GOP, I-frame, bitrate, CBR, VBR, âm thanh, AAC, luồng, main, sub, kênh, đầu ghi]
+keywords: [chỉnh hàng loạt, áp dụng, độ phân giải, codec, H.264, H.265, MJPEG, smart codec, H.265+, GOP, I-frame, bitrate, CBR, VBR, âm thanh, AAC, luồng, main, sub, kênh, đầu ghi, firmware, nâng cấp, hạ cấp, downgrade]
 ui: "#cameras/bulk"
-covers: ["/api/apply", "/api/fps-capability", "/api/anti-a", "/api/anti-a/trigger"]
+covers: ["/api/apply", "/api/fps-capability", "/api/anti-a", "/api/anti-a/trigger", "/api/firmware/inspect", "/api/firmware/preflight", "/api/firmware/apply"]
 related: [doc-cau-hinh, anh-chup, doi-mat-khau-thiet-bi]
 ---
 ## Mục đích
@@ -60,3 +60,10 @@ hình chung.
   và thu hẹp khoảng kênh.
 - Cam không phản hồi → kiểm tra cổng cấu hình (Dahua 37777, Hikvision 80) và
   tài khoản; thử [Đọc cấu hình (Dò)](#help/doc-cau-hinh) trước.
+
+## Nạp / Hạ cấp Firmware (Dahua / Imou / KBVision)
+
+1. Mở khung **Nạp / Hạ Cấp Firmware** ở cuối tab **Chỉnh hàng loạt**.
+2. Chọn file `.bin` hoặc `.pkg` để hệ thống kiểm tra cấu trúc nén `DH`/`PK`, mã băm CRC32 và danh sách mã phần cứng `hwid`.
+3. Bấm **Kiểm tra tương thích** để truy vấn `upgrader.getUpdateSerial` trên từng camera đã chọn — công cụ tự động chặn mọi camera khác model/HWID.
+4. Bấm **Kiểm chứng truyền thử 100% (Dry-Run)** để kiểm tra đường truyền `upgrader.appendData` rồi hủy phiên an toàn mà không ghi Flash, hoặc tích xác nhận rủi ro Bootloader để **Nạp Firmware Chính Thức**.

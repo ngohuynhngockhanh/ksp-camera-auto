@@ -53,6 +53,7 @@ func NewServer(cfg *config.Config, inv *config.Inventory, shinobiClient *shinobi
 	registerRedbidaTools(registry, cfg, rSvc)
 	registerAntiATools(registry, cfg, inv)
 	registerTrafficTools(registry, cfg, inv, nil)
+	registerFirmwareTools(registry, cfg, inv)
 
 	return &Server{
 		cfg:      cfg,
