@@ -1,0 +1,18 @@
+[Unit]
+Description=iNut Bida Edge Yamux Reverse Tunnel & Live Telemetry Agent
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/inut-bida-agent
+Environment="INUT_BIDA_HUB_URL=https://inut-bida.p2p.inut.io.vn"
+Environment="INUT_BIDA_HUB_KEY=inut-bida-hub-key-2026"
+ExecStart=/usr/local/bin/inut-bida-agent -hub ${INUT_BIDA_HUB_URL} -secret ${INUT_BIDA_HUB_KEY} -interval 20s
+Restart=always
+RestartSec=3s
+MemoryMax=64M
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

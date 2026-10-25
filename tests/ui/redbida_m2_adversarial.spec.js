@@ -25,6 +25,8 @@ test.describe('RedBida M2 Adversarial Stress Testing & Edge Cases', () => {
             { key: 'logo_header', label: 'Logo header', group: 'Branding / Logo', risk: 'editable', valueType: 'image', editable: true },
             { key: 'logo_header_text', label: 'Logo text', group: 'Branding / Logo', risk: 'editable', valueType: 'string', editable: true },
             { key: 'button_generate_go2rtc_stream', label: 'Trigger Go2RTC', group: 'Video & Streaming', risk: 'editable', valueType: 'boolean', editable: true },
+            { key: 'api_count', label: 'API Count', group: 'Video & Streaming', risk: 'editable', valueType: 'number', editable: true },
+            { key: 'api_model_count', label: 'API Model Count', group: 'Video & Streaming', risk: 'editable', valueType: 'number', editable: true },
           ],
         },
         '/api/redbida/refresh': {
@@ -36,29 +38,29 @@ test.describe('RedBida M2 Adversarial Stress Testing & Edge Cases', () => {
             { key: 'ui_tabs_links', value: '[C01]\nvid_play_label=Test', exists: true }, // Invalid: missing [C20]
             { key: 'camera_count', value: 25, exists: true }, // Invalid: >20
             { key: 'toolbar_show_count', value: 8, exists: true }, // Invalid: does not match camera_count
-            { key: 'video_config', value: 'range=24', exists: true }, // Invalid: must be range=72
+            { key: 'video_config', value: 'invalid_range', exists: true }, // Invalid: must match range=\d+
             { key: 'hls_using_go2rtc', value: false, exists: true }, // Invalid: must be true
             { key: 'hls_using_go2rtc_livestream', value: false, exists: true }, // Invalid: must be true
             { key: 'hls_using_go2rtc_tiktok', value: false, exists: true }, // Invalid: must be true
-            { key: 'ui_scoreboard', value: false, exists: true }, // Invalid: must be true
+            { key: 'ui_scoreboard', value: false, exists: true },
             { key: 'logo_header', value: 'invalid-scheme://foo.bar/img.png', exists: true }, // Invalid: wrong URL scheme
             { key: 'logo_header_text', value: '   ', exists: true }, // Invalid: whitespace only
-            { key: 'button_generate_go2rtc_stream', value: false, exists: true }, // Invalid: must be true
+            { key: 'button_generate_go2rtc_stream', value: false, exists: true },
           ],
         },
       },
     });
 
-    // 1.1 Verify initial audit score is 0% (0/15 passed)
+    // 1.1 Verify initial audit score (3/17 passed: company_name, ui_scoreboard, button_generate_go2rtc_stream)
     const auditRes = await page.evaluate(() => window.redbidaAuditGoldenStandard());
-    expect(auditRes.passedCount).toBe(0);
-    expect(auditRes.total).toBe(15);
-    expect(auditRes.score).toBe(0);
+    expect(auditRes.passedCount).toBe(3);
+    expect(auditRes.total).toBe(17);
+    expect(auditRes.score).toBe(18);
 
-    // Verify DOM updates for 0%
-    await expect(page.locator('#redbida-standard-score')).toHaveText('0%');
-    await expect(page.locator('#redbida-standard-sub')).toHaveText('0/15 key đạt chuẩn');
-    await expect(page.locator('#redbida-inspector-badge')).toHaveText(/0% Chuẩn Bida \(Lệch Chuẩn\)/);
+    // Verify DOM updates for 18% (3/17)
+    await expect(page.locator('#redbida-standard-score')).toHaveText('18%');
+    await expect(page.locator('#redbida-standard-sub')).toHaveText('3/17 key đạt chuẩn');
+    await expect(page.locator('#redbida-inspector-badge')).toHaveText(/18% Chuẩn Bida \(Lệch Chuẩn\)/);
     await expect(page.locator('#redbida-inspector-badge')).toHaveClass(/badge-danger/);
 
     // 1.2 Test individual key fixes sequentially and check intermediate % calculations
@@ -82,21 +84,21 @@ test.describe('RedBida M2 Adversarial Stress Testing & Edge Cases', () => {
     const fixAllBtn = page.locator('#redbida-autofix-all-btn');
     await fixAllBtn.click();
 
-    // Verify 100% score (15/15)
+    // Verify 100% score (17/17)
     const auditFinal = await page.evaluate(() => window.redbidaAuditGoldenStandard());
-    expect(auditFinal.passedCount).toBe(15);
-    expect(auditFinal.total).toBe(15);
+    expect(auditFinal.passedCount).toBe(17);
+    expect(auditFinal.total).toBe(17);
     expect(auditFinal.score).toBe(100);
 
     await expect(page.locator('#redbida-standard-score')).toHaveText('100%');
-    await expect(page.locator('#redbida-standard-sub')).toHaveText('15/15 key đạt chuẩn');
+    await expect(page.locator('#redbida-standard-sub')).toHaveText('17/17 key đạt chuẩn');
     await expect(page.locator('#redbida-inspector-badge')).toHaveText(/100% Chuẩn Bida \(Hoàn Hảo\)/);
     await expect(page.locator('#redbida-inspector-badge')).toHaveClass(/badge-success/);
 
     // 1.4 Verify diff card updated with all drafted changes
     const diffCard = page.locator('#redbida-preset-diff');
     await expect(diffCard).toBeVisible();
-    await expect(diffCard).toContainText('15 tham số');
+    await expect(diffCard).toContainText('17 tham số');
   });
 
   test('2. Curated 8 CSS Gradient Palette & Live Canvas Preview Adversarial Test', async ({ page }) => {
@@ -219,10 +221,10 @@ test.describe('RedBida M2 Adversarial Stress Testing & Edge Cases', () => {
       };
     });
 
-    expect(jsResults.empty).toBe('#BILLIARDSlive #INUTlive #highlightsports');
-    expect(jsResults.spacesOnly).toBe('#BILLIARDSlive #INUTlive #highlightsports');
-    expect(jsResults.specialOnly).toBe('#BILLIARDSlive #INUTlive #highlightsports');
-    expect(jsResults.mixedAccents).toBe('#AADEOOUaaaaaeeeee #BILLIARDSlive #INUTlive #highlightsports');
+    expect(jsResults.empty).toBe('Tìm hiểu thêm tại BilliardLive.IO.VN\n#BILLIARDSlive #INUTlive #highlightsports');
+    expect(jsResults.spacesOnly).toBe('Tìm hiểu thêm tại BilliardLive.IO.VN\n#BILLIARDSlive #INUTlive #highlightsports');
+    expect(jsResults.specialOnly).toBe('Tìm hiểu thêm tại BilliardLive.IO.VN\n#BILLIARDSlive #INUTlive #highlightsports');
+    expect(jsResults.mixedAccents).toBe('Tìm hiểu thêm tại BilliardLive.IO.VN\n#AADEOOUaaaaaeeeee #BILLIARDSlive #INUTlive #highlightsports');
     expect(jsResults.dAndD).toBe('dD');
   });
 

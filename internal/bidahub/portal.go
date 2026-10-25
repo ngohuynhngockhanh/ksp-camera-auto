@@ -49,6 +49,7 @@ type portalCameraView struct {
 	Resolution string `json:"resolution"`
 	FPS        int    `json:"fps"`
 }
+
 func (s *Server) handlePortalRequest(w http.ResponseWriter, r *http.Request) {
 	// Strictly Read-Only: reject any mutating HTTP method
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -323,10 +324,10 @@ func (s *Server) handlePortalStatus(w http.ResponseWriter, _ *http.Request, club
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true,
 		"club": map[string]any{
-			"id":        club.ID,
-			"name":      club.Name,
-			"branding":  club.Branding,
-			"store_url": club.StoreURL,
+			"id":         club.ID,
+			"name":       club.Name,
+			"branding":   club.Branding,
+			"store_url":  club.StoreURL,
 			"cstore_url": club.CStoreURL,
 			"portal_url": "/portal/" + club.PortalToken + "/",
 		},

@@ -3,5 +3,7 @@
 /healthz
 /
 /uploads/
+/api/system/metrics
+GET /api/system/metrics
 // Tab Trợ giúp không cần bài trợ giúp về chính nó.
 #help

@@ -244,7 +244,7 @@ test.describe('Milestone 1 Challenger Stress Tests', () => {
 
     // Verify all 5 settings are enabled and populated with Golden Standard values
     await expect(page.locator('#p-codec-enable')).toBeChecked();
-    await expect(page.locator('#p-codec-value')).toHaveValue('H.264');
+    await expect(page.locator('#p-codec-value')).toHaveValue('H.265');
 
     await expect(page.locator('#p-res-enable')).toBeChecked();
     await expect(page.locator('#p-width')).toHaveValue('1920');
@@ -261,7 +261,7 @@ test.describe('Milestone 1 Challenger Stress Tests', () => {
 
     // Summary chips
     const summary = page.getByTestId('bulk-summary');
-    await expect(summary).toContainText('Codec H.264');
+    await expect(summary).toContainText('Codec H.265');
     await expect(summary).toContainText('1920x1080');
     await expect(summary).toContainText('GOP 50');
     await expect(summary).toContainText('Bitrate 2048 Kbps CBR');

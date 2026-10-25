@@ -1,0 +1,17 @@
+[Unit]
+Description=iNut Bida Central Fleet Management Hub (Port 2090)
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/inut-bida-hub
+Environment="INUT_BIDA_ADMIN_EMAIL=khanhnhn@inut.vn"
+Environment="INUT_BIDA_SMTP_API_URL=https://ksp-pdf-signer.p2p.inut.io.vn/api/mail/send"
+ExecStart=/usr/local/bin/inut-bida-hub -port 2090 -db /opt/inut-bida-hub/data/hub-state.json -watchlist /opt/inut-bida-hub/FLEET_WATCHLIST.md -admin-email khanhnhn@inut.vn -mail-api-url https://ksp-pdf-signer.p2p.inut.io.vn/api/mail/send
+Restart=always
+RestartSec=5s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -24,6 +24,8 @@ test.describe('RedBida Milestone 3 Knowledge Hub & Preset Generator E2E', () => 
             { key: 'logo_header', label: 'Logo header', group: 'Branding / Logo', risk: 'editable', valueType: 'image', editable: true, secret: false },
             { key: 'logo_header_text', label: 'Logo text', group: 'Branding / Logo', risk: 'editable', valueType: 'string', editable: true, secret: false },
             { key: 'button_generate_go2rtc_stream', label: 'Trigger Go2RTC', group: 'Video & Streaming', risk: 'editable', valueType: 'boolean', editable: true, secret: false },
+            { key: 'api_count', label: 'API Count', group: 'Video & Streaming', risk: 'editable', valueType: 'number', editable: true, secret: false },
+            { key: 'api_model_count', label: 'API Model Count', group: 'Video & Streaming', risk: 'editable', valueType: 'number', editable: true, secret: false },
           ],
         },
         '/api/redbida/refresh': {
@@ -71,11 +73,11 @@ test.describe('RedBida Milestone 3 Knowledge Hub & Preset Generator E2E', () => 
     // Verify Diff card appeared
     const diffCard = page.locator('#redbida-preset-diff');
     await expect(diffCard).toBeVisible();
-    await expect(diffCard).toContainText('15 tham số');
-    await expect(diffCard).toContainText('#BidaHoangGiaCS2 #BILLIARDSlive #INUTlive #highlightsports');
+    await expect(diffCard).toContainText('17 tham số');
+    await expect(diffCard).toContainText('#BidaHoangGiaCS2 #BILLIARDSlive');
 
     // Verify draft count updated in metric card
-    await expect(page.locator('#redbida-draft-count')).toHaveText('15');
+    await expect(page.locator('#redbida-draft-count')).toHaveText('17');
 
     // Verify table rows marked dirty
     await expect(page.locator('[data-red-row="ui_title"]')).toHaveClass(/redbida-dirty/);
@@ -90,7 +92,7 @@ test.describe('RedBida Milestone 3 Knowledge Hub & Preset Generator E2E', () => 
     expect(submitted.changes.company_name).toBe('Bida Hoàng Gia CS2');
     expect(submitted.changes.camera_count).toBe(12);
     expect(submitted.changes.toolbar_show_count).toBe(12);
-    expect(submitted.changes.custom_hashtags).toBe('#BidaHoangGiaCS2 #BILLIARDSlive #INUTlive #highlightsports');
+    expect(submitted.changes.custom_hashtags).toBe('Tìm hiểu thêm tại BilliardLive.IO.VN\n#BidaHoangGiaCS2 #BILLIARDSlive #INUTlive #highlightsports');
     expect(submitted.changes.video_config).toBe('range=72');
     expect(submitted.changes.hls_using_go2rtc).toBe(true);
     expect(submitted.changes.button_generate_go2rtc_stream).toBe(true);

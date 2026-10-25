@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>iNut Bida Fleet Hub (:2090) — Đăng nhập SCADA</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script>
+    (function () {
+      var saved = localStorage.getItem('bidahub-theme') || localStorage.getItem('kspcam-theme') || 'dark';
+      if (saved === 'light' || saved === 'dark') {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    })();
+  </script>
+  <style>
+    body.login-page {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      margin: 0;
+    }
+    .login-theme-toggle {
+      position: fixed;
+      top: max(14px, env(safe-area-inset-top));
+      right: 16px;
+      min-width: 44px;
+      min-height: 44px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: var(--shadow-sm);
+    }
+    .login-card {
+      width: min(94vw, 410px);
+      background: var(--glass-card);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-strong);
+      border-radius: 16px;
+      padding: 30px 28px;
+      box-shadow: var(--shadow-lg);
+    }
+    .login-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .login-sub {
+      margin: 4px 0 20px;
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+    .login-field {
+      margin-bottom: 15px;
+    }
+    .login-field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+    .login-field input {
+      width: 100%;
+      padding: 11px 13px;
+      min-height: 44px;
+      border-radius: 9px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 15px;
+    }
+    .login-field input:focus {
+      outline: 2px solid var(--emerald);
+      border-color: transparent;
+    }
+    .login-submit {
+      width: 100%;
+      min-height: 46px;
+      margin-top: 8px;
+      border: none;
+      border-radius: 10px;
+      background: var(--primary);
+      color: var(--primary-fg);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .err-banner {
+      margin-top: 14px;
+      padding: 11px 13px;
+      border-radius: 9px;
+      background: var(--crimson-bg);
+      border: 1px solid var(--crimson-border);
+      color: var(--crimson);
+      font-size: 13px;
+      font-weight: 600;
+      display: none;
+    }
+    .err-banner.show {
+      display: block;
+    }
+    .ok-banner {
+      margin-top: 14px;
+      padding: 11px 13px;
+      border-radius: 9px;
+      background: var(--emerald-bg);
+      border: 1px solid var(--emerald-border);
+      color: var(--emerald);
+      font-size: 13px;
+      font-weight: 600;
+      display: none;
+    }
+    .ok-banner.show {
+      display: block;
+    }
+    .login-aux-row {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .link-btn {
+      appearance: none;
+      background: transparent;
+      border: none;
+      color: var(--cyan);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 6px 4px;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    .link-btn:hover {
+      color: var(--emerald);
+    }
+    .forgot-panel {
+      display: none;
+      margin-top: 4px;
+    }
+    .forgot-panel.active {
+      display: block;
+    }
+    .forgot-step {
+      display: none;
+    }
+    .forgot-step.active {
+      display: block;
+    }
+    .step-badge-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 12px;
+      padding: 8px 11px;
+      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .login-footer {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body class="login-page">
+  <button class="login-theme-toggle" id="theme-toggle" type="button" aria-label="Đổi giao diện Sáng / Tối">
+    <span id="theme-toggle-label">🌗 Sáng / Tối</span>
+  </button>
+
+  <div class="card login-card" id="login-card-shell">
+    <div class="login-brand">
+      <div class="brand-logo" aria-hidden="true">iN</div>
+      <div>
+        <h1 style="margin:0;font-size:17px;font-weight:800;">iNut Bida Fleet Hub (:2090)</h1>
+        <div class="mono" style="font-size:12px;color:var(--emerald);">SCADA Dual-Canvas Central Control</div>
+      </div>
+    </div>
+    <p class="login-sub">Trung tâm điều hành 30+ Box Bida / Pickleball, Chuẩn hóa 8 bước Golden Hardening &amp; RedBida Studio.</p>
+
+    <div id="loginSuccessBanner" class="ok-banner" role="status" aria-live="polite"></div>
+
+    <form id="loginForm" data-legacy-id="login-form" method="post" action="/login" autocomplete="off">
+      <div class="login-field">
+        <label for="username">Tài khoản vận hành</label>
+        <input id="username" name="username" type="text" autocomplete="off" placeholder="admin" required autofocus>
+      </div>
+
+      <div class="login-field">
+        <label for="password">Mật khẩu xác thực</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="••••••••" required>
+      </div>
+
+      <button type="submit" id="login-submit-btn" class="login-submit">Đăng nhập Hệ thống Trung tâm</button>
+
+      <div class="login-aux-row">
+        <span style="font-size:12px;color:var(--text-muted);">🛡️ Không lưu mật khẩu trình duyệt</span>
+        <button type="button" id="btnForgotPassword" class="link-btn">Quên mật khẩu?</button>
+      </div>
+
+      <div id="err" class="err err-banner" role="alert" aria-live="polite"></div>
+    </form>
+
+    <!-- 2-Step Forgot & Reset Password Modal / Panel via ksp-pdfsign Mail Server -->
+    <div id="forgotPasswordModal" class="forgot-panel" role="region" aria-label="Khôi phục mật khẩu qua OTP Email">
+      <div class="step-badge-row tabular-nums">
+        <span id="forgotStepIndicator">🔑 Bước 1/2: Nhận mã OTP qua Email (ksp-pdfsign)</span>
+        <button type="button" id="btnBackToLogin" class="link-btn" style="padding:0;font-size:12px;">← Quay lại đăng nhập</button>
+      </div>
+
+      <!-- Step 1: Request 6-digit OTP via ksp-pdfsign -->
+      <form id="forgotPasswordForm" class="forgot-step active" autocomplete="off">
+        <div class="login-field">
+          <label for="forgotIdentifier">Tài khoản hoặc Email Quản trị</label>
+          <input id="forgotIdentifier" name="identifier" type="text" value="admin" placeholder="admin hoặc khanhnhn@inut.vn" autocomplete="off" required>
+        </div>
+        <p style="margin:0 0 12px;font-size:12px;color:var(--text-secondary);">
+          Hệ thống gửi mã OTP 6 chữ số (hiệu lực 15 phút) qua máy chủ <code>ksp-pdfsign</code> tới email quản trị mặc định (<code>khanhnhn@inut.vn</code>).
+        </p>
+        <button type="submit" id="btnSendOTP" class="login-submit">Gửi mã OTP qua Email</button>
+        <div class="login-aux-row" style="justify-content:flex-end;">
+          <button type="button" id="btnAlreadyHaveOTP" class="link-btn" style="font-size:12px;">Đã có mã OTP? Nhập ngay →</button>
+        </div>
+      </form>
+
+      <!-- Step 2: Verify 6-digit OTP & Set New Password -->
+      <form id="resetPasswordForm" class="forgot-step" autocomplete="off">
+        <div id="forgotStatusBanner" class="ok-banner show" style="margin-top:0;margin-bottom:14px;" role="status" aria-live="polite">
+          Mã OTP 6 số đã gửi tới email quản trị (hiệu lực 15 phút).
+        </div>
+
+        <div class="login-field">
+          <label for="resetOTPCode">Mã xác thực OTP (6 chữ số)</label>
+          <input id="resetOTPCode" name="otp_code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="123456" autocomplete="one-time-code" class="mono tabular-nums" required>
+        </div>
+
+        <div class="login-field">
+          <label for="resetNewPassword">Mật khẩu mới (tối thiểu 6 ký tự)</label>
+          <input id="resetNewPassword" name="new_password" type="password" minlength="6" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="••••••••" required>
+        </div>
+
+        <div class="login-field">
+          <label for="resetConfirmPassword">Xác nhận mật khẩu mới</label>
+          <input id="resetConfirmPassword" name="confirm_password" type="password" minlength="6" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="••••••••" required>
+        </div>
+
+        <button type="submit" id="btnResetPassword" class="login-submit">Xác nhận OTP &amp; Đặt mật khẩu mới</button>
+
+        <div class="login-aux-row">
+          <button type="button" id="btnBackToStep1" class="link-btn" style="font-size:12px;">← Gửi lại mã OTP</button>
+        </div>
+      </form>
+
+      <div id="forgotErr" class="err err-banner" role="alert" aria-live="polite"></div>
+    </div>
+
+    <div class="login-footer tabular-nums">
+      <span>🟢 8-Step Golden Guard</span>
+      <span>Port :2090 · Pure Go</span>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      /* Zero-Password-Retention Guard: never store or retain passwords in DOM/Storage */
+      function purgeStoredPasswords() {
+        try {
+          ['password', 'admin_pass', 'viewer_pass', 'bidahub-password', 'kspcam-password'].forEach(function (k) {
+            localStorage.removeItem(k);
+            sessionStorage.removeItem(k);
+          });
+        } catch (_e) {}
+      }
+      function clearPasswordInputs() {
+        ['password', 'resetNewPassword', 'resetConfirmPassword', 'resetOTPCode'].forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el) el.value = '';
+        });
+      }
+      purgeStoredPasswords();
+      clearPasswordInputs();
+      window.addEventListener('pageshow', function () {
+        purgeStoredPasswords();
+        clearPasswordInputs();
+      });
+
+      var params = new URLSearchParams(window.location.search);
+      var errType = params.get('err');
+      var errEl = document.getElementById('err');
+      if (errEl && errType) {
+        if (errType === 'locked') {
+          errEl.textContent = 'IP đã bị tạm khóa 30 phút do đăng nhập sai nhiều lần. Vui lòng thử lại sau.';
+        } else {
+          errEl.textContent = 'Sai tài khoản hoặc mật khẩu.';
+        }
+        errEl.classList.add('show');
+      }
+
+      var toggleBtn = document.getElementById('theme-toggle');
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', function () {
+          var current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+          var next = current === 'dark' ? 'light' : 'dark';
+          document.documentElement.setAttribute('data-theme', next);
+          localStorage.setItem('bidahub-theme', next);
+          localStorage.setItem('kspcam-theme', next);
+        });
+      }
+
+      var loginForm = document.getElementById('loginForm');
+      var forgotModal = document.getElementById('forgotPasswordModal');
+      var forgotForm = document.getElementById('forgotPasswordForm');
+      var resetForm = document.getElementById('resetPasswordForm');
+      var forgotStepIndicator = document.getElementById('forgotStepIndicator');
+      var forgotStatusBanner = document.getElementById('forgotStatusBanner');
+      var forgotErr = document.getElementById('forgotErr');
+      var loginSuccessBanner = document.getElementById('loginSuccessBanner');
+
+      function showForgotError(msg) {
+        if (!forgotErr) return;
+        if (!msg) {
+          forgotErr.textContent = '';
+          forgotErr.classList.remove('show');
+        } else {
+          forgotErr.textContent = msg;
+          forgotErr.classList.add('show');
+        }
+      }
+
+      function switchForgotStep(step) {
+        showForgotError('');
+        if (step === 2) {
+          forgotForm.classList.remove('active');
+          resetForm.classList.add('active');
+          if (forgotStepIndicator) {
+            forgotStepIndicator.textContent = '🛡️ Bước 2/2: Xác thực OTP & Đặt mật khẩu mới';
+          }
+          var otpEl = document.getElementById('resetOTPCode');
+          if (otpEl) otpEl.focus();
+        } else {
+          resetForm.classList.remove('active');
+          forgotForm.classList.add('active');
+          if (forgotStepIndicator) {
+            forgotStepIndicator.textContent = '🔑 Bước 1/2: Nhận mã OTP qua Email (ksp-pdfsign)';
+          }
+          var idEl = document.getElementById('forgotIdentifier');
+          if (idEl) idEl.focus();
+        }
+      }
+
+      function openForgotModal() {
+        clearPasswordInputs();
+        if (errEl) errEl.classList.remove('show');
+        if (loginSuccessBanner) loginSuccessBanner.classList.remove('show');
+        var userEl = document.getElementById('username');
+        var idEl = document.getElementById('forgotIdentifier');
+        if (userEl && userEl.value.trim() && idEl) {
+          idEl.value = userEl.value.trim();
+        } else if (idEl && !idEl.value.trim()) {
+          idEl.value = 'admin';
+        }
+        if (loginForm) loginForm.style.display = 'none';
+        if (forgotModal) forgotModal.classList.add('active');
+        switchForgotStep(1);
+      }
+
+      function closeForgotModal() {
+        clearPasswordInputs();
+        showForgotError('');
+        if (forgotModal) forgotModal.classList.remove('active');
+        if (loginForm) loginForm.style.display = '';
+      }
+
+      var btnForgot = document.getElementById('btnForgotPassword');
+      if (btnForgot) btnForgot.addEventListener('click', openForgotModal);
+
+      var btnBack = document.getElementById('btnBackToLogin');
+      if (btnBack) btnBack.addEventListener('click', closeForgotModal);
+
+      var btnHaveOTP = document.getElementById('btnAlreadyHaveOTP');
+      if (btnHaveOTP) {
+        btnHaveOTP.addEventListener('click', function () {
+          switchForgotStep(2);
+        });
+      }
+
+      var btnBackStep1 = document.getElementById('btnBackToStep1');
+      if (btnBackStep1) {
+        btnBackStep1.addEventListener('click', function () {
+          clearPasswordInputs();
+          switchForgotStep(1);
+        });
+      }
+
+      if (forgotForm) {
+        forgotForm.addEventListener('submit', function (e) {
+          e.preventDefault();
+          showForgotError('');
+          var idEl = document.getElementById('forgotIdentifier');
+          var identifier = (idEl ? idEl.value : '').trim() || 'admin';
+          var btnSend = document.getElementById('btnSendOTP');
+          if (btnSend) btnSend.disabled = true;
+
+          fetch('/api/auth/forgot-password', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({ identifier: identifier })
+          }).then(function (res) {
+            return res.json().catch(function () { return {}; }).then(function (data) {
+              if (!res.ok) {
+                throw new Error((data && (data.message || data.error)) || ('Lỗi gửi OTP (HTTP ' + res.status + ')'));
+              }
+              return data;
+            });
+          }).then(function (data) {
+            var masked = (data && data.email_masked) ? data.email_masked : 'k***n@inut.vn';
+            var ttl = (data && data.ttl_minutes) ? data.ttl_minutes : 15;
+            if (forgotStatusBanner) {
+              forgotStatusBanner.textContent = (data && data.message)
+                ? (data.message + ' (' + masked + ' · hiệu lực ' + ttl + ' phút)')
+                : ('Đã gửi mã OTP 6 chữ số tới ' + masked + ' (hiệu lực ' + ttl + ' phút).');
+              forgotStatusBanner.classList.add('show');
+            }
+            switchForgotStep(2);
+          }).catch(function (err) {
+            showForgotError(err.message || 'Không thể gửi mã OTP lúc này.');
+          }).finally(function () {
+            if (btnSend) btnSend.disabled = false;
+          });
+        });
+      }
+
+      if (resetForm) {
+        resetForm.addEventListener('submit', function (e) {
+          e.preventDefault();
+          showForgotError('');
+          var idEl = document.getElementById('forgotIdentifier');
+          var otpEl = document.getElementById('resetOTPCode');
+          var newPassEl = document.getElementById('resetNewPassword');
+          var confirmPassEl = document.getElementById('resetConfirmPassword');
+
+          var identifier = (idEl ? idEl.value : '').trim() || 'admin';
+          var otpCode = (otpEl ? otpEl.value : '').trim();
+          var newPassword = newPassEl ? newPassEl.value : '';
+          var confirmPassword = confirmPassEl ? confirmPassEl.value : '';
+
+          /* Immediately wipe password & OTP input values from DOM */
+          if (newPassEl) newPassEl.value = '';
+          if (confirmPassEl) confirmPassEl.value = '';
+          if (otpEl) otpEl.value = '';
+          purgeStoredPasswords();
+
+          if (!otpCode || otpCode.length < 6) {
+            showForgotError('Vui lòng nhập đủ mã OTP 6 chữ số.');
+            return;
+          }
+          if (!newPassword || newPassword.length < 6) {
+            showForgotError('Mật khẩu mới phải có ít nhất 6 ký tự.');
+            return;
+          }
+          if (newPassword !== confirmPassword) {
+            showForgotError('Mật khẩu xác nhận không khớp.');
+            return;
+          }
+
+          var btnReset = document.getElementById('btnResetPassword');
+          if (btnReset) btnReset.disabled = true;
+
+          fetch('/api/auth/reset-password', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+              identifier: identifier,
+              otp_code: otpCode,
+              new_password: newPassword
+            })
+          }).then(function (res) {
+            return res.json().catch(function () { return {}; }).then(function (data) {
+              if (!res.ok) {
+                throw new Error((data && (data.message || data.error)) || ('Lỗi đặt lại mật khẩu (HTTP ' + res.status + ')'));
+              }
+              return data;
+            });
+          }).then(function (data) {
+            closeForgotModal();
+            var userEl = document.getElementById('username');
+            if (userEl && data && data.username) {
+              userEl.value = data.username;
+            }
+            var passEl = document.getElementById('password');
+            if (passEl) {
+              passEl.value = '';
+              passEl.focus();
+            }
+            if (loginSuccessBanner) {
+              loginSuccessBanner.textContent = 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới.';
+              loginSuccessBanner.classList.add('show');
+            }
+          }).catch(function (err) {
+            showForgotError(err.message || 'Mã OTP không hợp lệ hoặc đã hết hạn.');
+          }).finally(function () {
+            if (btnReset) btnReset.disabled = false;
+          });
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

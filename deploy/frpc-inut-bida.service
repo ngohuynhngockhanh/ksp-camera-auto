@@ -1,0 +1,14 @@
+[Unit]
+Description=FRP Client for iNut Bida Central Fleet Hub (inut-bida.p2p.inut.io.vn)
+After=network.target network-online.target inut-bida-hub.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/frpc -c /etc/frp/frpc-inut-bida.ini
+Restart=always
+RestartSec=5s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

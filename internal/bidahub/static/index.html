@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>iNut Bida Fleet Hub (:2090) — SCADA Central Control</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script>
+    (function () {
+      var saved = localStorage.getItem('bidahub-theme') || localStorage.getItem('kspcam-theme') || 'dark';
+      if (saved === 'light' || saved === 'dark') {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    })();
+  </script>
+</head>
+<body>
+  <!-- ========================================================================
+       Sticky SCADA Dual-Canvas Topbar & Navigation
+       ======================================================================== -->
+  <header class="scada-topbar">
+    <div class="topbar-main">
+      <div class="brand-cluster">
+        <div class="brand-logo" aria-hidden="true">iN</div>
+        <div class="brand-titles">
+          <h1 class="brand-title">
+            <span>iNut Bida Fleet Hub (:2090)</span>
+            <span class="badge badge-cyan mono">SCADA v1.0</span>
+          </h1>
+          <span class="brand-sub">Trung tâm Điều hành Đội Box Bida &amp; Pickleball · 8-Step Golden Hardening · RedBida 17-Rule</span>
+        </div>
+      </div>
+
+      <!-- 3-Color Hardware Status LEDs + Real-Time SSE Badge -->
+      <div class="topbar-actions">
+        <div class="led-cluster tabular-nums" title="Trạng thái Phần cứng Toàn Đội (Xanh: Online chuẩn | Vàng: Cảnh báo | Đỏ: Offline)">
+          <span class="led-item">
+            <span class="led-dot emerald"></span>
+            <span id="led-online-count">0</span> Online
+          </span>
+          <span class="led-item">
+            <span class="led-dot amber"></span>
+            <span id="led-warn-count">0</span> Cảnh báo
+          </span>
+          <span class="led-item">
+            <span class="led-dot crimson"></span>
+            <span id="led-offline-count">0</span> Offline
+          </span>
+        </div>
+
+        <div id="sse-badge" class="sse-badge" role="status" aria-live="polite">
+          <span class="sse-pulse"></span>
+          <span id="sse-badge-text">LIVE SSE</span>
+        </div>
+
+        <button type="button" id="cmd-palette-btn" class="btn" title="Tìm nhanh Box / CLB / IP / Lệnh (Ctrl+K)">
+          <span>🔍 Tìm nhanh</span>
+          <span class="kbd-hint">Ctrl+K</span>
+        </button>
+
+        <button type="button" id="poll-now-btn" class="btn btn-cyan" title="Thăm dò &amp; làm mới tức thì toàn bộ Box">
+          🔄 Poll Now
+        </button>
+
+        <button type="button" id="theme-toggle" class="btn" title="Chuyển nền SCADA Sáng (#eef5f4) / Tối (#071a24)">
+          🌗 Sáng / Tối
+        </button>
+
+
+        <button type="button" id="btnChangePassword" class="btn" title="Đổi mật khẩu quản trị">
+          🔑 Đổi mật khẩu
+        </button>
+        <a href="/logout" class="btn" title="Đăng xuất phiên quản trị">Đăng xuất</a>
+      </div>
+    </div>
+
+    <!-- Primary 6-View Navigation Bar -->
+    <nav class="scada-nav" aria-label="Phân hệ điều hành chính">
+      <button type="button" class="nav-tab active" data-view="fleet" id="nav-fleet">
+        <span>📡 Đội Box (Fleet Matrix)</span>
+        <span class="nav-badge tabular-nums" id="nav-badge-fleet">0</span>
+      </button>
+      <button type="button" class="nav-tab" data-view="hardening" id="nav-hardening">
+        <span>🛡️ Chuẩn Hóa 8 Bước (Golden Hardening)</span>
+        <span class="nav-badge tabular-nums" id="nav-badge-hardening">8/8</span>
+      </button>
+      <button type="button" class="nav-tab" data-view="cameras" id="nav-cameras">
+        <span>🎥 Kho Camera &amp; NVR Toàn Đội</span>
+        <span class="nav-badge tabular-nums" id="nav-badge-cameras">0</span>
+      </button>
+      <button type="button" class="nav-tab" data-view="redbida" id="nav-redbida">
+        <span>🎛️ RedBida 17-Rule &amp; FRPC Domain</span>
+        <span class="nav-badge tabular-nums" id="nav-badge-redbida">17/17</span>
+      </button>
+      <button type="button" class="nav-tab" data-view="handover" id="nav-handover">
+        <span>📦 Gói Bàn Giao &amp; Cổng Chủ Quán QR</span>
+        <span class="nav-badge tabular-nums" id="nav-badge-handover">QR</span>
+      </button>
+    </nav>
+  </header>
+
+  <!-- ========================================================================
+       Main SCADA Workspace
+       ======================================================================== -->
+  <main class="scada-main">
+
+    <!-- ======================================================================
+         VIEW 1: #fleet — Fleet Overview Matrix & 6 KPI Summary Cards
+         ====================================================================== -->
+    <section id="view-fleet" class="view-panel active" data-view-panel="fleet">
+      <div class="kpi-grid tabular-nums">
+        <article class="kpi-card" id="kpi-clubs-boxes">
+          <div class="kpi-label">
+            <span>1. Tổng CLB &amp; Box</span>
+            <span>🏢</span>
+          </div>
+          <div class="kpi-value" id="kpi-clubs-boxes-val">-- / --</div>
+          <div class="kpi-sub" id="kpi-clubs-boxes-sub">
+            <span>Đang tải đội thiết bị...</span>
+          </div>
+        </article>
+
+        <article class="kpi-card cyan" id="kpi-cameras-ffmpeg">
+          <div class="kpi-label">
+            <span>2. Camera &amp; Luồng FFmpeg</span>
+            <span>🎬</span>
+          </div>
+          <div class="kpi-value" id="kpi-cameras-ffmpeg-val">-- / --</div>
+          <div class="kpi-sub" id="kpi-cameras-ffmpeg-sub">
+            <span>Thực chạy / Kỳ vọng (2×N)</span>
+          </div>
+        </article>
+
+        <article class="kpi-card" id="kpi-sd-health">
+          <div class="kpi-label">
+            <span>3. Thẻ Nhớ SD &amp; F2FS/ext4</span>
+            <span>💾</span>
+          </div>
+          <div class="kpi-value" id="kpi-sd-health-val">100% OK</div>
+          <div class="kpi-sub" id="kpi-sd-health-sub">
+            <span>errors=continue,noatime</span>
+          </div>
+        </article>
+
+        <article class="kpi-card" id="kpi-hardening">
+          <div class="kpi-label">
+            <span>4. Chuẩn Hóa 8 Bước</span>
+            <span>🛡️</span>
+          </div>
+          <div class="kpi-value" id="kpi-hardening-val">-- / 8</div>
+          <div class="kpi-sub" id="kpi-hardening-sub">
+            <span>Golden Hardening SOP</span>
+          </div>
+        </article>
+
+        <article class="kpi-card" id="kpi-domains">
+          <div class="kpi-label">
+            <span>5. Tên Miền Store / C-Store</span>
+            <span>🌐</span>
+          </div>
+          <div class="kpi-value" id="kpi-domains-val">-- HTTP 200</div>
+          <div class="kpi-sub" id="kpi-domains-sub">
+            <span>Kiểm toán xung đột FRPC</span>
+          </div>
+        </article>
+
+        <article class="kpi-card cyan" id="kpi-rtt">
+          <div class="kpi-label">
+            <span>6. Độ Trễ Đường Hầm &amp; VPN</span>
+            <span>⚡</span>
+          </div>
+          <div class="kpi-value" id="kpi-rtt-val">-- ms</div>
+          <div class="kpi-sub" id="kpi-rtt-sub">
+            <span>Yamux Tunnel + VPN 77.88.x.y</span>
+          </div>
+        </article>
+      </div>
+
+      <!-- Fleet Filter & Search Toolbar -->
+      <div class="toolbar-card">
+        <div class="filter-chips" id="fleet-filter-chips" role="group" aria-label="Bộ lọc đội Box">
+          <button type="button" class="filter-chip active" data-filter="all">Tất cả (<span id="chip-count-all">0</span>)</button>
+          <button type="button" class="filter-chip" data-filter="online">🟢 Trực tuyến (<span id="chip-count-online">0</span>)</button>
+          <button type="button" class="filter-chip" data-filter="offline">🔴 Mất kết nối (<span id="chip-count-offline">0</span>)</button>
+          <button type="button" class="filter-chip" data-filter="ffmpeg-warn">⚠️ Cảnh báo FFmpeg (<span id="chip-count-ffmpeg">0</span>)</button>
+          <button type="button" class="filter-chip" data-filter="hardening-warn">🛡️ Cần vá Golden (<span id="chip-count-hardening">0</span>)</button>
+          <button type="button" class="filter-chip" data-filter="multi-box">🏢 CLB Nhiều Box (<span id="chip-count-multibox">0</span>)</button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;">
+            <input type="checkbox" id="group-by-club-toggle" checked>
+            <span>Gom nhóm theo CLB</span>
+          </label>
+          <input type="search" id="fleet-search" class="input" placeholder="Tìm CLB, Box ID, IP VPN 77.88.x.y, group key..." style="min-width:260px;">
+        </div>
+      </div>
+
+      <!-- Fleet Matrix Table / Club Groups -->
+      <div id="fleet-matrix-container" class="tabular-nums"></div>
+    </section>
+
+    <!-- ======================================================================
+         VIEW 3: #hardening — 8-Step Golden Hardening Compliance Matrix
+         ====================================================================== -->
+    <section id="view-hardening" class="view-panel" data-view-panel="hardening">
+      <div class="safety-banner" id="hardening-safety-banner">
+        <div>
+          🛡️ Chế độ An toàn Tuyệt đối: Không bao giờ format thẻ nhớ / ổ đĩa (Zero Disk Formatting) — Mọi tác vụ chuẩn hóa udev/remount (`errors=continue,noatime`) bảo toàn 100% video ghi hình.
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button type="button" id="bulk-remediate-btn" class="btn btn-primary">
+            🛠️ Vá Tự Động Toàn Bộ Box Chưa Đạt (8 Bước)
+          </button>
+        </div>
+      </div>
+
+      <div class="glass-panel">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <div>
+            <h2 style="margin:0;font-size:16px;">Ma Trận Tuân Thủ 8 Bước Golden Hardening SOP</h2>
+            <p style="margin:4px 0 0;font-size:12px;color:var(--text-secondary);">
+              Kiểm toán trực tiếp: (1) ZRAM <code>mem_limit=0</code> · (2) PM2 Memory Guard + <code>/dev/null</code> · (3) <code>kernel.sysrq=0</code> · (4) Watchdog 60s · (5) Storage Guard 15m (90%→80%) · (6) udev <code>errors=continue</code> · (7) Clean <code>/etc/fstab</code> · (8) Shinobi <code>doSnapshot:false</code> + Fragmented MP4 <code>movflags=frag_keyframe+empty_moov+default_base_moof</code>
+            </p>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <select id="hardening-filter" class="select">
+              <option value="all">Tất cả Box</option>
+              <option value="needs_fix">Cần vá lỗi (&lt; 8/8)</option>
+              <option value="compliant">Đã đạt chuẩn 8/8</option>
+            </select>
+            <input type="search" id="hardening-search" class="input" placeholder="Lọc theo CLB hoặc Box ID...">
+          </div>
+        </div>
+
+        <div id="hardening-matrix-container" class="tabular-nums"></div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         VIEW 4: #cameras — Multi-Box Camera & NVR Inventory + Bulk Golden H.265
+         ====================================================================== -->
+    <section id="view-cameras" class="view-panel" data-view-panel="cameras">
+      <div class="toolbar-card">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <select id="cam-club-filter" class="select">
+            <option value="">Tất cả CLB</option>
+          </select>
+          <select id="cam-box-filter" class="select">
+            <option value="">Tất cả Box</option>
+          </select>
+          <select id="cam-vendor-filter" class="select">
+            <option value="">Tất cả Hãng (Dahua / Hikvision / Tiandy)</option>
+            <option value="Dahua">Dahua (DVRIP 37777)</option>
+            <option value="Hikvision">Hikvision (ISAPI)</option>
+            <option value="Tiandy">Tiandy (ONVIF/RTSP)</option>
+          </select>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;">
+            <input type="checkbox" id="cam-doublestream-filter">
+            <span>⚠️ Chỉ hiện Double-Streaming</span>
+          </label>
+          <input type="search" id="cam-search-input" class="input" placeholder="Tìm bàn, IP camera, box_id:host:port...">
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <button type="button" id="bulk-golden-h265-btn" class="btn btn-primary">
+            ⚡ Áp dụng Chuẩn Bida Golden H.265
+          </button>
+        </div>
+      </div>
+
+      <div class="glass-panel">
+        <div id="cameras-summary-bar" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;"></div>
+        <div class="table-scroll">
+          <table class="scada-table tabular-nums" id="cameras-table">
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="cam-select-all" title="Chọn tất cả camera đang lọc"></th>
+                <th>Khóa Kép (Box:Host:Port)</th>
+                <th>CLB / Box</th>
+                <th>Bàn / Tên Camera</th>
+                <th>Hãng</th>
+                <th>Đầu Ghi NVR</th>
+                <th>Trạng Thái</th>
+                <th>Codec / FPS / Bitrate</th>
+                <th>Audio</th>
+                <th>Luồng Kép (Double-Stream)</th>
+              </tr>
+            </thead>
+            <tbody id="cameras-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         VIEW 5: #redbida — 17-Rule Inspector, Branding Guard & FRPC Auditor
+         ====================================================================== -->
+    <section id="view-redbida" class="view-panel" data-view-panel="redbida">
+      <div class="toolbar-card">
+        <div class="filter-chips" id="redbida-brand-chips">
+          <button type="button" class="filter-chip active" data-brand="all">Tất cả CLB</button>
+          <button type="button" class="filter-chip" data-brand="billiards">🎱 Billiards (Chuẩn RedBida)</button>
+          <button type="button" class="filter-chip" data-brand="pickleball">🏓 Pickleball (Bảo toàn Branding)</button>
+          <button type="button" class="filter-chip" data-brand="conflict">🚨 Xung đột FRPC Subdomain</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <input type="search" id="redbida-search" class="input" placeholder="Tìm store-*, c-store-*, CLB, Box ID...">
+        </div>
+      </div>
+
+      <!-- FRPC Subdomain Conflict & HTTP 200 Auditor -->
+      <div class="glass-panel">
+        <h2 style="margin:0 0 8px;font-size:15px;">🌐 Kiểm Toán Tên Miền FRPC (<code>store-*</code> / <code>c-store-*</code>) &amp; Xung Đột Subdomain</h2>
+        <div id="redbida-domains-container" class="tabular-nums"></div>
+      </div>
+
+      <!-- Per-Box 17-Rule Inspector & Controlled Unlock Studio -->
+      <div class="glass-panel">
+        <h2 style="margin:0 0 8px;font-size:15px;">🎛️ RedBida OTA-MQTT 17-Rule Golden Inspector &amp; Controlled Unlock</h2>
+        <p style="margin:0 0 12px;font-size:12px;color:var(--text-secondary);">
+          Bảo toàn tuyệt đối nhận diện thương hiệu <strong>🎱 Billiards</strong> vs <strong>🏓 Pickleball</strong> (Pika Sun, Kely, Heypick...). Hỗ trợ mở khóa có kiểm soát cho <code>frpc_config</code>, <code>eth0_virtual_ip</code>, <code>end0_virtual_ip</code>, <code>shinobi_group_key</code>, <code>ggcode</code> và 20 tab <code>[C01]..[C20]</code>.
+        </p>
+        <div id="redbida-boxes-container" class="tabular-nums"></div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         VIEW 6: #handover — 1-Click Handover Pack Generator + Inline SVG QR
+         ====================================================================== -->
+    <section id="view-handover" class="view-panel" data-view-panel="handover">
+      <div class="toolbar-card">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <label for="handover-club-select" style="font-weight:700;font-size:13px;">Chọn CLB / Quán Bàn Giao:</label>
+          <select id="handover-club-select" class="select" style="min-width:280px;"></select>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <a id="handover-open-portal-btn" href="#" target="_blank" rel="noopener" class="btn btn-cyan">
+            🔑 Mở Cổng Chủ Quán (/portal/{token}/)
+          </a>
+          <button type="button" id="copy-handover-btn" class="btn btn-primary">
+            📋 Sao Chép Gói Bàn Giao (Zalo / Telegram)
+          </button>
+        </div>
+      </div>
+
+      <div class="handover-layout">
+        <div class="glass-panel">
+          <h2 style="margin:0 0 10px;font-size:15px;">📝 Mẫu Tin Nhắn Bàn Giao Chủ Quán (Zalo / Telegram)</h2>
+          <textarea id="handover-template-text" class="textarea mono" rows="16" style="width:100%;resize:vertical;" readonly></textarea>
+          <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;">
+            <div style="font-size:12px;color:var(--text-secondary);">
+              Link Clip QR Bền Vững (HMAC): <a id="handover-clip-link" href="#" target="_blank" rel="noopener" class="mono" style="color:var(--emerald);">/clip/...</a>
+            </div>
+            <button type="button" id="copy-clip-url-btn" class="btn btn-xs">Sao chép Link Clip</button>
+          </div>
+        </div>
+
+        <div class="glass-panel">
+          <h2 style="margin:0 0 12px;font-size:15px;">📱 Bộ Mã QR SVG Thuần (Không Phụ Thuộc CDN)</h2>
+          <div class="qr-cards-grid">
+            <div class="qr-card">
+              <div style="font-weight:700;font-size:13px;">1. Xem Bàn &amp; Điểm Số (Store)</div>
+              <div class="qr-svg-box" id="qr-store-container"></div>
+              <a id="handover-store-link" href="#" target="_blank" rel="noopener" class="mono" style="font-size:12px;color:var(--cyan);word-break:break-all;">--</a>
+            </div>
+
+            <div class="qr-card">
+              <div style="font-weight:700;font-size:13px;">2. Xem Camera &amp; Tua Video (C-Store)</div>
+              <div class="qr-svg-box" id="qr-cstore-container"></div>
+              <a id="handover-cstore-link" href="#" target="_blank" rel="noopener" class="mono" style="font-size:12px;color:var(--cyan);word-break:break-all;">--</a>
+            </div>
+
+            <div class="qr-card">
+              <div style="font-weight:700;font-size:13px;">3. Cổng Chủ Quán Read-Only</div>
+              <div class="qr-svg-box" id="qr-portal-container"></div>
+              <a id="handover-portal-link" href="#" target="_blank" rel="noopener" class="mono" style="font-size:12px;color:var(--emerald);word-break:break-all;">--</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========================================================================
+       VIEW 2: #box/{box_id} — Slide-Over Box Detail Drawer (#box-drawer)
+       ======================================================================== -->
+  <div id="box-drawer-backdrop" class="drawer-backdrop"></div>
+  <aside id="box-drawer" class="box-drawer" aria-label="Chi tiết Box Bida / Pickleball">
+    <div class="drawer-header">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <h2 id="drawer-box-title" style="margin:0;font-size:16px;">Chi tiết Box</h2>
+          <span id="drawer-box-status-badge" class="badge badge-emerald">ONLINE</span>
+        </div>
+        <div id="drawer-box-sub" class="mono" style="font-size:12px;color:var(--text-secondary);margin-top:3px;">--</div>
+      </div>
+      <button type="button" id="drawer-close-btn" class="btn btn-xs" aria-label="Đóng ngăn kéo">✕ Đóng</button>
+    </div>
+
+    <div class="drawer-body tabular-nums">
+      <!-- 1-Click Streaming Reverse Proxy Launchers -->
+      <div class="drawer-section">
+        <h3>
+          <span>🚀 Cổng Truy Cập Trực Tiếp (Streaming Reverse Proxy + 1-Click SSO)</span>
+          <span class="mono" style="font-size:11px;color:var(--emerald);">FlushInterval: -1</span>
+        </h3>
+        <div id="drawer-proxy-links" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      </div>
+
+      <!-- Hardware & Storage Telemetry Bars -->
+      <div class="drawer-section">
+        <h3>
+          <span>📊 Tài nguyên Hệ thống Thời gian thực (On/Off · CPU · RAM · Heap · Avail · Swap · ZRAM &amp; Thẻ Nhớ Video)</span>
+          <span id="drawer-soc-badge" class="badge badge-neutral">--</span>
+        </h3>
+        <div id="drawer-telemetry" class="telemetry-grid"></div>
+      </div>
+
+      <!-- Shinobi Monitors vs Live FFmpeg Processes -->
+      <div class="drawer-section">
+        <h3>
+          <span>🎬 Shinobi Monitors vs Tiến Trình FFmpeg Thực Tế</span>
+          <span id="drawer-ffmpeg-badge" class="badge badge-cyan">0 / 0</span>
+        </h3>
+        <div id="drawer-monitors"></div>
+      </div>
+
+      <!-- 8-Step Golden Hardening Checklist for this Box -->
+      <div class="drawer-section">
+        <h3>
+          <span>🛡️ Kiểm Toán 8 Bước Golden Hardening</span>
+          <button type="button" id="drawer-remediate-btn" class="btn btn-primary btn-xs">
+            🛠️ Vá 1-Click (An Toàn 0-Format)
+          </button>
+        </h3>
+        <div id="drawer-hardening"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ========================================================================
+       Global Command Palette Modal (Ctrl+K) — #cmd-palette
+       ======================================================================== -->
+  <div id="cmd-palette" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Bảng lệnh nhanh">
+    <div class="cmd-modal">
+      <div class="cmd-input-wrap">
+        <span>🔍</span>
+        <input type="search" id="cmd-search-input" placeholder="Gõ tên CLB, mã Box (inut_204_141), IP VPN, hoặc lệnh nhanh..." autocomplete="off">
+        <button type="button" id="cmd-close-btn" class="btn btn-xs">ESC</button>
+      </div>
+      <div id="cmd-results" class="cmd-results tabular-nums"></div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       RedBida Controlled Unlock Editor Modal
+       ======================================================================== -->
+  <div id="redbida-editor-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Mở khóa cấu hình RedBida & FRPC">
+    <div class="cmd-modal" style="width:min(94vw,680px);">
+      <div class="drawer-header">
+        <div>
+          <h3 id="redbida-modal-title" style="margin:0;font-size:15px;">🔓 Mở Khóa Có Kiểm Soát RedBida &amp; FRPC</h3>
+          <div id="redbida-modal-sub" class="mono" style="font-size:12px;color:var(--text-secondary);">--</div>
+        </div>
+        <button type="button" id="redbida-modal-close" class="btn btn-xs">✕ Đóng</button>
+      </div>
+      <form id="redbida-editor-form" autocomplete="off" style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+        <input type="hidden" id="rb-edit-box-id">
+        <div class="telemetry-grid">
+          <div>
+            <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Shinobi Group Key (<code>shinobi_group_key</code>)</label>
+            <input type="text" id="rb-edit-group-key" class="input mono" style="width:100%;">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Mã GGCode (<code>ggcode</code>)</label>
+            <input type="text" id="rb-edit-ggcode" class="input mono" style="width:100%;">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">IP Ảo eth0 (<code>eth0_virtual_ip</code>)</label>
+            <input type="text" id="rb-edit-eth0-vip" class="input mono" style="width:100%;" placeholder="192.168.1.250">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">IP Ảo end0 (<code>end0_virtual_ip</code>)</label>
+            <input type="text" id="rb-edit-end0-vip" class="input mono" style="width:100%;" placeholder="192.168.1.250">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Tab <code>[C01]</code> (Bàn 1 / Sân 1)</label>
+            <input type="text" id="rb-edit-c01" class="input mono" style="width:100%;">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Nhận diện Thương hiệu (Branding Guard)</label>
+            <input type="text" id="rb-edit-branding" class="input mono" style="width:100%;" readonly>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Cấu hình FRPC (<code>frpc_config</code> — <code>store-*</code> / <code>c-store-*</code>)</label>
+          <textarea id="rb-edit-frpc" class="textarea mono" rows="4" style="width:100%;"></textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px;">
+          <button type="button" id="rb-autofix-btn" class="btn btn-amber">⚡ Auto-Fix 17 Quy Tắc</button>
+          <button type="submit" class="btn btn-primary">💾 Lưu &amp; Áp Dụng (Bảo Toàn Branding)</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       Change Password Modal (#changePasswordModal) — Zero-Password-Retention
+       ======================================================================== -->
+  <div id="changePasswordModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Đổi mật khẩu tài khoản">
+    <div class="cmd-modal" style="width:min(94vw,460px);">
+      <div class="drawer-header">
+        <div>
+          <h3 style="margin:0;font-size:15px;">🔑 Đổi Mật Khẩu Tài Khoản</h3>
+          <div class="mono" style="font-size:12px;color:var(--text-secondary);">Băm một chiều bcrypt · Tự động thu hồi phiên cũ</div>
+        </div>
+        <button type="button" id="btnCloseChangePassword" class="btn btn-xs" aria-label="Đóng hộp thoại đổi mật khẩu">✕ Đóng</button>
+      </div>
+      <form id="changePasswordForm" autocomplete="off" style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+        <div>
+          <label for="cpCurrentPassword" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Mật khẩu hiện tại</label>
+          <input type="password" id="cpCurrentPassword" name="current_password" class="input" style="width:100%;" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="••••••••" required>
+        </div>
+        <div>
+          <label for="cpNewPassword" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Mật khẩu mới (tối thiểu 6 ký tự)</label>
+          <input type="password" id="cpNewPassword" name="new_password" class="input" style="width:100%;" minlength="6" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="••••••••" required>
+        </div>
+        <div>
+          <label for="cpConfirmPassword" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Xác nhận mật khẩu mới</label>
+          <input type="password" id="cpConfirmPassword" name="confirm_password" class="input" style="width:100%;" minlength="6" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="••••••••" required>
+        </div>
+        <div id="cpErrorMsg" class="cp-error-banner" role="alert" aria-live="polite" style="display:none;"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px;">
+          <button type="button" id="btnCancelChangePassword" class="btn">Hủy</button>
+          <button type="submit" id="btnSubmitChangePassword" class="btn btn-primary">💾 Cập nhật mật khẩu</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

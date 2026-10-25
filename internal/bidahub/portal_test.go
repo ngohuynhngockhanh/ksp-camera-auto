@@ -258,7 +258,7 @@ func TestTier1_F5_ShopOwnerPortalWorksWithoutAdminCookieOrBearer(t *testing.T) {
 	srv, _ := newTestHubServer(t)
 	club := storeListClubs(srv)[0]
 
-	req1 := httptestNewNoAuthGet( "/portal/" + club.PortalToken + "/")
+	req1 := httptestNewNoAuthGet("/portal/" + club.PortalToken + "/")
 	rec1, _ := doHubRequest(t, srv, http.MethodGet, req1, nil, map[string]string{"NO_AUTH": "1"})
 	if rec1.Code != http.StatusOK {
 		t.Errorf("expected 200 OK on unauthenticated portal HTML, got %d", rec1.Code)

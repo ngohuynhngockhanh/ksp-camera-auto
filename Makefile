@@ -1,6 +1,10 @@
-BINARY  := kspcam
-PKG     := ./cmd/kspcam
-DIST    := dist
+BINARY      := kspcam
+HUB_BINARY   := inut-bida-hub
+AGENT_BINARY := inut-bida-agent
+PKG          := ./cmd/kspcam
+HUB_PKG      := ./cmd/inut-bida-hub
+AGENT_PKG    := ./cmd/inut-bida-agent
+DIST        := dist
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
@@ -14,8 +18,12 @@ export CGO_ENABLED=0
 all: build
 
 build:
-	$(GO) build -ldflags '$(LDFLAGS)' -o $(BINARY) $(PKG)
-
+	@mkdir -p bin
+	CGO_ENABLED=0 $(GO) build -ldflags '$(LDFLAGS)' -o $(BINARY) $(PKG)
+	CGO_ENABLED=0 $(GO) build -ldflags '$(LDFLAGS)' -o bin/$(BINARY) $(PKG)
+	CGO_ENABLED=0 $(GO) build -ldflags '$(LDFLAGS)' -o $(HUB_BINARY) $(HUB_PKG)
+	CGO_ENABLED=0 $(GO) build -ldflags '$(LDFLAGS)' -o bin/$(HUB_BINARY) $(HUB_PKG)
+	CGO_ENABLED=0 $(GO) build -ldflags '$(LDFLAGS)' -o bin/$(AGENT_BINARY) $(AGENT_PKG)
 run: build
 	./$(BINARY) --config config.yaml
 
@@ -35,14 +43,17 @@ tidy:
 build-all: build-amd64 build-arm32 build-arm64
 
 build-amd64:
-	GOOS=linux GOARCH=amd64 $(GO) build -ldflags '$(LDFLAGS)' -o $(DIST)/$(BINARY)-linux-amd64 $(PKG)
-
+	@mkdir -p $(DIST)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -ldflags '$(LDFLAGS)' -o $(DIST)/$(BINARY)-linux-amd64 $(PKG)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -ldflags '$(LDFLAGS)' -o $(DIST)/$(HUB_BINARY)-linux-amd64 $(HUB_PKG)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -ldflags '$(LDFLAGS)' -o $(DIST)/$(AGENT_BINARY)-linux-amd64 $(AGENT_PKG)
 build-arm32:
 	GOOS=linux GOARCH=arm GOARM=7 $(GO) build -ldflags '$(LDFLAGS)' -o $(DIST)/$(BINARY)-linux-armv7 $(PKG)
+	GOOS=linux GOARCH=arm GOARM=7 $(GO) build -ldflags '$(LDFLAGS)' -o $(DIST)/$(AGENT_BINARY)-linux-armv7 $(AGENT_PKG)
 
 build-arm64:
 	GOOS=linux GOARCH=arm64 $(GO) build -ldflags '$(LDFLAGS)' -o $(DIST)/$(BINARY)-linux-arm64 $(PKG)
-
+	GOOS=linux GOARCH=arm64 $(GO) build -ldflags '$(LDFLAGS)' -o $(DIST)/$(AGENT_BINARY)-linux-arm64 $(AGENT_PKG)
 # Sync latest compiled binaries to Ansible controller on 172.16.5.180
 sync-ansible: build-all
 	scp $(DIST)/$(BINARY)-linux-arm64 root@172.16.5.180:/build/armbian-build/ansible/playbook/roles/app_ksp_bida/files/kspcam
@@ -69,5 +80,5 @@ docs-check:
 	$(GO) run ./tools/docgen -check
 
 clean:
-	rm -f $(BINARY) $(BINARY)-hiksdk
-	rm -rf $(DIST)
+	rm -f $(BINARY) $(HUB_BINARY) $(BINARY)-hiksdk
+	rm -rf $(DIST) bin

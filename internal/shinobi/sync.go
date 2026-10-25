@@ -2,6 +2,7 @@ package shinobi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -17,6 +18,45 @@ var (
 	sanitizerRe    = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
 	cameraNameRe   = regexp.MustCompile(`(?i)^camera\s*0*(\d+)$`)
 )
+
+// GoldenCustRecordFlags enforces H.265 hvc1 tag and fragmented MP4 segments so recordings
+// remain playable (moov atom present from byte 0x20) even after sudden power loss or kill -9.
+const GoldenCustRecordFlags = "-tag:v hvc1 -segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof"
+
+// DefaultInputMapChoices returns the mandatory Shinobi input_map_choices structure
+// so Shinobi's builders.js:398 never throws TypeError reading 'stream'.
+func DefaultInputMapChoices() map[string][]string {
+	return map[string][]string{
+		"stream":              {},
+		"snap":                {},
+		"record":              {},
+		"record_timelapse":    {},
+		"detector":            {},
+		"detector_object":     {},
+		"detector_sip_buffer": {},
+	}
+}
+
+// MarshalJSON ensures MonitorDetails always serializes the Golden SOP fields
+// (input_map_choices, input_maps, snap, wall_clock_timestamp_ignore) required by Shinobi.
+func (d MonitorDetails) MarshalJSON() ([]byte, error) {
+	type Alias MonitorDetails
+	if d.WallClockTimestampIgnore == "" {
+		d.WallClockTimestampIgnore = "0"
+	}
+	payload := struct {
+		Alias
+		Snap            string              `json:"snap"`
+		InputMaps       string              `json:"input_maps"`
+		InputMapChoices map[string][]string `json:"input_map_choices"`
+	}{
+		Alias:           Alias(d),
+		Snap:            "0",
+		InputMaps:       "",
+		InputMapChoices: DefaultInputMapChoices(),
+	}
+	return json.Marshal(payload)
+}
 
 // DeviceToMid generates a URL-safe, deterministic Shinobi monitor ID from a config.Device.
 func DeviceToMid(d config.Device) string {
@@ -102,10 +142,10 @@ func (c *Client) BuildMonitorConfig(d config.Device) MonitorConfig {
 			Acodec:                   "copy",
 			RecordVcodec:             "copy",
 			RecordAcodec:             "aac",
-			CustInput:                "",            // Input flag để trống
-			CustStream:               "",            // Stream flag để trống
-			CustRecord:               "-tag:v hvc1", // Recording flag chuẩn H.265 MP4
-			WallClockTimestampIgnore: "0",           // Luôn bật -use_wallclock_as_timestamps 1 ngăn ngừa lệch timescale
+			CustInput:                "",                    // Input flag để trống
+			CustStream:               "",                    // Stream flag để trống
+			CustRecord:               GoldenCustRecordFlags, // Recording flag chuẩn H.265 Fragmented MP4
+			WallClockTimestampIgnore: "0",                   // Luôn bật -use_wallclock_as_timestamps 1 ngăn ngừa lệch timescale
 			Detector:                 "0",
 		},
 	}
@@ -154,7 +194,9 @@ func (c *Client) SyncToShinobi(ctx context.Context, inv *config.Inventory) (*Syn
 			existing.Path != monCfg.Path ||
 			existingDet.AutoHost != monCfg.Details.AutoHost ||
 			existingDet.Muser != monCfg.Details.Muser ||
-			existingDet.Mpass != monCfg.Details.Mpass
+			existingDet.Mpass != monCfg.Details.Mpass ||
+			existingDet.CustRecord != monCfg.Details.CustRecord ||
+			existingDet.WallClockTimestampIgnore != monCfg.Details.WallClockTimestampIgnore
 
 		if changed {
 			if err := c.EditMonitor(ctx, monCfg.Mid, monCfg); err != nil {

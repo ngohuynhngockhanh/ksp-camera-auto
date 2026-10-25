@@ -1,17 +1,52 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mcp"
 )
+
+type syncSSEWriter struct {
+	mu      sync.Mutex
+	headers http.Header
+	code    int
+	buf     bytes.Buffer
+}
+
+func newSyncSSEWriter() *syncSSEWriter {
+	return &syncSSEWriter{headers: make(http.Header), code: http.StatusOK}
+}
+
+func (w *syncSSEWriter) Header() http.Header { return w.headers }
+
+func (w *syncSSEWriter) WriteHeader(statusCode int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.code = statusCode
+}
+
+func (w *syncSSEWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.Write(p)
+}
+
+func (w *syncSSEWriter) Flush() {}
+
+func (w *syncSSEWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
 
 func TestServer_MCPRoutes(t *testing.T) {
 	cfg := config.Default()
@@ -66,15 +101,17 @@ func TestServer_MCPRoutes(t *testing.T) {
 
 	sseReq := httptest.NewRequest(http.MethodGet, "/mcp?key=ksp_mcp_test_secret", nil).WithContext(ctx)
 	sseReq.RemoteAddr = "10.0.0.5:12345"
-	sseRec := httptest.NewRecorder()
+	sseRec := newSyncSSEWriter()
 
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		handler.ServeHTTP(sseRec, sseReq)
 	}()
 
 	time.Sleep(50 * time.Millisecond)
 
-	out := sseRec.Body.String()
+	out := sseRec.String()
 	if !strings.Contains(out, "event: endpoint") {
 		t.Fatalf("expected 'event: endpoint' in SSE output, got: %s", out)
 	}
@@ -102,8 +139,10 @@ func TestServer_MCPRoutes(t *testing.T) {
 	}
 
 	time.Sleep(50 * time.Millisecond)
+	cancel()
+	<-done
 
-	finalSSE := sseRec.Body.String()
+	finalSSE := sseRec.String()
 	if !strings.Contains(finalSSE, "kspcam_list_cameras") || !strings.Contains(finalSSE, "shinobi_list_monitors") {
 		t.Errorf("expected tools list streamed over SSE, got: %s", finalSSE)
 	}

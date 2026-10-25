@@ -1,0 +1,1060 @@
+/* ============================================================================
+   iNut Bida Fleet Hub (:2090) — Cyber-Industrial SCADA Dual-Canvas Stylesheet
+   Light Canvas: #eef5f4 | Dark Canvas: #071a24
+   Zero external font/CSS dependencies; tabular-nums discipline throughout.
+   ============================================================================ */
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #071a24;
+  --bg-subtle: #0a202c;
+  --surface: #0d2636;
+  --card: #133347;
+  --card-hover: #183e56;
+  --glass-bg: rgba(13, 38, 54, 0.78);
+  --glass-card: rgba(19, 51, 71, 0.72);
+  --border: #1e4963;
+  --border-strong: #2a6284;
+  --text: #ecfeff;
+  --text-secondary: #a5cddb;
+  --text-muted: #6c96a8;
+  --emerald: #00e5a3;
+  --emerald-bg: rgba(0, 229, 163, 0.14);
+  --emerald-border: rgba(0, 229, 163, 0.38);
+  --amber: #ffb020;
+  --amber-bg: rgba(255, 176, 32, 0.15);
+  --amber-border: rgba(255, 176, 32, 0.40);
+  --crimson: #ff4d6d;
+  --crimson-bg: rgba(255, 77, 109, 0.15);
+  --crimson-border: rgba(255, 77, 109, 0.42);
+  --cyan: #00d2ff;
+  --cyan-bg: rgba(0, 210, 255, 0.14);
+  --cyan-border: rgba(0, 210, 255, 0.38);
+  --purple: #a78bfa;
+  --purple-bg: rgba(167, 139, 250, 0.15);
+  --primary: #00e5a3;
+  --primary-fg: #04151f;
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.32);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.65);
+  --grid-line: rgba(30, 73, 99, 0.25);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #eef5f4;
+  --bg-subtle: #e3efed;
+  --surface: #ffffff;
+  --card: #f7fbfa;
+  --card-hover: #edf6f4;
+  --glass-bg: rgba(255, 255, 255, 0.86);
+  --glass-card: rgba(255, 255, 255, 0.82);
+  --border: #dae8e6;
+  --border-strong: #b8d2ce;
+  --text: #071a24;
+  --text-secondary: #274c5e;
+  --text-muted: #567a8a;
+  --emerald: #00875a;
+  --emerald-bg: rgba(0, 135, 90, 0.11);
+  --emerald-border: rgba(0, 135, 90, 0.34);
+  --amber: #d97706;
+  --amber-bg: rgba(217, 119, 6, 0.11);
+  --amber-border: rgba(217, 119, 6, 0.34);
+  --crimson: #dc2626;
+  --crimson-bg: rgba(220, 38, 38, 0.10);
+  --crimson-border: rgba(220, 38, 38, 0.32);
+  --cyan: #0284c7;
+  --cyan-bg: rgba(2, 132, 199, 0.11);
+  --cyan-border: rgba(2, 132, 199, 0.32);
+  --purple: #6d28d9;
+  --purple-bg: rgba(109, 40, 217, 0.10);
+  --primary: #00875a;
+  --primary-fg: #ffffff;
+  --shadow-sm: 0 2px 6px rgba(7, 26, 36, 0.06);
+  --shadow-md: 0 8px 24px rgba(7, 26, 36, 0.10);
+  --shadow-lg: 0 18px 42px rgba(7, 26, 36, 0.16);
+  --grid-line: rgba(184, 210, 206, 0.35);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 32px 32px;
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Strict Tabular Numerals Discipline for SCADA Telemetry */
+.tabular-nums,
+.kpi-value,
+.kpi-sub,
+.rtt-val,
+.pct-val,
+.bitrate-val,
+.counter-val,
+.score-badge,
+.mono,
+code,
+pre,
+table td,
+.telemetry-bar-meta,
+.badge-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono,
+code,
+pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+/* ============================================================================
+   Sticky SCADA Topbar & Navigation
+   ============================================================================ */
+.scada-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.topbar-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 18px;
+  max-width: 1720px;
+  margin: 0 auto;
+  flex-wrap: wrap;
+}
+
+.brand-cluster {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--emerald), var(--cyan));
+  color: #04151f;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 15px;
+  flex-shrink: 0;
+  box-shadow: 0 0 14px var(--emerald-border);
+}
+
+.brand-titles {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.brand-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* 3-Color Hardware LED Cluster */
+.led-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.led-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.led-dot,
+.led {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.led-dot.emerald,
+.led.emerald {
+  background: var(--emerald);
+  box-shadow: 0 0 8px var(--emerald);
+}
+
+.led-dot.amber,
+.led.amber {
+  background: var(--amber);
+  box-shadow: 0 0 8px var(--amber);
+}
+
+.led-dot.crimson,
+.led.crimson {
+  background: var(--crimson);
+  box-shadow: 0 0 8px var(--crimson);
+}
+
+/* Connection Badge (LIVE SSE / POLLING 15s) */
+.sse-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--emerald-border);
+  background: var(--emerald-bg);
+  color: var(--emerald);
+  white-space: nowrap;
+}
+
+.sse-badge.polling {
+  border-color: var(--amber-border);
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
+.sse-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: scada-pulse 1.8s infinite ease-in-out;
+}
+
+@keyframes scada-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.45; }
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Primary Nav Tabs */
+.scada-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 18px 8px;
+  max-width: 1720px;
+  margin: 0 auto;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.nav-tab {
+  appearance: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 14px;
+  min-height: 38px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.nav-tab:hover {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.nav-tab.active {
+  background: var(--emerald-bg);
+  color: var(--emerald);
+  border-color: var(--emerald-border);
+  font-weight: 700;
+}
+
+.nav-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================================
+   Buttons, Inputs & Controls
+   ============================================================================ */
+.btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 13px;
+  min-height: 38px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--card-hover);
+  border-color: var(--border-strong);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--primary-fg);
+  border-color: transparent;
+  font-weight: 700;
+}
+
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  background: var(--primary);
+}
+
+.btn-amber {
+  background: var(--amber-bg);
+  color: var(--amber);
+  border-color: var(--amber-border);
+}
+
+.btn-amber:hover:not(:disabled) {
+  background: var(--amber);
+  color: #071a24;
+}
+
+.btn-crimson {
+  background: var(--crimson-bg);
+  color: var(--crimson);
+  border-color: var(--crimson-border);
+}
+
+.btn-cyan {
+  background: var(--cyan-bg);
+  color: var(--cyan);
+  border-color: var(--cyan-border);
+}
+
+.btn-xs {
+  padding: 4px 9px;
+  min-height: 30px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.input,
+.select,
+.textarea {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  min-height: 38px;
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--emerald);
+  box-shadow: 0 0 0 2px var(--emerald-bg);
+}
+
+.kbd-hint {
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: ui-monospace, monospace;
+}
+
+/* ============================================================================
+   Main Workspace & View Containers
+   ============================================================================ */
+.scada-main {
+  max-width: 1720px;
+  margin: 0 auto;
+  padding: 18px;
+}
+
+.view-panel {
+  display: none;
+}
+
+.view-panel.active {
+  display: block;
+}
+
+/* ============================================================================
+   6 KPI Summary Strip
+   ============================================================================ */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.kpi-card {
+  background: var(--glass-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 15px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--emerald);
+}
+
+.kpi-card.warn::before {
+  background: var(--amber);
+}
+
+.kpi-card.danger::before {
+  background: var(--crimson);
+}
+
+.kpi-card.cyan::before {
+  background: var(--cyan);
+}
+
+.kpi-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kpi-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+/* ============================================================================
+   Filter Bar, Chips & Search
+   ============================================================================ */
+.toolbar-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filter-chip {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 6px 12px;
+  min-height: 34px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.filter-chip:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.filter-chip.active {
+  background: var(--emerald-bg);
+  color: var(--emerald);
+  border-color: var(--emerald-border);
+}
+
+/* ============================================================================
+   Club Group Cards & High-Density Fleet Table
+   ============================================================================ */
+.club-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 14px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.club-header {
+  background: var(--card);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.club-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.club-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.scada-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.scada-table th {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.scada-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+.scada-table tbody tr {
+  transition: background 0.12s;
+}
+
+.scada-table tbody tr:hover {
+  background: var(--card-hover);
+}
+
+.scada-table tbody tr.clickable-row {
+  cursor: pointer;
+}
+
+.scada-table tbody tr.row-offline {
+  background: rgba(255, 77, 109, 0.06);
+  opacity: 0.86;
+}
+
+.scada-table tbody tr.row-offline td:first-child {
+  box-shadow: inset 3px 0 0 var(--crimson);
+}
+
+.cell-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Status & Telemetry Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.badge-emerald,
+.badge.emerald {
+  background: var(--emerald-bg);
+  color: var(--emerald);
+  border-color: var(--emerald-border);
+}
+
+.badge-amber,
+.badge.amber {
+  background: var(--amber-bg);
+  color: var(--amber);
+  border-color: var(--amber-border);
+}
+
+.badge-crimson,
+.badge.crimson {
+  background: var(--crimson-bg);
+  color: var(--crimson);
+  border-color: var(--crimson-border);
+}
+
+.badge-cyan,
+.badge.cyan {
+  background: var(--cyan-bg);
+  color: var(--cyan);
+  border-color: var(--cyan-border);
+}
+
+.badge-purple {
+  background: var(--purple-bg);
+  color: var(--purple);
+  border-color: rgba(167, 139, 250, 0.35);
+}
+
+.badge-neutral {
+  background: var(--card);
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+/* Inline Mini Progress / Telemetry Bars */
+.mini-meter {
+  width: 84px;
+  height: 6px;
+  background: var(--bg);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.mini-meter-fill {
+  height: 100%;
+  background: var(--emerald);
+  border-radius: 999px;
+}
+
+.mini-meter-fill.warn {
+  background: var(--amber);
+}
+
+.mini-meter-fill.danger {
+  background: var(--crimson);
+}
+
+.sparkline-svg {
+  width: 68px;
+  height: 22px;
+  vertical-align: middle;
+  overflow: visible;
+}
+
+/* ============================================================================
+   Glassmorphism Panels & Safety Banner
+   ============================================================================ */
+.glass-panel {
+  background: var(--glass-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 16px;
+}
+
+.safety-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--emerald-bg);
+  border: 1px solid var(--emerald-border);
+  color: var(--emerald);
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+/* ============================================================================
+   Slide-Over Box Detail Drawer (#box-drawer)
+   ============================================================================ */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(4, 15, 22, 0.65);
+  backdrop-filter: blur(4px);
+  display: none;
+}
+
+.drawer-backdrop.open {
+  display: block;
+}
+
+.box-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(94vw, 760px);
+  z-index: 210;
+  background: var(--surface);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(102%);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.box-drawer.open {
+  transform: translateX(0);
+}
+
+.drawer-header {
+  padding: 16px 20px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.drawer-body {
+  padding: 18px 20px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.drawer-section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.drawer-section h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.telemetry-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+/* ============================================================================
+   Command Palette Modal (Ctrl+K) & QR Modal
+   ============================================================================ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(4, 15, 22, 0.72);
+  backdrop-filter: blur(6px);
+  display: none;
+  place-items: start center;
+  padding-top: 10vh;
+}
+
+.modal-backdrop.open {
+  display: grid;
+}
+
+.cmd-modal {
+  width: min(92vw, 620px);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.cmd-input-wrap {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cmd-input-wrap input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  outline: none;
+}
+
+.cmd-results {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.cmd-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.cmd-item:hover,
+.cmd-item.selected {
+  background: var(--card-hover);
+}
+
+/* Handover & QR Grid */
+.handover-layout {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 16px;
+}
+
+.qr-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.qr-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.qr-svg-box {
+  width: 164px;
+  height: 164px;
+  background: #ffffff;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+}
+
+.qr-svg-box svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Toast Notification */
+.toast-stack {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast-msg {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--emerald-border);
+  border-left: 4px solid var(--emerald);
+  padding: 10px 14px;
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.toast-msg.error {
+  border-color: var(--crimson-border);
+  border-left-color: var(--crimson);
+}
+
+.cp-error-banner {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--crimson-bg);
+  border: 1px solid var(--crimson-border);
+  color: var(--crimson);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ============================================================================
+   Responsive Mobile Reflow (<768px) with >=44px Tap Targets
+   ============================================================================ */
+@media (max-width: 1200px) {
+  .kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .handover-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .telemetry-grid {
+    grid-template-columns: 1fr;
+  }
+  .btn,
+  .nav-tab,
+  .filter-chip,
+  .input,
+  .select {
+    min-height: 44px;
+  }
+  .topbar-main {
+    padding: 10px 12px;
+  }
+  .scada-main {
+    padding: 12px;
+  }
+}
