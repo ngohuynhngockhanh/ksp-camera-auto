@@ -496,6 +496,43 @@ var builtInFleetSpecs = []seedBoxSpec{
 		ShinobiGroupKey: "Fgbghldvgk", StoreDomain: "store-dragon-bn.video.io.vn", CStoreDomain: "c-store-dragon-bn.video.io.vn",
 		PM2CameraMB: 280, HardeningScore: 8, Notes: "11 NVR channels on 192.168.1.93:34567, 239GB btrfs SD card, fixed offline Ch1 snapshot worker leak, 22 FFmpeg",
 	},
+	{
+		ID: "inut_205_52", ClubID: "club_genz_hn7", ClubName: "Gen Z Billiards 375 Vũ Tông Phan", BoxName: "Gen Z Billiards 375 Vũ Tông Phan",
+		Branding: "billiards", VPNIP: "77.88.205.52", LANIP: "192.168.1.254", VirtualIP: "192.168.1.254",
+		SoCModel: "Allwinner H616", Arch: "aarch64", RAMTotalMB: 1945, RAMAvailableMB: 700, ZRAMTotalMB: 1945, ZRAMAlgo: "lz4",
+		SDTotalGB: 59, SDUsedPct: 68, SDFSType: "f2fs", SDMountOpts: "rw,noatime,nodiscard,errors=continue,users",
+		CamerasCount: 12, Vendor: "Dahua", Resolution: "1920x1080", Width: 1920, Height: 1080, FPS: 25, BitrateKbps: 1536, Codec: "H.265",
+		NVRHost: "192.168.1.99",
+		ShinobiGroupKey: "hn7", StoreDomain: "store-genz-hn-7.video.io.vn", CStoreDomain: "c-store-genz-hn-7.video.io.vn",
+		PM2CameraMB: 260, HardeningScore: 8, Notes: "12 camera Dahua + NVR 192.168.1.99, revived errored camera.js, 24/24 FFmpeg",
+	},
+	{
+		ID: "inut_205_59", ClubID: "club_tuan_king", ClubName: "Tuấn King Billiards Club", BoxName: "Tuấn King Billiards Club",
+		Branding: "billiards", VPNIP: "77.88.205.59", LANIP: "192.168.1.254", VirtualIP: "192.168.1.254",
+		SoCModel: "Allwinner H616", Arch: "aarch64", RAMTotalMB: 1945, RAMAvailableMB: 847, ZRAMTotalMB: 1945, ZRAMAlgo: "lz4",
+		SDTotalGB: 58, SDUsedPct: 3, SDFSType: "f2fs", SDMountOpts: "rw,noatime,nodiscard,errors=continue,users",
+		CamerasCount: 10, Vendor: "Dahua", Resolution: "1920x1080", Width: 1920, Height: 1080, FPS: 25, BitrateKbps: 1536, Codec: "H.265",
+		ShinobiGroupKey: "tuancreep", StoreDomain: "store-tuanking.video.io.vn", CStoreDomain: "c-store-tuanking.video.io.vn",
+		PM2CameraMB: 230, HardeningScore: 8, Notes: "10 camera Dahua, revived errored camera.js, 20/20 FFmpeg",
+	},
+	{
+		ID: "inut_205_110", ClubID: "club_99_cs9_2", ClubName: "99 CS9 Billiards - 2", BoxName: "99 CS9 Billiards - 2",
+		Branding: "billiards", VPNIP: "77.88.205.110", LANIP: "192.168.11.254", VirtualIP: "192.168.11.254",
+		SoCModel: "Allwinner H616", Arch: "aarch64", RAMTotalMB: 1945, RAMAvailableMB: 445, ZRAMTotalMB: 1945, ZRAMAlgo: "lz4",
+		SDTotalGB: 117, SDUsedPct: 69, SDFSType: "f2fs", SDMountOpts: "rw,noatime,nodiscard,errors=continue,users",
+		CamerasCount: 15, Vendor: "Hikvision", Resolution: "1920x1080", Width: 1920, Height: 1080, FPS: 25, BitrateKbps: 1536, Codec: "H.265",
+		ShinobiGroupKey: "9992", StoreDomain: "store-99-cs9-2.video.io.vn", CStoreDomain: "c-store-99-cs9-2.video.io.vn",
+		PM2CameraMB: 260, HardeningScore: 8, Notes: "15 camera Hikvision, fixed c-store-99-cs96-2 typo -> c-store-99-cs9-2, revived errored camera.js, 30/30 FFmpeg",
+	},
+	{
+		ID: "inut_204_133", ClubID: "club_zone_plus_1", ClubName: "Zone+ Thái Nguyên 1", BoxName: "Zone+ Thái Nguyên 1",
+		Branding: "billiards", VPNIP: "77.88.204.133", LANIP: "192.168.1.254", VirtualIP: "192.168.1.254",
+		SoCModel: "Allwinner H616", Arch: "aarch64", RAMTotalMB: 1945, RAMAvailableMB: 1024, ZRAMTotalMB: 1945, ZRAMAlgo: "lz4",
+		SDTotalGB: 58, SDUsedPct: 41, SDFSType: "f2fs", SDMountOpts: "rw,noatime,nodiscard,errors=continue,users",
+		CamerasCount: 10, Vendor: "Dahua", Resolution: "1920x1080", Width: 1920, Height: 1080, FPS: 25, BitrateKbps: 1536, Codec: "H.265",
+		ShinobiGroupKey: "zoneplus1", StoreDomain: "store-zoneplus1.video.io.vn", CStoreDomain: "c-store-zoneplus1.video.io.vn",
+		PM2CameraMB: 230, HardeningScore: 8, Notes: "10 camera, HLS live 20/20 FFmpeg active; SD card hardware dead on mmc0 (needs physical SD card replacement)",
+	},
 }
 
 func randomHex(nBytes int, seedFallback string) string {

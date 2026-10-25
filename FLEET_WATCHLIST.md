@@ -734,3 +734,17 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Sửa sạch lỗi JSON `Monitors.details` và bật Fragmented MP4 (`-segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof`, chuẩn H.264) cho cả 11 monitor $\rightarrow$ Xác nhận bằng `ffprobe` các file `.mp4` mới vừa ghi được vài giây đã đọc được `moov` atom (`h264,1920,1080`) ngay lập tức
     - Cài đặt **Storage Guard 15p (`90% -> 80%`)** bảo vệ thẻ 239 GB (đang ở 84%), **Smart Watchdog 60s**, **PM2 Memory Guard (`camera: 280M`)**, dịch vụ `kspcam.service` và `inut-bida-agent.service` (Yamux)
   - Trạng thái: Đủ **22 tiến trình FFmpeg** (`10/10` kênh có camera trên NVR đang ghi hình `.mp4` chuẩn Fragmented MP4 liên tục), RAM khả dụng **2.8 GiB + 2.4 GiB ZRAM**, chấm dứt hoàn toàn vòng lặp tự reboot mỗi 12 giờ, Yamux ONLINE (`rtt_ms: 70 ms`)
+
+- [x] **Node `inut_205_52`, `inut_205_59`, `inut_205_110`, `inut_204_133`**
+  - **`inut_205_52` (Gen Z Billiards 375 Vũ Tông Phan — `77.88.205.52`, group `hn7`, 12 camera Dahua + NVR `192.168.1.99`)**:
+    - Lỗi trước đó: Tiến trình `camera` trong PM2 bị sập sang trạng thái `errored` (`FFMPEG_COUNT=0`), `Swap = 0B`, chưa có Watchdog, cả 12 monitor bị lỗi JSON `detector_filters`.
+    - Đã xử lý: Bật ZRAM 1.9 GiB, sửa JSON 12 monitor + bật Fragmented MP4, cài đặt Smart Watchdog 60s + Storage Guard 15p + PM2 Guard `260M` + `inut-bida-agent`. Đã hồi sinh đủ **24/24 tiến trình FFmpeg** (`12/12` bàn ghi `.mp4` mới liên tục trên `/media/usb1/hn7`, thẻ 60 GB ở mức `68%`).
+  - **`inut_205_59` (Tuấn King Billiards Club — `77.88.205.59`, group `tuancreep`, 10 camera Dahua)**:
+    - Lỗi trước đó: Tiến trình `camera` trong PM2 bị `errored` (`FFMPEG_COUNT=0`), ZRAM mới 961 MiB, chưa có Watchdog, 10 monitor lỗi JSON `detector_filters`.
+    - Đã xử lý: Nâng ZRAM 1.9 GiB, sửa JSON 10 monitor + bật Fragmented MP4, cài đặt Smart Watchdog 60s + Storage Guard 15p + PM2 Guard `230M` + `inut-bida-agent`. Đã hồi sinh đủ **20/20 tiến trình FFmpeg** (`10/10` bàn ghi `.mp4` mới liên tục trên `/media/usb1/tuancreep`).
+  - **`inut_205_110` (99 Billiards - CS9 - 2 — `77.88.205.110`, group `9992`, 15 camera Hikvision)**:
+    - Lỗi trước đó: Tiến trình `camera` trong PM2 bị `errored` (`FFMPEG_COUNT=0`), `Swap = 0B`, cấu hình `frpc_config` bị gõ nhầm `subdomain = c-store-99-cs96-2` (thay vì `c-store-99-cs9-2`), 15 monitor lỗi JSON `detector_filters`.
+    - Đã xử lý: Sửa lại subdomain FRPC `c-store-99-cs9-2`, bật ZRAM 1.9 GiB, sửa JSON 15 monitor + bật Fragmented MP4, cài đặt Smart Watchdog 60s + Storage Guard 15p + PM2 Guard `260M` + `inut-bida-agent`. Đã hồi sinh đủ **30/30 tiến trình FFmpeg** (`15/15` bàn ghi `.mp4` mới liên tục trên `/media/usb1/9992`, thẻ 118 GB ở mức `70%`).
+  - **`inut_204_133` (Zone+ Thái Nguyên 1 — `77.88.204.133`, group `zoneplus1`, 10 camera)**:
+    - Chẩn đoán phần cứng: Thẻ nhớ MicroSD trên khe `mmc0` (`4020000.mmc`) đã chết chip điều khiển flash vật lý (`F2FS-fs: Issue discard failed, ret: -5`, `f2fs_commit_super fails to record err:-5`, mất hoàn toàn block device `/dev/mmcblk0` kể cả sau khi rebind `sunxi-mmc` và reboot).
+    - Đã xử lý: Áp dụng đầy đủ bộ Golden Hardening (ZRAM 1.9 GiB, `nodiscard` trong `/etc/media-automount.d/f2fs`, sửa JSON 10 monitor, Smart Watchdog 60s, PM2 Guard `230M`, `inut-bida-agent`). Hiện tại **20/20 tiến trình FFmpeg** đang chạy phát Live HLS bình thường cho cả 10 bàn (`store-zoneplus1.video.io.vn`); cần thay thẻ nhớ vật lý mới tại quán để ghi hình `.mp4` trở lại.
