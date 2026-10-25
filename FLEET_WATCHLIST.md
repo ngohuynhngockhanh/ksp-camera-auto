@@ -719,3 +719,18 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Sửa lỗi JSON `Monitors.details` và bật Fragmented MP4 cho toàn bộ 10 camera; đồng thời áp cấu hình **H.265 + SmartCodec + 25 FPS + 1536 Kbps CBR + Audio AAC** cho cả 10 camera Dahua
     - Chuẩn hóa Storage Guard 15p (`90% -> 80%`) có đồng bộ MySQL `Videos`, Smart Watchdog 60s, PM2 Memory Guard (`camera: 230M`), và cài đặt `inut-bida-agent.service` (Yamux)
   - Trạng thái: Đủ **20/20 tiến trình FFmpeg**, cả 10/10 bàn đang ghi hình `.mp4` mới liên tục trên `/media/usb1/49` (`69 GB / 118 GB`, `59%`), Yamux ONLINE (`rtt_ms: 52 ms`)
+
+- [x] **Node `inut_204_2`** (Dragon Billiards Club — `77.88.204.2`, group `Fgbghldvgk`)
+  - Phần cứng: Rockchip RK3318 (aarch64, kernel 6.1.63-current-rockchip64), RAM 3.9 GiB, Thẻ nhớ 239 GB **btrfs** (`/dev/mmcblk0p1`)
+  - Số lượng camera: 11 kênh kéo qua Đầu ghi NVR `192.168.1.93` (cổng RTSP 554 & VMS 34567, H.264 1080p) (`camera01` .. `camera11` tương ứng Kênh 2..11 và Kênh 1)
+  - Các lỗ hổng nghiêm trọng trước khi xử lý:
+    - **Box bị sập RAM và tự reboot mỗi 12 giờ** (`last -x` ghi nhận reboot liên tục ngày 22/10, 23/10, 24/10 và 09:47 sáng 25/10): trong `/root/crash_2026_10_24_000006.log`, tiến trình `camera.js` phình lên **25.7% RAM (~1.05 GiB)** làm RAM khả dụng tụt xuống dưới 250 MB và kích hoạt lệnh reboot của Node-RED
+    - **Nguyên nhân rò rỉ RAM**: Kênh 1 trên đầu ghi `192.168.1.93` (`camera11`) đang không có tín hiệu camera từ 23/10, kết hợp với `"doSnapshot"` chưa tắt khiến `monitor.js` đẻ ra hàng loạt tiến trình `ffmpeg -s 500x500 ... /dev/shm/streams/Fgbghldvgk/camera11/*.jpg` và Worker `snapshot.js` bị treo liên tục
+    - `Swap = 0B` (chưa kích hoạt ZRAM), `kernel.sysrq = 176`, `vm.swappiness = 0`, thẻ nhớ 239 GB đã đầy **85% (`201 GB`)** nhưng **chưa có Storage Guard 15p**
+    - Toàn bộ 11 monitor trong MySQL đều bị lỗi cú pháp JSON ở trường `detector_filters` và `cust_record: ""` (trống), khiến mọi file `.mp4` đang ghi dở đều bị lỗi `moov atom not found` mỗi khi box tự reboot
+  - Cấu hình đã xử lý (Không format thẻ nhớ, bảo toàn 100% 201 GB video):
+    - Đặt `"doSnapshot": false` trong `/home/Shinobi/conf.json`, `snap: "0"` trong `Monitors.details`, và vá `snapProcess.terminate()` trong `/home/Shinobi/libs/monitor.js` + `file.destroy()` trong `/home/Shinobi/libs/videos.js` $\rightarrow$ Chặn đứng hoàn toàn rò rỉ Worker từ kênh `camera11` offline, RAM của `camera.js` giữ ổn định ở ~140 MB (RAM trống khả dụng vọt lên **2.8 GiB / 3.9 GiB**)
+    - Kích hoạt **ZRAM Swap `2.4 GiB`** qua dịch vụ `inut-zram.service`, khóa `kernel.sysrq = 0`, `vm.swappiness = 80`
+    - Sửa sạch lỗi JSON `Monitors.details` và bật Fragmented MP4 (`-segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof`, chuẩn H.264) cho cả 11 monitor $\rightarrow$ Xác nhận bằng `ffprobe` các file `.mp4` mới vừa ghi được vài giây đã đọc được `moov` atom (`h264,1920,1080`) ngay lập tức
+    - Cài đặt **Storage Guard 15p (`90% -> 80%`)** bảo vệ thẻ 239 GB (đang ở 84%), **Smart Watchdog 60s**, **PM2 Memory Guard (`camera: 280M`)**, dịch vụ `kspcam.service` và `inut-bida-agent.service` (Yamux)
+  - Trạng thái: Đủ **22 tiến trình FFmpeg** (`10/10` kênh có camera trên NVR đang ghi hình `.mp4` chuẩn Fragmented MP4 liên tục), RAM khả dụng **2.8 GiB + 2.4 GiB ZRAM**, chấm dứt hoàn toàn vòng lặp tự reboot mỗi 12 giờ, Yamux ONLINE (`rtt_ms: 70 ms`)

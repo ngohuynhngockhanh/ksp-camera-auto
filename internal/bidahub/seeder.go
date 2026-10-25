@@ -486,6 +486,16 @@ var builtInFleetSpecs = []seedBoxSpec{
 		ShinobiGroupKey: "49", StoreDomain: "store-49-2.video.io.vn", CStoreDomain: "c-store-49-2.video.io.vn",
 		PM2CameraMB: 230, HardeningScore: 8, Notes: "10 camera Dahua 1080p, 118GB exFAT SD card, 20/20 FFmpeg",
 	},
+	{
+		ID: "inut_204_2", ClubID: "club_dragon_billiards_bn", ClubName: "Dragon Billiards Club", BoxName: "Dragon Billiards Club",
+		Branding: "billiards", VPNIP: "77.88.204.2", LANIP: "192.168.1.254", VirtualIP: "192.168.1.254",
+		SoCModel: "Rockchip RK3318", Arch: "aarch64", RAMTotalMB: 3974, RAMAvailableMB: 2834, ZRAMTotalMB: 2457, ZRAMAlgo: "zstd",
+		SDTotalGB: 238, SDUsedPct: 84, SDFSType: "btrfs", SDMountOpts: "rw,noatime,ssd,space_cache=v2",
+		CamerasCount: 11, Vendor: "Xiongmai/Dahua", Resolution: "1920x1080", Width: 1920, Height: 1080, FPS: 25, BitrateKbps: 1536, Codec: "H.264",
+		NVRHost: "192.168.1.93",
+		ShinobiGroupKey: "Fgbghldvgk", StoreDomain: "store-dragon-bn.video.io.vn", CStoreDomain: "c-store-dragon-bn.video.io.vn",
+		PM2CameraMB: 280, HardeningScore: 8, Notes: "11 NVR channels on 192.168.1.93:34567, 239GB btrfs SD card, fixed offline Ch1 snapshot worker leak, 22 FFmpeg",
+	},
 }
 
 func randomHex(nBytes int, seedFallback string) string {
