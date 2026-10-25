@@ -790,3 +790,18 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Đồng bộ `camera_count = 10`, `toolbar_show_count = 10`, cập nhật hạn mức `Users.details.size = "100000"` (100 GB / 3 ngày)
     - Nâng ZRAM Swap từ `900 MiB` lên **`1.9 GiB` (`lz4`)**, khóa `kernel.sysrq = 0`, `vm.swappiness = 80`, cấu hình `/etc/media-automount.d/` (`noatime,users,nodiscard`), cài đặt Storage Guard 15p (`90% -> 80%`), Smart Watchdog 60s, PM2 Memory Guard (`camera: 230M`, `inut: 280M`, `ota-mqtt: 120M`), và `inut-bida-agent.service`
   - Trạng thái: **18 tiến trình (`9/10` bàn: `camera01`, `02`, `04`, `05`, `06`, `07`, `08`, `09`, `10`)** đang chạy mượt và ghi hình `.mp4` mới liên tục vào `/media/usb1/s912/` (`71%`, còn trống 35 GB); riêng `camera03` (`192.168.2.243`) đang tắt nguồn/mất kết nối tại quán
+
+- [x] **Node `inut_205_112` & `inut_204_36`** (LEO Billiard — `77.88.205.112` & `77.88.204.36`, tổng 30 camera bàn chia 13 / 17)
+  - Hệ thống mạng LAN tại quán: Dải `192.168.110.0/24` (không dùng IP ảo), quản lý qua 2 đầu ghi Hikvision `DS-7632NXI-K2` (`192.168.110.179` & `192.168.110.178`, tài khoản `admin` / `Abcd678@`). Đã lọc bỏ 14 camera hành lang/quầy/cầu thang/ngoài sân, chỉ lấy đúng **30 camera bàn bida theo đúng thứ tự**:
+    - **Box 1 — `inut_205_112` (`77.88.205.112`, IP LAN: `192.168.110.8`, group `t9`, 13 camera bàn)**:
+      - Phần cứng: Allwinner Sunxi64 (`aarch64`, kernel `6.6.44-current-sunxi64`), RAM **1.9 GiB**, Thẻ nhớ 58 GB F2FS (`/dev/mmcblk0p1`).
+      - Danh sách 13 bàn (`camera01` .. `camera13`): `B 01` (`192.168.110.152`), `B 02` (`.189`), `B 03` (`.188`), `B 04` (`.180`), `B 05` (`.187`), `B 06` (`.185`), `VIP 1` (`.209` — 2K 2560x1440 + AAC), `VIP 2` (`.165` — 1080p + AAC), `VIP 3` (`.184`), `VIP 4` (`.153`), `VIP 5` (`.151`), `VIP 6` (`.182`), `VIP 7` (`.167`).
+      - Đã cấu hình trực tiếp 13 camera qua ISAPI về **H.265 + SmartCodec (`true`) + 1280 Kbps CBR + GOP 50 + Audio AAC** (cho `VIP 1`, `VIP 2`; 11 bàn không mic đặt `acodec: "no"` trên Shinobi).
+      - Áp dụng đầy đủ bộ Golden Hardening (ZRAM 1.9 GiB `lz4`, `errors=continue,noatime,users`, Fragmented MP4, `doSnapshot: false`, Storage Guard 15p `90% -> 80%`, Smart Watchdog 60s, PM2 Guard `camera: 250M`, `kspcam` + `inut-bida-agent`) và Onboarding **LEO Billiard** (Logo `IMG_8844_1923392092.jpeg`, SĐT `0968.536.838`, FB link).
+      - Trạng thái: **26/26 tiến trình FFmpeg (`13/13` bàn)** đang chạy mượt và ghi hình `.mp4` mới liên tục vào `/media/usb1/t9/`.
+    - **Box 2 — `inut_204_36` (`77.88.204.36`, IP LAN: `192.168.110.7`, group `bida2392`, 17 camera bàn)**:
+      - Phần cứng: Rockchip64 (`aarch64`, kernel `6.1.63-current-rockchip64`), RAM **1.9 GiB**, Thẻ nhớ 58 GB F2FS (`/dev/mmcblk0p1`).
+      - Danh sách 17 bàn (`camera01` .. `camera17`): `B 07` (`192.168.110.160`), `B 08` (`.157`), `B 09` (`.168`), `B 10` (`.207`), `B 11` (`.159`), `B 12` (`.186`), `B 13` (`.205`), `B 14` (`.206`), `B 15` (`.204`), `B 16` (`.156`), `B 17` (`.161`), `B 18` (`.155`), `B 19` (`.203`), `B 20` (`.154`), `B 21` (`.162`), `B 22` (`.169`), `B 23` (`.158`).
+      - Đã cấu hình trực tiếp 17 camera qua ISAPI về **H.265 + SmartCodec (`true`) + 1280 Kbps CBR + GOP 50** (`acodec: "no"` trên Shinobi).
+      - Áp dụng đầy đủ bộ Golden Hardening (ZRAM 1.9 GiB `lz4`, `noatime,users` cho kernel 6.1, Fragmented MP4, `doSnapshot: false`, Storage Guard 15p `90% -> 80%`, Smart Watchdog 60s, PM2 Guard `camera: 270M`, `kspcam` + `inut-bida-agent`) và Onboarding **LEO Billiard** (`camera_count = 17`, `toolbar_show_count = 17`).
+      - Trạng thái: **34/34 tiến trình FFmpeg (`17/17` bàn)** đang chạy mượt và ghi hình `.mp4` mới liên tục vào `/media/usb1/bida2392/`.
