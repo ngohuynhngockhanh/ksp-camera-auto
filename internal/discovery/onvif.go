@@ -205,6 +205,11 @@ func vendorFromText(s string) string {
 		return "dahua"
 	case strings.Contains(lower, "tiandy"):
 		return "tiandy"
+	case strings.Contains(lower, "raysharp") ||
+		strings.Contains(lower, "advantech") ||
+		strings.Contains(lower, "n10256") ||
+		strings.Contains(lower, "vc31"):
+		return "raysharp"
 	case hasTextToken(lower, "lc") || dahuaIPCModelHint(lower) || genericDahuaONVIFHint(lower):
 		return "dahua"
 	default:
@@ -250,8 +255,12 @@ func genericDahuaONVIFHint(text string) bool {
 // devices use DVRIP on 37777 by default; camera.Open handles the 8888 OEM
 // fallback if that port is unreachable.
 func onvifPortForVendor(vendor string) int {
-	if vendor == "dahua" {
+	switch vendor {
+	case "dahua":
 		return 37777
+	case "raysharp":
+		return 80
+	default:
+		return 0
 	}
-	return 0
 }

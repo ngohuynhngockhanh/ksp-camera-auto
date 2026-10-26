@@ -117,6 +117,16 @@ func normalizeCredTestTarget(t CredTestTarget, defaults config.Defaults) (config
 			if port <= 0 {
 				port = builtIn.HikvisionPort
 			}
+		case config.VendorRaysharp:
+			port = defaults.RaysharpPort
+			if port <= 0 {
+				port = builtIn.RaysharpPort
+			}
+		case config.VendorTiandy:
+			port = defaults.TiandyPort
+			if port <= 0 {
+				port = builtIn.TiandyPort
+			}
 		}
 	}
 	if port <= 0 || port > 65535 {
@@ -134,6 +144,10 @@ func normalizeCredTestVendor(raw string) (config.Vendor, bool) {
 		return config.VendorDahua, true
 	case "hikvision", "hik":
 		return config.VendorHikvision, true
+	case "raysharp", "advantech", "rs":
+		return config.VendorRaysharp, true
+	case "tiandy":
+		return config.VendorTiandy, true
 	default:
 		return "", false
 	}

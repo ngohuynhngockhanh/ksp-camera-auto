@@ -22,6 +22,7 @@ import (
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/camera"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/eventbus"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mcp"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/redbida"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/shinobi"
@@ -47,6 +48,7 @@ type Server struct {
 	antiA       *antiAGuardian
 	redbida     *redbida.Service
 	traffic     *traffic.Manager
+	events      *eventbus.Bus
 	uploadsDir  string
 	uploadsStop chan struct{}
 }
@@ -98,6 +100,9 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 		}
 	}
 	s.traffic = traffic.NewManager(inv)
+	s.events = eventbus.New(cfg.Events, inv)
+	s.events.Start(context.Background())
+	s.mcp.SetEventBus(s.events)
 	s.antiA = newAntiAGuardian(s, inv, "config.yaml", cfg.AntiA)
 	s.antiA.start(context.Background())
 	uploadsDir := defaultUploadsDir
@@ -120,6 +125,9 @@ func (s *Server) Close() {
 	}
 	if s.antiA != nil {
 		s.antiA.stop()
+	}
+	if s.events != nil {
+		s.events.Close()
 	}
 	if s.uploadsStop != nil {
 		close(s.uploadsStop)
@@ -200,6 +208,17 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/network/traffic/interfaces", api(s.handleTrafficInterfaces))
 	s.mux.Handle("/api/network/traffic/snapshot", api(s.handleTrafficSnapshot))
 	s.mux.Handle("/api/network/traffic/stream", api(s.handleTrafficStream))
+	s.mux.Handle("/api/ai/capabilities", api(s.handleAICapabilities))
+	s.mux.Handle("/api/ai/setting", api(s.handleAISetting))
+	s.mux.Handle("/api/ai/linkage", api(s.handleAILinkage))
+	s.mux.Handle("/api/ai/event-push", api(s.handleAIEventPush))
+	s.mux.Handle("/api/raysharp/raw", api(s.handleRaysharpRaw))
+	s.mux.Handle("/api/events/status", api(s.handleEventsStatus))
+	s.mux.Handle("/api/events/config", api(s.handleEventsConfig))
+	s.mux.Handle("/api/events/list", api(s.handleEventsList))
+	s.mux.Handle("/api/events/stream", api(s.handleEventsStream))
+	s.mux.Handle("/api/events/poll", api(s.handleEventsPollNow))
+	s.mux.Handle("/api/events/webhook/raysharp", limitBody(8<<20, http.HandlerFunc(s.handleRaysharpWebhook)))
 	s.mux.HandleFunc("/logo.png", s.handleLogoFile)
 	s.mux.Handle("/api/upload-logo", api(s.handleUploadLogo))
 	s.mux.HandleFunc("/uploads/", s.handleUploads)
@@ -258,6 +277,8 @@ func viewerAllowed(path, method string) bool {
 	case "/api/network/traffic/interfaces", "/api/network/traffic/snapshot", "/api/network/traffic/stream":
 		return method == http.MethodGet
 	case "/api/redbida/catalog", "/api/redbida/time-status":
+		return method == http.MethodGet
+	case "/api/events/status", "/api/events/list", "/api/events/stream":
 		return method == http.MethodGet
 	case "/api/playback-token":
 		return true
@@ -376,6 +397,11 @@ func (s *Server) sessionRole(r *http.Request) string {
 				return "viewer"
 			}
 			return "admin"
+		}
+	}
+	if u, p, ok := r.BasicAuth(); ok {
+		if role, valid := s.checkCreds(u, p); valid {
+			return role
 		}
 	}
 	return ""

@@ -129,3 +129,18 @@ internal/
 
 ### Kết luận
 Dòng đầu ghi NVR Advantech trong tài liệu thực chất là phần cứng ODM chất lượng cao của **Raysharp Technology**, vận hành trên nền **NVR 5.0 UI**. Thiết bị tuân thủ đầy đủ các tiêu chuẩn quốc tế mở (RTSP, ONVIF, HTTP). Hệ thống `ksp-camera-auto` **hoàn toàn có đủ nền tảng kiến trúc để hỗ trợ 100%**, giúp mở rộng khả năng quản trị tập trung của hệ thống sang các dự án chính phủ và doanh nghiệp lớn một cách dễ dàng và tin cậy.
+
+---
+
+## 5. Kết Quả Kiểm Chứng Thực Nghiệm Trên Phần Cứng Raysharp `N10256N` & `VC31` (Cập nhật 26/10/2026)
+
+Qua khảo sát trực tiếp bằng công cụ dịch ngược **REA MCP (`analyze_javascript_application`)** và thực nghiệm trên đầu ghi **Raysharp `N10256N` (`192.168.2.101` / `192.168.1.234`)** cùng Camera IP AI **Raysharp `VC31.35.1.3.6` (`192.168.2.100`)** tại node `inut_207_70`:
+
+1. **Giao thức API chính thức (`HTTP API V1.0` / `V1.026`)**:
+   - Toàn bộ cấu hình, chụp ảnh Snapshot và quản lý AI đều đi qua `POST /API/<Module>/<SubModule>/<Action>` với xác thực **HTTP Digest (`/API/Web/Login` kèm `remote_terminal_info: "WEB,chrome"`) + Cookie `session_80` + Header `X-csrftoken`**.
+   - Xem đặc tả chi tiết đầy đủ tại [`docs/PROTOCOL-RAYSHARP.md`](./PROTOCOL-RAYSHARP.md).
+2. **Đường dẫn RTSP thực tế đã xác minh**:
+   - `rtsp://<user>:<pass>@<host>:554/rtsp/streaming?channel=<1..256>&subtype=<0|1|2>`
+   - *Gotcha quan trọng trên IPC lẻ*: Luôn dùng `channel=1` (1-based) thay vì `channel=0` để tránh lỗi RTSP `453 Not Enough Bandwidth` khi camera đang kết nối đồng thời với đầu ghi NVR.
+3. **Tích hợp Toàn diện vào `kspcam` & `inut-bida-hub`**:
+   - Driver thuần Go `internal/raysharp` hỗ trợ 100% tính năng: Probe, Apply (Codec H.264/H.265/H.264+/H.265+, Resolution, FPS, Bitrate, GOP), OSD, Snapshot Base64, NVR IPChannel Discovery, Network, Time/NTP, Storage, AutoReboot, Playback Search, cấu hình 13 thuật toán AI (`Event/ChnSmart`, `Event/SettingConfig`, `Event/AlarmLinkage`), truy vấn CSDL AI (`AI/FDGroup`, `AI/PlateGroup`, `AI/SnapedFaces`, `AI/SnapedObjects`), và thu thập sự kiện AI thời gian thực qua `Event/Check` + Webhook đẩy thẳng lên MQTT Event Bus và `inut-bida-hub`.

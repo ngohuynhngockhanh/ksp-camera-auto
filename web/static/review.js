@@ -77,7 +77,7 @@
     // any vendor camera.Open()'s Camera implements camera.Recorder for).
     const sel = $('rv-cam');
     try {
-      const devices = (await api('/api/cameras') || []).filter(c => c.vendor === 'dahua' || c.vendor === 'hikvision' || c.vendor === 'tiandy');
+      const devices = (await api('/api/cameras') || []).filter(c => c.vendor === 'dahua' || c.vendor === 'hikvision' || c.vendor === 'tiandy' || c.vendor === 'raysharp');
       const cams = [];
       for (const d of devices) {
         if (!d.isNvr) { cams.push(Object.assign({}, d, { reviewChannel: 0 })); continue; }

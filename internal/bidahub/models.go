@@ -348,6 +348,31 @@ type PasswordResetOTP struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// AIEvent represents a real-time AI detection or camera/NVR alarm event stored
+// in the Hub's bounded AI Event Center.
+type AIEvent struct {
+	ID            string         `json:"id"`
+	BoxID         string         `json:"box_id"`
+	BoxName       string         `json:"box_name,omitempty"`
+	ClubID        string         `json:"club_id,omitempty"`
+	ClubName      string         `json:"club_name,omitempty"`
+	DeviceID      string         `json:"device_id"`
+	DeviceName    string         `json:"device_name,omitempty"`
+	Vendor        string         `json:"vendor"`
+	Host          string         `json:"host"`
+	Channel       int            `json:"channel"`
+	ChannelKey    string         `json:"channel_key,omitempty"`
+	ChannelName   string         `json:"channel_name,omitempty"`
+	EventType     string         `json:"event_type"`
+	RawSubType    string         `json:"raw_sub_type,omitempty"`
+	Source        string         `json:"source"` // "http_push", "mqtt", "longpoll", "webhook"
+	Timestamp     string         `json:"timestamp"`
+	ReceivedAt    time.Time      `json:"received_at"`
+	SnapshotB64   string         `json:"snapshot_b64,omitempty"`
+	BackgroundB64 string         `json:"background_b64,omitempty"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
+}
+
 // StoreData represents the atomically persisted JSON payload on disk.
 type StoreData struct {
 	Version     int                           `json:"version"`
@@ -359,6 +384,7 @@ type StoreData struct {
 	Lockouts    map[string]*LockoutEntry      `json:"lockouts"`
 	Sessions    map[string]*Session           `json:"sessions"`
 	Enrollments map[string]*EnrollmentRequest `json:"enrollments"`
+	AIEvents    []*AIEvent                    `json:"ai_events,omitempty"`
 }
 
 // ServerConfig is a type alias for Config.

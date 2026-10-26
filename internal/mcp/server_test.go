@@ -143,6 +143,11 @@ func TestServer_ToolsList(t *testing.T) {
 		"kspcam_get_network_traffic",
 		"kspcam_inspect_firmware",
 		"kspcam_upgrade_firmware",
+		"kspcam_ai_get_capabilities",
+		"kspcam_ai_get_setting",
+		"kspcam_ai_set_setting",
+		"kspcam_raysharp_raw",
+		"kspcam_events_list",
 	}
 
 	if len(toolsList.Tools) != len(expectedTools) {

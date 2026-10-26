@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/eventbus"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/redbida"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/shinobi"
 )
@@ -21,6 +22,7 @@ type Server struct {
 	shinobi  *shinobi.Client
 	redbida  *redbida.Service
 	registry *Registry
+	events   *eventbus.Bus
 	mu       sync.RWMutex
 	sessions map[string]*Session
 }
@@ -55,7 +57,7 @@ func NewServer(cfg *config.Config, inv *config.Inventory, shinobiClient *shinobi
 	registerTrafficTools(registry, cfg, inv, nil)
 	registerFirmwareTools(registry, cfg, inv)
 
-	return &Server{
+	srv := &Server{
 		cfg:      cfg,
 		inv:      inv,
 		shinobi:  shinobiClient,
@@ -63,6 +65,22 @@ func NewServer(cfg *config.Config, inv *config.Inventory, shinobiClient *shinobi
 		registry: registry,
 		sessions: make(map[string]*Session),
 	}
+	registerAIAndEventTools(registry, cfg, inv, srv)
+	return srv
+}
+
+// SetEventBus binds an active EventBus instance to the MCP server.
+func (s *Server) SetEventBus(b *eventbus.Bus) {
+	s.mu.Lock()
+	s.events = b
+	s.mu.Unlock()
+}
+
+// EventBus returns the bound EventBus instance (if any).
+func (s *Server) EventBus() *eventbus.Bus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.events
 }
 
 // Registry returns the underlying Tool Registry.

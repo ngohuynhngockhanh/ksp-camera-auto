@@ -78,7 +78,9 @@ func ScanSubnet(ctx context.Context, cidr string) ([]Result, error) {
 		}
 		return nil, fmt.Errorf("nmap scan failed: %w", err)
 	}
-	return parseNmapOutput(string(out)), nil
+	results := parseNmapOutput(string(out))
+	enrichPort80Raysharp(ctx, results)
+	return results, nil
 }
 
 // parseNmapOutput extracts one Result per (host, open camera-port) pair from

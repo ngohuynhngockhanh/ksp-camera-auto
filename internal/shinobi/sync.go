@@ -96,6 +96,8 @@ func (c *Client) BuildMonitorConfig(d config.Device) MonitorConfig {
 		path = fmt.Sprintf("/Streaming/Channels/%d", channel*100+1)
 	case config.VendorTiandy:
 		path = fmt.Sprintf("/cam/realmonitor?channel=%d&subtype=0", channel)
+	case config.VendorRaysharp:
+		path = fmt.Sprintf("/rtsp/streaming?channel=%d&subtype=0", channel)
 	default:
 		// Default to Dahua/Hik standard path
 		path = fmt.Sprintf("/cam/realmonitor?channel=%d&subtype=0", channel)
@@ -115,6 +117,17 @@ func (c *Client) BuildMonitorConfig(d config.Device) MonitorConfig {
 			path)
 	} else {
 		autoHost = fmt.Sprintf("rtsp://%s:554%s", d.Host, path)
+	}
+
+	acodec := "copy"
+	streamAcodec := "copy"
+	recordAcodec := "aac"
+	if d.Vendor == config.VendorRaysharp {
+		// Raysharp hardware outputs G.711A/G.711U only (no hardware AAC);
+		// disable audio copy to preserve 0% CPU zero-transcoding.
+		acodec = "no"
+		streamAcodec = "no"
+		recordAcodec = "no"
 	}
 
 	return MonitorConfig{
@@ -137,11 +150,11 @@ func (c *Client) BuildMonitorConfig(d config.Device) MonitorConfig {
 			StreamType:               "hls",
 			StreamFlvType:            "ws",
 			StreamVcodec:             "copy",
-			StreamAcodec:             "copy",
+			StreamAcodec:             streamAcodec,
 			Vcodec:                   "copy",
-			Acodec:                   "copy",
+			Acodec:                   acodec,
 			RecordVcodec:             "copy",
-			RecordAcodec:             "aac",
+			RecordAcodec:             recordAcodec,
 			CustInput:                "",                    // Input flag để trống
 			CustStream:               "",                    // Stream flag để trống
 			CustRecord:               GoldenCustRecordFlags, // Recording flag chuẩn H.265 Fragmented MP4
@@ -271,8 +284,9 @@ func (c *Client) SyncFromShinobi(ctx context.Context, inv *config.Inventory) (*S
 			configPort = 37777
 		} else if vendor == config.VendorTiandy {
 			configPort = 554
+		} else if vendor == config.VendorRaysharp {
+			configPort = 80
 		}
-
 		// Check if host already exists in inventory with a different port (e.g. 8888 fallback)
 		if existing, ok := inv.FindByHost(host, 0); ok && existing.Port > 0 {
 			configPort = existing.Port
@@ -387,6 +401,8 @@ func detectVendorFromPath(path string) config.Vendor {
 	switch {
 	case strings.Contains(p, "/cam/realmonitor"):
 		return config.VendorDahua
+	case strings.Contains(p, "/rtsp/streaming"):
+		return config.VendorRaysharp
 	case strings.Contains(p, "/streaming/channels"):
 		return config.VendorHikvision
 	default:

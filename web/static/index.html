@@ -170,6 +170,7 @@
                   <button type="button" class="tab-btn" id="ce-tab-btn-audio" data-ce-tab="audio" data-testid="detail-tab-audio">Âm thanh</button>
                   <button type="button" class="tab-btn" id="ce-tab-btn-network" data-ce-tab="network" data-testid="detail-tab-network">Mạng</button>
                   <button type="button" class="tab-btn" id="ce-tab-btn-ptz" data-ce-tab="ptz" data-testid="detail-tab-ptz">PTZ</button>
+                  <button type="button" class="tab-btn" id="ce-tab-btn-ai" data-ce-tab="ai" data-testid="detail-tab-ai">🧠 AI &amp; Sự kiện</button>
                   <button type="button" class="tab-btn" id="ce-tab-btn-maint" data-ce-tab="maint" data-testid="detail-tab-maint">Bảo trì</button>
                 </div>
 
@@ -245,6 +246,11 @@
                   </div>
                 </div>
 
+                <div class="card detail-panel" id="ce-panel-ai" hidden>
+                  <div class="msg" id="ce-ai-msg"></div>
+                  <div id="ce-ai-body"><p class="muted">Đang tải thông tin AI...</p></div>
+                </div>
+
                 <div class="card detail-panel" id="ce-panel-maint" hidden>
                   <div id="net-maint" data-testid="detail-maint-body"><p class="muted">Đang tải...</p></div>
                 </div>
@@ -294,6 +300,7 @@
                   <option value="">Tất cả hãng</option>
                   <option value="dahua">Dahua / KBVision</option>
                   <option value="hikvision">Hikvision</option>
+                  <option value="raysharp">Raysharp / Advantech (AI)</option>
                   <option value="tiandy">Tiandy</option>
                 </select>
               </div>
@@ -1466,6 +1473,7 @@
           <select id="nvr-vendor">
             <option value="hikvision" selected>Hikvision</option>
             <option value="dahua">Dahua</option>
+            <option value="raysharp">Raysharp / Advantech</option>
             <option value="tiandy">Tiandy</option>
           </select>
         </div>
@@ -1542,6 +1550,7 @@
               <select id="f-vendor" name="vendor" data-testid="form-vendor">
                 <option value="dahua">Dahua / KBVision</option>
                 <option value="hikvision">Hikvision</option>
+                <option value="raysharp">Raysharp / Advantech (AI)</option>
                 <option value="tiandy">Tiandy (xem lại + xem IP)</option>
               </select>
             </div>

@@ -31,6 +31,10 @@ func main() {
 		mailAPIURL    = flag.String("mail-api-url", "", "ksp-pdfsign HTTP Mail API URL (overrides INUT_BIDA_SMTP_API_URL)")
 		mailAPIKey    = flag.String("mail-api-key", "", "ksp-pdfsign HTTP Mail API Key (overrides INUT_BIDA_SMTP_API_KEY)")
 		apiKey        = flag.String("api-key", "", "Hub API key (overrides INUT_BIDA_API_KEY)")
+		mqttBroker    = flag.String("mqtt-broker", "", "MQTT broker for AI/alarm event subscription (e.g. tcp://127.0.0.1:1883)")
+		mqttUser      = flag.String("mqtt-user", "", "MQTT username")
+		mqttPass      = flag.String("mqtt-pass", "", "MQTT password")
+		mqttTopic     = flag.String("mqtt-topic", "kspcam/events/#", "MQTT subscription topic filter")
 		showVersion   = flag.Bool("version", false, "Print version and exit")
 	)
 	flag.Parse()
@@ -56,6 +60,10 @@ func main() {
 		MailAPIURL:    *mailAPIURL,
 		MailAPIKey:    *mailAPIKey,
 		APIKey:        *apiKey,
+		MQTTBroker:    *mqttBroker,
+		MQTTUser:      *mqttUser,
+		MQTTPass:      *mqttPass,
+		MQTTTopic:     *mqttTopic,
 		PollInterval:  30 * time.Second,
 		DialTimeout:   1500 * time.Millisecond,
 	}

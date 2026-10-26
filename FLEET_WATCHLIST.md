@@ -602,8 +602,8 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Kích hoạt ZRAM Swap 1.9 GiB unconstrained (`lz4`), `vm.swappiness = 80`, `vm.vfs_cache_pressure = 100`, khóa cứng `kernel.sysrq = 0`
     - Cài đặt Storage Guard 15p chuẩn 90% $\rightarrow$ 80% (`/media/usb1/arenaTuoIL`) + Smart Watchdog 60s
     - Cài đặt iptables redirect port 80 -> 2023
-    - PM2 Memory Guard: `camera: 170M` (6 camera) | `inut: 280M` | `ota-mqtt: 120M` với log trỏ `/dev/null`
-  - Trạng thái: Đủ 11 tiến trình FFmpeg và go2rtc, cả 6 camera đã phục hồi và đang ghi hình video mới liên tục, RAM khả dụng 1.3 GiB
+    - PM2 Memory Guard (+20% an toàn): `camera: 240M` (6 camera, nâng từ `170M`) | `inut: 336M` (nâng từ `280M`) | `ota-mqtt: 144M` (nâng từ `120M`) với log trỏ `/dev/null`
+  - Trạng thái: Toàn bộ camera đang bật điện ghi hình video mới liên tục (0 restart do chạm trần RAM), RAM khả dụng 1.1 GiB, ZRAM 1.9 GiB trống 99%
 
 - [x] **Node `inut_207_44`** (MIAPool Arena — `77.88.207.44`, group `mia`)
   - Phần cứng: Rockchip (armv7l, kernel 6.6), RAM 1.9 GiB, Thẻ nhớ 58 GB F2FS (`/dev/mmcblk0p1`), Cổng mạng 100Mb/s Fast Ethernet (`end0`)

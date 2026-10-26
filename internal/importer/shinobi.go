@@ -94,6 +94,8 @@ func ParseShinobi(data []byte, hikPort, dahuaPort int) (Result, error) {
 		port := hikPort
 		if vendor == config.VendorDahua {
 			port = dahuaPort
+		} else if vendor == config.VendorRaysharp {
+			port = 80
 		}
 		name := m.Name
 		if name == "" {
@@ -196,6 +198,8 @@ func detectVendor(path string) config.Vendor {
 	switch {
 	case strings.Contains(p, "/cam/realmonitor"):
 		return config.VendorDahua
+	case strings.Contains(p, "/rtsp/streaming"):
+		return config.VendorRaysharp
 	case strings.Contains(p, "/streaming/channels"):
 		return config.VendorHikvision
 	default:

@@ -44,7 +44,7 @@ const HASH_ALIASES = {
 };
 const CAMERA_TASKS = ['list', 'bulk', 'nvr', 'anti-a', 'traffic', 'results'];
 // Tabs of the camera detail page (#cameras/cam/<encodedId>/<tab>).
-const DETAIL_TABS = ['osd', 'picture', 'video', 'audio', 'network', 'ptz', 'maint'];
+const DETAIL_TABS = ['osd', 'picture', 'video', 'audio', 'network', 'ptz', 'ai', 'maint'];
 
 // streamPost POSTs a JSON body and consumes the "data: <event>\n\n" SSE
 // stream, rendering each event to the live log + progress bar. Used by
@@ -173,7 +173,7 @@ function rememberProbeResult(id, payload) {
 }
 
 function cameraSerialHtml(c) {
-  if (c.vendor !== 'dahua') return '<span class="muted">–</span>';
+  if (c.vendor !== 'dahua' && c.vendor !== 'raysharp') return '<span class="muted">–</span>';
   if (!c.serialNumber) return '<span class="muted">chưa dò SN</span>';
   return `<div class="camera-serial"><code>${escapeHtml(c.serialNumber)}</code>` +
     `<div class="camera-serial-qr" data-testid="camera-serial-qr" data-serial="${escapeHtml(c.serialNumber)}"></div></div>`;
@@ -614,7 +614,7 @@ function resolveLegacyHash() {
     document.getElementById('nvr-port').value = nvr ? nvr.port : 37777;
     document.getElementById('nvr-user').value = nvr ? nvr.username : 'admin';
     document.getElementById('nvr-pass').value = '';
-    document.getElementById('nvr-vendor').value = (nvr && (nvr.vendor === 'dahua' || nvr.vendor === 'hikvision')) ? nvr.vendor : 'hikvision';
+    document.getElementById('nvr-vendor').value = (nvr && ['dahua', 'hikvision', 'raysharp', 'tiandy'].includes(nvr.vendor)) ? nvr.vendor : 'hikvision';
     scanRows = [];
     document.getElementById('nvr-tbody').innerHTML = '<tr><td colspan="4" class="empty-hint">Nhập đầu ghi rồi bấm "Quét đầu ghi".</td></tr>';
     document.getElementById('nvr-save-btn').disabled = true;
@@ -1134,18 +1134,18 @@ function formatDiskCapacity(n) {
 // vendors), plus storage status/format and scheduled auto-reboot (Dahua only).
 async function renderMaintenance(c) {
   const el = document.getElementById('net-maint');
-  const isDahua = c.vendor === 'dahua';
+  const supportsMaint = c.vendor === 'dahua' || c.vendor === 'raysharp';
   let html = `<div class="row"><button class="btn btn-danger" type="button" id="maint-reboot-btn">Khởi động lại camera</button></div>`;
-  if (isDahua) {
+  if (supportsMaint) {
     html += `<div class="card-title section-gap">${c.isNvr ? 'Ổ cứng đầu ghi (NVR)' : 'Thẻ nhớ / Lưu trữ'}</div><div id="maint-storage"><p class="muted">Đang đọc bộ nhớ...</p></div>`;
-    if (c.isNvr) html += `<div class="card-title section-gap">Tình trạng ghi hình</div><div id="maint-record-health"><p class="muted">Đang kiểm tra bản ghi gần nhất...</p></div>`;
+    if (c.isNvr && c.vendor === 'dahua') html += `<div class="card-title section-gap">Tình trạng ghi hình</div><div id="maint-record-health"><p class="muted">Đang kiểm tra bản ghi gần nhất...</p></div>`;
     html += `<div class="card-title section-gap">Ngày giờ &amp; NTP</div><div id="maint-device-time"><p class="muted">Đang đọc đồng hồ thiết bị...</p></div>`;
     html += `<div class="card-title section-gap">Tự khởi động lại</div><div id="maint-autoreboot"><p class="muted">Đang đọc lịch...</p></div>`;
     html += `<div class="card-title section-gap">Xem lại video</div><div id="maint-playback"></div>`;
   }
   el.innerHTML = html;
   document.getElementById('maint-reboot-btn').addEventListener('click', () => rebootDevice(c));
-  if (!isDahua) return;
+  if (!supportsMaint) return;
   const q = `id=${encodeURIComponent(c.id)}&timeoutSeconds=${timeoutSec()}`;
   // Storage
   try {
@@ -2256,7 +2256,7 @@ document.getElementById('cd-live-fullscreen')?.addEventListener('click', () => {
 
 // Lazy-load sentinels for the detail page's data tabs (null until the tab is
 // first opened for the current camera; reset in openCameraDetail).
-let videoPayload = null, audioPayload = null, networkPayload = null, maintPayload = null;
+let videoPayload = null, audioPayload = null, networkPayload = null, maintPayload = null, aiPayload = null;
 
 // switchCeTab shows one detail panel and lazily fetches its data. The live
 // preview is NOT stopped here — it belongs to the page, not to a tab.
@@ -2280,6 +2280,10 @@ function switchCeTab(tab) {
     networkPayload = {};
     const cam = cameras.find(x => x.id === channelEditTile.camId);
     if (cam) openNetworkCard(cam);
+  }
+  if (tab === 'ai' && !aiPayload) {
+    aiPayload = {};
+    loadAITab(channelEditTile);
   }
   if (tab === 'maint' && !maintPayload) {
     maintPayload = {};
@@ -2475,7 +2479,7 @@ async function openCameraDetail(sel) {
     detailLive.stop();
     channelEditTile = { camId: cam.id, camName: cam.name || cam.host, channel: 0, stream: 0 };
     picturePayload = null;
-    videoPayload = null; audioPayload = null; networkPayload = null; maintPayload = null;
+    videoPayload = null; audioPayload = null; networkPayload = null; maintPayload = null; aiPayload = null;
     closeNetworkCard();
     document.getElementById('detail-name').textContent = cam.name || cam.host;
     document.getElementById('detail-meta').textContent =
@@ -2508,15 +2512,17 @@ function closeCameraDetail() {
 // The modal used to just hide them, so a feature silently vanished with no
 // hint that it exists at all for other vendors.
 function applyDetailCapabilities(cam) {
-  const isDahua = cam.vendor === 'dahua';
-  const canEncode = ['dahua', 'hikvision', 'tiandy'].includes(cam.vendor);
-  const canNetwork = ['dahua', 'hikvision', 'tiandy'].includes(cam.vendor);
-  const dahuaOnly = `Chỉ Dahua/KBVision hỗ trợ qua DVRIP — camera này là ${cam.vendor}.`;
+  const isFullVendor = cam.vendor === 'dahua' || cam.vendor === 'raysharp';
+  const isAI = cam.vendor === 'raysharp';
+  const canEncode = ['dahua', 'hikvision', 'tiandy', 'raysharp'].includes(cam.vendor);
+  const canNetwork = ['dahua', 'hikvision', 'tiandy', 'raysharp'].includes(cam.vendor);
+  const fullOnly = `Chỉ Dahua/KBVision và Raysharp hỗ trợ — camera này là ${cam.vendor}.`;
   const caps = {
-    picture: [isDahua, dahuaOnly],
-    ptz: [isDahua, dahuaOnly],
-    audio: [isDahua, dahuaOnly],
-    maint: [isDahua, dahuaOnly],
+    picture: [isFullVendor, fullOnly],
+    ptz: [isFullVendor, fullOnly],
+    audio: [isFullVendor, fullOnly],
+    ai: [isAI, `Chỉ thiết bị Raysharp AI hỗ trợ tab AI & Sự kiện — camera này là ${cam.vendor}.`],
+    maint: [isFullVendor, fullOnly],
     video: [canEncode, `Chưa hỗ trợ đọc/ghi cấu hình mã hoá cho ${cam.vendor}.`],
     network: [canNetwork, `Chưa hỗ trợ đọc/ghi cấu hình mạng cho ${cam.vendor}.`],
   };
@@ -2570,7 +2576,7 @@ document.getElementById('detail-channel').addEventListener('change', (ev) => {
   if (!channelEditTile) return;
   channelEditTile.channel = parseInt(ev.target.value, 10) || 0;
   // Every per-channel payload is now stale.
-  picturePayload = null; videoPayload = null; audioPayload = null;
+  picturePayload = null; videoPayload = null; audioPayload = null; aiPayload = null;
   const wasLive = detailLive.running();
   detailLive.stop();
   loadCePreview(channelEditTile, true);
@@ -3201,6 +3207,7 @@ function scanVendorClass(value) {
         /(^|[^a-z0-9])general([^a-z0-9]|$)/.test(text))) return 'dahua';
   if (/(^|[^a-z0-9])hikvision([^a-z0-9]|$)/.test(text) || text === 'hik' || text.startsWith('hik-')) return 'hikvision';
   if (/(^|[^a-z0-9])tiandy([^a-z0-9]|$)/.test(text)) return 'tiandy';
+  if (/(^|[^a-z0-9])(raysharp|advantech|n10256|vc31)([^a-z0-9]|$)/.test(text)) return 'raysharp';
   return '';
 }
 
@@ -4616,6 +4623,166 @@ function wireFirmwareUpgrader() {
   document.getElementById('fw-confirm-bootloader')?.addEventListener('change', updateFirmwareButtonsState);
   document.getElementById('fw-dryrun-btn')?.addEventListener('click', () => executeFirmwareAction(true));
   document.getElementById('fw-execute-btn')?.addEventListener('click', () => executeFirmwareAction(false));
+}
+
+async function loadAITab(tile) {
+  const body = document.getElementById('ce-ai-body');
+  const msg = document.getElementById('ce-ai-msg');
+  if (!body || !tile) return;
+  body.innerHTML = '<span class="spinner"></span>';
+  if (msg) { msg.textContent = ''; msg.className = 'msg'; }
+  try {
+    const [capRes, evRes] = await Promise.all([
+      api(`/api/ai/capabilities?id=${encodeURIComponent(tile.camId)}`),
+      api(`/api/events/list?device_id=${encodeURIComponent(tile.camId)}&limit=15`),
+    ]);
+    const chans = (capRes && capRes.channels) || [];
+    const chObj = chans.find(c => c.channel === tile.channel) || chans[0];
+    const abilities = (chObj && chObj.abilities) || [];
+    const events = (evRes && evRes.events) || [];
+    const evStatus = (evRes && evRes.status) || {};
+
+    let html = `
+      <div class="card-title">1. Trạng thái Thuật toán AI trên Kênh K${tile.channel + 1} (${escapeHtml((chObj && chObj.channelKey) || ('CH' + (tile.channel + 1)))})</div>
+      <p class="card-sub">Bấm vào từng thuật toán để bật/tắt công tắc (switch), chỉnh độ nhạy (sensitivity) và liên kết báo động.</p>
+    `;
+    if (!abilities.length) {
+      html += `<p class="muted">Không có thuật toán AI nào khả dụng trên kênh này.</p>`;
+    } else {
+      html += `<table class="mini-table"><thead><tr><th>Nhóm</th><th>Thuật toán</th><th>Trạng thái</th><th>Loại trừ (Mutex)</th><th>Thao tác</th></tr></thead><tbody>`;
+      for (const ab of abilities) {
+        const badge = ab.enabled ? '<span class="badge ok">Đang BẬT (On)</span>' : '<span class="badge">Tắt (Off)</span>';
+        const mut = (ab.mutualAbility && ab.mutualAbility.length) ? escapeHtml(ab.mutualAbility.join(', ')) : '—';
+        html += `<tr>
+          <td>${escapeHtml(ab.category || '')}</td>
+          <td><code>${escapeHtml(ab.ability)}</code></td>
+          <td>${badge}</td>
+          <td class="muted">${mut}</td>
+          <td><button class="btn btn-sm btn-secondary" type="button" data-ai-ability="${escapeHtml(ab.ability)}">Cấu hình</button></td>
+        </tr>`;
+      }
+      html += `</tbody></table>`;
+    }
+
+    html += `
+      <div id="ce-ai-ability-editor" class="section-gap"></div>
+      <div class="card-title section-gap">2. Luồng Sự kiện AI &amp; MQTT Event Bus</div>
+      <div class="row" style="margin-bottom:8px;">
+        <span class="badge info">Tổng sự kiện: ${evStatus.total_events || 0}</span>
+        <span class="badge ${evStatus.mqtt_connected ? 'ok' : ''}">MQTT: ${escapeHtml(evStatus.mqtt_broker || '127.0.0.1:12369')} (${evStatus.mqtt_published || 0} đã bắn)</span>
+        <button class="btn btn-sm btn-primary" type="button" id="ce-ai-poll-now">🔄 Quét Event/Check Ngay</button>
+      </div>
+    `;
+    if (!events.length) {
+      html += `<p class="muted">Chưa có sự kiện AI nào được ghi nhận trong bộ nhớ.</p>`;
+    } else {
+      html += `<table class="mini-table"><thead><tr><th>Thời gian</th><th>Kênh</th><th>Loại sự kiện</th><th>Nguồn</th></tr></thead><tbody>`;
+      for (const ev of events) {
+        html += `<tr>
+          <td><code>${escapeHtml(ev.timestamp || ev.received_at || '')}</code></td>
+          <td>K${ev.channel || 1} (${escapeHtml(ev.channel_key || '')})</td>
+          <td><b>${escapeHtml(ev.event_type)}</b> ${ev.raw_sub_type ? `<span class="muted">(${escapeHtml(ev.raw_sub_type)})</span>` : ''}</td>
+          <td>${escapeHtml(ev.source || '')}</td>
+        </tr>`;
+      }
+      html += `</tbody></table>`;
+    }
+
+    html += `
+      <div class="card-title section-gap">3. Gọi Trực Tiếp Raysharp Raw API (/API/*)</div>
+      <div class="row">
+        <div class="field field-grow"><label>Đường dẫn API</label><input id="ce-ai-raw-path" value="AI/Model/Get" placeholder="AI/FDGroup/GetId hoặc SystemInfo/Base/Get"></div>
+        <div class="field field-grow"><label>JSON Data</label><input id="ce-ai-raw-data" value='{}'></div>
+        <button class="btn btn-secondary" type="button" id="ce-ai-raw-send">Gửi RPC</button>
+      </div>
+      <pre id="ce-ai-raw-out" style="max-height:220px;overflow:auto;background:var(--bg-elev);padding:8px;border-radius:6px;font-size:12px;" hidden></pre>
+    `;
+
+    body.innerHTML = html;
+
+    body.querySelectorAll('[data-ai-ability]').forEach(btn => {
+      btn.addEventListener('click', () => openAIAbilityEditor(tile, btn.dataset.aiAbility));
+    });
+    document.getElementById('ce-ai-poll-now')?.addEventListener('click', async (ev) => {
+      ev.target.disabled = true;
+      try {
+        await api('/api/events/poll', { method: 'POST', body: '{}' });
+        await loadAITab(tile);
+      } catch (e) {
+        if (msg) { msg.textContent = 'Lỗi quét sự kiện: ' + e.message; msg.className = 'msg err'; }
+      } finally {
+        ev.target.disabled = false;
+      }
+    });
+    document.getElementById('ce-ai-raw-send')?.addEventListener('click', async () => {
+      const p = document.getElementById('ce-ai-raw-path').value.trim();
+      const dRaw = document.getElementById('ce-ai-raw-data').value.trim() || '{}';
+      const outEl = document.getElementById('ce-ai-raw-out');
+      outEl.hidden = false;
+      outEl.textContent = 'Đang gửi...';
+      try {
+        const parsed = JSON.parse(dRaw);
+        const res = await api('/api/raysharp/raw', { method: 'POST', body: JSON.stringify({ id: tile.camId, path: p, data: parsed, timeoutSeconds: timeoutSec() }) });
+        outEl.textContent = JSON.stringify(res, null, 2);
+      } catch (e) {
+        outEl.textContent = 'Lỗi: ' + e.message;
+      }
+    });
+  } catch (e) {
+    body.innerHTML = '';
+    if (msg) { msg.textContent = 'Lỗi tải AI: ' + e.message; msg.className = 'msg err'; }
+  }
+}
+
+async function openAIAbilityEditor(tile, ability) {
+  const ed = document.getElementById('ce-ai-ability-editor');
+  const msg = document.getElementById('ce-ai-msg');
+  if (!ed) return;
+  ed.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await api(`/api/ai/setting?id=${encodeURIComponent(tile.camId)}&channel=${tile.channel}&ability=${encodeURIComponent(ability)}`);
+    const data = (res && res.data) || {};
+    const sw = !!data.switch;
+    const sens = data.sensitivity != null ? data.sensitivity : 60;
+    ed.innerHTML = `
+      <fieldset class="ce-vid-stream">
+        <legend>Cấu hình AI: ${escapeHtml(ability)} (Kênh K${tile.channel + 1})</legend>
+        <div class="row">
+          <label class="checkbox-row"><input type="checkbox" id="ai-ed-switch" ${sw ? 'checked' : ''}> Bật thuật toán (${escapeHtml(ability)})</label>
+          <div class="field field-sm"><label>Độ nhạy (1-100)</label><input type="number" id="ai-ed-sens" min="1" max="100" value="${sens}"></div>
+          <button class="btn btn-primary" type="button" id="ai-ed-save">Lưu cấu hình AI</button>
+        </div>
+        <details style="margin-top:8px;"><summary class="muted">Xem toàn bộ JSON thông số (${escapeHtml(ability)})</summary>
+          <pre style="max-height:200px;overflow:auto;font-size:12px;">${escapeHtml(JSON.stringify(data, null, 2))}</pre>
+        </details>
+      </fieldset>
+    `;
+    document.getElementById('ai-ed-save')?.addEventListener('click', async (ev) => {
+      ev.target.disabled = true;
+      const newSw = document.getElementById('ai-ed-switch').checked;
+      const newSens = parseInt(document.getElementById('ai-ed-sens').value, 10) || 60;
+      try {
+        await api('/api/ai/setting', {
+          method: 'POST',
+          body: JSON.stringify({
+            id: tile.camId,
+            channel: tile.channel,
+            ability,
+            changes: { switch: newSw, sensitivity: newSens },
+            timeoutSeconds: timeoutSec(),
+          }),
+        });
+        if (msg) { msg.textContent = `Đã lưu cấu hình AI ${ability}.`; msg.className = 'msg ok'; }
+        await loadAITab(tile);
+      } catch (e) {
+        if (msg) { msg.textContent = 'Lỗi lưu AI: ' + e.message; msg.className = 'msg err'; }
+      } finally {
+        ev.target.disabled = false;
+      }
+    });
+  } catch (e) {
+    ed.innerHTML = `<p class="muted">Lỗi đọc cấu hình ${escapeHtml(ability)}: ${escapeHtml(e.message)}</p>`;
+  }
 }
 
 init();

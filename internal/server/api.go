@@ -204,8 +204,8 @@ func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "host is required")
 		return
 	}
-	if req.Vendor != config.VendorDahua && req.Vendor != config.VendorHikvision && req.Vendor != config.VendorTiandy {
-		writeErr(w, http.StatusBadRequest, "vendor must be dahua, hikvision or tiandy")
+	if req.Vendor != config.VendorDahua && req.Vendor != config.VendorHikvision && req.Vendor != config.VendorTiandy && req.Vendor != config.VendorRaysharp {
+		writeErr(w, http.StatusBadRequest, "vendor must be dahua, hikvision, tiandy or raysharp")
 		return
 	}
 	if req.Port == 0 {
@@ -214,6 +214,8 @@ func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
 			req.Port = s.cfg.Defaults.DahuaPort
 		case config.VendorTiandy:
 			req.Port = s.cfg.Defaults.TiandyPort
+		case config.VendorRaysharp:
+			req.Port = s.cfg.Defaults.RaysharpPort
 		default:
 			req.Port = s.cfg.Defaults.HikvisionPort
 		}

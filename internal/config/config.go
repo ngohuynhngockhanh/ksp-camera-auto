@@ -17,8 +17,9 @@ type Vendor string
 
 const (
 	VendorHikvision Vendor = "hikvision"
-	VendorDahua     Vendor = "dahua"  // covers KBVision (Dahua OEM)
-	VendorTiandy    Vendor = "tiandy" // Dahua-lineage RTSP; review-only over RTSP+ONVIF (pure-Go, no NetSDK)
+	VendorDahua     Vendor = "dahua"    // covers KBVision (Dahua OEM)
+	VendorTiandy    Vendor = "tiandy"   // Dahua-lineage RTSP; review-only over RTSP+ONVIF (pure-Go, no NetSDK)
+	VendorRaysharp  Vendor = "raysharp" // Raysharp / Advantech NVR & AI IP Camera (HTTP JSON API V1.0)
 )
 
 // Server holds web UI listener + login settings.
@@ -48,9 +49,10 @@ type Defaults struct {
 	// TiandyPort is the primary/control port stored for a Tiandy device. Tiandy
 	// playback rides RTSP (always :554) and IP-config rides ONVIF (:8082); this
 	// default (554) is what a bare Tiandy entry gets when a port is omitted.
-	TiandyPort int    `yaml:"tiandy_port"`
-	Username   string `yaml:"username"`
-	Password   string `yaml:"password"`
+	TiandyPort   int    `yaml:"tiandy_port"`
+	RaysharpPort int    `yaml:"raysharp_port"`
+	Username     string `yaml:"username"`
+	Password     string `yaml:"password"`
 	// TimeoutSeconds bounds one device operation; higher helps slow multi-channel
 	// NVRs. The web UI can override it per request.
 	TimeoutSeconds int `yaml:"timeout_seconds"`
@@ -156,6 +158,25 @@ type AntiAConfig struct {
 	GOP              int    `yaml:"gop,omitempty"`
 }
 
+// EventsConfig configures the real-time AI/Alarm Event Bus (Long-Polling +
+// Inbound Webhook + MQTT Event Publisher + Hub HTTP/Yamux Pusher).
+type EventsConfig struct {
+	Enabled             bool   `yaml:"enabled"`
+	BoxID               string `yaml:"box_id"`
+	PollIntervalSeconds int    `yaml:"poll_interval_seconds"` // Default 2
+	MQTTEnabled         bool   `yaml:"mqtt_enabled"`
+	MQTTBrokerHost      string `yaml:"mqtt_broker_host"`
+	MQTTBrokerPort      int    `yaml:"mqtt_broker_port"`
+	MQTTUsername        string `yaml:"mqtt_username,omitempty"`
+	MQTTPassword        string `yaml:"mqtt_password,omitempty"`
+	MQTTTopicPrefix     string `yaml:"mqtt_topic_prefix"`     // Default "kspcam/events"
+	MQTTIncludeSnapshot bool   `yaml:"mqtt_include_snapshot"` // Include Base64 thumbnail in MQTT JSON
+	HubPushEnabled      bool   `yaml:"hub_push_enabled"`
+	HubURL              string `yaml:"hub_url,omitempty"`
+	HubSecret           string `yaml:"hub_secret,omitempty"`
+	MaxRetainedEvents   int    `yaml:"max_retained_events"` // Default 200
+}
+
 // Config is the top-level configuration document.
 type Config struct {
 	Server      Server        `yaml:"server"`
@@ -165,6 +186,7 @@ type Config struct {
 	MCP         MCPConfig     `yaml:"mcp"`
 	Redbida     RedbidaConfig `yaml:"redbida"`
 	AntiA       AntiAConfig   `yaml:"anti_a"`
+	Events      EventsConfig  `yaml:"events"`
 }
 
 // Default returns a Config populated with built-in defaults.
@@ -182,6 +204,7 @@ func Default() Config {
 			HikvisionPort:  8000,
 			DahuaPort:      37777,
 			TiandyPort:     554,
+			RaysharpPort:   80,
 			Username:       "admin",
 			Password:       "smarthome12345",
 			TimeoutSeconds: 30,
@@ -212,6 +235,17 @@ func Default() Config {
 			IntervalMinutes: 30,
 			Mode:            "random",
 			BitrateKbps:     1280,
+		},
+		Events: EventsConfig{
+			Enabled:             true,
+			PollIntervalSeconds: 2,
+			MQTTEnabled:         false,
+			MQTTBrokerHost:      "127.0.0.1",
+			MQTTBrokerPort:      12369,
+			MQTTTopicPrefix:     "kspcam/events",
+			MQTTIncludeSnapshot: false,
+			HubPushEnabled:      false,
+			MaxRetainedEvents:   200,
 		},
 	}
 }
@@ -276,6 +310,9 @@ func (c *Config) applyDefaults() {
 	if c.Defaults.TiandyPort == 0 {
 		c.Defaults.TiandyPort = d.Defaults.TiandyPort
 	}
+	if c.Defaults.RaysharpPort == 0 {
+		c.Defaults.RaysharpPort = d.Defaults.RaysharpPort
+	}
 	if c.Defaults.Username == "" {
 		c.Defaults.Username = d.Defaults.Username
 	}
@@ -329,5 +366,20 @@ func (c *Config) applyDefaults() {
 	}
 	if c.AntiA.BitrateKbps <= 0 {
 		c.AntiA.BitrateKbps = d.AntiA.BitrateKbps
+	}
+	if c.Events.PollIntervalSeconds <= 0 {
+		c.Events.PollIntervalSeconds = d.Events.PollIntervalSeconds
+	}
+	if c.Events.MQTTBrokerHost == "" {
+		c.Events.MQTTBrokerHost = d.Events.MQTTBrokerHost
+	}
+	if c.Events.MQTTBrokerPort == 0 {
+		c.Events.MQTTBrokerPort = d.Events.MQTTBrokerPort
+	}
+	if c.Events.MQTTTopicPrefix == "" {
+		c.Events.MQTTTopicPrefix = d.Events.MQTTTopicPrefix
+	}
+	if c.Events.MaxRetainedEvents <= 0 {
+		c.Events.MaxRetainedEvents = d.Events.MaxRetainedEvents
 	}
 }

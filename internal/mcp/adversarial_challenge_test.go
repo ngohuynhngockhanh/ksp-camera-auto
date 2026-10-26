@@ -167,8 +167,8 @@ func TestAdversarialChallenge_RedbidaJSONRPC_AllTools(t *testing.T) {
 		if !ok {
 			t.Fatalf("invalid result type: %T", resp.Result)
 		}
-		if len(listRes.Tools) != 37 {
-			t.Errorf("expected 37 tools, got %d", len(listRes.Tools))
+		if len(listRes.Tools) != 42 {
+			t.Errorf("expected 42 tools, got %d", len(listRes.Tools))
 		}
 
 		expectedRedbida := []string{

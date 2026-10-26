@@ -14,6 +14,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/dahua"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/hik"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/raysharp"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/tiandy"
 )
 
@@ -319,6 +320,24 @@ type PTZControl interface {
 	PTZMove(ctx context.Context, channel int, code string, speed int, start bool) error
 }
 
+// AIConfig is implemented by cameras/NVRs that expose edge AI & Smart Event
+// capabilities (FaceDetection, HumanVehicle, LicensePlate, LineCrossing,
+// Intrusion, Alarm Linkage, and webhook push configuration).
+type AIConfig interface {
+	GetChnSmart(ctx context.Context) ([]raysharp.ChannelSmartSummary, error)
+	GetAISetting(ctx context.Context, channel int, ability string) (data map[string]any, rng map[string]any, err error)
+	SetAISetting(ctx context.Context, channel int, ability string, changes map[string]any) (map[string]any, error)
+	GetAIAlarmLinkage(ctx context.Context, channel int, ability string) (map[string]any, error)
+	SetAIAlarmLinkage(ctx context.Context, channel int, ability string, changes map[string]any) (map[string]any, error)
+	ConfigureEventPush(ctx context.Context, enable bool, targetHost string, targetPort int, targetPath string) error
+}
+
+// RawRPC is implemented by cameras/NVRs that allow direct pass-through RPC/API
+// invocation (e.g. Raysharp's 200+ /API/<Path> JSON endpoints).
+type RawRPC interface {
+	CallRaw(ctx context.Context, apiPath string, reqData any) (map[string]any, error)
+}
+
 // Open dials the device according to its configured vendor and returns a
 // Camera implementation.
 //
@@ -373,6 +392,9 @@ func Open(ctx context.Context, d config.Device, timeout time.Duration) (Camera, 
 			device:  d,
 			timeout: timeout,
 		}, nil
+	case config.VendorRaysharp:
+		cl := raysharp.New(d.Host, d.Port, d.Username, d.Password, timeout)
+		return &raysharpCamera{client: cl, device: d, timeout: timeout}, nil
 	default:
 		return nil, fmt.Errorf("unknown vendor %q", d.Vendor)
 	}

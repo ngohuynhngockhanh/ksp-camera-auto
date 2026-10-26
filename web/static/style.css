@@ -1887,6 +1887,10 @@ details.danger-zone[open] > summary::before { content: '▾ '; }
   color: #34d399;
   border-color: rgba(52, 211, 153, 0.4);
 }
+.cam-card-vendor-badge.vendor-raysharp {
+  color: #c084fc;
+  border-color: rgba(192, 132, 252, 0.45);
+}
 .cam-card-body {
   padding: 14px;
   display: flex;

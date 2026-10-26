@@ -34,6 +34,7 @@ type Store struct {
 	lockouts    map[string]*LockoutEntry
 	sessions    map[string]*Session
 	enrollments map[string]*EnrollmentRequest
+	aiEvents    []*AIEvent
 }
 
 // NewStore loads state from dataPath if present, seeding from watchlistPath (or built-in catalog) and persisting atomically.
@@ -73,6 +74,9 @@ func NewStore(dataPath string, watchlistPath string) (*Store, error) {
 				}
 				if st.Enrollments != nil {
 					s.enrollments = st.Enrollments
+				}
+				if st.AIEvents != nil {
+					s.aiEvents = st.AIEvents
 				}
 				loaded = true
 			}
@@ -253,6 +257,7 @@ func (s *Store) saveLocked() error {
 		Lockouts:    s.lockouts,
 		Sessions:    s.sessions,
 		Enrollments: s.enrollments,
+		AIEvents:    s.aiEvents,
 	}
 	payload, err := json.MarshalIndent(&st, "", "  ")
 	if err != nil {

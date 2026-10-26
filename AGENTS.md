@@ -429,6 +429,25 @@ Thiết bị Tiandy trong dự án được điều khiển theo mô hình 2 t�
 
 ---
 
+### 3.4b Raysharp NVR & AI IP Camera (`internal/raysharp` — HTTP JSON API V1.0)
+
+Dòng đầu ghi AI NVR (`N10256N` / `RS-SM-2426`) và Camera IP AI (`VC31` / `6M019A`) của Raysharp Technology (OUI MAC `38:24:F1`) sử dụng giao thức REST JSON `POST /API/<Module>/<SubModule>/<Action>` trên cổng HTTP 80 / HTTPS 443:
+1. **Xác thực 3 lớp (Digest + Session Cookie + CSRF Token)**:
+   - Bước 1: `POST /API/Web/Login` với `{"data":{"remote_terminal_info":"WEB,chrome"}}` nhận `401 WWW-Authenticate: Digest`.
+   - Bước 2: Gửi lại `POST /API/Web/Login` kèm Digest header (`MD5` hoặc `SHA-256`), trích xuất đồng thời `Set-Cookie: session_80=<hex>` và Response Header `X-csrftoken: <hex>`.
+   - Bước 3: Mọi request `/API/*` đều đính kèm `Cookie` + `X-csrftoken` (nếu thiếu sẽ bị từ chối với lỗi `400 {"error_code":"one_IE"}`). Đóng phiên bằng `POST /API/Web/Logout`.
+2. **Cấu hình Luồng, OSD, Snapshot & Kênh NVR**:
+   - Luồng chính/phụ: `/API/StreamConfig/MainStream/{Range,Get,Set}` và `SubStream/{Range,Get,Set}` (`video_encode_type`: `"H.264"`, `"H.265"`, `"H.264+"`, `"H.265+"`; `resolution`: `"2880 x 1620"`).
+   - Snapshot: `POST /API/Snapshot/Get` trả về JPEG Base64 trong `data.img_data`.
+   - Quét kênh IP trên NVR: `POST /API/ChannelConfig/IPChannel/Get`.
+   - Đường dẫn RTSP chuẩn (Port 554): `rtsp://<user>:<pass>@<host>:554/rtsp/streaming?channel=<1..256>&subtype=<0|1|2>` (luôn dùng `channel=1` 1-based cho IPC đơn lẻ để tránh lỗi RTSP `453 Not Enough Bandwidth`).
+3. **Cấu hình AI & Luồng Sự Kiện MQTT / Hub (`internal/eventbus`)**:
+   - Quản lý 13 thuật toán AI tại biên (`FaceDetection`, `HumanVehicle`, `LicensePlate`, `LineCrossing`, `Intrusion`...) qua `/API/Event/ChnSmart/Get`, `/API/Event/SettingConfig/{Range,Get,Set}`, `/API/Event/AlarmLinkage/{Get,Set}` và cơ sở dữ liệu AI trên NVR (`/API/AI/*`).
+   - Thu thập sự kiện AI thời gian thực qua Long-Polling `POST /API/Event/Check` (`plus_eventchk: "eventAiPushPic"`) kết hợp Inbound Webhook (`/api/events/webhook/raysharp`), xuất bản lên MQTT Event Bus (`kspcam/events/<box_id>/<device_id>/<channel>/<event_type>`) và đẩy trực tiếp về `inut-bida-hub` (`/api/agent/events`).
+   - Tài liệu đặc tả đầy đủ: [`docs/PROTOCOL-RAYSHARP.md`](./docs/PROTOCOL-RAYSHARP.md).
+
+---
+
 ### 3.5 Hệ thống Dò tìm Thiết bị Mạng (Discovery Subsystem)
 
 Package `internal/discovery` kết hợp 4 cơ chế quét song song:

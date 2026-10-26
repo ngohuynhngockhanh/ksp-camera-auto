@@ -32,6 +32,10 @@ type Config struct {
 	MailAPIKey    string
 	PollInterval  time.Duration
 	DialTimeout   time.Duration
+	MQTTBroker    string
+	MQTTUser      string
+	MQTTPass      string
+	MQTTTopic     string
 }
 
 // Server is the Central Fleet Management Hub HTTP server for inut-bida-hub (:2090).
@@ -46,6 +50,7 @@ type Server struct {
 	yamuxSessions map[string]*yamux.Session
 	sseMu         sync.RWMutex
 	sseClients    map[chan string]struct{}
+	mqttSub       *hubMQTTSubscriber
 	stopOnce      sync.Once
 	stopCh        chan struct{}
 }
@@ -153,6 +158,9 @@ func NewServer(cfg Config) (*Server, error) {
 	if cfg.PollInterval > 0 {
 		go s.backgroundPollLoop(cfg.PollInterval)
 	}
+	if strings.TrimSpace(cfg.MQTTBroker) != "" {
+		s.StartMQTTSubscriber(cfg.MQTTBroker, cfg.MQTTUser, cfg.MQTTPass, cfg.MQTTTopic)
+	}
 
 	return s, nil
 }
@@ -192,6 +200,7 @@ func (s *Server) Close() error {
 	s.stopOnce.Do(func() {
 		close(s.stopCh)
 		s.closeAllYamuxSessions()
+		s.stopMQTTSubscriber()
 	})
 	return s.store.Save()
 }
@@ -271,7 +280,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleHeartbeatBatch(w, r)
 		return
 	}
-
+	if path == "/api/agent/events" || path == "/fleet/api/agent/events" {
+		s.handleAgentEventsPush(w, r)
+		return
+	}
 	// 6. All remaining routes require Hub authentication (cookie, X-Hub-Key, or Bearer token)
 	principal, ok := s.authenticateRequest(r)
 	if !ok {
@@ -384,7 +396,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleClipSign(w, r)
 		return
 	}
-
+	if path == "/fleet/api/ai-events" || path == "/api/ai-events" {
+		s.handleAIEventsList(w, r)
+		return
+	}
+	if path == "/fleet/api/ai-events/mqtt" || path == "/api/ai-events/mqtt" {
+		s.handleAIEventsMQTTConfig(w, r)
+		return
+	}
+	if path == "/fleet/api/remote-config" || path == "/api/remote-config" {
+		s.handleFleetRemoteConfig(w, r)
+		return
+	}
 	writeJSON(w, http.StatusNotFound, map[string]any{
 		"error": "not_found",
 		"path":  path,
