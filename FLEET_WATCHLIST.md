@@ -134,12 +134,12 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
 
 - [x] **Node `inut_205_67`** (BinK Billiards Club — `77.88.205.67`, group `billiardclub`)
   - Phần cứng: Allwinner H313 (ARM64), RAM 1.9 GiB
-  - Số lượng camera: 11 camera (10 cam 4MP H.265 `2560x1440` + `camera11` bàn VIP 2MP `1920x1080` H.265 AAC)
+  - Số lượng camera: 11 camera (10 cam 4MP H.265 `2560x1440` + `camera11` bàn VIP 2MP `1920x1080` bắt buộc **H.264** AAC)
   - Cấu hình PM2 Memory Guard: `camera`: 220M | `inut`: 280M | `ota-mqtt`: 120M (log `/dev/null`)
   - Cấu hình Kernel & Swap: ZRAM 1.9 GiB (`lz4`, uncap `mem_limit=0`, `swappiness=80`, `vfs_cache_pressure=100`)
   - Cơ chế bảo vệ: Smart Watchdog 60s, Storage Guard 15p (`/media/usb1/billiardclub`), Sysrq gỡ sạch 100%
   - Tối ưu `camera11` (`192.168.10.21` — bàn VIP) & toàn bộ 11 cam (26/10/2026):
-    - Chuyển `camera11` từ `H.264 Baseline 2048 kbps VBR` sang **`H.265 Main 1280 kbps CBR @ 25fps, GOP 50`** + thêm `-tag:v hvc1` trong `cust_record`
+    - Giữ nguyên chuẩn bắt buộc **`H.264`** (`avc1`) cho `camera11` (`192.168.10.21`) để màn hình bàn VIP giải mã phần cứng mượt nhất, đổi từ `2048 kbps VBR` sang **`1536 kbps CBR @ 25fps, GOP 50, SmartCodec=false`**, giữ `cust_record: "-segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof"` (không gắn `-tag:v hvc1`)
     - Tắt `SmartCodec` (`H.265+`) trên cả 11 camera để khóa cứng chu kỳ I-Frame đúng `GOP=50` (2.0s), hạ `EXT-X-TARGETDURATION` của HLS từ **8 giây** xuống **2.000 giây** trên cả 11 bàn (giảm độ trễ xem trực tiếp trên màn hình từ 16s xuống ~3s)
     - Đặt `wall_clock_timestamp_ignore: "1"` riêng cho `camera11` để dùng RTP timestamp gốc của chip camera (`0.040000s` = 25.00 fps phẳng tuyệt đối), triệt tiêu hiện tượng dồn 10–15 frame vào 1ms khi mạng tới `.10.21` bị jitter
   - Trạng thái: Uptime >11 ngày, 22/22 FFmpeg ghi 11 bàn liên tục, `camera11` chạy mượt 25.00 fps đều đặn từng 40ms
