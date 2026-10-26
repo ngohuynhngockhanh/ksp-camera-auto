@@ -138,11 +138,12 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
   - Cấu hình PM2 Memory Guard: `camera`: 220M | `inut`: 280M | `ota-mqtt`: 120M (log `/dev/null`)
   - Cấu hình Kernel & Swap: ZRAM 1.9 GiB (`lz4`, uncap `mem_limit=0`, `swappiness=80`, `vfs_cache_pressure=100`)
   - Cơ chế bảo vệ: Smart Watchdog 60s, Storage Guard 15p (`/media/usb1/billiardclub`), Sysrq gỡ sạch 100%
-  - Tối ưu `camera11` (`192.168.10.21` — bàn VIP) & chuyển toàn bộ 11 cam kéo qua Đầu ghi NVR `DHI-NVR4116HS-4KS3` (`192.168.10.10`) (26/10/2026):
-    - Chuyển toàn bộ 11 bàn (`camera01` .. `camera11`) trong Shinobi `Monitors`, `/root/go2rtc.yaml` và `/opt/ksp-cam/cameras.yaml` sang kéo luồng trực tiếp từ Đầu ghi NVR **`192.168.10.10:554`** (`camera01..05` $\rightarrow$ Kênh `1..5`, `camera11` bàn VIP $\rightarrow$ Kênh `6`, `camera06..10` $\rightarrow$ Kênh `7..11`), chấm dứt hoàn toàn việc 11 camera bị kéo 2 luồng MainStream song song
+  - Tối ưu `camera11` (`192.168.10.21` — bàn VIP), chuyển toàn bộ 11 cam kéo qua Đầu ghi NVR `DHI-NVR4116HS-4KS3` (`192.168.10.10`) và ép cả 4 slot `MainFormat[0..3]` về đúng `1536 Kbps CBR` (26/10/2026):
+    - Chuyển toàn bộ 11 bàn (`camera01` .. `camera11`) trong Shinobi `Monitors`, `/root/go2rtc.yaml` và `/opt/ksp-cam/cameras.yaml` sang kéo luồng trực tiếp từ Đầu ghi NVR **`192.168.10.10:554`** (`camera01..05` $\rightarrow$ Kênh `1..5`, `camera11` bàn VIP $\rightarrow$ Kênh `6`, `camera06..10` $\rightarrow$ Kênh `7..11`), chấm dứt việc 11 camera bị kéo 2 luồng MainStream song song
+    - Phát hiện và sửa triệt để lỗi firmware Dahua giữ `3072 Kbps` ở các slot lịch trình Motion/Alarm (`MainFormat[1]` & `MainFormat[2]`) và `LimitBitRate=4096`: nâng cấp `internal/dahua/encode.go` (`forEachFormat`) để ghi đồng bộ cả **4 slot `MainFormat[0..3]` + `LimitBitRate = 1536`** cho toàn bộ 14 camera (`192.168.10.11..24`) và 14 kênh trên NVR `192.168.10.10`
     - Giữ nguyên chuẩn bắt buộc **`H.264`** (`avc1`) cho `camera11` (Kênh 6 — bàn VIP), đổi sang **`1536 kbps CBR @ 25fps, GOP 50, SmartCodec=false`**, `wall_clock_timestamp_ignore: "1"`, `cust_record: "-segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof"`
     - Tắt `SmartCodec` (`H.265+`) trên cả 11 camera để khóa cứng chu kỳ I-Frame đúng `GOP=50` (2.0s), hạ `EXT-X-TARGETDURATION` của HLS từ **8 giây** xuống **2.000 giây** trên cả 11 bàn
-  - Trạng thái: Đủ 22/22 FFmpeg kết nối vào `192.168.10.10:554` với `Recv-Q = 0`, `camera11` chạy mượt `25.00 fps` (`pts_time` nhảy đúng từng `0.040000s` tròn trĩnh `0.000 -> 0.040 -> 0.080 -> 0.120s`, I-Frame hạ xuống `84 KB`)
+  - Trạng thái: Băng thông RX trên `end0` giảm một nửa từ **`37 Mbps` xuống đúng `18 Mbps`** (`Dropped delta = 0`), mỗi segment HLS 2s chỉ còn **`~390 KB`** (thay vì `800 KB – 3.2 MB`), đủ 22/22 FFmpeg chạy mượt `25.00 fps` (`0.040000s`/frame)
 
 - [x] **Node `inut_205_69`** (PHE Vietnam — `77.88.205.69`, group `phe`)
   - Phần cứng: Allwinner H313 (ARM64), RAM 1.9 GiB

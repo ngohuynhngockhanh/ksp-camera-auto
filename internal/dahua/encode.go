@@ -153,6 +153,29 @@ func formatOfChannel(chObj map[string]any, s Stream) (map[string]any, error) {
 	return fmtObj, nil
 }
 
+// forEachFormat calls fn on the target stream's format object. For StreamMain,
+// Dahua cameras and NVRs store multiple schedule slots (MainFormat[0..3]:
+// Normal/General, Motion, Alarm, Day/Night). Applying changes to all present
+// MainFormat slots ensures the active schedule slot (e.g. MainFormat[1] or [2])
+// always matches MainFormat[0].
+func forEachFormat(chObj map[string]any, s Stream, fn func(fmtObj map[string]any)) error {
+	first, err := formatOfChannel(chObj, s)
+	if err != nil {
+		return err
+	}
+	if s != StreamMain {
+		fn(first)
+		return nil
+	}
+	arr, _ := chObj["MainFormat"].([]any)
+	for _, item := range arr {
+		if m, ok := item.(map[string]any); ok {
+			fn(m)
+		}
+	}
+	return nil
+}
+
 // formatOf navigates table[ch] to the MainFormat/ExtraFormat object for stream.
 func formatOf(table []any, ch int, s Stream) (map[string]any, error) {
 	if ch < 0 || ch >= len(table) {
@@ -181,14 +204,14 @@ func (c *Client) SetResolution(ch int, s Stream, w, h int) error {
 	if err != nil {
 		return err
 	}
-	fmtObj, err := formatOfChannel(chObj, s)
-	if err != nil {
+	if err := forEachFormat(chObj, s, func(fmtObj map[string]any) {
+		video := subMap(fmtObj, "Video")
+		video["Width"] = w
+		video["Height"] = h
+		video["CustomResolutionName"] = fmt.Sprintf("%dx%d", w, h)
+	}); err != nil {
 		return err
 	}
-	video := subMap(fmtObj, "Video")
-	video["Width"] = w
-	video["Height"] = h
-	video["CustomResolutionName"] = fmt.Sprintf("%dx%d", w, h)
 	return c.setChannelTable("Encode", ch, chObj)
 }
 
@@ -198,11 +221,11 @@ func (c *Client) SetFPS(ch int, s Stream, fps int) error {
 	if err != nil {
 		return err
 	}
-	fmtObj, err := formatOfChannel(chObj, s)
-	if err != nil {
+	if err := forEachFormat(chObj, s, func(fmtObj map[string]any) {
+		subMap(fmtObj, "Video")["FPS"] = fps
+	}); err != nil {
 		return err
 	}
-	subMap(fmtObj, "Video")["FPS"] = fps
 	return c.setChannelTable("Encode", ch, chObj)
 }
 
@@ -277,16 +300,16 @@ func (c *Client) SetCodec(ch int, s Stream, compression, profile string) error {
 	if err != nil {
 		return err
 	}
-	fmtObj, err := formatOfChannel(chObj, s)
-	if err != nil {
+	if err := forEachFormat(chObj, s, func(fmtObj map[string]any) {
+		video := subMap(fmtObj, "Video")
+		if compression != "" {
+			video["Compression"] = compression
+		}
+		if profile != "" {
+			video["Profile"] = profile
+		}
+	}); err != nil {
 		return err
-	}
-	video := subMap(fmtObj, "Video")
-	if compression != "" {
-		video["Compression"] = compression
-	}
-	if profile != "" {
-		video["Profile"] = profile
 	}
 	return c.setChannelTable("Encode", ch, chObj)
 }
@@ -297,12 +320,12 @@ func (c *Client) SetAudioAAC(ch int, s Stream) error {
 	if err != nil {
 		return err
 	}
-	fmtObj, err := formatOfChannel(chObj, s)
-	if err != nil {
+	if err := forEachFormat(chObj, s, func(fmtObj map[string]any) {
+		subMap(fmtObj, "Audio")["Compression"] = "AAC"
+		fmtObj["AudioEnable"] = true
+	}); err != nil {
 		return err
 	}
-	subMap(fmtObj, "Audio")["Compression"] = "AAC"
-	fmtObj["AudioEnable"] = true
 	return c.setChannelTable("Encode", ch, chObj)
 }
 
@@ -313,11 +336,11 @@ func (c *Client) SetGOP(ch int, s Stream, gop int) error {
 	if err != nil {
 		return err
 	}
-	fmtObj, err := formatOfChannel(chObj, s)
-	if err != nil {
+	if err := forEachFormat(chObj, s, func(fmtObj map[string]any) {
+		subMap(fmtObj, "Video")["GOP"] = gop
+	}); err != nil {
 		return err
 	}
-	subMap(fmtObj, "Video")["GOP"] = gop
 	return c.setChannelTable("Encode", ch, chObj)
 }
 
@@ -329,14 +352,17 @@ func (c *Client) SetBitrate(ch int, s Stream, kbps int, mode string) error {
 	if err != nil {
 		return err
 	}
-	fmtObj, err := formatOfChannel(chObj, s)
-	if err != nil {
+	if err := forEachFormat(chObj, s, func(fmtObj map[string]any) {
+		video := subMap(fmtObj, "Video")
+		video["BitRate"] = kbps
+		if _, hasLimit := video["LimitBitRate"]; hasLimit {
+			video["LimitBitRate"] = kbps
+		}
+		if mode != "" {
+			video["BitRateControl"] = mode
+		}
+	}); err != nil {
 		return err
-	}
-	video := subMap(fmtObj, "Video")
-	video["BitRate"] = kbps
-	if mode != "" {
-		video["BitRateControl"] = mode
 	}
 	return c.setChannelTable("Encode", ch, chObj)
 }

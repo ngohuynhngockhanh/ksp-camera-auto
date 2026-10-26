@@ -99,7 +99,7 @@ func applyOne(ctx context.Context, inv *config.Inventory, id string, profile cam
 	}
 	res.Name = d.Name
 	res.Host = d.Host
-	if d.NVRChannel > 0 && len(profile.Channels) == 0 {
+	if d.NVRChannel > 0 && d.NVRID == "" && len(profile.Channels) == 0 {
 		profile.Channel = d.NVRChannel - 1
 	}
 

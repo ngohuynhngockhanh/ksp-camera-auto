@@ -621,7 +621,7 @@ func (d *dahuaCamera) PTZMove(ctx context.Context, channel int, code string, spe
 
 // Probe reads back stream info. For NVR channel devices, it probes the specific NVRChannel.
 func (d *dahuaCamera) Probe(ctx context.Context) ([]StreamInfo, error) {
-	if d.device.NVRChannel > 0 {
+	if d.device.NVRChannel > 0 && d.device.NVRID == "" {
 		ch := d.device.NVRChannel - 1
 		var out []StreamInfo
 		for _, s := range []dahua.Stream{dahua.StreamMain, dahua.StreamSub1, dahua.StreamSub2} {
@@ -884,6 +884,10 @@ func (d *dahuaCamera) applyGOP(ch int, s dahua.Stream, streamName string, gop in
 		step.Err = err.Error()
 		return step
 	}
+	if err := d.client.SetGOP(ch, s, gop); err != nil {
+		step.Err = err.Error()
+		return step
+	}
 	if before.GOP == gop {
 		step.OK = true
 		step.Detail = fmt.Sprintf("GOP đã đúng %d", gop)
@@ -923,13 +927,13 @@ func (d *dahuaCamera) applyBitrate(ch int, s dahua.Stream, streamName string, kb
 		return step
 	}
 	modeOK := mode == "" || before.BitRateControl == mode
+	if err := d.client.SetBitrate(ch, s, kbps, mode); err != nil {
+		step.Err = err.Error()
+		return step
+	}
 	if before.BitRate == kbps && modeOK {
 		step.OK = true
 		step.Detail = fmt.Sprintf("bitrate đã đúng %s", label)
-		return step
-	}
-	if err := d.client.SetBitrate(ch, s, kbps, mode); err != nil {
-		step.Err = err.Error()
 		return step
 	}
 	after, err := d.client.GetStreamInfo(ch, s)
