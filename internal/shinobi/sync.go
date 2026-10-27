@@ -44,6 +44,9 @@ func (d MonitorDetails) MarshalJSON() ([]byte, error) {
 	if d.WallClockTimestampIgnore == "" {
 		d.WallClockTimestampIgnore = "0"
 	}
+	if cutoffMin, err := strconv.Atoi(strings.TrimSpace(d.Cutoff)); err != nil || cutoffMin < 5 {
+		d.Cutoff = "5"
+	}
 	payload := struct {
 		Alias
 		Snap            string              `json:"snap"`
@@ -159,6 +162,7 @@ func (c *Client) BuildMonitorConfig(d config.Device) MonitorConfig {
 			CustStream:               "",                    // Stream flag để trống
 			CustRecord:               GoldenCustRecordFlags, // Recording flag chuẩn H.265 Fragmented MP4
 			WallClockTimestampIgnore: "0",                   // Luôn bật -use_wallclock_as_timestamps 1 ngăn ngừa lệch timescale
+			Cutoff:                   "5",                   // Tối thiểu 5 phút / clip (-segment_time 300)
 			Detector:                 "0",
 		},
 	}

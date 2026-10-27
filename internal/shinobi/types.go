@@ -46,8 +46,8 @@ type MonitorDetails struct {
 	CustStream               string `json:"cust_stream"`                           // "" (trống, không dùng custom stream flags)
 	CustRecord               string `json:"cust_record"`                           // "-tag:v hvc1" cho chuẩn H.265 MP4 recording
 	WallClockTimestampIgnore string `json:"wall_clock_timestamp_ignore,omitempty"` // "0" để Shinobi luôn bật -use_wallclock_as_timestamps 1
+	Cutoff                   string `json:"cutoff,omitempty"`                      // Thời lượng mỗi file ghi hình (phút), tối thiểu "5" (300s)
 	Detector                 string `json:"detector,omitempty"`                    // "0"
-	CustomRTSP               string `json:"custom_rtsp,omitempty"`
 }
 
 // FlexibleString handles JSON fields that can be encoded as either a string, a number, or null.
