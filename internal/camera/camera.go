@@ -840,13 +840,13 @@ func (d *dahuaCamera) applyFPS(ch int, s dahua.Stream, streamName string, reques
 		step.Err = "FPS phải lớn hơn 0"
 		return step
 	}
+	if err := d.client.SetFPS(ch, s, target); err != nil {
+		step.Err = err.Error()
+		return step
+	}
 	if before.FPS == target {
 		step.OK = true
 		step.Detail = fmt.Sprintf("FPS đã đúng %d (max %d, %s)", target, cap.MaxFPS, cap.Source)
-		return step
-	}
-	if err := d.client.SetFPS(ch, s, target); err != nil {
-		step.Err = err.Error()
 		return step
 	}
 	after, err := d.client.GetStreamInfo(ch, s)
