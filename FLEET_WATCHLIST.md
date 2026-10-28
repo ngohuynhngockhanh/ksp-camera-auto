@@ -609,6 +609,8 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Cài đặt iptables redirect port 80 -> 2023
     - PM2 Memory Guard (+20% an toàn): `camera: 240M` (6 camera, nâng từ `170M`) | `inut: 336M` (nâng từ `280M`) | `ota-mqtt: 144M` (nâng từ `120M`) với log trỏ `/dev/null`
   - Trạng thái: Toàn bộ camera đang bật điện ghi hình video mới liên tục (0 restart do chạm trần RAM), RAM khả dụng 1.1 GiB, ZRAM 1.9 GiB trống 99%
+  - Cập nhật 28/10/2026 (Chuyển 5/6 camera sang chạy dây mạng LAN `eth0`):
+    - Sau khi sân kéo xong dây mạng LAN cho 5 camera (`camera01`, `03`, `04`, `05`, `06`), đã chuyển toàn bộ cấu hình trong Shinobi `Monitors`, `/root/go2rtc.yaml` và `/opt/ksp-cam/cameras.yaml` từ IP Wi-Fi cũ (`.163`, `.166`, `.153`, `.66`, `.143`) sang IP LAN tĩnh **`192.168.1.101`, `192.168.1.103`, `192.168.1.104`, `192.168.1.105`, `192.168.1.106`** (riêng `camera02` giữ `.241`), đồng bộ `GOP = 40` (`2.0s` @ `20 FPS`) và `cutoff: "5"` (5 phút/clip) $\rightarrow$ Đủ **12/12 tiến trình (`6/6` sân)** chạy `#EXT-X-TARGETDURATION: 2` (`#EXTINF: 2.000s`, `.ts` nhẹ `~210 KB`), ping LAN giảm từ `15–21ms` xuống **`0.9ms – 3.5ms`**.
 
 - [x] **Node `inut_207_44`** (MIAPool Arena — `77.88.207.44`, group `mia`)
   - Phần cứng: Rockchip (armv7l, kernel 6.6), RAM 1.9 GiB, Thẻ nhớ 58 GB F2FS (`/dev/mmcblk0p1`), Cổng mạng 100Mb/s Fast Ethernet (`end0`)
