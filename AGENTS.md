@@ -329,7 +329,7 @@ Tất cả RPC đều gửi qua frame `\xf6` với cấu trúc `{"method":..., "
      - I-Frame Interval: `Video.GOP` (tính theo số khung hình).
      - Bitrate: `Video.BitRate` (Kbps), `Video.BitRateControl` (`"VBR"` / `"CBR"`).
      - Audio AAC: `MainFormat[0].Audio.Compression = "AAC"`, `AudioEnable = true`.
-   - `SmartEncode`: `table[ch].Enable` (`true`/`false`) cho H.264+/H.265+.
+   - `SmartEncode`: `table[ch].Enable` (`false` — **BẮT BUỘC TẮT `SmartEncode = false` đối với mọi camera Dahua / Imou / KBVision** vì khi bật H.265+, thuật toán AI-GOP của firmware sẽ tự động kéo giãn khoảng cách I-Frame lên 150–200 frames = `6.67s – 10.0s`, làm phân đoạn HLS `.ts` phình to `1.4 MB – 2.2 MB` và gây trễ luồng xem trực tiếp).
    - `ChannelTitle`: `table[ch].Name` (Tên hiển thị kênh camera).
    - `VideoWidget`: `table[ch].CustomTitle[0..3].{Text, EncodeBlend}` cho 4 dòng OSD.
      > **Quy tắc OSD Mirroring:** Luôn phải ghi đồng thời slot 0 (Main) và slot 1 (Sub) cùng một nội dung text, nếu không firmware Dahua sẽ âm thầm hủy lệnh ghi.

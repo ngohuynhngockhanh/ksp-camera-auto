@@ -230,7 +230,14 @@ func (g *antiAGuardian) targetSmartCodec() bool {
 	if g.cfg.SmartCodec != nil {
 		return *g.cfg.SmartCodec
 	}
-	return true
+	return false
+}
+
+func (g *antiAGuardian) targetSmartCodecForVendor(vendor config.Vendor) bool {
+	if vendor == config.VendorDahua {
+		return false
+	}
+	return g.targetSmartCodec()
 }
 
 func isStreamCompliant(stream camera.StreamInfo, maxBitrate int, reqSmartCodec bool, targetWidth, targetHeight int) bool {
@@ -293,7 +300,7 @@ func (g *antiAGuardian) runCheck(ctx context.Context, forceFull bool) (int, erro
 		}
 
 		targetBitrate := g.targetBitrate()
-		targetSmartCodec := g.targetSmartCodec()
+		targetSmartCodec := g.targetSmartCodecForVendor(targetCam.Vendor)
 		targetWidth := g.cfg.ResolutionWidth
 		targetHeight := g.cfg.ResolutionHeight
 		if !isStreamCompliant(mainStream, targetBitrate, targetSmartCodec, targetWidth, targetHeight) {
@@ -363,7 +370,7 @@ func (g *antiAGuardian) enforceAll(ctx context.Context) int {
 			}
 			defer cam.Close()
 			targetBitrate := g.targetBitrate()
-			targetSmartCodec := g.targetSmartCodec()
+			targetSmartCodec := g.targetSmartCodecForVendor(camCfg.Vendor)
 			targetWidth := g.cfg.ResolutionWidth
 			targetHeight := g.cfg.ResolutionHeight
 			// Check current probe
@@ -500,7 +507,7 @@ func (g *antiAGuardian) getStatus() antiAStatusView {
 	if g.cfg.BitrateKbps > 0 {
 		bitrate = g.cfg.BitrateKbps
 	}
-	sc := true
+	sc := false
 	if g.cfg.SmartCodec != nil {
 		sc = *g.cfg.SmartCodec
 	}

@@ -877,3 +877,24 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Bật lại âm thanh `acodec: "copy"`, `stream_acodec: "copy"` cho toàn bộ 9/9 bàn (`camera01`..`camera09`), đặt `wall_clock_timestamp_ignore: "0"`, `cutoff: "5"` (5 phút/clip), `hls_time: "2"`, `hls_list_size: "3"`, gắn `-tag:v hvc1 -segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof`, tắt `doSnapshot: false` và vá `snapProcess.terminate()` trong `libs/monitor.js`.
     - Nâng ZRAM Swap lên **`1.9 GiB` (`lz4`)**, cấu hình `/etc/media-automount.d/` (`errors=continue,noatime,users`), Storage Guard 15p `90% -> 80%`, Smart Watchdog V4 60s, PM2 Memory Guard (`camera: 280M`, log `/dev/null`), đồng bộ `camera_count = 9` & `toolbar_show_count = 9`, và `iptables` `80 -> 2023`.
   - Trạng thái: **Đủ 18/18 tiến trình (`9/9` bàn, hồi sinh `camera04` và bật lại âm thanh cho `camera01, 02, 04, 05`)** chạy ổn định; cả 9 luồng HLS đạt chuẩn **`#EXT-X-TARGETDURATION: 2` (`#EXTINF: 2.000s`, `.ts` nhẹ `~400 KB`)**, băng thông `end0` chỉ **`16.1 Mbps`**.
+
+- [x] **Chiến dịch Quét & Tắt `SmartCodec` (`SmartEncode = false`) Toàn Hệ Thống Cho Camera Dahua / Imou / KBVision (28/10/2026)**
+  - **Cập nhật Backend `kspcam` (`internal/server/anti_a.go`)**: Đặt mặc định `targetSmartCodec() = false` và khóa cứng `targetSmartCodecForVendor(VendorDahua) = false` để Anti-A Guardian luôn giữ `SmartCodec = false` + `GOP = 2.0s` trên mọi thiết bị Dahua / Imou / KBVision.
+  - **Kết quả quét 58 node đang online trên toàn fleet**:
+    - **Đã tắt `SmartCodec` (`true` $\rightarrow$ `false`) và đồng bộ `GOP = 2.0s` (`2 * FPS`) trực tiếp trên 107 camera Dahua/Imou/KBVision thuộc 15 node**:
+      - `inut_204_53` (City Billiards Club TN - CS3 — `77.88.204.53`): Đã tắt `SmartCodec` trên **16/16 camera** (`192.168.1.151..168`, `GOP = 60`).
+      - `inut_207_12` (Poseidon Billiards — `77.88.207.12`): Đã tắt `SmartCodec` trên **13 camera** (`Camera03..15` — `192.168.1.203..215`, `GOP = 50`; `Camera01, 02, 16` đã tắt sẵn).
+      - `inut_204_161` (NTV Billiards — `77.88.204.161`): Đã tắt `SmartCodec` trên **12/12 camera** (`192.168.1.211..222`, `GOP = 50`).
+      - `inut_204_220` (Khánh Hà Billiards — `77.88.204.220`): Đã tắt `SmartCodec` trên **10/10 camera** (`172.16.1.239..248`, `GOP = 50–60`).
+      - `inut_205_75` (49 Billiards Carom Club Ninh Hòa — `77.88.205.75`): Đã tắt `SmartCodec` trên **10/10 camera** (`192.168.1.230..236, .251..253`, `GOP = 50`).
+      - `inut_204_159` (Axis Billiards — `77.88.204.159`): Đã tắt `SmartCodec` trên **9/9 camera** (`192.168.1.175, .190..197`, `GOP = 50`).
+      - `inut_205_50` (Skyline Pool Club Box 1 — `77.88.205.50`): Đã tắt `SmartCodec` trên **9/9 camera** (`192.168.1.227..238`, `GOP = 30–60`).
+      - `inut_204_155` (Bảo Anh Billiards Club — `77.88.204.155`): Đã tắt `SmartCodec` trên **6 camera** (`Camera01..06` — `192.168.1.190..195`, `GOP = 60`; `Camera07..08` đã tắt sẵn).
+      - `inut_204_222` (Hiếu Billiards Arena — `77.88.204.222`): Đã tắt `SmartCodec` trên **6/6 camera online** (`192.168.1.237..242`, `GOP = 50`).
+      - `inut_207_18` (Trí Nguyễn Café — `77.88.207.18`): Đã tắt `SmartCodec` trên **5 camera** (`Camera01..05` — `192.168.1.194..199`, `GOP = 60`; `Camera06..10` đã tắt sẵn).
+      - `inut_200_81` (Billiards B51 — `77.88.200.81`): Đã tắt `SmartCodec` trên **4/4 camera online** (`192.168.1.167..169, .240`, `GOP = 30–60`).
+      - `inut_202_213` (Núi Thành Billiards Center — `77.88.202.213`): Đã tắt `SmartCodec` trên **2/2 camera online** (`Camera03..04` — `192.168.1.242..243`, `GOP = 60`).
+      - `inut_204_167` (OnePiece — `77.88.204.167`): Đã tắt `SmartCodec` trên **2 camera** (`Camera03..04` — `192.168.1.101, .106`, `GOP = 40`).
+      - `inut_202_226` (Queen Billiards Club — `77.88.202.226`): Đã tắt `SmartCodec` trên **1 camera online** (`Camera02` — `192.168.1.241`, `GOP = 50`).
+      - `inut_205_54` (Skyline Pool Club Box 2 — `77.88.205.54`) & `inut_207_44` (MIAPool Arena — `77.88.207.44`): Đã tắt `SmartCodec` trên `Dahua-NVR` (`192.168.1.200`) và `Camera01` (`192.168.1.241`).
+    - **Các node Dahua/Imou/KBVision còn lại (260+ camera trên `204.20`, `204.22`, `204.38`, `204.83`, `204.133`, `204.137`, `204.141`, `204.165`, `204.251`, `205.6`, `205.31`, `205.52`, `205.55`, `205.56`, `205.57`, `205.59`, `205.62`, `205.67`, `205.72`, `205.73`, `205.77`, `205.85`, `205.87`, `205.120`)**: Đều đã xác nhận `SmartCodec = false` 100%.
