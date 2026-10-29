@@ -444,7 +444,7 @@ Dòng đầu ghi AI NVR (`N10256N` / `RS-SM-2426`) và Camera IP AI (`VC31` / `6
 3. **Cấu hình AI & Luồng Sự Kiện MQTT / Hub (`internal/eventbus`)**:
    - Quản lý 13 thuật toán AI tại biên (`FaceDetection`, `HumanVehicle`, `LicensePlate`, `LineCrossing`, `Intrusion`...) qua `/API/Event/ChnSmart/Get`, `/API/Event/SettingConfig/{Range,Get,Set}`, `/API/Event/AlarmLinkage/{Get,Set}` và cơ sở dữ liệu AI trên NVR (`/API/AI/*`).
    - Thu thập sự kiện AI thời gian thực qua Long-Polling `POST /API/Event/Check` (`plus_eventchk: "eventAiPushPic"`) kết hợp Inbound Webhook (`/api/events/webhook/raysharp`), xuất bản lên MQTT Event Bus (`kspcam/events/<box_id>/<device_id>/<channel>/<event_type>`) và đẩy trực tiếp về `inut-bida-hub` (`/api/agent/events`).
-   - Tài liệu đặc tả đầy đủ: [`docs/PROTOCOL-RAYSHARP.md`](./docs/PROTOCOL-RAYSHARP.md).
+   - Tài liệu đặc tả đầy đủ (bao gồm hồ sơ dịch ngược phần mềm PC `VMS Pro64_VANTECH(VCMS)_V2.15.1` và link tải lưu trữ Viettel MyBox): [`docs/PROTOCOL-RAYSHARP.md`](./docs/PROTOCOL-RAYSHARP.md).
 
 ---
 

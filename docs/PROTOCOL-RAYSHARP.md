@@ -324,3 +324,60 @@ Qua thực nghiệm bắn trực tiếp các tổ hợp `POST /API/Event/Setting
 | 6 | **Bản đồ nhiệt hiển thị mật độ (HeatMap)** | **95%** | `HeatMap` chạy nền không xung đột NPU; NVR trả về ảnh nền + lưới mật độ nhiệt (`AI/HeatMapStatistics/Get`, `heat_map_height: 36`). | Hub lấy dữ liệu ma trận nhiệt từ NVR và render lớp phủ heatmap. |
 | 7 | **Nhận diện biển số phương tiện (LPR / ANPR)** | **85% -> 99%** | Cam/NVR có sẵn `LicensePlate` (`EU_Plate`, `US_Plate`, `capture_vehicle_image: true`). Biển 1 dòng đọc tốt; biển 2 dòng VN đôi khi bị cắt dòng trên `EU_Plate`. | Khi cam đẩy ảnh crop xe/biển số (`PlateImg` / `ObjectImg`) qua MQTT về Hub, Hub có thể chạy OCR biển số VN 2 dòng hậu kiểm đạt 99%. |
 | 8 | **Mở rộng, nâng cấp tính năng phần mềm trong khả năng phần cứng** | **100%** | Hỗ trợ nâng cấp firmware IPC hàng loạt qua NVR (`/API/IPCMaintaint/IPCUpgrade/*`) và chuyển đổi nóng preset NPU trong < 200ms. | Kiến trúc `kspcam` (`internal/raysharp`, `internal/eventbus`, `/api/raysharp/raw`) + `inut-bida-hub` cho phép bổ sung thuật toán/báo cáo mới tại Hub mà không bị giới hạn bởi firmware đầu ghi. |
+
+---
+
+## 7. Hồ Sơ Dịch Ngược Phần Mềm Máy Tính `VMS Pro64_VANTECH(VCMS)_V2.15.1-260422_01.exe` (Lưu Trữ Tham Chiếu)
+
+### 7.1 Nguồn Tải & Định Danh Gói Cài Đặt (Link Lưu Trữ Chính Thức)
+- **Link tải Viettel MyBox (Gốc)**: `https://mybox.vietteltelecom.vn/drive/s/xmbVkOivvJDl84wBK2QZV3YVzmGpfC?zarsrc=31&utm_source=zalo&utm_medium=zalo&utm_campaign=zalo`
+- **API tải trực tiếp (Direct Download Endpoint)**:
+  `https://mybox.vietteltelecom.vn/api/v1/file-entries/download/NjA1MzUzNDJ8cA?shareable_link=xmbVkOivvJDl84wBK2QZV3YVzmGpfC&download=true`
+- **Tên file**: `VMS Pro64_VANTECH(VCMS)_V2.15.1-260422_01.exe`
+- **Dung lượng**: `170,805,959 bytes` (`~162.9 MiB`)
+- **SHA-256**: `b385da0322ee8d1142fe351e5ee7d27a3cea6bf00b79a01d101e7cf71a9a8c2d`
+- **Định dạng đóng gói**: Inno Setup `5.6.0 (Unicode)` (`company_name=VANTECH`, `version=V2.15.1-260422` trong `app/default.ini`).
+- **Bằng chứng phân tích REA MCP**:
+  - `inspect_pe_resources` trên bộ cài gốc: `ev_2fbf75dde052c28c843aa83fc755433ab0ef1ef2d959f6cbbe22d0571d778866`
+  - `inspect_pe_resources` trên `app/VCMS.exe` (`30,278,656 bytes`, SHA-256 `f035957b91d39e4dac4e65842c6b103e9a75aea985a875b451681c3ca0222dc2`): `ev_1df061f7deb3f5b5f9990eb5f8b9d5ad941dc9b3df4fc983eb30b238ed2bc49e`
+  - `inspect_pe_resources` trên `app/RSNet64.dll` (`4,360,704 bytes`, SHA-256 `6e38a738ea926eb3815eefd391cfa409bd1745d3cf1cf966ad3ae15bd4cf21a5`): `ev_fdee99600d04e363f8acd06ae30059043dcad10cc23d7824d31a2e845294d55c`
+  - `inspect_pe_resources` trên `app/RSPlay64.dll` (`4,760,064 bytes`, SHA-256 `c40c87bf05895a01753cad97ea05f3cfbd9ed9e204f41ff4402d350c8776bd72`): `ev_1cb90f15e0fa79f75e4cb63387cb3339200b4d9b42d1ddd69c4b15b85f0571e4`
+  - `inspect_artifact` & `extract_artifact` trên `app/import_template_enu.zip`: `ev_7be1f71731044a78bca6e8da3439bc899251ac789fde5ce906bb07514c552d28`, `ev_41419f57b03c2ca56d363f90946bf157a90faf08d52d78d2e7c3b69656d86524`
+  - `analyze_javascript_application` trên tập module JS giải nén từ Qt Resource `.rdata` của `VCMS.exe`: `ev_6066c39e8b4adaa507be3bfae39d6e35d8bfb0c950b8905927561b6d5b2e3b2c`
+
+### 7.2 Cấu Trúc Thành Phần Cốt Lõi Trong `VCMS.exe`
+1. **Kiến trúc Hybrid C++ Qt5 + Embedded WebEngine**:
+   - `VCMS.exe` kết hợp giao diện Qt5 Widgets (`1,503` C++ RTTI classes: `RSFaceID`, `RSRepeatVisitors`, `RSAttendanceCalculationObj`, `rsDataAnalysisHeatMap`, `rsAIScene`...) với `Qt5WebEngineCore.dll` + `Qt5WebChannel.dll` nhúng `283` tài nguyên Web (`qrc:/www/res/...`) để cấu hình thiết bị từ xa.
+   - Lưu trữ cục bộ bằng **3 cơ sở dữ liệu SQLite (`app/sqldatabase/`)** có hỗ trợ mã hóa `sqlitecipher.dll`:
+     - `base.db`: Quản lý thiết bị (`TDevice`, `TDevForCMSLogin`), nhóm kênh (`TGroupChannel`), bản đồ điện tử (`TEmap`, `TEmapObject`), chấm công (`TAttendance*`) và nhân sự/vector khuôn mặt (`TPersonnelManagement` lưu cột `FEATURE` và `FTVERION`).
+     - `Local.db`: Quản lý lịch ghi hình cục bộ và chỉ mục file video (`TLocalRecordFileInfo`, `TLocalAlarmRecordFileInfo`).
+     - `Alarm.db`: Quản lý kịch bản liên kết báo động (`TAlarmConfig`, `TChannelAlarmConfig` với cột `IntelligentBit`) và nhật ký (`TAlarmLog`).
+2. **4 Họ SDK Đa Hãng Đi Kèm**:
+   - **Raysharp SDK (Chính)**: `RSNet64.dll` (143 exports: giao thức nhị phân port `9000` + HTTP/HTTPS JSON `/API/*` trên nền `boost::beast`), `RSPlay64.dll` (153 exports: giải mã H.264/H.265/MJPEG phần cứng DXGI/D3D9/D2D1 + HiSilicon decoder `CHisi264Decoder`/`CHisi265Decoder`), `RSOnvifs64.dll` (32 exports), `RSIPsound64.dll` (5 exports đàm thoại 2 chiều & phát file âm thanh xuống loa IP), `RSStream.dll` (`live555`).
+   - **Dahua SDK**: `dhnetsdk.dll`, `dhconfigsdk.dll`, `dhplay.dll`, `avnetsdk.dll`, `StreamConvertor.dll`, `StreamSvr.dll`, `IvsDrawer.dll`.
+   - **Hikvision SDK**: `HCNetSDK.dll`, `HCCore.dll`, `PlayCtrl.dll`, `Sadp.dll`, `HCNetSDKCom/*`.
+   - **8 Họ P2P Cloud (`app/p2p/*`)**: `RSP2PLibrary.dll` (Raysharp), `IOTCAPIs.dll` / `AVAPIs.dll` / `P2PTunnelAPIs.dll` (TUTK), `GlnkAgentSDK.dll` (Goolink), `PPCS_API.dll` / `PPPP_API.dll` (CS2), `libt2u.dll` (Vantech RSVV/VV), `NpcMpiMonTsp.dll` (HSD).
+
+### 7.3 Các Phát Hiện Kỹ Thuật & Thuật Toán AI Có Thể Tái Sử Dụng
+1. **Thư viện Ghép Ảnh Toàn Cảnh Độc Lập `app/rsstitcher.dll` (`1.19 MB`)**:
+   - Xây dựng trên nền **OpenPano + CImg + FLANN** (không phụ thuộc OpenCV nặng):
+     - Phát hiện đặc trưng **DoG + SIFT Descriptor** (`pano::SIFTDetector`, `dog.cc`, `orientation.cc`).
+     - Khớp đặc trưng bằng **FLANN KD-Tree** + ước lượng ma trận **Homography RANSAC** (`homography.cc`, `transform_estimate.cc`).
+     - Chiếu hình trụ **Cylindrical Warping** (`pano::CylinderStitcher::build_warp`) và trộn đa băng tần **Multi-Band Blending** (`pano::MultiBandBlender::WeightedPixel`).
+   - Chỉ export 3 hàm C++ đơn giản (`stitching_create`, `stitching_proc`, `stitching_release`), nhận mảng đường dẫn ảnh đầu vào và xuất ảnh Panorama ghép hoàn chỉnh.
+2. **Bộ Tham Số Thị Giác Máy Tính JDVCA (`MsgParamJDVCA* = 724..726`)**:
+   - Cho phép tinh chỉnh trực tiếp các siêu tham số thuật toán trên camera từ xa:
+     - **JDVCA Intrusion Detection (`725`, `Intrusion_Detection.js`)**: `imgResizeFactor`, `minPersonConf`, `skipFrameNum`, `bgsUpdataFactor`, `BBSInRoiThr`, `fgInRoiThr`, `fgPesBBThr`, `minOverlapRatio`, `pesRectRatio`, và đặc biệt là **`footRectRatioFrom` / `footRectRatioTo`** (xét vị trí hộp giới hạn bàn chân trong đa giác ROI để chống báo giả do góc nghiêng camera).
+     - **JDVCA Red Mantle / Occlusion & Lost Object (`726`, `Red_Mantle_Detection.js`)**: Tinh chỉnh 2 tốc độ học nền `bgsUpdateSecondsSlow` & `bgsUpdateSecondsFast`, `fDetectRatioFixed`, `fDetectRatioLosted`, `fDetectRatioOcclusion`, `vanishKeepSeconds`, `toFixKeepSeconds`.
+     - **JDVCA Meter Recognition (`724`, `Type_Meter_Recognition.js`)**: Đọc giá trị đồng hồ kim tự động qua ROI `(left, top, width, height)` và thông số góc `begangle`, `anglescale`, `initv`, `valuescale`.
+3. **Quy Tắc Khóa GOP Khi Bật SmartCodec (`H.264+` / `H.265+`) Trên Firmware Raysharp/Vantech**:
+   - Trong `main_stream_set.js` (dòng `764`, `844`, `976`), khi `VideoEncType == 3` (`H.264+`) hoặc `VideoEncType == 4` (`H.265+`), firmware **tự động ẩn và khóa cứng `IFrameInterval` (GOP)** (`$("#IPC_form_Iratio_div").css('display', 'none')`).
+   - Do đó, giống như quy tắc trên Dahua/Imou/KBVision, **bắt buộc phải tắt SmartCodec (`VideoEncType = 1` / `"H.265"`)** trên mọi camera Raysharp/Vantech để có thể khóa `i_frame_interval = fps * 2` (`2.0s`), giúp phân đoạn HLS `.ts` luôn đạt chuẩn `2.000s`.
+4. **Giải Mã Phiên Bản Model NPU (`AI_Model.js` — `paramPageJson.AI_Model = "FaceDatabaseConfig"`)**:
+   - Phiên bản thuật toán NPU 32-bit `version` trả về từ `/API/AI/Model/Get` được giải mã theo công thức:
+     $$\text{Company} = (\text{ver} \gg 27) \& \text{0x1F}, \quad \text{Chip} = (\text{ver} \gg 21) \& \text{0x3F}, \quad \text{Func} = (\text{ver} \gg 16) \& \text{0x1F}, \quad \text{Alg} = (\text{ver} \gg 10) \& \text{0x3F}$$
+     $$\text{Release} = \lfloor (\text{ver} \& \text{0x3FF}) / 2 \rfloor + 1, \quad \text{Beta} = (\text{ver} \& 1)$$
+     (Ví dụ: `V0.6.0.0.2-release`).
+5. **Đường Dẫn RTSP Chuẩn Cho Dòng Firmware Cũ & Mới (`RTSP_Set.js`)**:
+   - **Firmware HTTP API V1.0 mới (`6M019A` / `N10256N`)**: `rtsp://<user>:<pass>@<IP>:554/rtsp/streaming?channel=1&subtype=0` (Main) / `subtype=1` (Sub).
+   - **Firmware Raysharp/Vantech truyền thống (`DEV_IPC` / `DEV_NVR`)**: `rtsp://<user>:<pass>@<IP>:554/ch01/0` (Main), `/ch01/1` (Sub), `/ch01/2` (Mobile) hoặc `/ip01/0` (trên Hybrid DVR).
