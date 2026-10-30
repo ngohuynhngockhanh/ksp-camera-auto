@@ -69,7 +69,7 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
      - **Nếu chuyển thành công sang AAC** (hoặc camera vốn đã có AAC):
        - `acodec`: `"copy"`
        - `stream_acodec`: `"copy"`
-       - `record_acodec`: `"aac"`
+       - `record_acodec`: `"copy"`
      - **Nếu KHÔNG sửa được về AAC** (firmware/phần cứng camera không hỗ trợ encoder AAC, read-back vẫn giữ non-AAC hoặc không có mic):
        - `acodec`: `"no"`
        - `stream_acodec`: `"no"`

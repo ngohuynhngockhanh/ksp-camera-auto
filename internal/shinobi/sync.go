@@ -124,7 +124,7 @@ func (c *Client) BuildMonitorConfig(d config.Device) MonitorConfig {
 
 	acodec := "copy"
 	streamAcodec := "copy"
-	recordAcodec := "aac"
+	recordAcodec := "copy"
 	if d.Vendor == config.VendorRaysharp {
 		// Raysharp hardware outputs G.711A/G.711U only (no hardware AAC);
 		// disable audio copy to preserve 0% CPU zero-transcoding.

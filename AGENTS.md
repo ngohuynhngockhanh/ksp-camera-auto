@@ -544,7 +544,7 @@ Module `internal/shinobi` cung cấp client Go thuần kết nối trực tiếp
   - **Quy tắc Codec & Remux (Zero-transcoding)**: `type: "h264"`, `vcodec: "copy"`, `record_vcodec: "copy"` (remux trực tiếp không tốn CPU).
   - **Quy tắc Xử lý Âm thanh (Audio Codec & Probe Workflow)**:
     - *Quy trình khi cài đặt/probe*: Khi thêm camera, hệ thống thăm dò (`probe`) cấu hình âm thanh. Nếu audio đang ở codec khác AAC (`pcm_alaw`, `pcm_mulaw`, `G.711A`, `G.711U`...), hệ thống **bắt buộc phải thử chuyển đổi encoder của camera về `AAC`** (`Audio.Compression=AAC` / `SetAudioAAC: true`).
-    - *Camera CÓ/CHUYỂN THÀNH CÔNG sang AAC* (`audioEnable: true` và `audioCodec == "AAC"`): Thiết lập `acodec: "copy"`, `stream_acodec: "copy"`, `record_acodec: "aac"`.
+    - *Camera CÓ/CHUYỂN THÀNH CÔNG sang AAC* (`audioEnable: true` và `audioCodec == "AAC"`): Thiết lập `acodec: "copy"`, `stream_acodec: "copy"`, `record_acodec: "copy"` (Zero-transcoding 100% cả video lẫn audio).
     - *Camera KHÔNG SỬA ĐƯỢC về AAC* (firmware không hỗ trợ AAC, read-back vẫn giữ non-AAC, hoặc tắt audio): Bắt buộc tắt copy âm thanh bằng cách gán `acodec: "no"`, `stream_acodec: "no"`, `record_acodec: "no"` trên Shinobi monitor.
   - **Quy tắc FFmpeg Flags**:
     - `cust_input`: `""` (**BẮT BUỘC ĐỂ TRỐNG** — xóa bỏ mọi cờ buffer/low_delay `-fflags nobuffer...`).
