@@ -73,6 +73,15 @@
        mount -o remount,noatime,errors=continue /media/usb1
        ```
     4. *Hiệu quả:* Gặp bad sector vật lý thì kernel tự bỏ qua và tiếp tục ghi đè không bị remount-ro; rút thẻ ra thì box vẫn boot vào Linux bình thường, mạng và SSH luôn online.
+- **QUY TẮC GỠ BỎ `netwatch.service` TRONG GOLDEN HARDENING (Mandatory Netwatch Removal)**:
+  - Khi kiểm tra hoặc tối ưu bất kỳ node nào trong fleet, nếu phát hiện có dịch vụ `netwatch.service` / `/usr/local/bin/netwatch_loop.sh` (kịch bản ping gateway rồi bắn `echo b > /proc/sysrq-trigger` làm sập nguồn cứng và ngắt ghi hình LAN khi rớt mạng WAN), **BẮT BUỘC phải tắt và khóa vĩnh viễn (`disable` + `mask`) dịch vụ `netwatch`**, đồng thời khóa `kernel.sysrq = 0`:
+    ```bash
+    systemctl stop netwatch.service 2>/dev/null || true
+    systemctl disable netwatch.service 2>/dev/null || true
+    systemctl mask netwatch.service 2>/dev/null || true
+    pkill -9 -f netwatch_loop.sh 2>/dev/null || true
+    rm -f /usr/local/bin/netwatch_loop.sh /root/netwatch_installer.sh 2>/dev/null || true
+    ```
 ---
 
 ## 2. Bản đồ kiến trúc hệ thống (System Architecture)
