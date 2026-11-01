@@ -19,9 +19,9 @@ var (
 	cameraNameRe   = regexp.MustCompile(`(?i)^camera\s*0*(\d+)$`)
 )
 
-// GoldenCustRecordFlags enforces H.265 hvc1 tag and fragmented MP4 segments so recordings
-// remain playable (moov atom present from byte 0x20) even after sudden power loss or kill -9.
-const GoldenCustRecordFlags = "-tag:v hvc1 -segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof"
+// GoldenCustRecordFlags enforces H.265 hvc1 tag and per-segment movflags=+faststart so
+// each completed MP4 segment has a full moov atom at byte 0x1C (loads in 1 Range request on mobile/iOS).
+const GoldenCustRecordFlags = "-tag:v hvc1 -segment_format_options movflags=+faststart"
 
 // DefaultInputMapChoices returns the mandatory Shinobi input_map_choices structure
 // so Shinobi's builders.js:398 never throws TypeError reading 'stream'.

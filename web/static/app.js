@@ -3874,7 +3874,7 @@ function wireShinobiTabEvents() {
           record_acodec: 'copy',
           cust_input: '',
           cust_stream: '',
-          cust_record: '-tag:v hvc1 -segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof',
+          cust_record: '-tag:v hvc1 -segment_format_options movflags=+faststart',
           wall_clock_timestamp_ignore: '0',
           snap: '0',
           detector: '0',

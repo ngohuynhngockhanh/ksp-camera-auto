@@ -78,7 +78,7 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 ### C. Quy tắc Flags (FFmpeg Flags Standard):
 - `cust_input`: `""` (**BẮT BUỘC ĐỂ TRỐNG** — không chèn cờ `-fflags nobuffer...` hay `-flags low_delay...`).
 - `cust_stream`: `""` (**BẮT BUỘC ĐỂ TRỐNG** — không chèn cờ `-hls_flags program_date_time...`).
-- `cust_record`: `"-tag:v hvc1 -segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof"` (**BẮT BUỘC**: `-tag:v hvc1` cho chuẩn H.265 để container MP4 gắn đúng fourcc `hvc1` phát mượt trên Apple/Web; `-segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof` truyền `movflags` vào từng segment `.mp4` con của `-f segment`, ghi `moov` atom ngay từ byte `0x20` đầu file giúp clip không bao giờ bị lỗi `moov atom not found` khi mất điện hoặc tiến trình `ffmpeg` bị ngắt giữa chừng).
+- `cust_record`: `"-tag:v hvc1 -segment_format_options movflags=+faststart"` (**BẮT BUỘC**: `-tag:v hvc1` cho chuẩn H.265 để container MP4 gắn đúng fourcc `hvc1` phát mượt trên Apple/Web; `-segment_format_options movflags=+faststart` truyền `movflags=+faststart` vào từng segment `.mp4` con của `-f segment`, đặt `moov` atom đầy đủ bảng `stbl` ngay tại byte `0x1C` đầu file — trình duyệt mobile phát ngay trong **1 HTTP Range request (~150ms)** và lưu được vào iPhone Photos. Tuyệt đối **KHÔNG** dùng `empty_moov` vì gây bão 150+ HTTP Range requests và lỗi phát/tải trên iPhone).
 - `wall_clock_timestamp_ignore`: `"0"` (**BẮT BUỘC: luôn gán "0"** để Shinobi tự động chèn cờ `-use_wallclock_as_timestamps 1`, ngăn ngừa lỗi trượt timescale `1/12800` khiến FPS nhảy vọt 11,983 fps khi mạng LAN camera bị nghẽn gói).
 
 ### D. Watchdog & Giám sát:

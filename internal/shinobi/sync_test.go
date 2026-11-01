@@ -24,7 +24,7 @@ func TestBuildMonitorConfigGoldenSOPDetails(t *testing.T) {
 
 	cfg := client.BuildMonitorConfig(dev)
 
-	wantCustRecord := "-tag:v hvc1 -segment_format_options movflags=frag_keyframe+empty_moov+default_base_moof"
+	wantCustRecord := "-tag:v hvc1 -segment_format_options movflags=+faststart"
 	if cfg.Details.CustRecord != wantCustRecord {
 		t.Fatalf("CustRecord = %q, want %q", cfg.Details.CustRecord, wantCustRecord)
 	}
