@@ -33,6 +33,33 @@
   - **Ngày lên Full Go:** `2026-11-08`
   - **Kiến trúc:** `linux/arm64` (`aarch64`), chạy đồng bộ `go-shinobi-ksp` (`:8080`, 10 camera, RAM `~18.7 MB`) + `redbida-go` (`:2023`, RAM `~14.2 MB`, giảm từ `183.6 MB` Node-RED) + `ksp-go2rtc` (`:1984`, RAM `~15.6 MB`, CORS `origin: "*"`) + `ota-mqtt` (`:12369`). Tổng RAM hệ thống giảm từ `737 MB` xuống **`464 MB`** (giải phóng `273 MB` RAM + `311 MB` Swap).
   - **Trạng thái:** `ONLINE` — đầy đủ CORS (`Access-Control-Allow-Origin: *`), `/#!/0..30`, `/api/v1/:id`, `/inut-billiard-live-cong-ty-inut-jsc/:id`, `/root/go2rtc.yaml` 10 streams, và MQTT `12369` (`mhw` unwrap `/private/i_sets/ack`).
+
+- **`inut_201_102` (`77.88.201.102` — QL Billiards Club, `ke=qlbilliards`, 7 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM: `251M/999M` (giảm từ `480M`), `go-shinobi-ksp` `~9.8 MB`, `redbida-go` `~10.7 MB`, `ksp-go2rtc` `~10.1 MB`, `kspcam` `:2028` (`7/7` snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_202_208` (`77.88.202.208` — CLB Bida Win, `ke=win11`, 6 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM: `223M/999M` (giảm từ `538M`), `go-shinobi-ksp` `~9.2 MB`, `redbida-go` `~9.1 MB`, `ksp-go2rtc` `~8.3 MB`, `kspcam` `:2028` (`6/6` snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_202_214` (`77.88.202.214` — Billiard Club Chấn Hoàng, `ke=chanhoang`, 7 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM: `253M/999M` (giảm từ `476M`), `go-shinobi-ksp` `~12.2 MB`, `redbida-go` `~9.5 MB`, `ksp-go2rtc` `~7.6 MB`, `kspcam` `:2028` (`7/7` snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_202_213` (`77.88.202.213` — Núi Thành Billiards Center, `ke=nuithanh`, 4 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM: `206M/999M` (giảm từ `411M`), `go-shinobi-ksp` `~13.0 MB`, `redbida-go` `~11.9 MB`, `ksp-go2rtc` `~13.5 MB`, `kspcam` `:2028` (4 cam synced, 2 online snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_202_226` (`77.88.202.226` — Queen Billiards Club, `ke=giaphong`, 5 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM: `199M/999M` (giảm từ `409M`), `go-shinobi-ksp` `~14.4 MB`, `redbida-go` `~11.1 MB`, `ksp-go2rtc` `~12.5 MB`, `kspcam` `:2028` (5 cam synced, 1 online snapshot OK), `inut-bida-agent` `active`.
+
+- **`inut_203_80` (`77.88.203.80` — Monkey Billiards Club, `ke=monkey`, 8 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM: `325M/999M` (giảm từ `484M`), `go-shinobi-ksp` `~12.3 MB`, `redbida-go` `~11.0 MB`, `ksp-go2rtc` `~13.9 MB`, `kspcam` `:2028` (`8/8` snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_203_90` (`77.88.203.90` — AMIGOS Billiards, `ke=amigos`, 7 cam NVR Hikvision)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM: `253M/999M` (giảm từ `664M`), `go-shinobi-ksp` `~16.0 MB` (`7/7` Recording), `redbida-go` `~10.9 MB`, `ksp-go2rtc` `~11.7 MB`, `kspcam` `:2028` (`7/7` snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_200_76` (`77.88.200.76` — SlyBilliards Club, `ke=sly`, 7 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM: `257M/999M` (giảm từ `493M`), `go-shinobi-ksp` `~16.1 MB` (`fsck.f2fs -a` phục hồi thẻ nhớ không mất clip, `6/7` cam online Recording), `redbida-go` `~11.5 MB`, `ksp-go2rtc` `~14.5 MB`, `kspcam` `:2028` (`5/5` cam online snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_200_79` (`77.88.200.79` — 247 Billiards & Coffee Cần Thơ, `ke=golfbg`, 6 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM: `225M/999M` (giảm từ `694M`), `go-shinobi-ksp` `~16.0 MB` (`6/6` Recording), `redbida-go` `~11.8 MB`, `ksp-go2rtc` `~13.4 MB`, `kspcam` `:2028` (`6/6` snapshots OK), `inut-bida-agent` `active`.
 ---
 
 ## 2. Lệnh Ansible Trên `172.16.5.180` (`/build/armbian-build/ansible`)

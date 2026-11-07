@@ -73,6 +73,17 @@
 - **Bảo toàn API Keys & Video Cũ:**
   - Giữ nguyên 100% API keys từ MySQL `ccio.API` (`<REDACTED_SHINOBI_TOKEN>`, `<REDACTED_MONITOR_TOKEN>`) và toàn bộ 82 GB file video `.mp4` trên `/media/usb1/s912/camera01..camera10/`.
 - **Trạng thái kiểm chứng:** `ONLINE` • Luồng FFmpeg ghi hình 5 phút/clip (`moov_size=262144:movflags=+faststart`) • RAM `go-shinobi-ksp` ~18.7 MB • Load average `0.95`.
+
+### 1.6 Lô 9 Node `armv7l` (`1 GB RAM`) Lên Full Go Ngày `2026-11-08`
+- **`inut_201_102` (`77.88.201.102` — QL Billiards Club):** `ke=qlbilliards` • `7` cam (`192.168.1.234..240`) • RAM giảm từ `480 MB` xuống **`251 MB`** • `7/7` Recording & `7/7` snapshots `:2028` OK.
+- **`inut_202_208` (`77.88.202.208` — CLB Bida Win):** `ke=win11` • `6` cam (`192.168.1.240..245`) • RAM giảm từ `538 MB` xuống **`223 MB`** • `6/6` Recording & `6/6` snapshots `:2028` OK.
+- **`inut_202_214` (`77.88.202.214` — Billiard Club Chấn Hoàng):** `ke=chanhoang` • `7` cam (`192.168.2.241..247`) • RAM giảm từ `476 MB` xuống **`253 MB`** • `7/7` Recording & `7/7` snapshots `:2028` OK.
+- **`inut_202_213` (`77.88.202.213` — Núi Thành Billiards Center):** `ke=nuithanh` • `4` cam (`192.168.1.240..243`, 2 cam online) • RAM giảm từ `411 MB` xuống **`206 MB`** • `2/2` cam online snapshots `:2028` OK.
+- **`inut_202_226` (`77.88.202.226` — Queen Billiards Club):** `ke=giaphong` • `5` cam (`192.168.1.240..244`, 1 cam online) • RAM giảm từ `409 MB` xuống **`199 MB`** • `1/1` cam online snapshot `:2028` OK.
+- **`inut_203_80` (`77.88.203.80` — Monkey Billiards Club):** `ke=monkey` • `8` cam (`192.168.1.202..210`) • RAM giảm từ `484 MB` xuống **`325 MB`** • `8/8` Recording & `8/8` snapshots `:2028` OK.
+- **`inut_203_90` (`77.88.203.90` — AMIGOS Billiards):** `ke=amigos` • `7` cam NVR Hikvision (`192.168.100.189` ch `301..1001`) • RAM giảm từ `664 MB` xuống **`253 MB`** • `7/7` Recording & `7/7` snapshots `:2028` OK.
+- **`inut_200_76` (`77.88.200.76` — SlyBilliards Club):** `ke=sly` • `7` cam (`192.168.1.241..247`, đã chạy `fsck.f2fs -a` phục hồi phân vùng `/media/usb1` không mất dữ liệu) • RAM giảm từ `493 MB` xuống **`257 MB`** • `6/7` Recording & `5/5` cam online snapshots `:2028` OK.
+- **`inut_200_79` (`77.88.200.79` — 247 Billiards & Coffee Cần Thơ):** `ke=golfbg` • `6` cam (`192.168.1.201..206`) • RAM giảm từ `694 MB` xuống **`225 MB`** • `6/6` Recording & `6/6` snapshots `:2028` OK.
 ---
 
 ## 2. Quy Trình Chuẩn Onboarding Từ Shinobi Cũ Lên Go-Shinobi-KSP (Zero Clip Loss)
