@@ -28,6 +28,11 @@
   - **Ngày lên Full Go:** `2026-11-08`
   - **Kiến trúc:** `linux/arm64` (`aarch64`), chạy đồng bộ `go-shinobi-ksp` (`:8080`, 11 camera NVR, RAM `~16 MB`) + `redbida-go` (`:2023`, RAM `~13 MB`) + `ksp-go2rtc` (`:1984`, CORS `origin: "*"`) + `kspcam` (`:2028`) + `inut-bida-agent` + `ota-mqtt` (`:12369`).
   - **Trạng thái:** `ONLINE` — đầy đủ CORS (`Access-Control-Allow-Origin: *`) trên cả `:2023`, `:8080`, `:1984` cho màn hình bảng điểm Android `rk3566_r` (`Cameralive CodePush v41`), i18n (`vi`/`en`/`cz`), và CheckVAR 1 Cam & 2 Cam.
+
+- **`inut_204_251` (`77.88.204.251` / `4.251` — TG Golden Billiards Club)**:
+  - **Ngày lên Full Go:** `2026-11-08`
+  - **Kiến trúc:** `linux/arm64` (`aarch64`), chạy đồng bộ `go-shinobi-ksp` (`:8080`, 10 camera, RAM `~18.7 MB`) + `redbida-go` (`:2023`, RAM `~14.2 MB`, giảm từ `183.6 MB` Node-RED) + `ksp-go2rtc` (`:1984`, RAM `~15.6 MB`, CORS `origin: "*"`) + `ota-mqtt` (`:12369`). Tổng RAM hệ thống giảm từ `737 MB` xuống **`464 MB`** (giải phóng `273 MB` RAM + `311 MB` Swap).
+  - **Trạng thái:** `ONLINE` — đầy đủ CORS (`Access-Control-Allow-Origin: *`), `/#!/0..30`, `/api/v1/:id`, `/inut-billiard-live-cong-ty-inut-jsc/:id`, `/root/go2rtc.yaml` 10 streams, và MQTT `12369` (`mhw` unwrap `/private/i_sets/ack`).
 ---
 
 ## 2. Lệnh Ansible Trên `172.16.5.180` (`/build/armbian-build/ansible`)

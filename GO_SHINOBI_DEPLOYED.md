@@ -62,6 +62,17 @@
   - Giữ nguyên 100% 5 API keys từ MySQL `ccio.API` (`<REDACTED_SHINOBI_TOKEN>`, `<REDACTED_MONITOR_TOKEN>`) và toàn bộ **667+ file video `.mp4`** trên `/media/usb1/billiardclub/camera01..camera11/`.
 - **Trạng thái kiểm chứng:** `ONLINE` • 11/11 luồng FFmpeg ghi hình 5 phút/clip (`moov_size=262144:movflags=+faststart`) • RAM `go-shinobi-ksp` ~18 MB.
 
+
+### 1.5 `inut_204_251` — `77.88.204.251` (TG Golden Billiards Club)
+- **Tên quán / Điểm lắp đặt:** TG Golden Billiards Club (`ui_title=TG Golden Billiards Club`)
+- **Kiến trúc phần cứng:** `aarch64` (`Linux 5.15.190-ophub`, 2 GB RAM, thẻ nhớ F2FS `/media/usb1` 118 GB)
+- **Binary triển khai:** `/opt/go-shinobi-ksp/go-shinobi-ksp` (`go-shinobi-ksp-linux-arm64`, PM2 process `camera`)
+- **Database SQLite WAL:** `/opt/go-shinobi-ksp/shinobi.sqlite` (MariaDB/MySQL đã dừng & disable, tổng RAM hệ thống giảm từ `737 MB` xuống `464 MB` và Swap giảm từ `391 MB` xuống `80 MB`)
+- **Group Key (`ke` / `shinobi_camera_id`):** `s912`
+- **Số lượng Camera Monitors:** `10` (`camera01`..`camera10` — `192.168.2.239..249:554/cam/realmonitor?channel=1&subtype=0`, chế độ `record`)
+- **Bảo toàn API Keys & Video Cũ:**
+  - Giữ nguyên 100% API keys từ MySQL `ccio.API` (`<REDACTED_SHINOBI_TOKEN>`, `<REDACTED_MONITOR_TOKEN>`) và toàn bộ 82 GB file video `.mp4` trên `/media/usb1/s912/camera01..camera10/`.
+- **Trạng thái kiểm chứng:** `ONLINE` • Luồng FFmpeg ghi hình 5 phút/clip (`moov_size=262144:movflags=+faststart`) • RAM `go-shinobi-ksp` ~18.7 MB • Load average `0.95`.
 ---
 
 ## 2. Quy Trình Chuẩn Onboarding Từ Shinobi Cũ Lên Go-Shinobi-KSP (Zero Clip Loss)
