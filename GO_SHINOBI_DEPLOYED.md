@@ -84,6 +84,16 @@
 - **`inut_203_90` (`77.88.203.90` — AMIGOS Billiards):** `ke=amigos` • `7` cam NVR Hikvision (`192.168.100.189` ch `301..1001`) • RAM giảm từ `664 MB` xuống **`253 MB`** • `7/7` Recording & `7/7` snapshots `:2028` OK.
 - **`inut_200_76` (`77.88.200.76` — SlyBilliards Club):** `ke=sly` • `7` cam (`192.168.1.241..247`, đã chạy `fsck.f2fs -a` phục hồi phân vùng `/media/usb1` không mất dữ liệu) • RAM giảm từ `493 MB` xuống **`257 MB`** • `6/7` Recording & `5/5` cam online snapshots `:2028` OK.
 - **`inut_200_79` (`77.88.200.79` — 247 Billiards & Coffee Cần Thơ):** `ke=golfbg` • `6` cam (`192.168.1.201..206`) • RAM giảm từ `694 MB` xuống **`225 MB`** • `6/6` Recording & `6/6` snapshots `:2028` OK.
+
+### 1.7 Lô 8 Node `aarch64` (`2 GB RAM`) Lên Full Go Ngày `2026-11-08`
+- **`inut_204_163` (`77.88.204.163` — SD Billiards Club - CS2):** `ke=P6zP1kVhht` • `8` cam • RAM giảm từ `934 MB` xuống **`452 MB`** • `8/8` Recording & `8/8` snapshots `:2028` OK.
+- **`inut_205_123` (`77.88.205.123` — Magic Arena Đà Nẵng):** `ke=magic2` • `12` cam NVR `:1554` • RAM giảm từ `921 MB` xuống **`436 MB`** • `12/12` Recording & `12/12` snapshots `:2028` OK.
+- **`inut_205_124` (`77.88.205.124` — Magic Arena Đà Nẵng):** `ke=magic1` • `16` cam NVR `:1554` • RAM giảm từ `1143 MB` xuống **`500 MB`** • `16/16` Recording & `16/16` snapshots `:2028` OK.
+- **`inut_204_36` (`77.88.204.36` — LEO Billiard):** `ke=bida2392` • `17` cam NVR • RAM giảm từ `1243 MB` xuống **`533 MB`** • `17/17` Recording & `17/17` snapshots `:2028` OK.
+- **`inut_205_112` (`77.88.205.112` — LEO Billiard):** `ke=t9` • `13` cam NVR • RAM giảm từ `1362 MB` xuống **`766 MB`** • `13/13` Recording & `13/13` snapshots `:2028` OK.
+- **`inut_205_29` (`77.88.205.29` — CLB Bida 49 Ninh Hoà):** `ke=banchobienhoanha` • `12` cam • RAM giảm từ `1149 MB` xuống **`592 MB`** • `12/12` Recording & `12/12` snapshots `:2028` OK.
+- **`inut_205_75` (`77.88.205.75` — 49 Billiards Carom Club Ninh Hòa):** `ke=49` • `10` cam • RAM giảm từ `872 MB` xuống **`562 MB`** • `10/10` Recording & `10/10` snapshots `:2028` OK.
+- **`inut_205_85` (`77.88.205.85` — Lion King Billiards Club Nam Định - CS2):** `ke=lionkingnd` • `6` cam • RAM giảm từ `809 MB` xuống **`503 MB`** • `6/6` Recording & `6/6` snapshots `:2028` OK.
 ---
 
 ## 2. Quy Trình Chuẩn Onboarding Từ Shinobi Cũ Lên Go-Shinobi-KSP (Zero Clip Loss)

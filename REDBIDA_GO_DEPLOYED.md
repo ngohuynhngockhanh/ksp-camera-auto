@@ -60,6 +60,30 @@
 
 - **`inut_200_79` (`77.88.200.79` — 247 Billiards & Coffee Cần Thơ, `ke=golfbg`, 6 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM: `225M/999M` (giảm từ `694M`), `go-shinobi-ksp` `~16.0 MB` (`6/6` Recording), `redbida-go` `~11.8 MB`, `ksp-go2rtc` `~13.4 MB`, `kspcam` `:2028` (`6/6` snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_204_163` (`77.88.204.163` / `4.163` — SD Billiards Club - CS2, `ke=P6zP1kVhht`, 8 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `934M` xuống **`452M/1794M`** (giải phóng `482 MB`), `go-shinobi-ksp` `~17.7 MB`, `redbida-go` `~27.4 MB`, `ksp-go2rtc` `~15.2 MB`, `kspcam` `:2028` (`8/8` snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_205_123` (`77.88.205.123` / `5.123` — Magic Arena Đà Nẵng, `ke=magic2`, 12 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `921M` xuống **`436M/1923M`** (giải phóng `485 MB`), `go-shinobi-ksp` `~19.6 MB`, `redbida-go` `~28.6 MB`, `ksp-go2rtc` `~16.1 MB`, `kspcam` `:2028` (`12/12` snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_205_124` (`77.88.205.124` / `5.124` — Magic Arena Đà Nẵng, `ke=magic1`, 16 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1143M` xuống **`500M/1923M`** (giải phóng `643 MB`), `go-shinobi-ksp` `~25.3 MB`, `redbida-go` `~27.5 MB`, `ksp-go2rtc` `~16.4 MB`, `kspcam` `:2028` (`16/16` snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_204_36` (`77.88.204.36` / `4.36` — LEO Billiard, `ke=bida2392`, 17 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1243M` xuống **`533M/1980M`** (giải phóng `710 MB`), `go-shinobi-ksp` `~20.5 MB`, `redbida-go` `~27.8 MB`, `ksp-go2rtc` `~15.7 MB`, `kspcam` `:2028` (`17/17` snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_205_112` (`77.88.205.112` / `5.112` — LEO Billiard, `ke=t9`, 13 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1362M` xuống **`766M/1923M`** (giải phóng `596 MB`), `go-shinobi-ksp` `~18.0 MB`, `redbida-go` `~27.0 MB`, `ksp-go2rtc` `~16.2 MB`, `kspcam` `:2028` (`13/13` snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_205_29` (`77.88.205.29` / `5.29` — CLB Bida 49 Ninh Hoà, `ke=banchobienhoanha`, 12 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1149M` xuống **`592M/1923M`** (giải phóng `557 MB`), `go-shinobi-ksp` `~25.9 MB`, `redbida-go` `~28.5 MB`, `ksp-go2rtc` `~15.8 MB`, `kspcam` `:2028` (`12/12` snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_205_75` (`77.88.205.75` / `5.75` — 49 Billiards Carom Club Ninh Hòa, `ke=49`, 10 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `872M` xuống **`562M/1923M`** (giải phóng `310 MB`), `go-shinobi-ksp` `~20.6 MB`, `redbida-go` `~12.6 MB`, `ksp-go2rtc` `~16.1 MB`, `kspcam` `:2028` (`10/10` snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_205_85` (`77.88.205.85` / `5.85` — Lion King Billiards Club Nam Định - CS2, `ke=lionkingnd`, 6 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `809M` xuống **`503M/1923M`** (giải phóng `306 MB`), `go-shinobi-ksp` `~18.6 MB`, `redbida-go` `~26.6 MB`, `ksp-go2rtc` `~16.2 MB`, `kspcam` `:2028` (`6/6` snapshots OK), `inut-bida-agent` `active`.
 ---
 
 ## 2. Lệnh Ansible Trên `172.16.5.180` (`/build/armbian-build/ansible`)
