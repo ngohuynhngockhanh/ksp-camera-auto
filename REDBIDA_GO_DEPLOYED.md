@@ -25,11 +25,9 @@
   - **Trạng thái:** `ONLINE` — hoạt động đầy đủ `/#!/0..30`, `/api/v1/:id`, `/inut-billiard-live-cong-ty-inut-jsc/:id`, `/hls/...`, `/videos/...`, MQTT `12369` (`/data/alarms` chuẩn 1:1).
 
 - **`inut_205_67` (`77.88.205.67` / `5.67` — BinK Billiards Club - Quy Nhơn)**:
-  - **Ngày lên Full Go:** `2026-11-07`
-  - **Kiến trúc:** `linux/arm64` (`aarch64`), chạy song song `go-shinobi-ksp` (`:8080`, 11 camera NVR) + `redbida-go` (`:2023`) + `kspcam` (`:2028`) + `inut-bida-agent` + `ota-mqtt` (`:12369`).
-  - **RAM & Swap tiết kiệm:** Tổng RAM hệ thống giảm **`-560 MB`** (`1154 MB -> 594 MB`), Swap giảm **`-636 MB`** (`832 MB -> 196 MB`); PM2 `inut` giảm từ `192.3 MB` xuống **`~27 MB`** (`redbida-go`).
-  - **Trạng thái:** `ONLINE` — hoạt động đầy đủ `/#!/0..30`, `/api/v1/:id`, `/inut-billiard-live-cong-ty-inut-jsc/:id`, `/hls/...`, `/videos/...`, MQTT `12369` (`/data/alarms` chuẩn 1:1).
-
+  - **Ngày nâng cấp:** `2026-11-07`
+  - **Kiến trúc:** `linux/arm64` (`aarch64`), đang chạy `go-shinobi-ksp` (`:8080`, 11 camera NVR, RAM `~16 MB`) + `kspcam` (`:2028`) + `inut-bida-agent` + `ota-mqtt` (`:12369`).
+  - **Trạng thái `:2023` (`inut`):** Tạm thời giữ Node-RED cũ trên `:2023` theo yêu cầu vận hành trong khi vẫn chạy `go-shinobi-ksp` (`:8080`).
 ---
 
 ## 2. Lệnh Ansible Trên `172.16.5.180` (`/build/armbian-build/ansible`)

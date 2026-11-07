@@ -1166,3 +1166,21 @@ Khi người dùng yêu cầu **"nâng cấp full go cho `<node_id>`"** (ví d�
      - Các nút `5 phút trước`..`4 giờ trước` lùi cộng dồn liên tiếp mỗi lần bấm; nút `Mới nhất` nhảy về đoạn 3 phút mới nhất; khi có `?from_app=1`, cắt xong hiển thị thẻ `PRO PLAYER HIGHLIGHT` kèm ảnh cầu thủ `/pro-player-qr.png`, thời lượng clip và mã QR tải về.
    - **Check 6 — Khóa Bảo Vệ Ansible (`make bida-update` & `make shinobi-update`)**:
      - Chạy `make bida-update <node>` hoặc `make shinobi-update <node>` trên `172.16.5.180` phải tự động nhận diện node đã lên Go và bỏ qua (`changed=0`).
+   - **Check 7 — Tương Thích App Bảng Điểm `Camera Live` (`com.loc4atnt.cameralive` HotCodePush) & Kiểm Tra `valid_license`**:
+     - **Quy trình tải & debug gói HotCodePush mới nhất của `com.loc4atnt.cameralive`**:
+       1. Đọc `SERVER_URL` (`https://codepush-iotanhdiep.mysystemservice.com/`) và `ANDROID_DEPLOY_KEY` / `IOS_DEPLOY_KEY` từ `assets/capacitor.config.json` bên trong `/home/ksp/inut-apphub/server/apks/com.loc4atnt.cameralive-86.apk`:
+          ```bash
+          python3 -c '
+          import zipfile, json, urllib.request
+          with zipfile.ZipFile("/home/ksp/inut-apphub/server/apks/com.loc4atnt.cameralive-86.apk") as z:
+              cfg = json.loads(z.read("assets/capacitor.config.json"))["plugins"]["CodePush"]
+          url = f"{cfg[\"SERVER_URL\"].rstrip(\"/\")}/v0.1/public/codepush/update_check?deployment_key={cfg[\"ANDROID_DEPLOY_KEY\"]}&app_version=1.2.26"
+          info = json.loads(urllib.request.urlopen(url, timeout=10).read())["update_info"]
+          print("Latest CodePush label:", info["label"], "download_url:", info["download_url"])
+          '
+          ```
+       2. Tải `download_url` về `/tmp/cameralive-codepush-latest/bundle.zip`, giải nén `public/assets/index-*.js`, và chạy hàm giải mã bảng chuỗi `_0x...` ở đầu file để kiểm tra logic thực tế của bản phát hành mới nhất (hiện tại `v41`).
+     - **Quy tắc sống còn cho `/api/v1/:id` và `valid_license` (Bảng điểm `rk3566_r`, `D01`, `HSD-215`)**:
+       - Ứng dụng `com.loc4atnt.cameralive` chạy trong Capacitor WebView với **`Origin: http://localhost`** và gọi cross-origin `fetch("http://<ip>:2023/api/v1/<id>?id=<device_id>&model=<model>&manufacturer=...")`.
+       - Server `:2023` (`redbida-go`) **BẮT BUỘC phải trả về `Access-Control-Allow-Origin: *`** trên mọi phản hồi HTTP (bao gồm `OPTIONS`). Nếu thiếu `Access-Control-Allow-Origin: *`, WebView chặn `fetch()` do lỗi CORS khiến hàm `TC()` trả về `null` $\to$ `source.type` rơi về `"url"` thay vì `"dict"` $\to$ app hiểu nhầm là không có license và văng thông báo `landing.invalidLicense`!
+       - Trong hàm `E3(deviceInfo, valid_license)` của `Cameralive`: chuỗi `valid_license` được tách theo `\n` (`split('\n').map(s => s.trim()).filter(Boolean)`). **Nếu `valid_license` rỗng (`""`), `lines.length === 0` trả về `true` — nghĩa là màn hình nào cũng dùng được bảng điểm**. Nếu `valid_license` khác rỗng, dòng cấu hình phải khớp `id` và `model` của màn hình (`resolveScoreboardValidLicense` trong `redbida-go` tự động chuẩn hóa cả hai trường hợp).
