@@ -1219,6 +1219,11 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		to := s.reqTimeout(timeoutSeconds)
 		ctx, cancel := context.WithTimeout(r.Context(), to)
 		defer cancel()
+		// Fast path (<35ms, zero camera load): if go-shinobi-ksp has a fresh (<15s old)
+		// HLS .ts segment in /dev/shm/streams/<gk>/<mid>/, decode 1 frame directly from RAM.
+		if fb, fbErr := s.tryFastRAMStreamSnapshot(ctx, src, ch); fbErr == nil && len(fb) > 200 {
+			return fb, nil
+		}
 		cam, err := camera.Open(ctx, src, to)
 		if err != nil && d.NVRID != "" && src.ID == d.ID {
 			if nvr, ok := s.inv.Get(d.NVRID); ok {
@@ -1257,6 +1262,63 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
+}
+
+// tryFastRAMStreamSnapshot checks if a fresh (<15s old) .ts segment exists in /dev/shm/streams
+// for this camera (by cameraNN prefix or DeviceToMid) without making any network/HTTP calls.
+func (s *Server) tryFastRAMStreamSnapshot(ctx context.Context, d config.Device, channel int) ([]byte, error) {
+	var candidateMids []string
+	if m := camPrefixMidRe.FindStringSubmatch(d.Name); len(m) > 1 {
+		if n, err := strconv.Atoi(m[1]); err == nil && n > 0 {
+			candidateMids = append(candidateMids, fmt.Sprintf("camera%02d", n))
+		}
+	}
+	if mid := shinobi.DeviceToMid(d); mid != "" {
+		candidateMids = append(candidateMids, mid)
+	}
+	if len(candidateMids) == 0 {
+		return nil, fmt.Errorf("no candidate mid")
+	}
+	var groupDirs []string
+	if gk := strings.TrimSpace(s.cfg.Shinobi.GroupKey); gk != "" {
+		groupDirs = append(groupDirs, filepath.Join("/dev/shm/streams", gk))
+	}
+	if entries, err := os.ReadDir("/dev/shm/streams"); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				groupDirs = append(groupDirs, filepath.Join("/dev/shm/streams", e.Name()))
+			}
+		}
+	}
+	cutoff := time.Now().Add(-15 * time.Second)
+	for _, gdir := range groupDirs {
+		for _, mid := range candidateMids {
+			tsFiles, _ := filepath.Glob(filepath.Join(gdir, mid, "*.ts"))
+			var newestTS string
+			var newestMod time.Time
+			for _, f := range tsFiles {
+				if st, err := os.Stat(f); err == nil && st.Size() > 1024 && st.ModTime().After(cutoff) && st.ModTime().After(newestMod) {
+					newestMod = st.ModTime()
+					newestTS = f
+				}
+			}
+			if newestTS != "" {
+				out, err := exec.CommandContext(ctx, "ffmpeg",
+					"-loglevel", "error",
+					"-i", newestTS,
+					"-frames:v", "1",
+					"-f", "image2",
+					"-c:v", "mjpeg",
+					"-q:v", "4",
+					"pipe:1",
+				).Output()
+				if err == nil && len(out) > 200 && out[0] == 0xff && out[1] == 0xd8 {
+					return out, nil
+				}
+			}
+		}
+	}
+	return nil, fmt.Errorf("no fresh RAM stream segment")
 }
 
 var camPrefixMidRe = regexp.MustCompile(`(?i)camera\s*0*(\d+)`)
