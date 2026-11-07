@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 EnvironmentFile=-/etc/default/inut-bida-agent
 Environment="INUT_BIDA_HUB_URL=https://inut-bida.p2p.inut.io.vn"
-Environment="INUT_BIDA_HUB_KEY=inut-bida-hub-key-2026"
+Environment="INUT_BIDA_HUB_KEY=<INUT_BIDA_HUB_KEY>"
 ExecStart=/usr/local/bin/inut-bida-agent -hub ${INUT_BIDA_HUB_URL} -secret ${INUT_BIDA_HUB_KEY} -interval 20s
 Restart=always
 RestartSec=3s

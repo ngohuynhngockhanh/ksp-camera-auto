@@ -636,9 +636,9 @@ Tự động hóa triển khai và cấu hình Shinobi NVR được quản lý q
 
 #### A. Quy trình Cấp phát Tự động (`tasks/shinobi_provision.yml`)
 1. **Kiểm tra Shinobi Service**: Thăm dò cổng 8080 trên target box (`wait_for 127.0.0.1:8080`).
-2. **Thử Đăng nhập Người dùng Thường**: Gọi `POST /?json=true` với user `ngohuynhngockhanh@gmail.com` / `smarthome12345`.
+2. **Thử Đăng nhập Người dùng Thường**: Gọi `POST /?json=true` với user `<SHINOBI_ADMIN_EMAIL>` / `<SHINOBI_USER_PASSWORD>`.
 3. **Kích hoạt Super Admin (Khi Chưa Có User)**:
-   - Đăng nhập Super Admin qua `POST /super/?json=true` (`ngohuynhngockhanh@gmail.com` / `KSPHondaCity51F79713@`).
+   - Đăng nhập Super Admin qua `POST /super/?json=true` (`<SHINOBI_SUPER_EMAIL>` / `<SHINOBI_SUPER_PASSWORD>`).
    - Đảm bảo `super.json` chứa token hợp lệ.
    - Đăng ký tài khoản Admin mới qua `POST /super/<super_token>/accounts/registerAdmin`.
    - Đăng nhập lại tài khoản người dùng và trích xuất `auth_token` và Group Key (`ke`).
@@ -1111,3 +1111,58 @@ func (m *MockISAPIServer) Close() {
 │   make build-all        # Đảm bảo compile tĩnh thành công amd64/armv7/arm64│
 └────────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+### 7.3 Chuẩn Tương Thích 1:1 `Go-Shinobi-KSP` (`iNut NVR :8080`) Với RedBida `:2023`, `kspcam` `:2028` & Quy Trình Onboarding
+
+1. **Hợp đồng JSON 1:1 cho API Videos (`GET /:apiKey/videos/:ke/:mid`) trên `:2023`**:
+   - Mọi phần tử video trả về bắt buộc phải có `actionUrl` (`/<apiKey>/videos/<ke>/<mid>/<filename>`), `href`, và `links` (`deleteVideo`, `changeToUnread`, `changeToRead`) để hàm `prepare to list` trên Node-RED `:2023` (`video.inut = video.actionUrl.replace("/" + msg.shinobi_token, "")`) hoạt động 100%.
+2. **Chuẩn hóa Múi Giờ Box (`GMT+7`) & Xử lý hậu tố `Z` của `modernc.org/sqlite`**:
+   - Driver `modernc.org/sqlite` khi đọc cột `DATETIME` ra `string` sẽ tự gắn hậu tố `"Z"`. Hàm `parseSQLTime` bắt buộc `strings.TrimSuffix(raw, "Z")` trước khi `time.ParseInLocation(..., time.Local)` và `parseQueryTime` bắt buộc hỗ trợ `time.RFC3339Nano` + `.In(time.Local)` để danh sách clip và thanh timeline `:2023` khớp đúng giờ của Box.
+3. **Bảo vệ Mount `/media/usb1` (`IsVideosDirMounted`) & Chốt Clip Đang Ghi (`CheckVAR` Flush)**:
+   - Trước khi chạy `ffmpeg` ở chế độ `record`, bắt buộc kiểm tra `/media/usb1` đã được mount thật trên `/proc/mounts` (hoặc khác `st_dev` với `/`). Nếu chưa mount, tự động chạy `ffmpeg` ở chế độ **Chỉ Xem (`Watch-Only` HLS)** kèm báo động đỏ để bảo vệ bộ nhớ eMMC gốc, và tự động chuyển lại `Recording` khi `/media/usb1` được mount.
+   - Trước khi Stop / Restart / Onboarding, bắt buộc gọi `date -s "$(date '+%Y-%m-%d %H:%M:%S')"` và dừng `ffmpeg` bằng `SIGINT` để chốt hoàn chỉnh file `.mp4` đang ghi với `moov` atom ở đầu file (`-tag:v hvc1 -segment_format_options moov_size=262144:movflags=+faststart`).
+4. **Tương thích Import/Export JSON (`[...]`) & Onboarding Không Mất Clip (`make go-shinobi <target>`)**:
+   - Xuất cấu hình Monitor ra mảng JSON trần `[...]` để import ngược vào Shinobi Node.js cũ hoặc `kspcam` OK 100%.
+   - Khi triển khai node mới qua `make go-shinobi <target>` trên `172.16.5.180`, giữ nguyên 100% API keys (`shinobi_token`, `shinobi_monitor_token`), Monitors, Videos và cập nhật vào `GO_SHINOBI_DEPLOYED.md`. Chi tiết xem tại `.agents/skills/go-shinobi-compatibility/SKILL.md`.
+
+---
+
+### 7.4 Quy Trình "Nâng Cấp Full Go (`full go`)" Cho 1 Node ID & Checklist Chủ Động Kiểm Thử Từng Tính Năng
+
+Khi người dùng yêu cầu **"nâng cấp full go cho `<node_id>`"** (ví dụ: `nâng cấp 5.67 lên full go` hoặc `full go 6.10`), AI Agent tự động hiểu và thực thi đầy đủ quy trình chuẩn sau:
+
+1. **Quy Ước Ánh Xạ Mã Node (`<subnet>.<host>` $\to$ Ansible Host & IP)**:
+   - `4.X` $\to$ `inut_204_X` (`77.88.204.X`)
+   - `5.X` $\to$ `inut_205_X` (`77.88.205.X`) (ví dụ: `5.67` $\to$ `inut_205_67` / `77.88.205.67`; `5.98` $\to$ `inut_205_98` / `77.88.205.98`)
+   - `6.X` $\to$ `inut_206_X` (`77.88.206.X`) (ví dụ: `6.10` $\to$ `inut_206_10` / `77.88.206.10`; `6.14` $\to$ `inut_206_14` / `77.88.206.14`)
+   - `7.X` $\to$ `inut_207_X` (`77.88.207.X`)
+2. **Các Bước Thực Thi Bắt Buộc Khi Nâng Cấp Full Go**:
+   - **Bước 1 (Golden Hardening & Bảo toàn 100% Branding/Video)**:
+     - Kiểm tra kiến trúc (`uname -m`: `aarch64` dùng bản `arm64`, `armv7l` dùng bản `armv7`), RAM, dung lượng `/media/usb1`.
+     - Cấu hình `/etc/media-automount.d/{f2fs,ext4,auto}` (với kernel 6.x dùng `errors=continue,noatime,users`; với kernel 5.15 sunxi `f2fs` không hỗ trợ `errors=continue` thì dùng `noatime,users`), dọn sạch thẻ nhớ ngoài khỏi `/etc/fstab`, remount nóng `/media/usb1` (tuyệt đối không format thẻ nhớ).
+     - Tắt, `disable`, `mask` và xóa `netwatch.service` / `/usr/local/bin/netwatch_loop.sh`; đặt `kernel.sysrq = 0`.
+     - Bảo toàn nguyên vẹn 100% các khóa branding trong `/root/ota-mqtt/change_ok/` (`ui_title`, `ui_bg`, `logo_header`, `logo_livestream`, `logo_header_text`, `custom_hashtags`, `shinobi_camera_id`, `shinobi_token`, `shinobi_monitor_token`).
+   - **Bước 2 (Triển khai Bộ 3 Dịch vụ Go trên `172.16.5.180` tại `/build/armbian-build/ansible`)**:
+     - **`go-shinobi-ksp` (`:8080`, PM2 `camera`)**: Chạy `make go-shinobi inut_<subnet>_<host>` để chốt clip đang ghi, backup MySQL `ccio`, migrate 100% `Users`/`API`/`Monitors`/`Videos` sang SQLite `/opt/go-shinobi-ksp/shinobi.sqlite`, tắt/disable MariaDB, và ép cờ `-tag:v hvc1 -segment_format_options moov_size=262144:movflags=+faststart -segment_time 300`.
+     - **`redbida-go` (`:2023`, PM2 `inut`)**: Chạy `make redbida-go inut_<subnet>_<host>` để chuyển PM2 `inut` từ Node-RED sang `redbida-go`.
+     - **`kspcam` (`:2028`) & `inut-bida-agent`**: Cập nhật binary mới nhất theo kiến trúc (`arm64` / `armv7`), đảm bảo `systemctl is-active kspcam inut-bida-agent` đều `active`.
+   - **Bước 3 (Ghi nhận vào Sổ cái Triển khai)**:
+     - Cập nhật thông tin node vào cả `GO_SHINOBI_DEPLOYED.md` và `REDBIDA_GO_DEPLOYED.md` (lưu ý: tuyệt đối viết `<REDACTED_TOKEN>` thay vì paste chuỗi token thật vào file markdown để không kích hoạt cảnh báo GitGuardian).
+3. **Checklist Chủ Động Kiểm Thử Từng Tính Năng Sau Khi Lên Full Go**:
+   - **Check 1 — Sức khỏe tiến trình & Ghi hình 5 phút/clip (`:8080`, `:2023`, `:2028`)**:
+     - `pm2 list`: `camera` (`go-shinobi-ksp`), `inut` (`redbida-go`), `ota-mqtt` đều `online` với `↺ = 0`.
+     - `curl -s http://127.0.0.1:8080/healthz`, `curl -s http://127.0.0.1:2023/healthz`, `curl -s http://127.0.0.1:2028/healthz` đều trả về `ok`.
+     - `ps -ef | grep ffmpeg`: chạy `/usr/bin/ffmpeg` với `-tag:v hvc1 -segment_format_options moov_size=262144:movflags=+faststart` và `-segment_time 300`.
+   - **Check 2 — Cấu trúc MQTT `/data/alarms` trên `vnmap.inut.vn/device/86`**:
+     - Trong payload `/data/alarms`, trường `usb` bắt buộc là mảng JSON `[]` (không được là `{}`), `p2p` chứa trạng thái các proxy FRPC, và `info` có đầy đủ tiền tố `"Camera uptime: ..."`, `"P2P uptime: ..."`, `"API req: ..."`, `"View: ..."`, tốc độ mạng `"eth0/end0  (U↑): ... Mbps  (D↓): ... Mbps"` và danh sách thiết bị kết nối.
+     - Mở `https://vnmap.inut.vn/device/86`, tìm theo mã node (ví dụ `5.98`, `5.67`, `6.14`, `6.10`) $\to$ xác nhận `0 pageerror` và hiển thị đầy đủ nút `[P2P]`, `[SỐ USB: 0]` cùng các dòng thông số.
+   - **Check 3 — Giao diện Trang Chủ `:2023` & Menu `?show_toolbar_open=1`**:
+     - Mở `/#!/0`: thanh `#mainToolbar` ẩn mặc định (`display: none`), chỉ hiển thị khi URL có `?show_toolbar_open=1` (menu góc trái chỉ hiển thị các bàn camera, không hiển thị mục `20..23`).
+   - **Check 4 — Chế độ Tua Chậm (`0.05x..8x`) & Zoom/Pan iOS Safari (`#overlay`)**:
+     - Mở `#overlay`: bảng điều khiển nhỏ gọn, nền trong suốt `rgba(15, 23, 42, 0.38)`, chọn `0.05x..8x` không văng `DOMException`, tua `-1s/-3s/-5s/+1s/+3s/+5s/+10s` phản hồi tức thì nhờ HTTP `206 Partial Content`, pinch 2 ngón và nhấc 1 ngón trên `#zoomStage` không bị nhảy khung hình.
+   - **Check 5 — Trang Cắt Clip & QR Pro Player Highlight (`?from_app=1`)**:
+     - Các nút `5 phút trước`..`4 giờ trước` lùi cộng dồn liên tiếp mỗi lần bấm; nút `Mới nhất` nhảy về đoạn 3 phút mới nhất; khi có `?from_app=1`, cắt xong hiển thị thẻ `PRO PLAYER HIGHLIGHT` kèm ảnh cầu thủ `/pro-player-qr.png`, thời lượng clip và mã QR tải về.
+   - **Check 6 — Khóa Bảo Vệ Ansible (`make bida-update` & `make shinobi-update`)**:
+     - Chạy `make bida-update <node>` hoặc `make shinobi-update <node>` trên `172.16.5.180` phải tự động nhận diện node đã lên Go và bỏ qua (`changed=0`).

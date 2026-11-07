@@ -262,7 +262,7 @@ func scanProcessesFFmpegAndCameraRSS() (ffmpegCount int, cameraRSSMB float64) {
 			ffmpegCount++
 			continue
 		}
-		if strings.Contains(cmd, "camera.js") {
+		if strings.Contains(cmd, "camera.js") || strings.Contains(cmd, "go-shinobi-ksp") {
 			rss := readProcessRSSMB(filepath.Join(pidDir, "status"))
 			if rss > cameraRSSMB {
 				cameraRSSMB = rss

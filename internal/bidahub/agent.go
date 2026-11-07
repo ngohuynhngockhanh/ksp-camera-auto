@@ -551,7 +551,7 @@ func sampleProcessMetrics() (ffmpegCount int, kspcamRSSMB, heapAllocMB, heapSysM
 					}
 				}
 			}
-			if strings.Contains(cmdline, "camera.js") && !strings.Contains(cmdline, "singleCamera") {
+			if (strings.Contains(cmdline, "camera.js") || strings.Contains(cmdline, "go-shinobi-ksp")) && !strings.Contains(cmdline, "singleCamera") {
 				rssKB, _ := readProcStatusRSSAndDataKB(pid)
 				rssM := math.Round((float64(rssKB)/1024.0)*10) / 10
 				if rssM > cameraRSSMB {

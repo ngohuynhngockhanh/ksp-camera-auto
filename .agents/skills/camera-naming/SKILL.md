@@ -17,13 +17,13 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 | **Tên hiển thị Camera (Name)** | `CameraXX` (Title case, đệm 2 số) | `Camera01`, `Camera02`, `Camera08` | Không có dấu cách, chữ `C` viết hoa. |
 | **Shinobi Monitor ID (`mid`)** | `cameraXX` (Lowercase, đệm 2 số) | `camera01`, `camera02`, `camera08` | Chữ thường toàn bộ, định danh duy nhất trên Shinobi NVR. |
 | **KSP-Cam Inventory ID** | `<ip_address>:<port>` | `192.168.1.195:37777` | Cổng cấu hình DVRIP (`37777`), ISAPI (`80`), hoặc SDK (`8000`). |
-| **RTSP Main-stream Path** | `rtsp://<user>:<pass>@<ip>:554/cam/realmonitor?channel=1&subtype=0` | `rtsp://admin:Admin123456@192.168.1.195:554/cam/realmonitor?channel=1&subtype=0` | Transport bắt buộc `tcp`, codec remux `copy`. |
-| **RTSP Sub-stream Path** | `rtsp://<user>:<pass>@<ip>:554/cam/realmonitor?channel=1&subtype=1` | `rtsp://admin:Admin123456@192.168.1.195:554/cam/realmonitor?channel=1&subtype=1` | Dùng cho preview / thumbnail hoặc low bandwidth. |
+| **RTSP Main-stream Path** | `rtsp://<user>:<pass>@<ip>:554/cam/realmonitor?channel=1&subtype=0` | `rtsp://admin:<CAMERA_PASS>@192.168.1.195:554/cam/realmonitor?channel=1&subtype=0` | Transport bắt buộc `tcp`, codec remux `copy`. |
+| **RTSP Sub-stream Path** | `rtsp://<user>:<pass>@<ip>:554/cam/realmonitor?channel=1&subtype=1` | `rtsp://admin:<CAMERA_PASS>@192.168.1.195:554/cam/realmonitor?channel=1&subtype=1` | Dùng cho preview / thumbnail hoặc low bandwidth. |
 | **Redbida `shinobi_camera_id`** | Giá trị là **Shinobi Group ID / Group Key** | `kely`, `pymid463`, `AWU8wJMd2l` | Mã nhóm Group ID của Shinobi NVR dùng ghép URL HLS/Videos trong Node-RED. |
 | **Redbida `shinobi_group_key`** | Chuỗi GroupKey Shinobi | `kely`, `pymid463`, `AWU8wJMd2l` | Đồng bộ cùng giá trị với `shinobi_camera_id`. |
-| **Redbida `shinobi_token`** | API Key IP `0.0.0.0` (Quyền: `watch_stream: 1`, `watch_videos: 1`) | `WI4j88BE80U9xW6dMJ6dgYRtxIN2BT` | Dùng cho khách hàng xem luồng trực tiếp và xem lại/tải video. |
-| **Redbida `shinobi_monitor_token`** | API Key IP `0.0.0.0` (Quyền: `get_monitors: 1`) | `6kA6G986hwa84Je1VKRsF7X68MW7Ok` | Dùng để lấy danh sách monitors cho giao diện web. |
-| **Backend Admin API Key** | API Key **BẮT BUỘC IP `127.0.0.1`** (Full Admin: `auth_socket`, `get/control_monitors`, `watch/delete_videos`) | `F272sgCvIRnzUVOTqUkkff7aEwCmZX` | Lưu trong `/opt/ksp-cam/config.yaml`, bảo mật nội bộ chỉ cho backend `kspcam` gọi. |
+| **Redbida `shinobi_token`** | API Key IP `0.0.0.0` (Quyền: `watch_stream: 1`, `watch_videos: 1`) | `<REDACTED_SHINOBI_TOKEN>` | Dùng cho khách hàng xem luồng trực tiếp và xem lại/tải video. |
+| **Redbida `shinobi_monitor_token`** | API Key IP `0.0.0.0` (Quyền: `get_monitors: 1`) | `<REDACTED_MONITOR_TOKEN>` | Dùng để lấy danh sách monitors cho giao diện web. |
+| **Backend Admin API Key** | API Key **BẮT BUỘC IP `127.0.0.1`** (Full Admin: `auth_socket`, `get/control_monitors`, `watch/delete_videos`) | `<REDACTED_ADMIN_API_KEY>` | Lưu trong `/opt/ksp-cam/config.yaml`, bảo mật nội bộ chỉ cho backend `kspcam` gọi. |
 | **Redbida `ui_tabs_links`** | Chuẩn INI 20 section `[C01]` .. `[C20]` (4 dòng/section) | Xem chi tiết Section 4 bên dưới | Dòng 3 `vid_play_label` = `<ui_title>` (Tên quán). |
 | **Redbida `video_config`** | Chuỗi cấu hình video playback | `range=72` | Giới hạn tra cứu lịch sử highlight/video 72 giờ. |
 | **Redbida `custom_hashtags`** | Chuỗi hashtag định dạng chuẩn | `Tìm hiểu thêm tại BilliardLive.IO.VN\n#<UITitleNoSpaces> #BILLIARDSlive #INUTlive #highlightsports` | Bắt đầu "Tìm hiểu thêm tại BilliardLive.IO.VN\n", tên quán không dấu không cách + 3 hashtag chuẩn. |
@@ -110,14 +110,14 @@ Kỹ năng này hướng dẫn quy tắc đặt tên, quản lý định danh v�
 
 | STT | Monitor ID (`mid`) | Tên (`Name`) | Địa chỉ IP | Serial Number (`SN`) | Safety Code | Mật khẩu |
 |---|---|---|---|---|---|---|
-| 1 | `camera01` | `Camera01` | `192.168.1.195` | `33443ACPSFC97C2` | `L2D6643F` | `Admin123456` |
-| 2 | `camera02` | `Camera02` | `192.168.1.191` | `33443ACPSFF371A` | `L2A9991E` | `Admin123456` |
-| 3 | `camera03` | `Camera03` | `192.168.1.192` | `33443ACPSFAA7D5` | `L251423F` | `Admin123456` |
-| 4 | `camera04` | `Camera04` | `192.168.1.194` | `33443ACPSF5D901` | `L2AAA219` | `Admin123456` |
-| 5 | `camera05` | `Camera05` | `192.168.1.190` | `0731FACPSF85A97` | `L28BF007` | `Admin123456` |
-| 6 | `camera06` | `Camera06` | `192.168.1.197` | `0731FACPSF4A471` | `L250833C` | `Admin123456` |
-| 7 | `camera07` | `Camera07` | `192.168.1.196` | `33443ACPSF294DB` | `L22F39D1` | `Admin123456` |
-| 8 | `camera08` | `Camera08` | `192.168.1.193` | `33443ACPSF01EB0` | `L21F07E0` | `Admin123456` |
+| 1 | `camera01` | `Camera01` | `192.168.1.195` | `33443ACPSFC97C2` | `<SAFETY_CODE>` | `<CAMERA_PASS>` |
+| 2 | `camera02` | `Camera02` | `192.168.1.191` | `33443ACPSFF371A` | `<SAFETY_CODE>` | `<CAMERA_PASS>` |
+| 3 | `camera03` | `Camera03` | `192.168.1.192` | `33443ACPSFAA7D5` | `<SAFETY_CODE>` | `<CAMERA_PASS>` |
+| 4 | `camera04` | `Camera04` | `192.168.1.194` | `33443ACPSF5D901` | `<SAFETY_CODE>` | `<CAMERA_PASS>` |
+| 5 | `camera05` | `Camera05` | `192.168.1.190` | `0731FACPSF85A97` | `<SAFETY_CODE>` | `<CAMERA_PASS>` |
+| 6 | `camera06` | `Camera06` | `192.168.1.197` | `0731FACPSF4A471` | `<SAFETY_CODE>` | `<CAMERA_PASS>` |
+| 7 | `camera07` | `Camera07` | `192.168.1.196` | `33443ACPSF294DB` | `<SAFETY_CODE>` | `<CAMERA_PASS>` |
+| 8 | `camera08` | `Camera08` | `192.168.1.193` | `33443ACPSF01EB0` | `<SAFETY_CODE>` | `<CAMERA_PASS>` |
 
 ---
 

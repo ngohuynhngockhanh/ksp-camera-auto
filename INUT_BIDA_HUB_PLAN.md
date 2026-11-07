@@ -170,7 +170,7 @@ Khảo sát Read-Only trực tiếp trên máy chủ trung tâm `root@77.88.208.
   server_addr = p2p.inut.io.vn
   server_port = 7008
   user = ksp_pdf_signer
-  meta_token = b55ea6043210c1a0864735fe06aca46b
+  meta_token = <FRPC_META_TOKEN>
 
   [inut-point]
   type = http
@@ -184,7 +184,7 @@ Khảo sát Read-Only trực tiếp trên máy chủ trung tâm `root@77.88.208.
   server_addr = a.inut.io.vn
   server_port = 7008
   user = inut-p2p
-  meta_token = 6b91c84f23e745a90d8c1e2f3456789a
+  meta_token = <FRPC_META_TOKEN>
 
   [inut-p2p-hub]
   type = http
@@ -474,7 +474,7 @@ WantedBy=multi-user.target
 server_addr = p2p.inut.io.vn
 server_port = 7008
 user = ksp_pdf_signer
-meta_token = b55ea6043210c1a0864735fe06aca46b
+meta_token = <FRPC_META_TOKEN>
 
 [inut-bida]
 type = http
@@ -482,7 +482,7 @@ local_ip = 127.0.0.1
 local_port = 2090
 subdomain = inut-bida
 ```
-*(Tùy chọn mở rộng: Có thể thêm 1 instance trỏ vào `server_addr = a.inut.io.vn`, `server_port = 7008`, `user = inut-p2p`, `meta_token = 6b91c84f23e745a90d8c1e2f3456789a`, `subdomain = inut-bida` để chạy đồng thời trên cả `https://inut-bida.p2p.inut.io.vn` và `https://inut-bida.a.inut.io.vn` mà không cần khởi động lại bất kỳ dịch vụ `frps` nào đang chạy).*
+*(Tùy chọn mở rộng: Có thể thêm 1 instance trỏ vào `server_addr = a.inut.io.vn`, `server_port = 7008`, `user = inut-p2p`, `meta_token = <FRPC_META_TOKEN>`, `subdomain = inut-bida` để chạy đồng thời trên cả `https://inut-bida.p2p.inut.io.vn` và `https://inut-bida.a.inut.io.vn` mà không cần khởi động lại bất kỳ dịch vụ `frps` nào đang chạy).*
 
 ---
 

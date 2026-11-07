@@ -27,3 +27,10 @@
 *.swp
 /tools/hik-oracle/oracle
 /tmp/hiksdk_log*
+
+# Agent scratchpads and local test artifacts (keep only .agents/skills/)
+.agents/*
+!.agents/skills/
+!.agents/skills/**
+/scratch/
+/inut-bida-hub
