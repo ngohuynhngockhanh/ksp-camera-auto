@@ -25,9 +25,9 @@
   - **Trạng thái:** `ONLINE` — hoạt động đầy đủ `/#!/0..30`, `/api/v1/:id`, `/inut-billiard-live-cong-ty-inut-jsc/:id`, `/hls/...`, `/videos/...`, MQTT `12369` (`/data/alarms` chuẩn 1:1).
 
 - **`inut_205_67` (`77.88.205.67` / `5.67` — BinK Billiards Club - Quy Nhơn)**:
-  - **Ngày nâng cấp:** `2026-11-07`
-  - **Kiến trúc:** `linux/arm64` (`aarch64`), đang chạy `go-shinobi-ksp` (`:8080`, 11 camera NVR, RAM `~16 MB`) + `kspcam` (`:2028`) + `inut-bida-agent` + `ota-mqtt` (`:12369`).
-  - **Trạng thái `:2023` (`inut`):** Tạm thời giữ Node-RED cũ trên `:2023` theo yêu cầu vận hành trong khi vẫn chạy `go-shinobi-ksp` (`:8080`).
+  - **Ngày lên Full Go:** `2026-11-08`
+  - **Kiến trúc:** `linux/arm64` (`aarch64`), chạy đồng bộ `go-shinobi-ksp` (`:8080`, 11 camera NVR, RAM `~16 MB`) + `redbida-go` (`:2023`, RAM `~13 MB`) + `ksp-go2rtc` (`:1984`, CORS `origin: "*"`) + `kspcam` (`:2028`) + `inut-bida-agent` + `ota-mqtt` (`:12369`).
+  - **Trạng thái:** `ONLINE` — đầy đủ CORS (`Access-Control-Allow-Origin: *`) trên cả `:2023`, `:8080`, `:1984` cho màn hình bảng điểm Android `rk3566_r` (`Cameralive CodePush v41`), i18n (`vi`/`en`/`cz`), và CheckVAR 1 Cam & 2 Cam.
 ---
 
 ## 2. Lệnh Ansible Trên `172.16.5.180` (`/build/armbian-build/ansible`)
