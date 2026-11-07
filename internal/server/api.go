@@ -11,6 +11,11 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +27,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/dahua"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/importer"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mediaexport"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/shinobi"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/tiandy"
 )
 
@@ -1220,11 +1226,18 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 				cam, err = camera.Open(ctx, src, to)
 			}
 		}
+		var snap []byte
+		if err == nil {
+			snap, err = cam.Snapshot(ctx, ch, stream)
+			_ = cam.Close()
+		}
 		if err != nil {
+			if fb, fbErr := s.fallbackSnapshotFromShinobiOrRTSP(ctx, src, ch); fbErr == nil && len(fb) > 200 {
+				return fb, nil
+			}
 			return nil, err
 		}
-		defer cam.Close()
-		return cam.Snapshot(ctx, ch, stream)
+		return snap, nil
 	}
 
 	var (
@@ -1244,6 +1257,148 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
+}
+
+var camPrefixMidRe = regexp.MustCompile(`(?i)camera\s*0*(\d+)`)
+
+// fallbackSnapshotFromShinobiOrRTSP extracts a single JPEG frame from either:
+//  1. The live HLS .ts segment in /dev/shm/streams/<groupKey>/<mid>/*.ts (~35ms, zero camera load), or
+//  2. The monitor's RTSP stream URL (auto_host) via ffmpeg -frames:v 1.
+//
+// This guarantees snapshots load on custom-port NVRs (e.g. :1554), RTSP-only Wi-Fi cameras
+// (EZVIZ/Imou), or cameras whose HTTP/ISAPI snapshot endpoint is disabled.
+func (s *Server) fallbackSnapshotFromShinobiOrRTSP(ctx context.Context, d config.Device, channel int) ([]byte, error) {
+	var candidateMids []string
+	if m := camPrefixMidRe.FindStringSubmatch(d.Name); len(m) > 1 {
+		if n, err := strconv.Atoi(m[1]); err == nil && n > 0 {
+			candidateMids = append(candidateMids, fmt.Sprintf("camera%02d", n))
+		}
+	}
+	if mid := shinobi.DeviceToMid(d); mid != "" {
+		candidateMids = append(candidateMids, mid)
+	}
+
+	var autoHostRTSP string
+	gk := strings.TrimSpace(s.cfg.Shinobi.GroupKey)
+	if s.shinobi != nil {
+		if mons, err := s.shinobi.ListMonitors(ctx); err == nil {
+			wantCh := channel + 1
+			if d.NVRChannel > 0 {
+				wantCh = d.NVRChannel
+			}
+			hikChStr := fmt.Sprintf("/channels/%d", wantCh*100+1)
+			dahuaChStr := fmt.Sprintf("channel=%d", wantCh)
+			for _, mon := range mons {
+				var det struct {
+					AutoHost string `json:"auto_host"`
+				}
+				rawDet := strings.TrimSpace(string(mon.Details))
+				if len(rawDet) > 0 && rawDet[0] == '"' {
+					var s string
+					if json.Unmarshal(mon.Details, &s) == nil {
+						_ = json.Unmarshal([]byte(s), &det)
+					}
+				} else if len(rawDet) > 0 {
+					_ = json.Unmarshal(mon.Details, &det)
+				}
+				ah := strings.TrimSpace(det.AutoHost)
+				ahLower := strings.ToLower(ah)
+				nameMatch := strings.EqualFold(strings.TrimSpace(mon.Name), strings.TrimSpace(d.Name))
+				hostMatch := mon.Host == d.Host || strings.Contains(ahLower, strings.ToLower(d.Host))
+				chMatch := strings.Contains(ahLower, hikChStr) || strings.Contains(ahLower, dahuaChStr) || wantCh == 1
+				if nameMatch || (hostMatch && chMatch) {
+					candidateMids = append([]string{mon.Mid}, candidateMids...)
+					if autoHostRTSP == "" && strings.HasPrefix(ahLower, "rtsp://") {
+						autoHostRTSP = ah
+					}
+					if gk == "" && mon.Ke != "" {
+						gk = mon.Ke
+					}
+				}
+			}
+		}
+	}
+
+	// 1. Try decoding 1 frame from the newest .ts segment in /dev/shm/streams/<gk>/<mid>/
+	var groupDirs []string
+	if gk != "" {
+		groupDirs = append(groupDirs, filepath.Join("/dev/shm/streams", gk))
+	}
+	if entries, err := os.ReadDir("/dev/shm/streams"); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				groupDirs = append(groupDirs, filepath.Join("/dev/shm/streams", e.Name()))
+			}
+		}
+	}
+	for _, gdir := range groupDirs {
+		for _, mid := range candidateMids {
+			tsFiles, _ := filepath.Glob(filepath.Join(gdir, mid, "*.ts"))
+			var newestTS string
+			var newestMod time.Time
+			for _, f := range tsFiles {
+				if st, err := os.Stat(f); err == nil && st.Size() > 1024 && st.ModTime().After(newestMod) {
+					newestMod = st.ModTime()
+					newestTS = f
+				}
+			}
+			if newestTS != "" {
+				out, err := exec.CommandContext(ctx, "ffmpeg",
+					"-loglevel", "error",
+					"-i", newestTS,
+					"-frames:v", "1",
+					"-f", "image2",
+					"-c:v", "mjpeg",
+					"-q:v", "4",
+					"pipe:1",
+				).Output()
+				if err == nil && len(out) > 200 && out[0] == 0xff && out[1] == 0xd8 {
+					return out, nil
+				}
+			}
+		}
+	}
+
+	// 2. Fallback to grabbing 1 frame directly over RTSP via ffmpeg
+	if autoHostRTSP == "" && d.Host != "" {
+		wantCh := channel + 1
+		if d.NVRChannel > 0 {
+			wantCh = d.NVRChannel
+		}
+		rtspPath := fmt.Sprintf("/cam/realmonitor?channel=%d&subtype=0", wantCh)
+		if d.Vendor == config.VendorHikvision {
+			rtspPath = fmt.Sprintf("/Streaming/Channels/%d", wantCh*100+1)
+		} else if d.Vendor == config.VendorRaysharp {
+			rtspPath = fmt.Sprintf("/rtsp/streaming?channel=%d&subtype=0", wantCh)
+		}
+		u := &url.URL{
+			Scheme: "rtsp",
+			Host:   fmt.Sprintf("%s:554", d.Host),
+		}
+		if d.Username != "" {
+			u.User = url.UserPassword(d.Username, d.Password)
+		}
+		autoHostRTSP = u.String() + rtspPath
+	}
+	if autoHostRTSP != "" {
+		out, err := exec.CommandContext(ctx, "ffmpeg",
+			"-loglevel", "error",
+			"-rtsp_transport", "tcp",
+			"-i", autoHostRTSP,
+			"-frames:v", "1",
+			"-f", "image2",
+			"-c:v", "mjpeg",
+			"-q:v", "4",
+			"pipe:1",
+		).Output()
+		if err == nil && len(out) > 200 && out[0] == 0xff && out[1] == 0xd8 {
+			return out, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return nil, fmt.Errorf("no fallback snapshot source available")
 }
 
 // atoiDefault parses s as an int, returning def on empty/invalid input.
