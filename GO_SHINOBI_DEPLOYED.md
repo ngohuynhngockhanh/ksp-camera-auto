@@ -112,6 +112,8 @@
 - **`inut_205_8` (`77.88.205.8` — PICKO 247):** `ke=picko247` • `6` cam • RAM giảm từ `794 MB` xuống **`371 MB`** • `6/6` Recording & `6/6` snapshots `:2028` OK.
 - **`inut_205_12` (`77.88.205.12` — Hoàng Tuấn Pickleball):** `ke=hoangtuan` • `5` cam • RAM giảm từ `1099 MB` xuống **`641 MB`** • `5/5` Recording & `5/5` snapshots `:2028` OK.
 - **`inut_205_27` (`77.88.205.27` — MatchUp Sports Complex):** `ke=thucc` • `6` cam • RAM giảm từ `1047 MB` xuống **`520 MB`** • `6/6` Recording & `6/6` snapshots `:2028` OK.
+- **`inut_205_5` (`77.88.205.5` — Tok Tok Billiards Center):** `ke=toktok` • `18` cam • RAM giảm từ `1201 MB` xuống **`484 MB`** • `18/18` Recording & `18/18` snapshots `:2028` OK.
+- **`inut_204_97` (`77.88.204.97` — Tok Tok II Billiards Center):** `ke=toktok2` • `16` cam • RAM giảm từ `1218 MB` xuống **`546 MB`** • `16/16` Recording & `16/16` snapshots `:2028` OK.
 ---
 
 ## 2. Quy Trình Chuẩn Onboarding Từ Shinobi Cũ Lên Go-Shinobi-KSP (Zero Clip Loss)

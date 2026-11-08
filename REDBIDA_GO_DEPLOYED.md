@@ -117,6 +117,10 @@
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1099M` xuống **`641M/1923M`** (giải phóng `458 MB`), `go-shinobi-ksp` `~18.4 MB` (`5/5` Recording), `redbida-go` `~28.0 MB`, `kspcam` `:2028` (`5/5` snapshots OK), `inut-bida-agent` `active`.
 - **`inut_205_27` (`77.88.205.27` — MatchUp Sports Complex, `ke=thucc`, 6 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1047M` xuống **`520M/1923M`** (giải phóng `527 MB`), `go-shinobi-ksp` `~18.6 MB` (`6/6` Recording), `redbida-go` `~28.0 MB`, `kspcam` `:2028` (`6/6` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_5` (`77.88.205.5` / `5.5` — Tok Tok Billiards Center, `ke=toktok`, 18 cam, có `banner_top` popup)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1201M` xuống **`484M/1923M`** (giải phóng `717 MB`), `go-shinobi-ksp` `~22.3 MB` (`18/18` Recording), `redbida-go` `~12.9 MB` (đầy đủ `banner_top` popup + click sang Facebook + upload ảnh banner trong `#!/22`), `ksp-go2rtc` `~14.9 MB`, `kspcam` `:2028` (`18/18` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_204_97` (`77.88.204.97` / `4.97` — Tok Tok II Billiards Center, `ke=toktok2`, 16 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1218M` xuống **`546M/1980M`** (giải phóng `672 MB`), `go-shinobi-ksp` `~20.7 MB` (`16/16` Recording), `redbida-go` `~29.3 MB`, `ksp-go2rtc` `~11.7 MB`, `kspcam` `:2028` (`16/16` snapshots OK), `inut-bida-agent` `active`.
 ---
 
 ## 2. Lệnh Ansible Trên `172.16.5.180` (`/build/armbian-build/ansible`)
