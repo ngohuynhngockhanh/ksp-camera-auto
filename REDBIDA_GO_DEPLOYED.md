@@ -155,6 +155,8 @@
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1205M` xuống **`632M/1923M`** (giải phóng `573 MB`), `go-shinobi-ksp` `~20.5 MB` (`16/16` Recording), `redbida-go` `~30.9 MB`, `ksp-go2rtc` `~16.1 MB`, `kspcam` `:2028` (`30/30` kênh snapshots OK), `inut-bida-agent` `active`.
 - **`inut_205_121` (`77.88.205.121` — Black Coffee Billiards, `ke=loicafe`, 6 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `935M` xuống **`391M/1923M`** (giải phóng `544 MB`), `go-shinobi-ksp` `~18.9 MB` (`6/6` Recording), `redbida-go` `~29.3 MB`, `ksp-go2rtc` `~15.8 MB`, `kspcam` `:2028` (`6/6` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_204_144` (`77.88.204.144` / `4.144` — Lio Kig Billiads Club, `ke=replaceemmc`, 8 cam qua NVR `192.168.1.200`)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `962M` xuống **`502M/1923M`** (giải phóng `460 MB`), `go-shinobi-ksp` `~20.1 MB` (`8/8` Recording, bảo toàn `1,239` clip `.mp4`), `redbida-go` `~28.6 MB`, `ksp-go2rtc` `~15.6 MB`, `kspcam` `:2028` (`8/8` snapshots OK), `inut-bida-agent` `active`.
 ---
 
 ## 2. Lệnh Ansible Trên `172.16.5.180` (`/build/armbian-build/ansible`)

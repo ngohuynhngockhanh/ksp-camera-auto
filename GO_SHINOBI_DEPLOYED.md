@@ -133,6 +133,7 @@
 - **`inut_205_56` (`77.88.205.56` — King Kong Thái Nguyên):** `ke=mp4` • `9` cam • RAM giảm từ `779 MB` xuống **`392 MB`** • `9/9` Recording & `9/9` snapshots `:2028` OK.
 - **`inut_205_82` (`77.88.205.82` — Hoàng Tom Billiards):** `ke=mia` • `16` cam • RAM giảm từ `1205 MB` xuống **`632 MB`** • `16/16` Recording & `30/30` snapshots `:2028` OK.
 - **`inut_205_121` (`77.88.205.121` — Black Coffee Billiards):** `ke=loicafe` • `6` cam • RAM giảm từ `935 MB` xuống **`391 MB`** • `6/6` Recording & `6/6` snapshots `:2028` OK.
+- **`inut_204_144` (`77.88.204.144` — Lio Kig Billiads Club):** `ke=replaceemmc` • `8` cam • RAM giảm từ `962 MB` xuống **`502 MB`** • `8/8` Recording & `8/8` snapshots `:2028` OK.
 ---
 
 ## 2. Quy Trình Chuẩn Onboarding Từ Shinobi Cũ Lên Go-Shinobi-KSP (Zero Clip Loss)
