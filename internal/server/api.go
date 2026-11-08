@@ -1218,18 +1218,17 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		// (liveSource only dials for NVR-linked cameras, so others are unaffected).
 		src, ch := s.liveSource(d, channel)
 		to := s.reqTimeout(timeoutSeconds)
-		ctx, cancel := context.WithTimeout(r.Context(), to)
-		defer cancel()
-		// Fast path (<35ms, zero camera load): if go-shinobi-ksp has a fresh (<15s old)
-		// HLS .ts segment in /dev/shm/streams/<gk>/<mid>/, decode 1 frame directly from RAM.
-		if fb, fbErr := s.tryFastRAMStreamSnapshot(ctx, src, ch); fbErr == nil && len(fb) > 200 {
-			return fb, nil
+		primaryTo := to
+		if st, stErr := os.Stat("/dev/shm/streams"); stErr == nil && st.IsDir() && primaryTo > 2*time.Second {
+			primaryTo = 2 * time.Second
 		}
-		cam, err := camera.Open(ctx, src, to)
+		ctx, cancel := context.WithTimeout(r.Context(), primaryTo)
+		defer cancel()
+		cam, err := camera.Open(ctx, src, primaryTo)
 		if err != nil && d.NVRID != "" && src.ID == d.ID {
 			if nvr, ok := s.inv.Get(d.NVRID); ok {
 				src, ch = nvr, d.NVRChannel-1
-				cam, err = camera.Open(ctx, src, to)
+				cam, err = camera.Open(ctx, src, primaryTo)
 			}
 		}
 		var snap []byte
@@ -1238,7 +1237,9 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 			_ = cam.Close()
 		}
 		if err != nil {
-			if fb, fbErr := s.fallbackSnapshotFromShinobiOrRTSP(ctx, src, ch); fbErr == nil && len(fb) > 200 {
+			fbCtx, fbCancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer fbCancel()
+			if fb, fbErr := s.fallbackSnapshotFromShinobiOrRTSP(fbCtx, src, ch); fbErr == nil && len(fb) > 200 {
 				return fb, nil
 			}
 			return nil, err
@@ -1340,16 +1341,22 @@ func decodeFrameFromRecentTS(ctx context.Context, dir string, cutoff time.Time) 
 	if buf.Len() <= 1024 {
 		return nil, false
 	}
-	subCtx, cancel := context.WithTimeout(ctx, 2500*time.Millisecond)
+	snapshotFFmpegSem <- struct{}{}
+	defer func() { <-snapshotFFmpegSem }()
+	subCtx, cancel := context.WithTimeout(ctx, 6500*time.Millisecond)
 	defer cancel()
 	cmd := exec.CommandContext(subCtx, "ffmpeg",
 		"-loglevel", "error",
+		"-probesize", "262144",
+		"-analyzeduration", "500000",
+		"-skip_frame", "nokey",
 		"-f", "mpegts",
 		"-i", "pipe:0",
+		"-vf", "scale=640:-2",
 		"-frames:v", "1",
 		"-f", "image2",
 		"-c:v", "mjpeg",
-		"-q:v", "4",
+		"-q:v", "5",
 		"pipe:1",
 	)
 	cmd.Stdin = bytes.NewReader(buf.Bytes())
@@ -1359,6 +1366,8 @@ func decodeFrameFromRecentTS(ctx context.Context, dir string, cutoff time.Time) 
 	}
 	return nil, false
 }
+
+var snapshotFFmpegSem = make(chan struct{}, 2)
 
 var camPrefixMidRe = regexp.MustCompile(`(?i)camera\s*0*(\d+)`)
 
