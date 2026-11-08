@@ -24,11 +24,9 @@
   - **RAM tiết kiệm:** Tiến trình PM2 `inut` giảm từ `~225.5 MB` (Node-RED) xuống **`~14 MB`** (`redbida-go`).
   - **Trạng thái:** `ONLINE` — hoạt động đầy đủ `/#!/0..30`, `/api/v1/:id`, `/inut-billiard-live-cong-ty-inut-jsc/:id`, `/hls/...`, `/videos/...`, MQTT `12369` (`/data/alarms` chuẩn 1:1).
 
-- **`inut_205_67` (`77.88.205.67` / `5.67` — BinK Billiards Club - Quy Nhơn)**:
-  - **Ngày lên Full Go:** `2026-11-08`
-  - **Kiến trúc:** `linux/arm64` (`aarch64`), chạy đồng bộ `go-shinobi-ksp` (`:8080`, 11 camera NVR, RAM `~16 MB`) + `redbida-go` (`:2023`, RAM `~13 MB`) + `ksp-go2rtc` (`:1984`, CORS `origin: "*"`) + `kspcam` (`:2028`) + `inut-bida-agent` + `ota-mqtt` (`:12369`).
-  - **Trạng thái:** `ONLINE` — đầy đủ CORS (`Access-Control-Allow-Origin: *`) trên cả `:2023`, `:8080`, `:1984` cho màn hình bảng điểm Android `rk3566_r` (`Cameralive CodePush v41`), i18n (`vi`/`en`/`cz`), và CheckVAR 1 Cam & 2 Cam.
-
+- **`inut_205_67` (`77.88.205.67` / `5.67` — BinK Billiards Club - Quy Nhơn — `Hybrid Box-SD + NVR 72h`)**:
+  - **Ngày lên Full Go + Hybrid SD↔NVR:** `2026-11-08` • `linux/arm64` (`max_storage_percent: 85`) • Kết hợp thẻ nhớ 58GB (`~80` clip gần nhất `~6.2 giờ`) + đầu ghi `NVR Dahua 16CH 192.168.10.10:37777` (`+788` clip quá khứ) thành **`867–868` clip/bàn trọn `72 giờ` (`11x` dung lượng thẻ nhớ)** • Mở clip 5 phút (`60 MB`) từ NVR trong **`13.76s`**, tua Slow-Mo **`12.95 ms` (`HTTP 206`)**, cắt clip `70s` từ NVR trong **`7.69s`** (`13.99 MB`, `moov=True`).
+  - **Trạng thái:** `ONLINE` — đầy đủ CORS (`Access-Control-Allow-Origin: *`) trên cả `:2023`, `:8080`, `:1984` cho màn hình bảng điểm Android `rk3566_r`, i18n (`vi`/`en`/`cz`), và CheckVAR 1 Cam & 2 Cam.
 - **`inut_204_251` (`77.88.204.251` / `4.251` — TG Golden Billiards Club)**:
   - **Ngày lên Full Go:** `2026-11-08`
   - **Kiến trúc:** `linux/arm64` (`aarch64`), chạy đồng bộ `go-shinobi-ksp` (`:8080`, 10 camera, RAM `~18.7 MB`) + `redbida-go` (`:2023`, RAM `~14.2 MB`, giảm từ `183.6 MB` Node-RED) + `ksp-go2rtc` (`:1984`, RAM `~15.6 MB`, CORS `origin: "*"`) + `ota-mqtt` (`:12369`). Tổng RAM hệ thống giảm từ `737 MB` xuống **`464 MB`** (giải phóng `273 MB` RAM + `311 MB` Swap).
@@ -118,9 +116,9 @@
 - **`inut_205_27` (`77.88.205.27` — MatchUp Sports Complex, `ke=thucc`, 6 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1047M` xuống **`520M/1923M`** (giải phóng `527 MB`), `go-shinobi-ksp` `~18.6 MB` (`6/6` Recording), `redbida-go` `~28.0 MB`, `kspcam` `:2028` (`6/6` snapshots OK), `inut-bida-agent` `active`.
 - **`inut_205_5` (`77.88.205.5` / `5.5` — Tok Tok Billiards Center, `ke=toktok`, 18 cam, có `banner_top` popup)**:
-  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1201M` xuống **`484M/1923M`** (giải phóng `717 MB`), `go-shinobi-ksp` `~22.3 MB` (`18/18` Recording), `redbida-go` `~12.9 MB` (đầy đủ `banner_top` popup + click sang Facebook + upload ảnh banner trong `#!/22`), `ksp-go2rtc` `~14.9 MB`, `kspcam` `:2028` (`18/18` snapshots OK), `inut-bida-agent` `active`.
+  - **Ngày lên Full Go + Sẵn sàng Hybrid Bridge (`85%` Storage Guard):** `2026-11-08` • `linux/arm64` • RAM giảm từ `1201M` xuống **`521M/1923M`**, bật sẵn `bridge` + `nvr_direct_fallback: true` + `cut_spool_dir` (chờ điền mật khẩu đầu ghi `DHI-NVR4232-4KS3` `192.168.1.222:37777` trên `:2028` để nối dài `274` clip thẻ nhớ ra `72h`).
 - **`inut_204_97` (`77.88.204.97` / `4.97` — Tok Tok II Billiards Center, `ke=toktok2`, 16 cam)**:
-  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1218M` xuống **`546M/1980M`** (giải phóng `672 MB`), `go-shinobi-ksp` `~20.7 MB` (`16/16` Recording), `redbida-go` `~29.3 MB`, `ksp-go2rtc` `~11.7 MB`, `kspcam` `:2028` (`16/16` snapshots OK), `inut-bida-agent` `active`.
+  - **Ngày lên Full Go + Sẵn sàng Hybrid Bridge (`85%` Storage Guard):** `2026-11-08` • `linux/arm64` • RAM giảm từ `1218M` xuống **`561M/1980M`**, bật sẵn `bridge` + `nvr_direct_fallback: true` + `cut_spool_dir` (chờ điền mật khẩu đầu ghi KBVision `NVR` `192.168.1.254:8888` trên `:2028` để nối dài `342–358` clip thẻ nhớ ra `72h`).
 - **`inut_204_146` (`77.88.204.146` / `4.146` — Sniper Billiards Club, `ke=sniper`, 14 cam qua NVR `192.168.1.253`)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1460M` xuống **`912M/3919M`** (giải phóng `548 MB`), `go-shinobi-ksp` `~17.7 MB` (`14/14` Recording, bảo toàn `1,410` clip `.mp4`), `redbida-go` `~13.3 MB`, `ksp-go2rtc` `~15.0 MB`, `kspcam` `:2028` (`1/1` NVR snapshot OK), `inut-bida-agent` `active`.
 - **`inut_205_47` (`77.88.205.47` / `5.47` — Aileex Billiards Club Yên Bái, `ke=alieex`, 13 cam)**:
