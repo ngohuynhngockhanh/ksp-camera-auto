@@ -48,6 +48,8 @@ type MonitorDetails struct {
 	WallClockTimestampIgnore string `json:"wall_clock_timestamp_ignore,omitempty"` // "0" để Shinobi luôn bật -use_wallclock_as_timestamps 1
 	Cutoff                   string `json:"cutoff,omitempty"`                      // Thời lượng mỗi file ghi hình (phút), tối thiểu "5" (300s)
 	Detector                 string `json:"detector,omitempty"`                    // "0"
+	NVRDirect                string `json:"nvr_direct,omitempty"`                  // "1" for zero-idle rescued/diskless monitors
+	RescueFrom               string `json:"rescue_from,omitempty"`                 // broken peer box ID when added by Box Rescue Mode
 }
 
 // FlexibleString handles JSON fields that can be encoded as either a string, a number, or null.

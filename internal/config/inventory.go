@@ -32,6 +32,7 @@ type Device struct {
 	IsNVR               bool   `yaml:"isNvr,omitempty"`               // this device is the NVR itself
 	NVRWatchdog         bool   `yaml:"nvrWatchdog,omitempty"`         // automatically verify/repair recording
 	NVRSyncTimeFromHost bool   `yaml:"nvrSyncTimeFromHost,omitempty"` // sync from trusted INUT clock
+	RescueFrom          string `yaml:"rescueFrom,omitempty"`          // broken peer box ID when added by Box Rescue Mode
 }
 
 // Addr returns host:port for dialling.

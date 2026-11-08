@@ -246,6 +246,9 @@ graph TD
 | `/api/shinobi/monitors/state` | `POST` | Admin | `{mid, state}` (`start`/`stop`/`record`) | `{ok: true}` | Thay đổi trạng thái luồng video monitor |
 | `/api/shinobi/sync-to-shinobi` | `POST` | Admin | None | `SyncReport` | Đồng bộ thủ công: Xuất `cameras.yaml` -> Shinobi |
 | `/api/shinobi/sync-from-shinobi` | `POST` | Admin | None | `SyncReport` | Đồng bộ thủ công: Kéo monitors Shinobi -> `cameras.yaml` |
+| `/api/rescue/status` | `GET` | Admin | None | `{ok, primaryCameras, rescuePeers, rescuedCameras}` | Kiểm tra trạng thái Cứu hộ Box hỏng & dải kênh chạy gánh |
+| `/api/rescue/activate` | `POST` | Admin | `rescueActivateReq` (`monitorsJson`, `vip`, ...) | `{ok, peer, rescuedMids}` | 1-Click Cứu hộ Box hỏng (`0%` tải nền: VIP `lan0` + `go2rtc` on-demand + NVR Bridge) |
+| `/api/rescue/deactivate` | `POST` | Admin | `{peerName}` | `{ok, removedCameras, removedMonitors}` | Gỡ bỏ IP ảo & dọn sạch kênh cứu hộ khi Box hỏng đã sửa xong |
 | `/api/anti-a` | `GET`, `POST` | GET: Viewer/Admin, POST: Admin | GET: None / POST: `antiAConfigReq` | `antiAStatusView` | Giám sát & cấu hình Anti-A Guardian (H.265 Auto-Lock) |
 | `/api/anti-a/trigger` | `POST` | Admin | `{}` | `{ok: true, enforced: int, status}` | Kích hoạt quét & khóa toàn bộ camera về H.265/SmartCodec/AAC |
 | `/api/network/traffic/interfaces` | `GET` | Viewer/Admin | None | `{interfaces: []string, default: string}` | Danh sách card mạng ethernet hợp lệ (loại trừ wlan0, lo) |
@@ -631,6 +634,7 @@ Package `internal/mcp` nhúng trực tiếp máy chủ giao thức **Model Conte
 | | `redbida_apply_onboarding_preset` | `title, cameraCount, bg, groupKey, ...` | 1-Click Onboarding: tính toán & áp dụng đồng bộ 15 tham số Golden Template |
 | | `redbida_trigger_go2rtc` | Không | Gửi cờ kích hoạt Node-RED biên dịch cấu hình luồng `/root/go2rtc.yaml` |
 | | `redbida_get_time_status` | Không | Đọc đồng hồ hệ thống RFC 3339 và trạng thái đồng bộ NTP (`timedatectl`) |
+| **Box Rescue / Failover** | `kspcam_rescue_box` | `action, peerName, iface, vip, frpcSubdomain, monitorsJson` | Kích hoạt / hủy / kiểm tra chế độ Cứu hộ Box hỏng (`Zero-Idle Failover`) |
 
 ---
 

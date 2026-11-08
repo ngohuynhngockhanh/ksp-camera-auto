@@ -153,6 +153,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/system/metrics", s.handleSystemMetrics)
 
 	// MCP (Model Context Protocol) Server endpoints.
+	s.registerRescueMCPTools()
 	mcpHandler := s.mcp.HTTPHandler()
 	s.mux.Handle("/mcp", mcpHandler)
 	s.mux.Handle("/mcp/", mcpHandler)
@@ -211,6 +212,9 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/shinobi/sync-to-shinobi", api(s.handleShinobiSyncToShinobi))
 	s.mux.Handle("/api/shinobi/sync-from-shinobi", api(s.handleShinobiSyncFromShinobi))
 	s.mux.Handle("/api/shinobi/videos", api(s.handleShinobiVideos))
+	s.mux.Handle("/api/rescue/status", api(s.handleBoxRescueStatus))
+	s.mux.Handle("/api/rescue/activate", api(s.handleBoxRescueActivate))
+	s.mux.Handle("/api/rescue/deactivate", api(s.handleBoxRescueDeactivate))
 	s.mux.Handle("/api/anti-a", api(s.handleAntiA))
 	s.mux.Handle("/api/anti-a/trigger", api(s.handleAntiATrigger))
 	s.mux.Handle("/api/firmware/inspect", s.requireAuth(limitBody(36<<20, http.HandlerFunc(s.handleFirmwareInspect))))
