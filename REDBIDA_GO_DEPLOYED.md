@@ -121,6 +121,10 @@
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1201M` xuống **`484M/1923M`** (giải phóng `717 MB`), `go-shinobi-ksp` `~22.3 MB` (`18/18` Recording), `redbida-go` `~12.9 MB` (đầy đủ `banner_top` popup + click sang Facebook + upload ảnh banner trong `#!/22`), `ksp-go2rtc` `~14.9 MB`, `kspcam` `:2028` (`18/18` snapshots OK), `inut-bida-agent` `active`.
 - **`inut_204_97` (`77.88.204.97` / `4.97` — Tok Tok II Billiards Center, `ke=toktok2`, 16 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1218M` xuống **`546M/1980M`** (giải phóng `672 MB`), `go-shinobi-ksp` `~20.7 MB` (`16/16` Recording), `redbida-go` `~29.3 MB`, `ksp-go2rtc` `~11.7 MB`, `kspcam` `:2028` (`16/16` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_204_146` (`77.88.204.146` / `4.146` — Sniper Billiards Club, `ke=sniper`, 14 cam qua NVR `192.168.1.253`)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1460M` xuống **`912M/3919M`** (giải phóng `548 MB`), `go-shinobi-ksp` `~17.7 MB` (`14/14` Recording, bảo toàn `1,410` clip `.mp4`), `redbida-go` `~13.3 MB`, `ksp-go2rtc` `~15.0 MB`, `kspcam` `:2028` (`1/1` NVR snapshot OK), `inut-bida-agent` `active`.
+- **`inut_205_47` (`77.88.205.47` / `5.47` — Aileex Billiards Club Yên Bái, `ke=alieex`, 13 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `983M` xuống **`510M/1923M`** (giải phóng `473 MB`), `go-shinobi-ksp` `~18.3 MB` (`13/13` Recording), `redbida-go` `~14.0 MB`, `ksp-go2rtc` `~15.6 MB`, `kspcam` `:2028` (`13/13` snapshots OK), `inut-bida-agent` `active`.
 ---
 
 ## 2. Lệnh Ansible Trên `172.16.5.180` (`/build/armbian-build/ansible`)
