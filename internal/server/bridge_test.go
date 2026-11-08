@@ -178,3 +178,53 @@ func TestBridgeVirtualFilenameAndSpoolRangeServing(t *testing.T) {
 		t.Fatalf("expected Accept-Ranges: bytes, got %q", got)
 	}
 }
+
+func TestBridgeMultiChannelHikvisionNVRDetection(t *testing.T) {
+	t.Setenv("KSPCAM_KEY", "bridge-test-crypto-key")
+	tmp := t.TempDir()
+	inv, err := config.LoadInventory(filepath.Join(tmp, "cameras.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate imported multi-channel Hikvision NVR entries like 77.88.205.123 (192.168.1.50:82-c31..c42)
+	_ = inv.Upsert(config.Device{
+		ID:         "192.168.1.50:82-c31",
+		Name:       "Camera01",
+		Host:       "192.168.1.50",
+		Port:       82,
+		Vendor:     config.VendorHikvision,
+		Username:   "live",
+		Password:   "secret",
+		NVRChannel: 31,
+	})
+	_ = inv.Upsert(config.Device{
+		ID:         "192.168.1.50:82-c32",
+		Name:       "Camera02",
+		Host:       "192.168.1.50",
+		Port:       82,
+		Vendor:     config.VendorHikvision,
+		Username:   "live",
+		Password:   "secret",
+		NVRChannel: 32,
+	})
+
+	cfg := config.Default()
+	cfg.Bridge.SpoolDir = filepath.Join(tmp, "spool")
+	cfg.Events.Enabled = false
+	srv, err := New(cfg, inv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+
+	tgt, ok := srv.resolveBridgeTarget("", "camera01", 0, false)
+	if !ok {
+		t.Fatal("expected camera01 to resolve")
+	}
+	if tgt.IsCamSD {
+		t.Fatalf("expected multi-channel NVR entry 192.168.1.50:82-c31 to have IsCamSD=false")
+	}
+	if tgt.Channel != 30 {
+		t.Fatalf("expected 0-based channel=30 for nvrChannel=31, got %d", tgt.Channel)
+	}
+}

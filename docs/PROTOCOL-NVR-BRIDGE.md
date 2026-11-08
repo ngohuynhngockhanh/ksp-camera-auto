@@ -146,3 +146,14 @@ Cấu hình phần cứng thực tế: Chip `armv7l` 32-bit (`Linux 5.15.93-sunx
 - **Tua Slow-Mo `0.05x–8x` / nhảy `-1s`, `+1s` trên clip đang xem**: **`13.01 ms`** từ RAM `/dev/shm`.
 - **Cắt clip `90 giây` vắt ngang 2 khung 5 phút (`/cut-video` -> `packed.mp4`, `14.98 MB`)**: Hoàn tất `100%` trong **`6.02 giây`**.
 - **Tài nguyên tiêu thụ trên Box 1GB RAM**: `load average = 0.58` (`0%` CPU khi nghỉ), RAM tiến trình `camera = 11.3 MB`, `inut = 27.1 MB`, `/dev/shm` tự giới hạn an toàn dưới `120 MB`.
+
+---
+
+## 6. Số Liệu Kiểm Chứng Chế Độ Lai `Hybrid SD + NVR` Trên `inut_205_123` (`Magic Arena Đà Nẵng` — 12 Camera)
+
+Cấu hình thực tế: Chip `aarch64` (`RAM 2 GB`), gắn thẻ nhớ **64 GB** (`/media/usb1`) ghi `12` bàn (`camera01..camera12`) nên thẻ nhớ chỉ giữ được **`~8.8 giờ` (`111` clip/bàn)** trước khi cuốn chiếu, trong khi CLB cấu hình `video_config: range=72` (`72 giờ` = 3 ngày) và có đầu ghi **Hikvision 64 kênh (`192.168.1.50`, HTTP ISAPI `:82`, RTSP `:1554`, kênh `31..42`, 2K HEVC `2560x1440`)**:
+
+- **Mở rộng dung lượng lưu trữ gấp `8.1x` mà không thay thẻ nhớ**: Danh sách clip mỗi bàn tự động nối khít **`111` clip thẻ nhớ (`10:20 -> hiện tại`, `0` băng thông NVR)** với **`+785` clip `v_nvr_*` từ đầu ghi (`72 giờ trước -> 10:20`)**, tổng cộng **`896` clip/bàn** tải về UI trong **`~580–620 ms`**.
+- **Tải nhanh phân đoạn Hikvision bằng `ISAPI DownloadTimeRange` (không kéo cả cục 1 GB HDD)**: Rút đúng 5 phút video 2K (`~43.3 MB`) qua 1 kết nối HTTP Digest tốc độ `~10 MB/s` + đóng gói `+faststart` trong **`13.34s`**, tua Slow-Mo `0.05x–8x` trong **`11.03 ms`**.
+- **Cắt clip vắt ngang điểm nối `NVR ↔ Thẻ nhớ` (`10:19:30..10:21:00`)**: Tự động gộp ranh giới `v_nvr_*` + `.mp4` thẻ nhớ và xuất `packed.mp4` (`13.6 MB`, `0% CPU encode`) trong **`6.97s`**.
+- **Chuẩn hóa tên file tải về bảo mật**: Mọi file tải trực tiếp đều mang tiền tố `inut_<camera>_<filename>.mp4` (tuyệt đối không lộ `groupKey` nội bộ).

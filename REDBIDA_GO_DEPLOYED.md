@@ -64,8 +64,8 @@
 - **`inut_204_163` (`77.88.204.163` / `4.163` — SD Billiards Club - CS2, `ke=P6zP1kVhht`, 8 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `934M` xuống **`452M/1794M`** (giải phóng `482 MB`), `go-shinobi-ksp` `~17.7 MB`, `redbida-go` `~27.4 MB`, `ksp-go2rtc` `~15.2 MB`, `kspcam` `:2028` (`8/8` snapshots OK), `inut-bida-agent` `active`.
 
-- **`inut_205_123` (`77.88.205.123` / `5.123` — Magic Arena Đà Nẵng, `ke=magic2`, 12 cam)**:
-  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `921M` xuống **`436M/1923M`** (giải phóng `485 MB`), `go-shinobi-ksp` `~19.6 MB`, `redbida-go` `~28.6 MB`, `ksp-go2rtc` `~16.1 MB`, `kspcam` `:2028` (`12/12` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_123` (`77.88.205.123` / `5.123` — Magic Arena Đà Nẵng, `ke=magic2`, 12 cam — `Hybrid SD + NVR 72h`)**:
+  - **Ngày lên Full Go + Hybrid SD↔NVR Bridge:** `2026-11-08` • `linux/arm64` • RAM **`403M/1923M`** • Kết hợp thẻ nhớ 64GB (`111` clip gần nhất `~8.8 giờ`) + đầu ghi Hikvision 64 kênh `192.168.1.50:82` (kênh `31..42`, `+785` clip quá khứ) thành **`896` clip liên mạch trọn 72 giờ (`8.1x` dung lượng thẻ nhớ)** • Mở clip 2 ngày trước `13.34s` / tua Slow-Mo `11.03ms`, cắt clip vắt qua điểm nối NVR↔SD trong `6.97s`, tên file tải chuẩn `inut_cameraXX_...`.
 
 - **`inut_205_124` (`77.88.205.124` / `5.124` — Magic Arena Đà Nẵng, `ke=magic1`, 16 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1143M` xuống **`500M/1923M`** (giải phóng `643 MB`), `go-shinobi-ksp` `~25.3 MB`, `redbida-go` `~27.5 MB`, `ksp-go2rtc` `~16.4 MB`, `kspcam` `:2028` (`16/16` snapshots OK), `inut-bida-agent` `active`.
