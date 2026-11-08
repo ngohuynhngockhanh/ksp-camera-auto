@@ -1,0 +1,647 @@
+package xiongmai
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/json"
+	"fmt"
+	"io"
+	"math/big"
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
+)
+
+// PreLoginInfo captures unauthenticated metadata returned by POST /cgi-bin/login.cgi {"Name":"GetPreLoginInfo"}.
+type PreLoginInfo struct {
+	Ret      int    `json:"Ret"`
+	Language string `json:"Language"`
+	TCPPort  int    `json:"TCPPort"`
+}
+
+// ProbePreLoginCGI sends an unauthenticated GetPreLoginInfo probe to HTTP port
+// (default 80) to identify Xiongmai CGI-capable NVRs/HVRs/IPCs during LAN discovery.
+func ProbePreLoginCGI(ctx context.Context, baseURL string, timeout time.Duration) (*PreLoginInfo, error) {
+	if timeout <= 0 {
+		timeout = 1500 * time.Millisecond
+	}
+	hc := &http.Client{Timeout: timeout}
+	u := strings.TrimRight(baseURL, "/") + "/cgi-bin/login.cgi"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, strings.NewReader(`{"Name":"GetPreLoginInfo"}`))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := hc.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("xiongmai GetPreLoginInfo HTTP %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if err != nil {
+		return nil, err
+	}
+	var info PreLoginInfo
+	if err := json.Unmarshal(bytes.TrimRight(body, "\x00\r\n "), &info); err != nil {
+		return nil, err
+	}
+	if info.Ret != RetOK || info.TCPPort <= 0 {
+		return nil, fmt.Errorf("not a Xiongmai GetPreLoginInfo payload")
+	}
+	return &info, nil
+}
+
+// CGITransport implements Transport over Xiongmai's HTTP /cgi-bin/*.cgi +
+// RFC 6455 WebSocket /websocket-bin/* interface (RSA-1024 + AES-128-CBC ZeroPad).
+type CGITransport struct {
+	host     string
+	port     int
+	baseURL  string
+	username string
+	password string
+	timeout  time.Duration
+	hc       *http.Client
+
+	mu        sync.Mutex
+	salt      string
+	sessionID string
+	aesKey    string
+	useAES    bool
+	loginInfo *LoginInfo
+}
+
+// NewCGITransport creates a pure-Go HTTP CGI + WebSocket transport.
+func NewCGITransport(host string, port int, username, password string, timeout time.Duration) *CGITransport {
+	if port <= 0 || port == DefaultSofiaPort {
+		port = 80
+	}
+	if timeout <= 0 {
+		timeout = 15 * time.Second
+	}
+	return &CGITransport{
+		host:     host,
+		port:     port,
+		baseURL:  fmt.Sprintf("http://%s", net.JoinHostPort(host, fmt.Sprintf("%d", port))),
+		username: username,
+		password: password,
+		timeout:  timeout,
+		hc:       &http.Client{Timeout: timeout},
+	}
+}
+
+func (c *CGITransport) Name() string { return "http-cgi" }
+
+func (c *CGITransport) LoginInfo() *LoginInfo {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.loginInfo
+}
+
+func (c *CGITransport) Login(ctx context.Context) (*LoginInfo, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.loginInfo != nil && c.sessionID != "" {
+		return c.loginInfo, nil
+	}
+	return c.loginLocked(ctx)
+}
+
+func randQuerySuffix() string {
+	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
+	if err != nil {
+		return "0.123456"
+	}
+	return fmt.Sprintf("0.%06d", n.Int64())
+}
+
+func (c *CGITransport) postRawJSON(ctx context.Context, cgiPath string, reqObj any) ([]byte, error) {
+	raw, err := json.Marshal(reqObj)
+	if err != nil {
+		return nil, err
+	}
+	u := fmt.Sprintf("%s%s?randnum=%s", c.baseURL, cgiPath, randQuerySuffix())
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json;charset=utf-8")
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrDialUnreachable, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%w: CGI %s HTTP %d", ErrDialUnreachable, cgiPath, resp.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+}
+
+func (c *CGITransport) loginLocked(ctx context.Context) (*LoginInfo, error) {
+	// Step 1: POST /cgi-bin/login.cgi {"Name":"GetSalt"}
+	saltBody, err := c.postRawJSON(ctx, "/cgi-bin/login.cgi", map[string]any{"Name": "GetSalt"})
+	if err != nil {
+		return nil, err
+	}
+	var saltResp struct {
+		Ret                 int    `json:"Ret"`
+		Salt                string `json:"Salt"`
+		PublicKey           string `json:"PublicKey"`
+		LoginEncryptionType string `json:"LoginEncryptionType"`
+		DataEncryptionType  string `json:"DataEncryptionType"`
+		OEMHeader           string `json:"OEMHeader"`
+	}
+	if err := json.Unmarshal(bytes.TrimRight(saltBody, "\x00\r\n "), &saltResp); err != nil {
+		return nil, fmt.Errorf("%w: invalid GetSalt JSON: %v", ErrDialUnreachable, err)
+	}
+	if saltResp.Ret != RetOK {
+		return nil, &RetError{Op: "GetSalt", Ret: saltResp.Ret}
+	}
+
+	useAES := strings.Contains(strings.ToUpper(saltResp.DataEncryptionType), "AES")
+	loginReq := map[string]any{
+		"Name": "Login",
+		"Salt": saltResp.Salt,
+	}
+
+	var aesKey string
+	if strings.Contains(strings.ToUpper(saltResp.LoginEncryptionType), "RSA") && saltResp.PublicKey != "" {
+		pub, err := ParseRSAPublicKey(saltResp.PublicKey)
+		if err != nil {
+			return nil, err
+		}
+		pwMD5 := HexMD5Lower(c.password)
+		signPlain := saltResp.OEMHeader + saltResp.Salt + pwMD5
+		signEnc, err := EncryptRSAPKCS1Hex(pub, []byte(signPlain))
+		if err != nil {
+			return nil, err
+		}
+		userEnc, err := EncryptRSAPKCS1Hex(pub, []byte(c.username))
+		if err != nil {
+			return nil, err
+		}
+		verkPlain, err := RandomHex96()
+		if err != nil {
+			return nil, err
+		}
+		verkEnc, err := EncryptRSAPKCS1Hex(pub, []byte(verkPlain))
+		if err != nil {
+			return nil, err
+		}
+		loginReq["LoginEncryptionType"] = "RSA"
+		loginReq["User"] = userEnc
+		loginReq["Sign"] = signEnc
+		loginReq["VERK"] = verkEnc
+		if useAES {
+			aesKey, err = RandomAESKey16()
+			if err != nil {
+				return nil, err
+			}
+			dtakEnc, err := EncryptRSAPKCS1Hex(pub, []byte(aesKey))
+			if err != nil {
+				return nil, err
+			}
+			loginReq["DTAK"] = dtakEnc
+		}
+	} else {
+		// Legacy MD5_8 CGI login fallback
+		sign := MD5_8(saltResp.Salt + saltResp.OEMHeader + MD5_8(c.password))
+		loginReq["LoginEncryptionType"] = "MD5_8"
+		loginReq["User"] = c.username
+		loginReq["Sign"] = sign
+		useAES = false
+	}
+
+	// Step 2: POST /cgi-bin/login.cgi {"Name":"Login", ...} (plain JSON envelope)
+	loginBody, err := c.postRawJSON(ctx, "/cgi-bin/login.cgi", loginReq)
+	if err != nil {
+		return nil, err
+	}
+	var loginResp map[string]any
+	// Some firmwares encrypt the Login response with DTAK, most return plain JSON.
+	plainLogin := bytes.TrimRight(loginBody, "\x00\r\n ")
+	if useAES && len(plainLogin) > 0 && plainLogin[0] != '{' {
+		if dec, derr := AESDecryptZeroPadB64(plainLogin, aesKey); derr == nil {
+			plainLogin = dec
+		}
+	}
+	if err := json.Unmarshal(plainLogin, &loginResp); err != nil {
+		return nil, fmt.Errorf("xiongmai CGI Login decode: %w", err)
+	}
+	ret := extractRet(loginResp)
+	if ret != RetOK {
+		return nil, &RetError{Op: "CgiLogin", Ret: ret}
+	}
+
+	sessHex := stringFieldAny(loginResp, "SessionID")
+	if sessHex == "" {
+		sessHex = "0x00000001"
+	}
+	c.salt = saltResp.Salt
+	c.sessionID = sessHex
+	c.aesKey = aesKey
+	c.useAES = useAES
+
+	info := &LoginInfo{
+		SessionIDHex:  sessHex,
+		SessionIDNum:  parseSessionHex(sessHex),
+		ChannelNum:    intFieldAny(loginResp, "ChannelNum"),
+		ExtraChannel:  intFieldAny(loginResp, "ExtraChannel"),
+		DeviceType:    strings.TrimSpace(stringFieldAny(loginResp, "DeviceType", "DeviceType ")),
+		AliveInterval: intFieldAny(loginResp, "AliveInterval"),
+		DataUseAES:    useAES,
+		TransportName: c.Name(),
+	}
+	c.loginInfo = info
+	return info, nil
+}
+
+func (c *CGITransport) doCGI(ctx context.Context, op, cgiPath string, req map[string]any) (map[string]any, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.loginInfo == nil || c.sessionID == "" {
+		if _, err := c.loginLocked(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	resp, err := c.sendAuthenticatedLocked(ctx, cgiPath, req)
+	if err != nil {
+		return nil, err
+	}
+	ret := extractRet(resp)
+	if ret == RetNoLogin || ret == RetCGIFormatError || ret == RetEncryptError {
+		c.loginInfo = nil
+		c.sessionID = ""
+		if _, err := c.loginLocked(ctx); err != nil {
+			return nil, err
+		}
+		resp, err = c.sendAuthenticatedLocked(ctx, cgiPath, req)
+		if err != nil {
+			return nil, err
+		}
+		ret = extractRet(resp)
+	}
+	if ret != 0 && !IsRetSuccess(ret) {
+		return resp, &RetError{Op: op, Ret: ret}
+	}
+	return resp, nil
+}
+
+func (c *CGITransport) sendAuthenticatedLocked(ctx context.Context, cgiPath string, req map[string]any) (map[string]any, error) {
+	bodyMap := make(map[string]any, len(req)+2)
+	for k, v := range req {
+		bodyMap[k] = v
+	}
+	bodyMap["SessionID"] = c.sessionID
+	bodyMap["Salt"] = c.salt
+
+	rawJSON, err := json.Marshal(bodyMap)
+	if err != nil {
+		return nil, err
+	}
+
+	var reqBytes []byte
+	contentType := "application/json;charset=utf-8"
+	if c.useAES && c.aesKey != "" {
+		b64, err := AESEncryptZeroPadB64(rawJSON, c.aesKey)
+		if err != nil {
+			return nil, err
+		}
+		reqBytes = []byte(b64)
+		contentType = "text/plain;charset=utf-8"
+	} else {
+		reqBytes = rawJSON
+	}
+
+	u := fmt.Sprintf("%s%s?randnum=%s", c.baseURL, cgiPath, randQuerySuffix())
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(reqBytes))
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", contentType)
+
+	httpResp, err := c.hc.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("xiongmai CGI %s: %w", cgiPath, err)
+	}
+	defer httpResp.Body.Close()
+	respRaw, err := io.ReadAll(io.LimitReader(httpResp.Body, 8<<20))
+	if err != nil {
+		return nil, err
+	}
+	if httpResp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("xiongmai CGI %s HTTP %d", cgiPath, httpResp.StatusCode)
+	}
+
+	var plain []byte
+	if c.useAES && c.aesKey != "" {
+		plain, err = AESDecryptZeroPadB64(respRaw, c.aesKey)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		plain = bytes.TrimRight(respRaw, "\x00\r\n ")
+	}
+	var out map[string]any
+	if err := json.Unmarshal(plain, &out); err != nil {
+		return nil, fmt.Errorf("xiongmai CGI %s JSON decode: %w", cgiPath, err)
+	}
+	return out, nil
+}
+
+func (c *CGITransport) GetInfo(ctx context.Context, name string) (map[string]any, error) {
+	return c.doCGI(ctx, "GetInfo("+name+")", "/cgi-bin/getinfo.cgi", map[string]any{"Name": name})
+}
+
+func (c *CGITransport) GetAbility(ctx context.Context, name string) (map[string]any, error) {
+	return c.doCGI(ctx, "GetAbility("+name+")", "/cgi-bin/getability.cgi", map[string]any{"Name": name})
+}
+
+func (c *CGITransport) GetChannelAbility(ctx context.Context, name string) (map[string]any, error) {
+	return c.doCGI(ctx, "GetChannelAbility("+name+")", "/cgi-bin/getchannelability.cgi", map[string]any{"Name": name})
+}
+
+func (c *CGITransport) GetConfig(ctx context.Context, name string) (map[string]any, error) {
+	return c.doCGI(ctx, "GetConfig("+name+")", "/cgi-bin/getconfig.cgi", map[string]any{"Name": name})
+}
+
+func (c *CGITransport) SetConfig(ctx context.Context, name string, payload any) (map[string]any, error) {
+	return c.doCGI(ctx, "SetConfig("+name+")", "/cgi-bin/setconfig.cgi", map[string]any{
+		"Name": name,
+		name:   payload,
+	})
+}
+
+func (c *CGITransport) OpDev(ctx context.Context, name string, param any) (map[string]any, error) {
+	req := map[string]any{"Name": name}
+	if param != nil {
+		req[name] = param
+	}
+	return c.doCGI(ctx, "OpDev("+name+")", "/cgi-bin/opdev.cgi", req)
+}
+
+func (c *CGITransport) PTZ(ctx context.Context, param any) (map[string]any, error) {
+	return c.doCGI(ctx, "OPPTZControl", "/cgi-bin/opptz.cgi", map[string]any{
+		"Name":         "OPPTZControl",
+		"OPPTZControl": param,
+	})
+}
+
+func (c *CGITransport) ModifyPassword(ctx context.Context, user, oldPass, newPass string) error {
+	_, err := c.doCGI(ctx, "ModifyPassword", "/cgi-bin/usermanager.cgi", map[string]any{
+		"Name":        "ModifyPassword",
+		"EncryptType": "MD5",
+		"UserName":    user,
+		"PassWord":    MD5_8(oldPass),
+		"NewPassWord": MD5_8(newPass),
+	})
+	return err
+}
+
+func (c *CGITransport) Snapshot(ctx context.Context, channel int) ([]byte, error) {
+	if _, err := c.Login(ctx); err != nil {
+		return nil, err
+	}
+	// Try Xiongmai standard HTTP snapshot endpoints: /webcapture.jpg and /cgi-bin/snapshot.cgi
+	endpoints := []string{
+		fmt.Sprintf("%s/webcapture.jpg?command=snap&channel=%d&user=%s&password=%s",
+			c.baseURL, channel+1, url.QueryEscape(c.username), url.QueryEscape(c.password)),
+		fmt.Sprintf("%s/webcapture.jpg?command=snap&channel=%d", c.baseURL, channel),
+		fmt.Sprintf("%s/cgi-bin/snapshot.cgi?chn=%d&u=%s&p=%s",
+			c.baseURL, channel, url.QueryEscape(c.username), url.QueryEscape(c.password)),
+	}
+	for _, u := range endpoints {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			continue
+		}
+		resp, err := c.hc.Do(req)
+		if err != nil {
+			continue
+		}
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK && bytes.HasPrefix(data, []byte{0xFF, 0xD8, 0xFF}) {
+			return data, nil
+		}
+	}
+	return nil, fmt.Errorf("xiongmai CGI snapshot endpoint unavailable")
+}
+
+// DownloadRecordFile streams recorded H.264/H.265 media over Xiongmai's native
+// RFC 6455 WebSocket /websocket-bin/Type=HttpPlayBack + /cgi-bin/websocket.cgi.
+func (c *CGITransport) DownloadRecordFile(ctx context.Context, w io.Writer, channel int, file RecordFile, start, end time.Time) error {
+	if _, err := c.Login(ctx); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	salt := c.salt
+	c.mu.Unlock()
+
+	wsConn, br, err := c.dialWebSocketPlayback(ctx, salt, channel)
+	if err != nil {
+		return err
+	}
+	defer wsConn.Close()
+
+	// Expect initial text frame: {"Ret":100,"State":"Begin"}
+	_ = wsConn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	opCode, initMsg, err := readWSFrame(br, wsConn)
+	if err != nil {
+		return fmt.Errorf("xiongmai ws playback init read: %w", err)
+	}
+	if opCode == 1 {
+		var st map[string]any
+		if json.Unmarshal(bytes.TrimRight(initMsg, "\x00\r\n "), &st) == nil {
+			if r := extractRet(st); r != 0 && !IsRetSuccess(r) {
+				return &RetError{Op: "ws.HttpPlayBack.Begin", Ret: r}
+			}
+		}
+	}
+
+	localTime := file.RawBegin
+	if !start.IsZero() && (file.BeginTime.IsZero() || start.After(file.BeginTime)) {
+		localTime = start.Format("2006-01-02 15:04:05")
+	}
+
+	// Send StartDownLoad over /cgi-bin/websocket.cgi
+	_, err = c.doCGI(ctx, "HttpPlayBack.StartDownLoad", "/cgi-bin/websocket.cgi", map[string]any{
+		"Name": "HttpPlayBack",
+		"HttpPlayBack": map[string]any{
+			"Opr":       "StartDownLoad",
+			"PlayMode":  "PlayByName",
+			"Channel":   channel,
+			"Stream":    "Main",
+			"ExactSeek": 1,
+			"PlayByName": map[string]any{
+				"LocalTime": localTime,
+				"FileName":  file.FileName,
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	var wrote int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		_ = wsConn.SetReadDeadline(time.Now().Add(15 * time.Second))
+		op, payload, err := readWSFrame(br, wsConn)
+		if err != nil {
+			if wrote > 0 {
+				break
+			}
+			return err
+		}
+		if op == 8 { // Close frame
+			break
+		}
+		if op == 1 { // Text frame (e.g. {"Ret":100,"State":"End"})
+			if bytes.Contains(payload, []byte(`"End"`)) || bytes.Contains(payload, []byte(`"Stop"`)) {
+				break
+			}
+			continue
+		}
+		if op == 2 && len(payload) > 0 { // Binary media frame
+			es := StripXMMediaFrames(payload)
+			if len(es) > 0 {
+				n, werr := w.Write(es)
+				wrote += int64(n)
+				if werr != nil {
+					return werr
+				}
+			}
+		}
+	}
+	if wrote == 0 {
+		return fmt.Errorf("xiongmai ws HttpPlayBack returned 0 media bytes")
+	}
+	return nil
+}
+
+func (c *CGITransport) dialWebSocketPlayback(ctx context.Context, salt string, channel int) (net.Conn, *bufio.Reader, error) {
+	addr := net.JoinHostPort(c.host, fmt.Sprintf("%d", c.port))
+	dialer := net.Dialer{Timeout: c.timeout}
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return nil, nil, err
+	}
+	var keyRaw [16]byte
+	_, _ = rand.Read(keyRaw[:])
+	wsKey := base64.StdEncoding.EncodeToString(keyRaw[:])
+	path := fmt.Sprintf("/websocket-bin/Type=HttpPlayBack?Salt=%s&Channel=%d&Stream=Main&XMHead=1",
+		url.QueryEscape(salt), channel)
+	handshake := fmt.Sprintf("GET %s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n",
+		path, addr, wsKey)
+	_ = conn.SetDeadline(time.Now().Add(c.timeout))
+	if _, err := conn.Write([]byte(handshake)); err != nil {
+		_ = conn.Close()
+		return nil, nil, err
+	}
+	br := bufio.NewReaderSize(conn, 128<<10)
+	statusLine, err := br.ReadString('\n')
+	if err != nil || !strings.Contains(statusLine, "101") {
+		_ = conn.Close()
+		return nil, nil, fmt.Errorf("xiongmai ws upgrade failed: %s (%v)", strings.TrimSpace(statusLine), err)
+	}
+	for {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			_ = conn.Close()
+			return nil, nil, err
+		}
+		if line == "\r\n" || line == "\n" {
+			break
+		}
+	}
+	return conn, br, nil
+}
+
+func readWSFrame(br *bufio.Reader, conn net.Conn) (byte, []byte, error) {
+	var msg bytes.Buffer
+	var firstOpcode byte
+	for {
+		var hdr [2]byte
+		if _, err := io.ReadFull(br, hdr[:]); err != nil {
+			return 0, nil, err
+		}
+		fin := (hdr[0] & 0x80) != 0
+		opcode := hdr[0] & 0x0F
+		masked := (hdr[1] & 0x80) != 0
+		length := uint64(hdr[1] & 0x7F)
+		switch length {
+		case 126:
+			var ext [2]byte
+			if _, err := io.ReadFull(br, ext[:]); err != nil {
+				return 0, nil, err
+			}
+			length = uint64(binary.BigEndian.Uint16(ext[:]))
+		case 127:
+			var ext [8]byte
+			if _, err := io.ReadFull(br, ext[:]); err != nil {
+				return 0, nil, err
+			}
+			length = binary.BigEndian.Uint64(ext[:])
+		}
+		if length > maxSofiaPayloadBytes {
+			return 0, nil, fmt.Errorf("xiongmai ws frame too large (%d)", length)
+		}
+		var maskKey [4]byte
+		if masked {
+			if _, err := io.ReadFull(br, maskKey[:]); err != nil {
+				return 0, nil, err
+			}
+		}
+		payload := make([]byte, length)
+		if length > 0 {
+			if _, err := io.ReadFull(br, payload); err != nil {
+				return 0, nil, err
+			}
+		}
+		if masked {
+			for i := range payload {
+				payload[i] ^= maskKey[i%4]
+			}
+		}
+		if opcode == 9 { // Ping -> send masked Pong
+			pong := []byte{0x8A, 0x80, 0, 0, 0, 0}
+			_, _ = conn.Write(pong)
+			continue
+		}
+		if firstOpcode == 0 && opcode != 0 {
+			firstOpcode = opcode
+		}
+		msg.Write(payload)
+		if fin {
+			return firstOpcode, msg.Bytes(), nil
+		}
+	}
+}
+
+func (c *CGITransport) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.loginInfo == nil || c.sessionID == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	_, _ = c.sendAuthenticatedLocked(ctx, "/cgi-bin/login.cgi", map[string]any{"Name": "Logout"})
+	c.loginInfo = nil
+	c.sessionID = ""
+	return nil
+}

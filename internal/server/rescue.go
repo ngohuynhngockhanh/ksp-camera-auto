@@ -196,6 +196,11 @@ func extractRTSPChannelAndVendor(autoHost, pathStr string) (config.Vendor, int, 
 		if m := rescueDahuaChRe.FindStringSubmatch(combined); len(m) == 2 {
 			ch, _ = strconv.Atoi(m[1])
 		}
+	} else if lc := strings.ToLower(combined); strings.Contains(lc, "real_stream") || strings.Contains(lc, "_stream=") || (strings.Contains(lc, "user=") && strings.Contains(lc, "_password=")) {
+		vendor = config.VendorXiongmai
+		if m := rescueDahuaChRe.FindStringSubmatch(combined); len(m) == 2 {
+			ch, _ = strconv.Atoi(m[1])
+		}
 	}
 	return vendor, ch, host, user, pass, rtspPort
 }

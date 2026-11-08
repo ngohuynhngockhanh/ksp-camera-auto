@@ -14,7 +14,7 @@ import (
 // that UDP discovery can't reach: Hikvision/ONVIF HTTP (80, 8000) and Dahua's
 // private protocol (37777 TCP, 37778 sub-stream, plus 8888 which some
 // KBVision — a Dahua OEM — devices use instead of 37777).
-const nmapPorts = "80,8000,37777,37778,8888"
+const nmapPorts = "80,8000,34567,37777,37778,8888"
 
 var (
 	nmapHostRe = regexp.MustCompile(`^Nmap scan report for (?:\S+ \()?([0-9.]+)\)?$`)
@@ -43,6 +43,8 @@ func vendorForPort(port int) string {
 		return "hikvision"
 	case 37777, 37778, 8888:
 		return "dahua"
+	case 34567:
+		return "xiongmai"
 	default:
 		return ""
 	}
@@ -80,6 +82,7 @@ func ScanSubnet(ctx context.Context, cidr string) ([]Result, error) {
 	}
 	results := parseNmapOutput(string(out))
 	enrichPort80Raysharp(ctx, results)
+	enrichPort80Xiongmai(ctx, results)
 	return results, nil
 }
 

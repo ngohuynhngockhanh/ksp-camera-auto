@@ -464,6 +464,19 @@ Dòng đầu ghi AI NVR (`N10256N` / `RS-SM-2426`) và Camera IP AI (`VC31` / `6
 
 ---
 
+### 3.4c Xiongmai / XMEye / iCSee / Vitacam (`internal/xiongmai` — Dual-Transport OOP Sofia 34567 & CGI 80)
+
+Dòng Camera IP (Vitacam, iCSee, XMEye, JFTech) và Đầu ghi DVR/HVR/NVR của Hangzhou Xiongmai Technology (`vendor: "xiongmai"`, OUI MAC `00:12:43`, `00:12:17`) được điều khiển thông qua interface chiến lược hướng đối tượng `xiongmai.Transport`:
+1. **Đàm phán Giao vận Tự động (`SofiaTCPTransport` `:34567` $\leftrightarrow$ `CGITransport` `:80`)**:
+   - `SofiaTCPTransport`: Khung nhị phân 20-byte Little-Endian (`0xFF 0x01`) trên TCP `34567` với băm mật khẩu 8 ký tự `MD5_8`, ghép mảnh đa gói và tải luồng gốc `OPPlayBack` (`1420/1424`) cho các mắt cam độc lập 8MB Flash.
+   - `CGITransport`: Giao tiếp HTTP `/cgi-bin/*.cgi` xác thực **RSA-1024 PKCS#1 v1.5** kết hợp phiên **`AES-128-CBC` ZeroPadding (`DTAK`)** và WebSocket RFC 6455 `/websocket-bin/Type=HttpPlayBack` cho các đầu ghi HVR/NVR đời mới yêu cầu bắt tay RSA (`Ret = 205` trên `:34567`).
+2. **Cấu hình Luồng, Xuyên kênh `bypass@`, OSD & Mạng Hex-IP**:
+   - Tự động tương thích cả hai dạng `MainFormat` / `ExtraFormat` (mảng `[{...}]` trên IPC và object `{...}` trên HVR), định tuyến `bypass@AVEnc.Encode.[nDig]` cho kênh IP trên HVR/NVR, quy đổi `GOP` theo giây (`1..12s`) $\leftrightarrow$ số khung hình, và chuyển đổi địa chỉ IP Hex Little-Endian (`0x8A4DA8C0` $\leftrightarrow$ `192.168.77.138`).
+   - Đường dẫn RTSP chuẩn: `rtsp://<user>:<pass>@<host>:554/user=<user>_password=<pass>_channel=<1..N>_stream=<0|1>.sdp?real_stream`.
+   - Tài liệu đặc tả đầy đủ: [`docs/PROTOCOL-XIONGMAI.md`](./docs/PROTOCOL-XIONGMAI.md).
+
+---
+
 ### 3.5 Hệ thống Dò tìm Thiết bị Mạng (Discovery Subsystem)
 
 Package `internal/discovery` kết hợp 4 cơ chế quét song song:

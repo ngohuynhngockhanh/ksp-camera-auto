@@ -16,6 +16,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/hik"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/raysharp"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/tiandy"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/xiongmai"
 )
 
 // Stream selects an encoded stream. Values match dahua.Stream: 0=main,
@@ -395,6 +396,9 @@ func Open(ctx context.Context, d config.Device, timeout time.Duration) (Camera, 
 	case config.VendorRaysharp:
 		cl := raysharp.New(d.Host, d.Port, d.Username, d.Password, timeout)
 		return &raysharpCamera{client: cl, device: d, timeout: timeout}, nil
+	case config.VendorXiongmai:
+		cl := xiongmai.New(d.Host, d.Port, d.Username, d.Password, timeout)
+		return &xiongmaiCamera{client: cl, device: d, timeout: timeout}, nil
 	default:
 		return nil, fmt.Errorf("unknown vendor %q", d.Vendor)
 	}

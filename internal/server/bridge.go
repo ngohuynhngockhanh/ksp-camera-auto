@@ -26,6 +26,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/isapi"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mediaexport"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/shinobi"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/xiongmai"
 )
 
 var (
@@ -1077,6 +1078,10 @@ func (b *nvrBridge) pullAndRemuxZeroCPU(ctx context.Context, tgt resolvedBridgeT
 		_ = outFile.Close()
 		return err
 
+	case config.VendorXiongmai:
+		cl := xiongmai.New(d.Host, d.Port, d.Username, d.Password, 30*time.Second)
+		defer cl.Close()
+		return cl.ExportMP4Faststart(ctx, tgt.Channel, start, end, workDir, outMP4)
 	default:
 		return fmt.Errorf("unsupported vendor %q for NVR bridge", d.Vendor)
 	}

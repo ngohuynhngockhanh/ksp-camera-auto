@@ -173,7 +173,7 @@ function rememberProbeResult(id, payload) {
 }
 
 function cameraSerialHtml(c) {
-  if (c.vendor !== 'dahua' && c.vendor !== 'raysharp') return '<span class="muted">–</span>';
+  if (c.vendor !== 'dahua' && c.vendor !== 'raysharp' && c.vendor !== 'xiongmai') return '<span class="muted">–</span>';
   if (!c.serialNumber) return '<span class="muted">chưa dò SN</span>';
   return `<div class="camera-serial"><code>${escapeHtml(c.serialNumber)}</code>` +
     `<div class="camera-serial-qr" data-testid="camera-serial-qr" data-serial="${escapeHtml(c.serialNumber)}"></div></div>`;
@@ -614,7 +614,7 @@ function resolveLegacyHash() {
     document.getElementById('nvr-port').value = nvr ? nvr.port : 37777;
     document.getElementById('nvr-user').value = nvr ? nvr.username : 'admin';
     document.getElementById('nvr-pass').value = '';
-    document.getElementById('nvr-vendor').value = (nvr && ['dahua', 'hikvision', 'raysharp', 'tiandy'].includes(nvr.vendor)) ? nvr.vendor : 'hikvision';
+    document.getElementById('nvr-vendor').value = (nvr && ['dahua', 'hikvision', 'raysharp', 'xiongmai', 'tiandy'].includes(nvr.vendor)) ? nvr.vendor : 'hikvision';
     scanRows = [];
     document.getElementById('nvr-tbody').innerHTML = '<tr><td colspan="4" class="empty-hint">Nhập đầu ghi rồi bấm "Quét đầu ghi".</td></tr>';
     document.getElementById('nvr-save-btn').disabled = true;
@@ -1134,7 +1134,7 @@ function formatDiskCapacity(n) {
 // vendors), plus storage status/format and scheduled auto-reboot (Dahua only).
 async function renderMaintenance(c) {
   const el = document.getElementById('net-maint');
-  const supportsMaint = c.vendor === 'dahua' || c.vendor === 'raysharp';
+  const supportsMaint = c.vendor === 'dahua' || c.vendor === 'raysharp' || c.vendor === 'xiongmai';
   let html = `<div class="row"><button class="btn btn-danger" type="button" id="maint-reboot-btn">Khởi động lại camera</button></div>`;
   if (supportsMaint) {
     html += `<div class="card-title section-gap">${c.isNvr ? 'Ổ cứng đầu ghi (NVR)' : 'Thẻ nhớ / Lưu trữ'}</div><div id="maint-storage"><p class="muted">Đang đọc bộ nhớ...</p></div>`;
@@ -2513,16 +2513,17 @@ function closeCameraDetail() {
 // hint that it exists at all for other vendors.
 function applyDetailCapabilities(cam) {
   const isFullVendor = cam.vendor === 'dahua' || cam.vendor === 'raysharp';
+  const isMaintOrPTZ = isFullVendor || cam.vendor === 'xiongmai';
   const isAI = cam.vendor === 'raysharp';
-  const canEncode = ['dahua', 'hikvision', 'tiandy', 'raysharp'].includes(cam.vendor);
-  const canNetwork = ['dahua', 'hikvision', 'tiandy', 'raysharp'].includes(cam.vendor);
+  const canEncode = ['dahua', 'hikvision', 'tiandy', 'raysharp', 'xiongmai'].includes(cam.vendor);
+  const canNetwork = ['dahua', 'hikvision', 'tiandy', 'raysharp', 'xiongmai'].includes(cam.vendor);
   const fullOnly = `Chỉ Dahua/KBVision và Raysharp hỗ trợ — camera này là ${cam.vendor}.`;
   const caps = {
     picture: [isFullVendor, fullOnly],
-    ptz: [isFullVendor, fullOnly],
+    ptz: [isMaintOrPTZ, fullOnly],
     audio: [isFullVendor, fullOnly],
     ai: [isAI, `Chỉ thiết bị Raysharp AI hỗ trợ tab AI & Sự kiện — camera này là ${cam.vendor}.`],
-    maint: [isFullVendor, fullOnly],
+    maint: [isMaintOrPTZ, fullOnly],
     video: [canEncode, `Chưa hỗ trợ đọc/ghi cấu hình mã hoá cho ${cam.vendor}.`],
     network: [canNetwork, `Chưa hỗ trợ đọc/ghi cấu hình mạng cho ${cam.vendor}.`],
   };
@@ -3208,6 +3209,7 @@ function scanVendorClass(value) {
   if (/(^|[^a-z0-9])hikvision([^a-z0-9]|$)/.test(text) || text === 'hik' || text.startsWith('hik-')) return 'hikvision';
   if (/(^|[^a-z0-9])tiandy([^a-z0-9]|$)/.test(text)) return 'tiandy';
   if (/(^|[^a-z0-9])(raysharp|advantech|n10256|vc31)([^a-z0-9]|$)/.test(text)) return 'raysharp';
+  if (/(^|[^a-z0-9])(xiongmai|xmeye|icsee|vitacam|jftech|sofia)([^a-z0-9]|$)/.test(text)) return 'xiongmai';
   return '';
 }
 
@@ -3225,10 +3227,12 @@ function normalizeScanResult(raw) {
   // A private Dahua/Hik port is a stronger signal than an absent vendor.
   if (!vendor && [37777, 37778, 8888].includes(reportedPort)) vendor = 'dahua';
   if (!vendor && reportedPort === 8000) vendor = 'hikvision';
+  if (!vendor && reportedPort === 34567) vendor = 'xiongmai';
   if (!vendor) vendor = String(result.vendor == null ? '' : result.vendor).trim();
   let port = reportedPort;
   if (!port && vendor === 'dahua') port = 37777;
   if (!port && vendor === 'hikvision') port = 8000;
+  if (!port && vendor === 'xiongmai') port = 34567;
   return Object.assign(result, { vendor, port });
 }
 

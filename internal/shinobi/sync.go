@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/xiongmai"
 )
 
 var (
@@ -101,6 +102,8 @@ func (c *Client) BuildMonitorConfig(d config.Device) MonitorConfig {
 		path = fmt.Sprintf("/cam/realmonitor?channel=%d&subtype=0", channel)
 	case config.VendorRaysharp:
 		path = fmt.Sprintf("/rtsp/streaming?channel=%d&subtype=0", channel)
+	case config.VendorXiongmai:
+		path = xiongmai.BuildRTSPPath(d.Username, d.Password, channel, 0)
 	default:
 		// Default to Dahua/Hik standard path
 		path = fmt.Sprintf("/cam/realmonitor?channel=%d&subtype=0", channel)
@@ -125,8 +128,8 @@ func (c *Client) BuildMonitorConfig(d config.Device) MonitorConfig {
 	acodec := "copy"
 	streamAcodec := "copy"
 	recordAcodec := "copy"
-	if d.Vendor == config.VendorRaysharp {
-		// Raysharp hardware outputs G.711A/G.711U only (no hardware AAC);
+	if d.Vendor == config.VendorRaysharp || d.Vendor == config.VendorXiongmai {
+		// Raysharp & Xiongmai Sofia chips output G.711A/G.711U by default;
 		// disable audio copy to preserve 0% CPU zero-transcoding.
 		acodec = "no"
 		streamAcodec = "no"
@@ -290,6 +293,8 @@ func (c *Client) SyncFromShinobi(ctx context.Context, inv *config.Inventory) (*S
 			configPort = 554
 		} else if vendor == config.VendorRaysharp {
 			configPort = 80
+		} else if vendor == config.VendorXiongmai {
+			configPort = 34567
 		}
 		// Check if host already exists in inventory with a different port (e.g. 8888 fallback)
 		if existing, ok := inv.FindByHost(host, 0); ok && existing.Port > 0 {
@@ -407,6 +412,8 @@ func detectVendorFromPath(path string) config.Vendor {
 		return config.VendorDahua
 	case strings.Contains(p, "/rtsp/streaming"):
 		return config.VendorRaysharp
+	case strings.Contains(p, "real_stream") || strings.Contains(p, "_stream=") || (strings.Contains(p, "user=") && strings.Contains(p, "_password=")):
+		return config.VendorXiongmai
 	case strings.Contains(p, "/streaming/channels"):
 		return config.VendorHikvision
 	default:

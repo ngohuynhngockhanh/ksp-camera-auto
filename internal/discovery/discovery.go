@@ -88,11 +88,11 @@ func Scan(ctx context.Context, timeout time.Duration) ([]Result, error) {
 		mu.Unlock()
 	}
 
-	wg.Add(3)
+	wg.Add(4)
 	go run(scanONVIF)
 	go run(scanDahua)
 	go run(scanSADP)
-	wg.Wait()
+	go run(scanXiongmai)
 
 	return mergeResults(all), nil
 }
