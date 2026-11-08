@@ -79,6 +79,32 @@ func StreamPlaybackFast(ctx context.Context, w io.Writer, host, user, pass strin
 	return nil
 }
 
+// StreamTSFast streams a channel's [start,end] recording as concatenated
+// MPEG-TS at ~7x realtime via the in-process "Rate-Control: no" RTSP proxy on
+// a single sequential RTSP session (safe for onboard [Cam-SD] cards on modern
+// Dahua/Imou IPCs that do not expose 0xf4 PlayBack.download). Callers remux
+// the resulting MPEG-TS into +faststart hvc1 MP4 with zero CPU transcoding.
+func StreamTSFast(ctx context.Context, w io.Writer, host, user, pass string, channel int, start, end time.Time) error {
+	select {
+	case playbackSem <- struct{}{}:
+		defer func() { <-playbackSem }()
+	case <-ctx.Done():
+		return fmt.Errorf("dahua: fast ts %s: %w (waiting for a slot)", host, ctx.Err())
+	}
+	tsOffset := 0.0
+	for t := start; t.Before(end); t = t.Add(fastChunk) {
+		ce := t.Add(fastChunk)
+		if ce.After(end) {
+			ce = end
+		}
+		if err := streamChunkFast(ctx, w, host, user, pass, channel, t, ce, tsOffset); err != nil {
+			return err
+		}
+		tsOffset += ce.Sub(t).Seconds()
+	}
+	return nil
+}
+
 // streamChunkFast downloads one [start,end] chunk via the RTSP proxy + ffmpeg,
 // as MPEG-TS, appended to w. tsOffset (seconds) shifts this chunk's output
 // timestamps so they continue the previous chunk's — without it every chunk's

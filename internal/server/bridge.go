@@ -484,7 +484,7 @@ func (s *Server) resolveBridgeTarget(idParam, midParam string, reqChannel int, h
 			sameHostPeers++
 		}
 	}
-	isMultiChNVR := cam.NVRChannel > 1 || sameHostPeers > 1 || strings.Contains(strings.ToLower(cam.ID), "-c")
+	isMultiChNVR := cam.NVRChannel > 1 || sameHostPeers > 1
 	return resolvedBridgeTarget{
 		Mid:     mid,
 		Cam:     cam,
@@ -542,11 +542,22 @@ func (b *nvrBridge) FlushRecordingsCache() {
 }
 
 func (b *nvrBridge) getRecordingsCached(ctx context.Context, tgt resolvedBridgeTarget, start, end time.Time, forceFresh bool) ([]dahua.Recording, error) {
-	// Quantize cache key to 10-second buckets so concurrent UI tab loads share 1 query.
-	cacheKey := fmt.Sprintf("%s|%d|%d|%d", tgt.Source.ID, tgt.Channel, start.Unix()/10, end.Unix()/10)
+	// Historical Hybrid tail queries (ending >2m in the past) change at most once
+	// per 5-minute segment rollover: quantize to 300s buckets with a 3-minute RAM TTL
+	// so 600..1200-segment Imou [Cam-SD] cards load in <1ms on subsequent tab opens!
+	// Live Diskless queries (ending near now) use 15s buckets & 15s TTL, and CheckVAR
+	// flushes recCache immediately via FlushRecordingsCache().
+	isHistoricalTail := time.Since(end) > 2*time.Minute
+	bucketSec := int64(15)
+	ttl := 15 * time.Second
+	if isHistoricalTail {
+		bucketSec = 300
+		ttl = 3 * time.Minute
+	}
+	cacheKey := fmt.Sprintf("%s|%d|%d|%d", tgt.Source.ID, tgt.Channel, start.Unix()/bucketSec, end.Unix()/bucketSec)
 	if !forceFresh {
 		b.recMu.RLock()
-		if ent, ok := b.recCache[cacheKey]; ok && time.Since(ent.fetchedAt) < 10*time.Second {
+		if ent, ok := b.recCache[cacheKey]; ok && time.Since(ent.fetchedAt) < ttl {
 			b.recMu.RUnlock()
 			return ent.list, nil
 		}
@@ -554,8 +565,11 @@ func (b *nvrBridge) getRecordingsCached(ctx context.Context, tgt resolvedBridgeT
 	}
 
 	val, err := b.recGroup.Do(cacheKey, func() (any, error) {
-		to := b.s.reqTimeout(15)
-		cctx, cancel := context.WithTimeout(ctx, to)
+		to := b.s.reqTimeout(30)
+		if to < 30*time.Second {
+			to = 30 * time.Second
+		}
+		cctx, cancel := context.WithTimeout(context.Background(), to)
 		defer cancel()
 		cam, err := camera.Open(cctx, tgt.Source, to)
 		if err != nil {
@@ -883,23 +897,42 @@ func (b *nvrBridge) pullAndRemuxZeroCPU(ctx context.Context, tgt resolvedBridgeT
 
 	switch d.Vendor {
 	case config.VendorDahua:
-		// 1. Primary Ultra-Fast Path: Binary DVRIP 0xbb .dav download (~5-8 MB/s on LAN)
-		// followed by 0%-CPU -f dhav -c copy -> MP4 +faststart (~2.5s for 5 min on ARMv7).
-		davPath := filepath.Join(workDir, "raw.dav")
-		davFile, err := os.Create(davPath)
-		if err == nil {
-			davErr := dahua.StreamDav(ctx, davFile, d.Host, d.Port, d.Username, d.Password, tgt.Channel, start, end)
-			_ = davFile.Close()
-			if davErr == nil {
-				if fi, stErr := os.Stat(davPath); stErr == nil && fi.Size() > 1024 {
-					remuxErr := remuxCopyFileToFaststartMP4(ctx, "dhav", davPath, outMP4, 0, durSec)
-					_ = os.Remove(davPath)
+		// 1a. Primary NVR Ultra-Fast Path: Binary DVRIP 0xbb .dav download (~5-8 MB/s on LAN).
+		// Skipped on standalone [Cam-SD] IPCs (which silently drop 0xf4 frames until read timeout)
+		// so [Cam-SD] jumps straight to 1b (Rate-Control:no ~7x RTSP)!
+		if !tgt.IsCamSD {
+			davPath := filepath.Join(workDir, "raw.dav")
+			if davFile, err := os.Create(davPath); err == nil {
+				davErr := dahua.StreamDav(ctx, davFile, d.Host, d.Port, d.Username, d.Password, tgt.Channel, start, end)
+				_ = davFile.Close()
+				if davErr == nil {
+					if fi, stErr := os.Stat(davPath); stErr == nil && fi.Size() > 1024 {
+						remuxErr := remuxCopyFileToFaststartMP4(ctx, "dhav", davPath, outMP4, 0, durSec)
+						_ = os.Remove(davPath)
+						if remuxErr == nil {
+							return nil
+						}
+					}
+				}
+				_ = os.Remove(davPath)
+			}
+		}
+		// 1b. Fast RTSP "Rate-Control: no" path (~7x realtime on 1 sequential TCP session)
+		// for modern Dahua/Imou [Cam-SD] IPCs that reject 0xf4 PlayBack.download.
+		tsPath := filepath.Join(workDir, "fast.ts")
+		if tsFile, err := os.Create(tsPath); err == nil {
+			fastErr := dahua.StreamTSFast(ctx, tsFile, d.Host, d.Username, d.Password, tgt.Channel, start, end)
+			_ = tsFile.Close()
+			if fastErr == nil {
+				if fi, stErr := os.Stat(tsPath); stErr == nil && fi.Size() > 1024 {
+					remuxErr := remuxCopyFileToFaststartMP4(ctx, "mpegts", tsPath, outMP4, 0, durSec)
+					_ = os.Remove(tsPath)
 					if remuxErr == nil {
 						return nil
 					}
 				}
 			}
-			_ = os.Remove(davPath)
+			_ = os.Remove(tsPath)
 		}
 
 		// 2. Fallback Path: RTSP Playback stream-copy (parallel=4 on NVR, parallel=1 on Cam-SD).
