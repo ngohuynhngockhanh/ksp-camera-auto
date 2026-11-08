@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -1327,21 +1328,34 @@ func decodeFrameFromRecentTS(ctx context.Context, dir string, cutoff time.Time) 
 	if len(cands) > 3 {
 		cands = cands[:3]
 	}
-	for _, c := range cands {
-		subCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
-		out, err := exec.CommandContext(subCtx, "ffmpeg",
-			"-loglevel", "error",
-			"-i", c.path,
-			"-frames:v", "1",
-			"-f", "image2",
-			"-c:v", "mjpeg",
-			"-q:v", "4",
-			"pipe:1",
-		).Output()
-		cancel()
-		if err == nil && len(out) > 200 && out[0] == 0xff && out[1] == 0xd8 {
-			return out, true
+	if len(cands) == 0 {
+		return nil, false
+	}
+	var buf bytes.Buffer
+	for i := len(cands) - 1; i >= 0; i-- {
+		if b, err := os.ReadFile(cands[i].path); err == nil && len(b) > 1024 {
+			_, _ = buf.Write(b)
 		}
+	}
+	if buf.Len() <= 1024 {
+		return nil, false
+	}
+	subCtx, cancel := context.WithTimeout(ctx, 2500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(subCtx, "ffmpeg",
+		"-loglevel", "error",
+		"-f", "mpegts",
+		"-i", "pipe:0",
+		"-frames:v", "1",
+		"-f", "image2",
+		"-c:v", "mjpeg",
+		"-q:v", "4",
+		"pipe:1",
+	)
+	cmd.Stdin = bytes.NewReader(buf.Bytes())
+	out, err := cmd.Output()
+	if err == nil && len(out) > 200 && out[0] == 0xff && out[1] == 0xd8 {
+		return out, true
 	}
 	return nil, false
 }
