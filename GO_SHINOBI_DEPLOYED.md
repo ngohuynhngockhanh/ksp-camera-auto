@@ -94,6 +94,24 @@
 - **`inut_205_29` (`77.88.205.29` — CLB Bida 49 Ninh Hoà):** `ke=banchobienhoanha` • `12` cam • RAM giảm từ `1149 MB` xuống **`592 MB`** • `12/12` Recording & `12/12` snapshots `:2028` OK.
 - **`inut_205_75` (`77.88.205.75` — 49 Billiards Carom Club Ninh Hòa):** `ke=49` • `10` cam • RAM giảm từ `872 MB` xuống **`562 MB`** • `10/10` Recording & `10/10` snapshots `:2028` OK.
 - **`inut_205_85` (`77.88.205.85` — Lion King Billiards Club Nam Định - CS2):** `ke=lionkingnd` • `6` cam • RAM giảm từ `809 MB` xuống **`503 MB`** • `6/6` Recording & `6/6` snapshots `:2028` OK.
+
+### 1.8 Lô 16 Node (`202_173..205_27`) Lên Full Go Ngày `2026-11-08`
+- **`inut_202_173` (`77.88.202.173` — Thế Trâm Pickleball):** `ke=dmdeabhancca` • `1` cam • RAM giảm từ `561 MB` xuống **`225 MB`** • `1/1` Recording & `1/1` snapshot `:2028` OK.
+- **`inut_202_210` (`77.88.202.210` — Lang Biang Pickleball Club):** `ke=INUTJSCSO1VIETNAMNHEMAYCONVO` • `2` cam • RAM giảm từ `579 MB` xuống **`280 MB`** • `2/2` Recording & `2/2` snapshots `:2028` OK.
+- **`inut_202_218` (`77.88.202.218` — PFA T-Tennis & Pickleball):** `ke=pfareal` • `2` cam • RAM giảm từ `537 MB` xuống **`206 MB`** • `2/2` Recording & `1/1` cam online snapshot `:2028` OK.
+- **`inut_202_219` (`77.88.202.219` — CLB Pickleball 26gram - CN2):** `ke=vnvarISdog` • `3` cam • RAM giảm từ `574 MB` xuống **`242 MB`** • `3/3` Recording & `3/3` snapshots `:2028` OK.
+- **`inut_202_222` (`77.88.202.222` — Fox Billiards & Coffee Hội An):** `ke=chiubia` • `4` cam • RAM giảm từ `610 MB` xuống **`205 MB`** • `4/4` snapshots `:2028` OK (chưa gắn thẻ nhớ ngoài `/media/usb1`, Storage Guard tự bảo vệ eMMC).
+- **`inut_203_81` (`77.88.203.81` — Dinker Pickleball Club):** `ke=dinker` • `6` cam • RAM giảm từ `643 MB` xuống **`261 MB`** • `6/6` Recording & `5/5` cam online snapshots `:2028` OK.
+- **`inut_204_22` (`77.88.204.22` — VSP Pickleball):** `ke=lAxKsdIBux` • `14` cam • RAM giảm từ `1372 MB` xuống **`713 MB`** • `14/14` Recording & `13/13` cam online snapshots `:2028` OK.
+- **`inut_204_107` (`77.88.204.107` — Trang Hoàng Pickleball):** `ke=cam4107` • `16` cam • RAM giảm từ `1161 MB` xuống **`547 MB`** • `16/16` Recording & `16/16` snapshots `:2028` OK.
+- **`inut_204_135` (`77.88.204.135` — HTP Pickleball):** `ke=b389` • `6` cam • RAM giảm từ `955 MB` xuống **`539 MB`** • `6/6` Recording & `6/6` snapshots `:2028` OK.
+- **`inut_204_157` (`77.88.204.157` — Kely Pickleball):** `ke=kely` • `13` cam • RAM giảm từ `937 MB` xuống **`512 MB`** • `12/13` Recording & `12/12` cam online snapshots `:2028` OK.
+- **`inut_204_158` (`77.88.204.158` — Sân Pickleball BRG):** `ke=brg` • `12` cam • RAM giảm từ `1081 MB` xuống **`538 MB`** • `12/12` Recording & `12/12` snapshots `:2028` OK.
+- **`inut_204_160` (`77.88.204.160` — QA Pickleball):** `ke=qa` • `3` cam • RAM giảm từ `822 MB` xuống **`408 MB`** • `3/3` Recording & `3/3` snapshots `:2028` OK.
+- **`inut_204_165` (`77.88.204.165` — Nguyễn Huệ Pickleball):** `ke=KT8zqe2yGq` • `4` cam • RAM giảm từ `840 MB` xuống **`429 MB`** • `4/4` Recording & `4/4` snapshots `:2028` OK.
+- **`inut_205_8` (`77.88.205.8` — PICKO 247):** `ke=picko247` • `6` cam • RAM giảm từ `794 MB` xuống **`371 MB`** • `6/6` Recording & `6/6` snapshots `:2028` OK.
+- **`inut_205_12` (`77.88.205.12` — Hoàng Tuấn Pickleball):** `ke=hoangtuan` • `5` cam • RAM giảm từ `1099 MB` xuống **`641 MB`** • `5/5` Recording & `5/5` snapshots `:2028` OK.
+- **`inut_205_27` (`77.88.205.27` — MatchUp Sports Complex):** `ke=thucc` • `6` cam • RAM giảm từ `1047 MB` xuống **`520 MB`** • `6/6` Recording & `6/6` snapshots `:2028` OK.
 ---
 
 ## 2. Quy Trình Chuẩn Onboarding Từ Shinobi Cũ Lên Go-Shinobi-KSP (Zero Clip Loss)

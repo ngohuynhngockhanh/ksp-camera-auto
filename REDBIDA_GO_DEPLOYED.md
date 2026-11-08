@@ -84,6 +84,39 @@
 
 - **`inut_205_85` (`77.88.205.85` / `5.85` — Lion King Billiards Club Nam Định - CS2, `ke=lionkingnd`, 6 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `809M` xuống **`503M/1923M`** (giải phóng `306 MB`), `go-shinobi-ksp` `~18.6 MB`, `redbida-go` `~26.6 MB`, `ksp-go2rtc` `~16.2 MB`, `kspcam` `:2028` (`6/6` snapshots OK), `inut-bida-agent` `active`.
+
+- **`inut_202_173` (`77.88.202.173` — Thế Trâm Pickleball, `ke=dmdeabhancca`, 1 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM giảm từ `561M` xuống **`225M/999M`** (giải phóng `336 MB`), `go-shinobi-ksp` `~17.0 MB` (`1/1` Recording), `redbida-go` `~11.7 MB`, `kspcam` `:2028` (`1/1` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_202_210` (`77.88.202.210` — Lang Biang Pickleball Club, `ke=INUTJSCSO1VIETNAMNHEMAYCONVO`, 2 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM giảm từ `579M` xuống **`280M/999M`** (giải phóng `299 MB`), `go-shinobi-ksp` `~14.5 MB` (`2/2` Recording), `redbida-go` `~10.8 MB`, `kspcam` `:2028` (`2/2` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_202_218` (`77.88.202.218` — PFA T-Tennis & Pickleball, `ke=pfareal`, 2 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM giảm từ `537M` xuống **`206M/999M`** (giải phóng `331 MB`), `go-shinobi-ksp` `~10.4 MB` (`2/2` Recording), `redbida-go` `~5.5 MB`, `kspcam` `:2028` (`1/1` cam online snapshot OK), `inut-bida-agent` `active`.
+- **`inut_202_219` (`77.88.202.219` — CLB Pickleball 26gram - CN2, `ke=vnvarISdog`, 3 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM giảm từ `574M` xuống **`242M/999M`** (giải phóng `332 MB`), `go-shinobi-ksp` `~16.9 MB` (`3/3` Recording), `redbida-go` `~11.8 MB`, `kspcam` `:2028` (`3/3` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_202_222` (`77.88.202.222` — Fox Billiards & Coffee Hội An, `ke=chiubia`, 4 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM giảm từ `610M` xuống **`205M/999M`** (giải phóng `405 MB`), `go-shinobi-ksp` `~12.8 MB`, `redbida-go` `~11.7 MB`, `kspcam` `:2028` (`4/4` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_203_81` (`77.88.203.81` — Dinker Pickleball Club, `ke=dinker`, 6 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM giảm từ `643M` xuống **`261M/999M`** (giải phóng `382 MB`), `go-shinobi-ksp` `~9.3 MB` (`6/6` Recording), `redbida-go` `~6.6 MB`, `kspcam` `:2028` (`5/5` cam online snapshots OK), `inut-bida-agent` `active`.
+- **`inut_204_22` (`77.88.204.22` — VSP Pickleball, `ke=lAxKsdIBux`, 14 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1372M` xuống **`713M/3974M`** (giải phóng `659 MB`), `go-shinobi-ksp` `~19.9 MB` (`14/14` Recording), `redbida-go` `~13.5 MB`, `kspcam` `:2028` (`13/13` cam online snapshots OK), `inut-bida-agent` `active`.
+- **`inut_204_107` (`77.88.204.107` — Trang Hoàng Pickleball, `ke=cam4107`, 16 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1161M` xuống **`547M/1980M`** (giải phóng `614 MB`), `go-shinobi-ksp` `~18.7 MB` (`16/16` Recording), `redbida-go` `~13.3 MB`, `kspcam` `:2028` (`16/16` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_204_135` (`77.88.204.135` — HTP Pickleball, `ke=b389`, 6 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `955M` xuống **`539M/1923M`** (giải phóng `416 MB`), `go-shinobi-ksp` `~18.7 MB` (`6/6` Recording), `redbida-go` `~13.9 MB`, `kspcam` `:2028` (`6/6` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_204_157` (`77.88.204.157` — Kely Pickleball, `ke=kely`, 13 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `937M` xuống **`512M/1794M`** (giải phóng `425 MB`), `go-shinobi-ksp` `~20.2 MB` (`12/13` Recording), `redbida-go` `~29.5 MB`, `kspcam` `:2028` (`12/12` cam online snapshots OK), `inut-bida-agent` `active`.
+- **`inut_204_158` (`77.88.204.158` — Sân Pickleball BRG, `ke=brg`, 12 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1081M` xuống **`538M/1794M`** (giải phóng `543 MB`), `go-shinobi-ksp` `~17.5 MB` (`12/12` Recording), `redbida-go` `~13.2 MB`, `kspcam` `:2028` (`12/12` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_204_160` (`77.88.204.160` — QA Pickleball, `ke=qa`, 3 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `822M` xuống **`408M/1794M`** (giải phóng `414 MB`), `go-shinobi-ksp` `~17.9 MB` (`3/3` Recording), `redbida-go` `~26.5 MB`, `kspcam` `:2028` (`3/3` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_204_165` (`77.88.204.165` — Nguyễn Huệ Pickleball, `ke=KT8zqe2yGq`, 4 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `840M` xuống **`429M/1794M`** (giải phóng `411 MB`), `go-shinobi-ksp` `~17.4 MB` (`4/4` Recording), `redbida-go` `~28.2 MB`, `kspcam` `:2028` (`4/4` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_8` (`77.88.205.8` — PICKO 247, `ke=picko247`, 6 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `794M` xuống **`371M/1923M`** (giải phóng `423 MB`), `go-shinobi-ksp` `~19.3 MB` (`6/6` Recording), `redbida-go` `~29.0 MB`, `kspcam` `:2028` (`6/6` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_12` (`77.88.205.12` — Hoàng Tuấn Pickleball, `ke=hoangtuan`, 5 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1099M` xuống **`641M/1923M`** (giải phóng `458 MB`), `go-shinobi-ksp` `~18.4 MB` (`5/5` Recording), `redbida-go` `~28.0 MB`, `kspcam` `:2028` (`5/5` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_27` (`77.88.205.27` — MatchUp Sports Complex, `ke=thucc`, 6 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1047M` xuống **`520M/1923M`** (giải phóng `527 MB`), `go-shinobi-ksp` `~18.6 MB` (`6/6` Recording), `redbida-go` `~28.0 MB`, `kspcam` `:2028` (`6/6` snapshots OK), `inut-bida-agent` `active`.
 ---
 
 ## 2. Lệnh Ansible Trên `172.16.5.180` (`/build/armbian-build/ansible`)
