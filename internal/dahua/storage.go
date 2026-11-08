@@ -51,9 +51,15 @@ func (c *Client) GetStorageInfo() ([]StorageDevice, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !resp.ok() {
-		return nil, fmt.Errorf("storage.getDeviceAllInfo failed: %s", respErr(resp))
-	}
+	return decodeStorageDeviceAllInfo(resp)
+}
+
+// decodeStorageDeviceAllInfo parses storage.getDeviceAllInfo responses across
+// Dahua and Imou firmware:
+//   - Dahua returns {"result":true,"params":{"info":[]}} when no card is present.
+//   - Imou IPC-A32EP-L / IPC-A32E-L returns {"result":false,"params":{"info":[]},"error":null}
+//     when the microSD slot is empty; treat that empty info array with null error as []StorageDevice{}.
+func decodeStorageDeviceAllInfo(resp rpcResp) ([]StorageDevice, error) {
 	var p struct {
 		Info []struct {
 			Name   string `json:"Name"`
@@ -67,6 +73,14 @@ func (c *Client) GetStorageInfo() ([]StorageDevice, error) {
 				IsNeedFormat bool      `json:"IsNeedFormat"`
 			} `json:"Detail"`
 		} `json:"info"`
+	}
+	if !resp.ok() {
+		if resp.errMessage() == "" && len(bytes.TrimSpace(resp.Params)) > 0 {
+			if err := json.Unmarshal(resp.Params, &p); err == nil && p.Info != nil && len(p.Info) == 0 {
+				return []StorageDevice{}, nil
+			}
+		}
+		return nil, fmt.Errorf("storage.getDeviceAllInfo failed: %s", respErr(resp))
 	}
 	if err := json.Unmarshal(resp.Params, &p); err != nil {
 		return nil, fmt.Errorf("storage.getDeviceAllInfo: decode: %w", err)
