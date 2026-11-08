@@ -668,6 +668,8 @@ Khi Edge Box không gắn thẻ nhớ `/media/usb1` (chế độ `Diskless / NVR
 1. **Bất biến `0% CPU Encode` (`100% Stream Copy`)**: Tuyệt đối cấm chạy `libx264`, `libx265` hay `-c:a aac` bằng CPU trên Box iNut. Mọi luồng rút từ đầu ghi (nhị phân `0xbb` `.dav` trên Dahua, `ISAPI IMKH` / RTSP trên Hikvision) đều đóng gói bằng `-c:v copy -c:a copy` (tự động fallback sang `-c:v copy -an` nếu âm thanh G.711 không tương thích MP4) kèm `-tag:v hvc1 -movflags +faststart` đặt `moov` tại byte `0x1C`.
 2. **Kho đệm RAM `/dev/shm/kspcam-clips` & Bảo vệ đầu ghi**: Tự động giới hạn LRU `120 MB` trên box RAM 1GB (`240 MB` trên box RAM 2–4GB, TTL `10 phút`), khóa semaphore tối đa `2` luồng đồng thời / IP đầu ghi NVR và `1` luồng tuần tự đối với camera cắm thẻ nhớ lẻ (`[Cam-SD]`).
 3. **Virtual 5-Minute Slicer & Cắt Clip Trực Tiếp**: `go-shinobi-ksp` tự băm lịch sử NVR thành các khung 5 phút `v_nvr_YYYY-MM-DDTHH-MM-SS_<dur>.mp4` (khung mới nhất sát `now - 3s` không cần chạy `date -s`) và hỗ trợ `Hybrid Merge` với thẻ nhớ cũ; `redbida-go` phát trực tiếp `HTTP 206 Byte-Range` và gộp khoảng cắt liên tiếp vào `/dev/shm/redbida-cuts`. Xem đặc tả chi tiết tại [`docs/PROTOCOL-NVR-BRIDGE.md`](./docs/PROTOCOL-NVR-BRIDGE.md).
+4. **Sổ tay Quy trình Triển khai Thực địa (`Diskless`, `Hybrid SD+NVR 72h`, `1-Click Box Rescue` & `Failback SOP`)**: Xem hướng dẫn từng bước và kịch bản tự động hóa tại [`docs/DEPLOYMENT-NVR-HYBRID-RESCUE.md`](./docs/DEPLOYMENT-NVR-HYBRID-RESCUE.md) và [`docs/PROTOCOL-BOX-RESCUE.md`](./docs/PROTOCOL-BOX-RESCUE.md).
+
 ---
 
 ## 4. Luồng xử lý cấu hình tuần tự (Sequence Diagram)

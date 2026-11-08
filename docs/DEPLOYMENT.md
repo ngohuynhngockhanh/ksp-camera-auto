@@ -56,3 +56,10 @@ ansible -i inventories/linux <host> -m shell -a \
 ```
 
 Reachable externally at the frp `ksp-cam-<host>` subdomain (must terminate TLS).
+
+## Advanced Edge Topologies: Diskless NVR-Direct, Hybrid SD+NVR (`72h`) & 1-Click Box Rescue
+
+For full multi-package (`kspcam` + `go-shinobi-ksp` + `redbida-go` + `ksp-go2rtc`) field SOPs, pre-flight checklists, 1-click Box Rescue failover scripts (`VIP` on `lan0` + `FRPC` subdomain + zero-idle on-demand `go2rtc`), and clean failback steps, see:
+- **[`docs/DEPLOYMENT-NVR-HYBRID-RESCUE.md`](./DEPLOYMENT-NVR-HYBRID-RESCUE.md)**
+- **[`docs/PROTOCOL-NVR-BRIDGE.md`](./PROTOCOL-NVR-BRIDGE.md)**
+- **[`docs/PROTOCOL-BOX-RESCUE.md`](./PROTOCOL-BOX-RESCUE.md)**
