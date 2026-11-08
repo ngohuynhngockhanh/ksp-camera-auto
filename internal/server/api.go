@@ -1293,32 +1293,57 @@ func (s *Server) tryFastRAMStreamSnapshot(ctx context.Context, d config.Device, 
 	cutoff := time.Now().Add(-15 * time.Second)
 	for _, gdir := range groupDirs {
 		for _, mid := range candidateMids {
-			tsFiles, _ := filepath.Glob(filepath.Join(gdir, mid, "*.ts"))
-			var newestTS string
-			var newestMod time.Time
-			for _, f := range tsFiles {
-				if st, err := os.Stat(f); err == nil && st.Size() > 1024 && st.ModTime().After(cutoff) && st.ModTime().After(newestMod) {
-					newestMod = st.ModTime()
-					newestTS = f
-				}
-			}
-			if newestTS != "" {
-				out, err := exec.CommandContext(ctx, "ffmpeg",
-					"-loglevel", "error",
-					"-i", newestTS,
-					"-frames:v", "1",
-					"-f", "image2",
-					"-c:v", "mjpeg",
-					"-q:v", "4",
-					"pipe:1",
-				).Output()
-				if err == nil && len(out) > 200 && out[0] == 0xff && out[1] == 0xd8 {
-					return out, nil
-				}
+			if out, ok := decodeFrameFromRecentTS(ctx, filepath.Join(gdir, mid), cutoff); ok {
+				return out, nil
 			}
 		}
 	}
 	return nil, fmt.Errorf("no fresh RAM stream segment")
+}
+func decodeFrameFromRecentTS(ctx context.Context, dir string, cutoff time.Time) ([]byte, bool) {
+	tsFiles, _ := filepath.Glob(filepath.Join(dir, "*.ts"))
+	type tsCand struct {
+		path string
+		mod  time.Time
+	}
+	var cands []tsCand
+	for _, f := range tsFiles {
+		st, err := os.Stat(f)
+		if err != nil || st.Size() <= 1024 {
+			continue
+		}
+		if !cutoff.IsZero() && !st.ModTime().After(cutoff) {
+			continue
+		}
+		cands = append(cands, tsCand{path: f, mod: st.ModTime()})
+	}
+	for i := 0; i < len(cands); i++ {
+		for j := i + 1; j < len(cands); j++ {
+			if cands[j].mod.After(cands[i].mod) {
+				cands[i], cands[j] = cands[j], cands[i]
+			}
+		}
+	}
+	if len(cands) > 3 {
+		cands = cands[:3]
+	}
+	for _, c := range cands {
+		subCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+		out, err := exec.CommandContext(subCtx, "ffmpeg",
+			"-loglevel", "error",
+			"-i", c.path,
+			"-frames:v", "1",
+			"-f", "image2",
+			"-c:v", "mjpeg",
+			"-q:v", "4",
+			"pipe:1",
+		).Output()
+		cancel()
+		if err == nil && len(out) > 200 && out[0] == 0xff && out[1] == 0xd8 {
+			return out, true
+		}
+	}
+	return nil, false
 }
 
 var camPrefixMidRe = regexp.MustCompile(`(?i)camera\s*0*(\d+)`)
@@ -1395,28 +1420,8 @@ func (s *Server) fallbackSnapshotFromShinobiOrRTSP(ctx context.Context, d config
 	}
 	for _, gdir := range groupDirs {
 		for _, mid := range candidateMids {
-			tsFiles, _ := filepath.Glob(filepath.Join(gdir, mid, "*.ts"))
-			var newestTS string
-			var newestMod time.Time
-			for _, f := range tsFiles {
-				if st, err := os.Stat(f); err == nil && st.Size() > 1024 && st.ModTime().After(newestMod) {
-					newestMod = st.ModTime()
-					newestTS = f
-				}
-			}
-			if newestTS != "" {
-				out, err := exec.CommandContext(ctx, "ffmpeg",
-					"-loglevel", "error",
-					"-i", newestTS,
-					"-frames:v", "1",
-					"-f", "image2",
-					"-c:v", "mjpeg",
-					"-q:v", "4",
-					"pipe:1",
-				).Output()
-				if err == nil && len(out) > 200 && out[0] == 0xff && out[1] == 0xd8 {
-					return out, nil
-				}
+			if out, ok := decodeFrameFromRecentTS(ctx, filepath.Join(gdir, mid), time.Time{}); ok {
+				return out, nil
 			}
 		}
 	}
