@@ -125,6 +125,36 @@
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1460M` xuống **`912M/3919M`** (giải phóng `548 MB`), `go-shinobi-ksp` `~17.7 MB` (`14/14` Recording, bảo toàn `1,410` clip `.mp4`), `redbida-go` `~13.3 MB`, `ksp-go2rtc` `~15.0 MB`, `kspcam` `:2028` (`1/1` NVR snapshot OK), `inut-bida-agent` `active`.
 - **`inut_205_47` (`77.88.205.47` / `5.47` — Aileex Billiards Club Yên Bái, `ke=alieex`, 13 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `983M` xuống **`510M/1923M`** (giải phóng `473 MB`), `go-shinobi-ksp` `~18.3 MB` (`13/13` Recording), `redbida-go` `~14.0 MB`, `ksp-go2rtc` `~15.6 MB`, `kspcam` `:2028` (`13/13` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_6` (`77.88.205.6` — TheLight Pool Arena, `ke=thelightpoolarena`, 10 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `703M` xuống **`388M/1923M`** (giải phóng `315 MB`), `go-shinobi-ksp` `~20.5 MB` (`10/10` Recording), `redbida-go` `~12.5 MB`, `ksp-go2rtc` `~16.0 MB`, `kspcam` `:2028` (`10/10` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_7` (`77.88.205.7` — LoGi Billiards, `ke=logi`, 10 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1004M` xuống **`391M/1923M`** (giải phóng `613 MB`), `go-shinobi-ksp` `~19.0 MB` (`10/10` Recording), `redbida-go` `~12.5 MB`, `ksp-go2rtc` `~15.6 MB`, `kspcam` `:2028` (`10/10` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_10` (`77.88.205.10` — CLB Billiard The King, `ke=xinchao`, 8 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `729M` xuống **`388M/1923M`** (giải phóng `341 MB`), `go-shinobi-ksp` `~20.0 MB` (`8/8` Recording), `redbida-go` `~27.4 MB`, `ksp-go2rtc` `~16.0 MB`, `kspcam` `:2028` (`8/8` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_14` (`77.88.205.14` — ATD Billiards Club, `ke=h2`, 12 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1222M` xuống **`513M/1923M`** (giải phóng `709 MB`), `go-shinobi-ksp` `~19.7 MB` (`7/7` active Recording, `1` Stopped, `4` cam tắt điện LAN), `redbida-go` `~27.9 MB`, `ksp-go2rtc` `~15.9 MB`, `kspcam` `:2028` (`8/8` cam online snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_17` (`77.88.205.17` — Bi-a AnhEm, `ke=anhem`, 8 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `951M` xuống **`471M/1923M`** (giải phóng `480 MB`), `go-shinobi-ksp` `~22.0 MB` (`8/8` Recording), `redbida-go` `~27.2 MB`, `ksp-go2rtc` `~15.8 MB`, `kspcam` `:2028` (`8/8` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_18` (`77.88.205.18` — MAY Billiards, `ke=b52cs32`, 8 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `729M` xuống **`398M/1923M`** (giải phóng `331 MB`), `go-shinobi-ksp` `~26.9 MB` (`7/7` cam online Recording, `1` cam `.242` tắt điện LAN), `redbida-go` `~12.4 MB`, `ksp-go2rtc` `~16.0 MB`, `kspcam` `:2028` (`7/7` cam online snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_19` (`77.88.205.19` — Billiards Quang Phúc, `ke=qp`, 10 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `933M` xuống **`417M/1923M`** (giải phóng `516 MB`), `go-shinobi-ksp` `~18.7 MB` (`6/6` active Recording, `4` Stopped), `redbida-go` `~29.4 MB`, `ksp-go2rtc` `~15.8 MB`, `kspcam` `:2028` (`6/6` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_43` (`77.88.205.43` — Konoha Premium, `ke=konoha`, 13 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1284M` xuống **`700M/1923M`** (giải phóng `584 MB`), `go-shinobi-ksp` `~17.5 MB` (`12/12` active Recording, `1` Stopped), `redbida-go` `~27.9 MB`, `ksp-go2rtc` `~15.8 MB`, `kspcam` `:2028` (`13/13` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_45` (`77.88.205.45` — Bida Hoàng Phát 6, `ke=thua`, 9 cam `DH-H2AE`)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1271M` xuống **`600M/1923M`** (giải phóng `671 MB`), dọn ổ `/media/usb1` từ `97%` về `84%`, giải phóng zombie RTSP session trên `DH-H2AE`, `go-shinobi-ksp` `~19.6 MB` (`9/9` Recording), `redbida-go` `~29.0 MB`, `ksp-go2rtc` `~16.1 MB`, `kspcam` `:2028` (`9/9` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_51` (`77.88.205.51` — Dragon Billiards Club, `ke=thin`, 10 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1197M` xuống **`535M/1923M`** (giải phóng `662 MB`), `go-shinobi-ksp` `~20.5 MB` (`10/10` Recording), `redbida-go` `~27.1 MB`, `ksp-go2rtc` `~15.9 MB`, `kspcam` `:2028` (`10/10` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_53` (`77.88.205.53` — The Best Billiards Club, `ke=ultrapool1`, 12 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `848M` xuống **`474M/1923M`** (giải phóng `374 MB`), `go-shinobi-ksp` `~17.7 MB` (`12/12` Recording), `redbida-go` `~14.4 MB`, `ksp-go2rtc` `~16.0 MB`, `kspcam` `:2028` (`11/12` snapshots OK — `1` cam CareCam RTSP-only), `inut-bida-agent` `active`.
+- **`inut_205_55` (`77.88.205.55` — Tuyết Linh Billiards Club, `ke=tuyetlinh`, 11 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `763M` xuống **`421M/1923M`** (giải phóng `342 MB`), `go-shinobi-ksp` `~19.5 MB` (`11/11` Recording), `redbida-go` `~27.3 MB`, `ksp-go2rtc` `~15.8 MB`, `kspcam` `:2028` (`11/11` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_56` (`77.88.205.56` — King Kong Thái Nguyên, `ke=mp4`, 9 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `779M` xuống **`392M/1923M`** (giải phóng `387 MB`), `go-shinobi-ksp` `~19.9 MB` (`9/9` Recording), `redbida-go` `~29.6 MB`, `ksp-go2rtc` `~15.8 MB`, `kspcam` `:2028` (`9/9` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_82` (`77.88.205.82` — Hoàng Tom Billiards, `ke=mia`, 16 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1205M` xuống **`632M/1923M`** (giải phóng `573 MB`), `go-shinobi-ksp` `~20.5 MB` (`16/16` Recording), `redbida-go` `~30.9 MB`, `ksp-go2rtc` `~16.1 MB`, `kspcam` `:2028` (`30/30` kênh snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_121` (`77.88.205.121` — Black Coffee Billiards, `ke=loicafe`, 6 cam)**:
+  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `935M` xuống **`391M/1923M`** (giải phóng `544 MB`), `go-shinobi-ksp` `~18.9 MB` (`6/6` Recording), `redbida-go` `~29.3 MB`, `ksp-go2rtc` `~15.8 MB`, `kspcam` `:2028` (`6/6` snapshots OK), `inut-bida-agent` `active`.
 ---
 
 ## 2. Lệnh Ansible Trên `172.16.5.180` (`/build/armbian-build/ansible`)

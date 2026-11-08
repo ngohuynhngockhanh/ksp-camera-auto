@@ -116,6 +116,23 @@
 - **`inut_204_97` (`77.88.204.97` — Tok Tok II Billiards Center):** `ke=toktok2` • `16` cam • RAM giảm từ `1218 MB` xuống **`546 MB`** • `16/16` Recording & `16/16` snapshots `:2028` OK.
 - **`inut_204_146` (`77.88.204.146` — Sniper Billiards Club):** `ke=sniper` • `14` cam • RAM giảm từ `1460 MB` xuống **`912 MB`** • `14/14` Recording & `1/1` NVR snapshot `:2028` OK.
 - **`inut_205_47` (`77.88.205.47` — Aileex Billiards Club Yên Bái):** `ke=alieex` • `13` cam • RAM giảm từ `983 MB` xuống **`510 MB`** • `13/13` Recording & `13/13` snapshots `:2028` OK.
+
+### 1.9 Lô 15 Node (`205_6..205_121`) Lên Full Go Ngày `2026-11-08`
+- **`inut_205_6` (`77.88.205.6` — TheLight Pool Arena):** `ke=thelightpoolarena` • `10` cam • RAM giảm từ `703 MB` xuống **`388 MB`** • `10/10` Recording & `10/10` snapshots `:2028` OK.
+- **`inut_205_7` (`77.88.205.7` — LoGi Billiards):** `ke=logi` • `10` cam • RAM giảm từ `1004 MB` xuống **`391 MB`** • `10/10` Recording & `10/10` snapshots `:2028` OK.
+- **`inut_205_10` (`77.88.205.10` — CLB Billiard The King):** `ke=xinchao` • `8` cam • RAM giảm từ `729 MB` xuống **`388 MB`** • `8/8` Recording & `8/8` snapshots `:2028` OK.
+- **`inut_205_14` (`77.88.205.14` — ATD Billiards Club):** `ke=h2` • `12` cam (`8` online) • RAM giảm từ `1222 MB` xuống **`513 MB`** • `7/7` active Recording & `8/8` online snapshots `:2028` OK.
+- **`inut_205_17` (`77.88.205.17` — Bi-a AnhEm):** `ke=anhem` • `8` cam • RAM giảm từ `951 MB` xuống **`471 MB`** • `8/8` Recording & `8/8` snapshots `:2028` OK.
+- **`inut_205_18` (`77.88.205.18` — MAY Billiards):** `ke=b52cs32` • `8` cam (`7` online) • RAM giảm từ `729 MB` xuống **`398 MB`** • `7/7` online Recording & `7/7` online snapshots `:2028` OK.
+- **`inut_205_19` (`77.88.205.19` — Billiards Quang Phúc):** `ke=qp` • `10` cam (`6` active, `4` Stopped) • RAM giảm từ `933 MB` xuống **`417 MB`** • `6/6` active Recording & `6/6` snapshots `:2028` OK.
+- **`inut_205_43` (`77.88.205.43` — Konoha Premium):** `ke=konoha` • `13` cam (`12` active, `1` Stopped) • RAM giảm từ `1284 MB` xuống **`700 MB`** • `12/12` active Recording & `13/13` snapshots `:2028` OK.
+- **`inut_205_45` (`77.88.205.45` — Bida Hoàng Phát 6):** `ke=thua` • `9` cam • RAM giảm từ `1271 MB` xuống **`600 MB`** • `9/9` Recording & `9/9` snapshots `:2028` OK.
+- **`inut_205_51` (`77.88.205.51` — Dragon Billiards Club):** `ke=thin` • `10` cam • RAM giảm từ `1197 MB` xuống **`535 MB`** • `10/10` Recording & `10/10` snapshots `:2028` OK.
+- **`inut_205_53` (`77.88.205.53` — The Best Billiards Club):** `ke=ultrapool1` • `12` cam • RAM giảm từ `848 MB` xuống **`474 MB`** • `12/12` Recording & `11/12` snapshots `:2028` OK.
+- **`inut_205_55` (`77.88.205.55` — Tuyết Linh Billiards Club):** `ke=tuyetlinh` • `11` cam • RAM giảm từ `763 MB` xuống **`421 MB`** • `11/11` Recording & `11/11` snapshots `:2028` OK.
+- **`inut_205_56` (`77.88.205.56` — King Kong Thái Nguyên):** `ke=mp4` • `9` cam • RAM giảm từ `779 MB` xuống **`392 MB`** • `9/9` Recording & `9/9` snapshots `:2028` OK.
+- **`inut_205_82` (`77.88.205.82` — Hoàng Tom Billiards):** `ke=mia` • `16` cam • RAM giảm từ `1205 MB` xuống **`632 MB`** • `16/16` Recording & `30/30` snapshots `:2028` OK.
+- **`inut_205_121` (`77.88.205.121` — Black Coffee Billiards):** `ke=loicafe` • `6` cam • RAM giảm từ `935 MB` xuống **`391 MB`** • `6/6` Recording & `6/6` snapshots `:2028` OK.
 ---
 
 ## 2. Quy Trình Chuẩn Onboarding Từ Shinobi Cũ Lên Go-Shinobi-KSP (Zero Clip Loss)
