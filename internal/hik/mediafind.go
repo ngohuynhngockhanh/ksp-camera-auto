@@ -29,7 +29,7 @@ const deviceTimeLayout = "2006-01-02 15:04:05"
 // by the device's whole UTC offset — e.g. 7h for a UTC+7 device.)
 func (c *Client) FindRecordings(ctx context.Context, channel int, start, end time.Time) ([]dahua.Recording, error) {
 	trackID := channel*100 + 1
-	segs, err := c.isapi.SearchTrack(ctx, trackID, start, end, 40)
+	segs, err := c.isapi.SearchTrack(ctx, trackID, start, end, 200)
 	if err != nil {
 		return nil, fmt.Errorf("hik: find recordings: %w", err)
 	}

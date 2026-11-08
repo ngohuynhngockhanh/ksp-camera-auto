@@ -168,7 +168,7 @@ func davChunk(ctx context.Context, w io.Writer, host string, port int, user, pas
 	// which the stream stalls mid-chunk. Send one every 2s.
 	kaStop := make(chan struct{})
 	go func() {
-		t := time.NewTicker(2 * time.Second)
+		t := time.NewTicker(800 * time.Millisecond)
 		defer t.Stop()
 		ka := make([]byte, headerLen)
 		ka[0] = 0xa1
@@ -240,33 +240,47 @@ func paramValue(payload []byte, key string) string {
 	return ""
 }
 
-// davIdle bounds how long a chunk's stream may go silent before it's treated as
-// finished — a fallback for a device that goes quiet at end-of-range instead of
-// closing the socket. The normal terminator is the device closing the sub-channel
-// (EOF / connection reset), which ends the read immediately.
-const davIdle = 20 * time.Second
+// davStartIdle bounds how long copyDavSegment waits for the FIRST 0xbb media
+// frame (covers cold NVR HDD spin-up). Once media bytes begin flowing over LAN,
+// davStreamIdle bounds silence between 0xbb media frames — tracked separately
+// from non-0xbb keepalive echoes (\xa1) so an active .dav file whose sub-range
+// finishes without closing the TCP socket terminates promptly instead of
+// resetting the read deadline on keepalives forever.
+const (
+	davStartIdle  = 15 * time.Second
+	davStreamIdle = 2200 * time.Millisecond
+)
 
-// copyDavSegment reads a chunk's DHAV off the sub-channel and writes it to w until
-// the device finishes: it closes the sub-channel (EOF or connection reset — its
-// normal end-of-download signal) or goes idle past davIdle. Non-0xbb frames (the
-// \xf4 AckSubChannel reply before the data, keepalive echoes) are consumed and
-// skipped. The expected arg is unused (kept for the caller's clarity).
 func copyDavSegment(ctx context.Context, w io.Writer, conn net.Conn, expected int64) error {
 	hdr := make([]byte, headerLen)
 	var got int64
+	lastMedia := time.Now()
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		_ = conn.SetReadDeadline(time.Now().Add(davIdle))
+		deadline := time.Now().Add(davStartIdle)
+		if got > 0 {
+			if time.Since(lastMedia) >= davStreamIdle {
+				return nil
+			}
+			deadline = lastMedia.Add(davStreamIdle)
+		}
+		_ = conn.SetReadDeadline(deadline)
 		if _, err := io.ReadFull(conn, hdr); err != nil {
 			if isIdleOrEOF(err) {
-				return nil // chunk finished (device closed / reset / idle)
+				if got == 0 {
+					return fmt.Errorf("dahua: dav stream timed out with 0 media bytes")
+				}
+				return nil // chunk finished (device closed / reset / media idle)
 			}
 			return fmt.Errorf("dahua: dav read header: %w (after %d bytes)", err, got)
 		}
 		n := binary.LittleEndian.Uint32(hdr[4:8])
 		if n == 0 {
+			if hdr[0] == 0xbb && got > 0 {
+				return nil // explicit end-of-media marker frame
+			}
 			continue
 		}
 		if n > maxFrame {
@@ -274,7 +288,7 @@ func copyDavSegment(ctx context.Context, w io.Writer, conn net.Conn, expected in
 		}
 		payload := make([]byte, n)
 		if _, err := io.ReadFull(conn, payload); err != nil {
-			if isIdleOrEOF(err) {
+			if isIdleOrEOF(err) && got > 0 {
 				return nil
 			}
 			return fmt.Errorf("dahua: dav read payload: %w", err)
@@ -284,6 +298,7 @@ func copyDavSegment(ctx context.Context, w io.Writer, conn net.Conn, expected in
 				return err
 			}
 			got += int64(n)
+			lastMedia = time.Now()
 		}
 	}
 }

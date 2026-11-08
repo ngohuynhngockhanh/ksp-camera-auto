@@ -51,6 +51,7 @@ type Server struct {
 	events      *eventbus.Bus
 	uploadsDir  string
 	uploadsStop chan struct{}
+	bridge      *nvrBridge
 }
 
 // New builds a Server with routes registered.
@@ -113,6 +114,7 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 	s.uploadsDir = uploadsDir
 	s.uploadsStop = make(chan struct{})
 	s.startUploadsCleaner(24 * time.Hour)
+	s.bridge = newNVRBridge(s)
 	s.routes()
 	s.nvrWatch = newNVRWatchdog(s)
 	return s, nil
@@ -131,6 +133,9 @@ func (s *Server) Close() {
 	}
 	if s.uploadsStop != nil {
 		close(s.uploadsStop)
+	}
+	if s.bridge != nil {
+		s.bridge.Close()
 	}
 }
 
@@ -152,6 +157,12 @@ func (s *Server) routes() {
 	s.mux.Handle("/mcp", mcpHandler)
 	s.mux.Handle("/mcp/", mcpHandler)
 	s.mux.Handle("/mcp/messages", mcpHandler)
+
+	// Internal Loopback / X-Kspcam-Key NVR & Cam-SD Playback Bridge (:2028 <-> :8080 / :2023).
+	s.mux.HandleFunc("/api/v1/bridge/status", s.handleBridgeStatus)
+	s.mux.HandleFunc("/api/v1/bridge/recordings", s.handleBridgeRecordings)
+	s.mux.HandleFunc("/api/v1/bridge/clip.mp4", s.handleBridgeClipMP4)
+	s.mux.HandleFunc("/api/v1/bridge/flush-cache", s.handleBridgeFlushCache)
 
 	// Authenticated JSON API. api() gates on the session and caps the request
 	// body (DoS guard on constrained boxes).

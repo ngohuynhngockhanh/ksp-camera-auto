@@ -1155,12 +1155,20 @@ func (s *Server) handleChannelNames(w http.ResponseWriter, r *http.Request) {
 // recordingSource returns the device + 0-based channel that a camera's
 // RECORDINGS (timeline, playback, .dav download) should be read from. A camera
 // with no local storage that is linked to an NVR reads from that NVR's channel;
-// otherwise it reads from itself at reqChannel.
+// a direct NVR entry with a 1-based NVRChannel uses NVRChannel-1 when channel 0
+// is requested; otherwise it reads from itself at reqChannel.
 func (s *Server) recordingSource(cam config.Device, reqChannel int) (config.Device, int) {
 	if cam.NoStorage && cam.NVRID != "" {
 		if nvr, ok := s.inv.Get(cam.NVRID); ok {
-			return nvr, cam.NVRChannel - 1
+			ch := cam.NVRChannel - 1
+			if ch < 0 {
+				ch = 0
+			}
+			return nvr, ch
 		}
+	}
+	if reqChannel == 0 && cam.NVRChannel > 1 {
+		return cam, cam.NVRChannel - 1
 	}
 	return cam, reqChannel
 }

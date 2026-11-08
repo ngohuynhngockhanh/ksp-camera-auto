@@ -145,6 +145,25 @@ func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts)
 		}(i, c)
 	}
 	wg.Wait()
+	// Sequential retry pass: if an NVR briefly rejected one of the concurrent RTSP
+	// sessions (e.g. 453 Not Enough Bandwidth), retry only the failed chunks one
+	// by one before aborting the export.
+	for i, e := range errs {
+		if e == nil || ctx.Err() != nil {
+			continue
+		}
+		select {
+		case <-time.After(400 * time.Millisecond):
+		case <-ctx.Done():
+			break
+		}
+		if retryErr := fetchChunk(ctx, chunks[i], paths[i], opts); retryErr == nil {
+			errs[i] = nil
+			report(int(atomic.AddInt32(&fetched, 1)), len(chunks), "fetch")
+		} else {
+			errs[i] = retryErr
+		}
+	}
 	for i, e := range errs {
 		if e != nil {
 			return fmt.Errorf("mediaexport: chunk %d (%s): %w", i, chunkStderr(paths[i]), e)
@@ -207,36 +226,48 @@ func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts)
 }
 
 // fetchChunk pulls one RTSP playback chunk and remuxes it to the intermediate
-// container: MPEG-TS for MP4 output (the only container that concatenates
-// cleanly there), MKV for matroska output (preserves G.711 audio). Video is
-// always copied; audio is copied or transcoded to AAC per opts.
+// container with STRICT ZERO-CPU ENCODE (-c:v copy, never libx264/aac encode).
+// Audio is copied untouched (-c:a copy); if the container muxer rejects a
+// non-AAC audio stream (e.g. G.711 pcm_alaw/pcm_mulaw in MPEG-TS), fetchChunk
+// automatically retries once with -an (0% CPU) so video export succeeds cleanly.
 func fetchChunk(ctx context.Context, c Chunk, outPath string, opts remuxOpts) error {
-	args := []string{"-nostdin", "-rtsp_transport", "tcp", "-i", c.URL}
-	if c.Seconds > 0 {
-		args = append(args, "-t", strconv.Itoa(c.Seconds))
-	}
-	args = append(args, "-c:v", "copy")
-	if opts.transcodeAudio && !opts.matroska {
-		args = append(args, "-c:a", "aac", "-b:a", "64k")
-	} else {
-		args = append(args, "-c:a", "copy")
-	}
-	if opts.matroska {
-		args = append(args, "-f", "matroska")
-	} else {
-		args = append(args, "-f", "mpegts")
-	}
-	args = append(args, "-y", outPath)
+	runOnce := func(dropAudio bool) error {
+		args := []string{"-nostdin", "-rtsp_transport", "tcp", "-i", c.URL}
+		if c.Seconds > 0 {
+			args = append(args, "-t", strconv.Itoa(c.Seconds))
+		}
+		args = append(args, "-c:v", "copy")
+		if dropAudio || (opts.transcodeAudio && !opts.matroska) {
+			args = append(args, "-an")
+		} else {
+			args = append(args, "-c:a", "copy")
+		}
+		if opts.matroska {
+			args = append(args, "-f", "matroska")
+		} else {
+			args = append(args, "-f", "mpegts")
+		}
+		args = append(args, "-y", outPath)
 
-	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
-	var errBuf strings.Builder
-	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil {
-		_ = os.WriteFile(outPath+".err", []byte(tail(errBuf.String(), 400)), 0o600)
-		return err
+		cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+		var errBuf strings.Builder
+		cmd.Stderr = &errBuf
+		if err := cmd.Run(); err != nil {
+			_ = os.WriteFile(outPath+".err", []byte(tail(errBuf.String(), 400)), 0o600)
+			return err
+		}
+		if fi, err := os.Stat(outPath); err != nil || fi.Size() == 0 {
+			return fmt.Errorf("empty chunk")
+		}
+		return nil
 	}
-	if fi, err := os.Stat(outPath); err != nil || fi.Size() == 0 {
-		return fmt.Errorf("empty chunk")
+	if err := runOnce(false); err != nil {
+		if !opts.matroska && !opts.transcodeAudio && ctx.Err() == nil {
+			if errNoAudio := runOnce(true); errNoAudio == nil {
+				return nil
+			}
+		}
+		return err
 	}
 	return nil
 }

@@ -177,6 +177,29 @@ type EventsConfig struct {
 	MaxRetainedEvents   int    `yaml:"max_retained_events"` // Default 200
 }
 
+// BridgeConfig configures the internal NVR / Cam-SD Playback Bridge (:2028)
+// consumed by go-shinobi-ksp (:8080) and redbida-go (:2023) via X-Kspcam-Key.
+type BridgeConfig struct {
+	Enabled        bool   `yaml:"enabled" json:"enabled"`
+	APIKey         string `yaml:"api_key" json:"apiKey"`
+	SpoolDir       string `yaml:"spool_dir" json:"spoolDir"`
+	MaxSpoolMB     int    `yaml:"max_spool_mb" json:"maxSpoolMb"`
+	ClipTTLSeconds int    `yaml:"clip_ttl_seconds" json:"clipTtlSeconds"`
+	MaxPerNVR      int    `yaml:"max_per_nvr" json:"maxPerNvr"`
+}
+
+func (b *BridgeConfig) UnmarshalYAML(value *yaml.Node) error {
+	type rawBridge BridgeConfig
+	raw := rawBridge{
+		Enabled: true,
+	}
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	*b = BridgeConfig(raw)
+	return nil
+}
+
 // Config is the top-level configuration document.
 type Config struct {
 	Server      Server        `yaml:"server"`
@@ -187,6 +210,7 @@ type Config struct {
 	Redbida     RedbidaConfig `yaml:"redbida"`
 	AntiA       AntiAConfig   `yaml:"anti_a"`
 	Events      EventsConfig  `yaml:"events"`
+	Bridge      BridgeConfig  `yaml:"bridge"`
 }
 
 // Default returns a Config populated with built-in defaults.
@@ -246,6 +270,13 @@ func Default() Config {
 			MQTTIncludeSnapshot: false,
 			HubPushEnabled:      false,
 			MaxRetainedEvents:   200,
+		},
+		Bridge: BridgeConfig{
+			Enabled:        true,
+			SpoolDir:       "/dev/shm/kspcam-clips",
+			MaxSpoolMB:     0, // 0 = auto-detect by system RAM (120 MB on <=1.3GB, 240 MB on >=2GB)
+			ClipTTLSeconds: 600,
+			MaxPerNVR:      2,
 		},
 	}
 }
@@ -381,5 +412,14 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Events.MaxRetainedEvents <= 0 {
 		c.Events.MaxRetainedEvents = d.Events.MaxRetainedEvents
+	}
+	if c.Bridge.SpoolDir == "" {
+		c.Bridge.SpoolDir = d.Bridge.SpoolDir
+	}
+	if c.Bridge.ClipTTLSeconds <= 0 {
+		c.Bridge.ClipTTLSeconds = d.Bridge.ClipTTLSeconds
+	}
+	if c.Bridge.MaxPerNVR <= 0 {
+		c.Bridge.MaxPerNVR = d.Bridge.MaxPerNVR
 	}
 }

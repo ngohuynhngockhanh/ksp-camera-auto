@@ -90,6 +90,9 @@ func (c *Client) FindRecordings(channel int, start, end time.Time) ([]Recording,
 			return out, nil
 		}
 		for _, in := range p.Infos {
+			if in.Channel != channel {
+				continue
+			}
 			out = append(out, Recording{
 				Channel:     in.Channel,
 				StartTime:   in.StartTime,

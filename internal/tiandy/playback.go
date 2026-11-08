@@ -89,15 +89,10 @@ func (c *Client) StreamPlayback(ctx context.Context, w io.Writer, channel int, s
 		"-rtsp_transport", "tcp",
 		"-i", rtsp,
 		"-t", fmt.Sprintf("%d", dur),
-		// Video is copied (no HEVC transcode — the box can't afford it). Audio
-		// is the catch: Tiandy streams G.711 a-law (pcm_alaw), which MP4 cannot
-		// carry, so a plain "-c copy" fails with "codec not currently supported
-		// in container". Transcode just the audio to AAC (ffmpeg's built-in
-		// encoder, ~8 kHz mono — negligible CPU); harmless when there's no audio
-		// track. This is the one place Tiandy's remux differs from Hik's.
+		// Zero-transcoding policy on iNut Edge Boxes: video is copied (-c:v copy)
+		// and incompatible G.711 PCM audio is omitted (-an) rather than CPU-encoded.
 		"-c:v", "copy",
-		"-c:a", "aac",
-		"-b:a", "64k",
+		"-an",
 		// Tiandy records HEVC/H.265. ffmpeg tags an HEVC MP4 track "hev1" by
 		// default, but Safari/iOS only play HEVC-in-MP4 tagged "hvc1" (Chrome/
 		// Firefox can't decode HEVC either way). Retagging is free — still a
@@ -129,7 +124,7 @@ func (c *Client) StreamPlaybackFast(ctx context.Context, w io.Writer, channel in
 	ch := tiandyChannel(channel)
 	return mediaexport.FastMP4Range(ctx, w, start, end, 30, func(cs, ce time.Time) string {
 		return playbackRTSPURL(c.host, c.user, c.pass, ch, cs, ce)
-	}, true, 10)
+	}, false, 10)
 }
 
 // StreamNative exports [start,end] as an MKV with BOTH streams copied
