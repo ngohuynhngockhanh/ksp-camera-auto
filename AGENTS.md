@@ -235,6 +235,10 @@ graph TD
 | `/api/nvr/health` | `GET` | Admin | Query: `id` | `nvrHealthReport` | Đọc báo cáo sức khỏe ghi hình NVR |
 | `/api/nvr/health/check` | `POST` | Admin | `{id}` | `nvrHealthReport` | Ép kiểm tra sức khỏe ghi hình NVR tức thì |
 | `/api/nvr/watchdog` | `POST` | Admin | `{id, enabled, syncTimeFromHost}` | `{ok: true}` | Bật / tắt chế độ tự chữa lỗi (Self-healing Watchdog) |
+| `/api/v1/bridge/status` | `GET` | `X-Kspcam-Key` / Loopback | None | `{ok, spoolDir, mappings}` | Trạng thái cầu nối NVR/Cam-SD & bảng ánh xạ `mid -> NVR` |
+| `/api/v1/bridge/recordings` | `GET` | `X-Kspcam-Key` / Loopback | Query: `mid, start, end` | `{ok, recordings}` | Truy vấn lịch sử ghi hình NVR/Cam-SD (cache 10s + singleflight) |
+| `/api/v1/bridge/clip.mp4` | `GET` | `X-Kspcam-Key` / Loopback | Query: `mid, file` hoặc `start, end` | `video/mp4` (`HTTP 206`) | Rút & remux `0% CPU` (`-c copy +faststart`) vào `/dev/shm` |
+| `/api/v1/bridge/flush-cache` | `POST` | `X-Kspcam-Key` / Loopback | None | `{ok: true}` | Làm tươi tức thì danh sách ghi hình NVR khi bấm CheckVAR |
 | `/api/shinobi/status` | `GET` | Viewer/Admin | None | `shinobiStatusView` | Lấy trạng thái kết nối Shinobi, URL, Group Key |
 | `/api/shinobi/monitors` | `GET` | Viewer/Admin | None | `[]shinobi.Monitor` | Lấy danh sách toàn bộ monitor trên Shinobi |
 | `/api/shinobi/monitors` | `POST` | Admin | `MonitorConfig` (JSON) | `{ok: true}` | Thêm monitor mới hoặc chỉnh sửa monitor |
@@ -651,6 +655,15 @@ Tự động hóa triển khai và cấu hình Shinobi NVR được quản lý q
    - Tự động seed danh sách camera ban đầu qua `kspcam --import-shinobi`.
 6. **Nguyên tắc Bảo mật Cốt lõi**: Mật khẩu Super Admin và thông tin đăng nhập cấp phát chỉ tồn tại trong Ansible task/vars, tuyệt đối không bị hardcode trong mã nguồn Go của `kspcam`.
 
+
+---
+
+### 3.10 Cầu nối NVR / Thẻ nhớ Camera Không Thẻ Nhớ (`Zero-CPU NVR/Cam-SD Fallback Bridge`)
+
+Khi Edge Box không gắn thẻ nhớ `/media/usb1` (chế độ `Diskless / NVR-Direct`) hoặc thẻ nhớ gặp sự cố vật lý giữa ca, bộ 3 dịch vụ `kspcam (:2028)` ↔ `go-shinobi-ksp (:8080)` ↔ `redbida-go (:2023)` tự động liên thông qua khóa nội bộ `X-Kspcam-Key` trên `127.0.0.1`:
+1. **Bất biến `0% CPU Encode` (`100% Stream Copy`)**: Tuyệt đối cấm chạy `libx264`, `libx265` hay `-c:a aac` bằng CPU trên Box iNut. Mọi luồng rút từ đầu ghi (nhị phân `0xbb` `.dav` trên Dahua, `ISAPI IMKH` / RTSP trên Hikvision) đều đóng gói bằng `-c:v copy -c:a copy` (tự động fallback sang `-c:v copy -an` nếu âm thanh G.711 không tương thích MP4) kèm `-tag:v hvc1 -movflags +faststart` đặt `moov` tại byte `0x1C`.
+2. **Kho đệm RAM `/dev/shm/kspcam-clips` & Bảo vệ đầu ghi**: Tự động giới hạn LRU `120 MB` trên box RAM 1GB (`240 MB` trên box RAM 2–4GB, TTL `10 phút`), khóa semaphore tối đa `2` luồng đồng thời / IP đầu ghi NVR và `1` luồng tuần tự đối với camera cắm thẻ nhớ lẻ (`[Cam-SD]`).
+3. **Virtual 5-Minute Slicer & Cắt Clip Trực Tiếp**: `go-shinobi-ksp` tự băm lịch sử NVR thành các khung 5 phút `v_nvr_YYYY-MM-DDTHH-MM-SS_<dur>.mp4` (khung mới nhất sát `now - 3s` không cần chạy `date -s`) và hỗ trợ `Hybrid Merge` với thẻ nhớ cũ; `redbida-go` phát trực tiếp `HTTP 206 Byte-Range` và gộp khoảng cắt liên tiếp vào `/dev/shm/redbida-cuts`. Xem đặc tả chi tiết tại [`docs/PROTOCOL-NVR-BRIDGE.md`](./docs/PROTOCOL-NVR-BRIDGE.md).
 ---
 
 ## 4. Luồng xử lý cấu hình tuần tự (Sequence Diagram)

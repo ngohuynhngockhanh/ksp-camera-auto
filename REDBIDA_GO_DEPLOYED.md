@@ -93,8 +93,8 @@
   - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM giảm từ `537M` xuống **`206M/999M`** (giải phóng `331 MB`), `go-shinobi-ksp` `~10.4 MB` (`2/2` Recording), `redbida-go` `~5.5 MB`, `kspcam` `:2028` (`1/1` cam online snapshot OK), `inut-bida-agent` `active`.
 - **`inut_202_219` (`77.88.202.219` — CLB Pickleball 26gram - CN2, `ke=vnvarISdog`, 3 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM giảm từ `574M` xuống **`242M/999M`** (giải phóng `332 MB`), `go-shinobi-ksp` `~16.9 MB` (`3/3` Recording), `redbida-go` `~11.8 MB`, `kspcam` `:2028` (`3/3` snapshots OK), `inut-bida-agent` `active`.
-- **`inut_202_222` (`77.88.202.222` — Fox Billiards & Coffee Hội An, `ke=chiubia`, 4 cam)**:
-  - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM giảm từ `610M` xuống **`205M/999M`** (giải phóng `405 MB`), `go-shinobi-ksp` `~12.8 MB`, `redbida-go` `~11.7 MB`, `kspcam` `:2028` (`4/4` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_202_222` (`77.88.202.222` — Fox Billiards & Coffee Hội An, `ke=chiubia`, 4 cam — Node Đầu Tiên Chạy `Zero-CPU NVR-Direct Bridge` Không Thẻ Nhớ)**:
+  - **Ngày lên Full Go + NVR Fallback Bridge:** `2026-11-08` • `linux/armv7` (`1 GB RAM`, không gắn thẻ nhớ `/media/usb1`) • Liên kết đầu ghi Dahua `DHI-NVR1108HS-S3/H-VN` (`192.168.1.243:37777` kênh `1, 2, 6, 8`) • Đầy đủ `866+` clip 5 phút 2K (`2560x1440` `hvc1` + `aac`), CheckVAR `1.03s`, mở clip 5 phút `13.45s` / tua Slow-Mo `13.01ms` từ `/dev/shm`, cắt clip 90s vắt 2 khung trong `6.02s` (`0% CPU encode`, `loadavg = 0.58`).
 - **`inut_203_81` (`77.88.203.81` — Dinker Pickleball Club, `ke=dinker`, 6 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM giảm từ `643M` xuống **`261M/999M`** (giải phóng `382 MB`), `go-shinobi-ksp` `~9.3 MB` (`6/6` Recording), `redbida-go` `~6.6 MB`, `kspcam` `:2028` (`5/5` cam online snapshots OK), `inut-bida-agent` `active`.
 - **`inut_204_22` (`77.88.204.22` — VSP Pickleball, `ke=lAxKsdIBux`, 14 cam)**:
