@@ -591,7 +591,7 @@ func (t *SofiaTCPTransport) DownloadRecordFile(ctx context.Context, w io.Writer,
 		return err
 	}
 	if st := xmStatsFromContext(ctx); st != nil {
-		st.recordFPS(ext.ObservedFPS())
+		st.recordExtractor(ext)
 	}
 	if ext.WroteBytes() == 0 {
 		return fmt.Errorf("xiongmai sofia OPPlayBack returned 0 media bytes")

@@ -711,7 +711,7 @@ func (c *CGITransport) DownloadRecordFile(ctx context.Context, w io.Writer, chan
 		return err
 	}
 	if st := xmStatsFromContext(ctx); st != nil {
-		st.recordFPS(ext.ObservedFPS())
+		st.recordExtractor(ext)
 	}
 	if ext.WroteBytes() == 0 {
 		return fmt.Errorf("xiongmai ws HttpPlayBack returned 0 media bytes")

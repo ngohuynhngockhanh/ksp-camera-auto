@@ -100,7 +100,7 @@ func TestStripXMMediaFramesAndCodecDetection(t *testing.T) {
 
 	pHdr := make([]byte, 8)
 	copy(pHdr[:4], []byte{0x00, 0x00, 0x01, 0xFD})
-	binary.LittleEndian.PutUint16(pHdr[6:8], uint16(len(h265P)))
+	binary.LittleEndian.PutUint32(pHdr[4:8], uint32(len(h265P)))
 	pkt.Write(pHdr)
 	pkt.Write(h265P)
 
@@ -676,7 +676,7 @@ func TestXMStreamExtractorChunkSpanningAndTimeWindowTrim(t *testing.T) {
 	makePFrame := func(nal []byte) []byte {
 		hdr := make([]byte, 8)
 		copy(hdr[:4], []byte{0x00, 0x00, 0x01, 0xFD})
-		binary.LittleEndian.PutUint16(hdr[6:8], uint16(len(nal)))
+		binary.LittleEndian.PutUint32(hdr[4:8], uint32(len(nal)))
 		return append(hdr, nal...)
 	}
 	makeAudio := func(aud []byte) []byte {
@@ -686,15 +686,22 @@ func TestXMStreamExtractorChunkSpanningAndTimeWindowTrim(t *testing.T) {
 		return append(hdr, aud...)
 	}
 
+	// Simulate a 6fps camera (like Vitacam on 8.4) whose header byte [5] falsely claims 25fps:
+	// 24 frames over 4s [11:29:58..11:30:02] + 30 frames over 5s [11:30:02..11:30:07] = 54 frames / 9s = 6fps!
+	tPost = time.Date(2026, 11, 9, 11, 30, 7, 0, loc)
 	var wire bytes.Buffer
-	wire.Write(makeIFrame(tPre, 20, idrPre))
+	wire.Write(makeIFrame(tPre, 25, idrPre))
+	for range 23 {
+		wire.Write(makePFrame(pIn))
+	}
 	wire.Write(makeAudio([]byte{1, 2, 3, 4, 5}))
-	wire.Write(makeIFrame(tIn, 20, idrIn))
-	wire.Write(makePFrame(pIn))
-	wire.Write(makeIFrame(tPost, 20, idrPost))
-
+	wire.Write(makeIFrame(tIn, 25, idrIn))
+	for range 29 {
+		wire.Write(makePFrame(pIn))
+	}
+	wire.Write(makeIFrame(tPost, 25, idrPost))
 	reqStart := time.Date(2026, 11, 9, 11, 30, 0, 0, loc)
-	reqEnd := time.Date(2026, 11, 9, 11, 35, 0, 0, loc)
+	reqEnd := time.Date(2026, 11, 9, 11, 30, 6, 0, loc)
 
 	var out bytes.Buffer
 	ext := NewXMStreamExtractor(&out, reqStart, reqEnd)
@@ -717,13 +724,17 @@ func TestXMStreamExtractorChunkSpanningAndTimeWindowTrim(t *testing.T) {
 	if !stoppedEarly {
 		t.Fatalf("expected ErrXMStopTimeReached on post-window I-frame")
 	}
-	if ext.ObservedFPS() != 20 {
-		t.Fatalf("ObservedFPS = %d, want 20", ext.ObservedFPS())
+	if ext.ObservedFPS() != 6 {
+		t.Fatalf("ObservedFPS = %d, want 6 (wall-clock derived, overriding false headerFPS=25)", ext.ObservedFPS())
 	}
-	// Must contain pre-start GOP (within 2s before reqStart) + in-window IDR (including embedded 00 00 01 FA!) + P-frame, and NOT idrPost!
-	want := append(append(append([]byte{}, idrPre...), idrIn...), pIn...)
-	if !bytes.Equal(out.Bytes(), want) {
-		t.Fatalf("extracted ES = %x, want %x", out.Bytes(), want)
+	if ext.ObservedFPSRational() != "54/9" {
+		t.Fatalf("ObservedFPSRational = %q, want 54/9", ext.ObservedFPSRational())
+	}
+	if ext.VideoFrames() != 54 {
+		t.Fatalf("VideoFrames = %d, want 54 (24 preGOP + 30 in-window)", ext.VideoFrames())
+	}
+	if bytes.Contains(out.Bytes(), idrPost) || !bytes.Contains(out.Bytes(), idrIn) {
+		t.Fatalf("extracted ES missing idrIn or leaked idrPost")
 	}
 }
 

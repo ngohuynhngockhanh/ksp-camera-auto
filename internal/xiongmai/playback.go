@@ -169,12 +169,23 @@ var ErrXMStopTimeReached = errors.New("xiongmai: playback stop timestamp reached
 type xmStatsCtxKey struct{}
 
 type xmStreamStats struct {
-	fps int
+	fps         int
+	fpsRational string
+	preRollSec  float64
 }
 
-func (s *xmStreamStats) recordFPS(fps int) {
-	if fps >= 5 && fps <= 60 && s.fps == 0 {
+func (s *xmStreamStats) recordExtractor(ext *XMStreamExtractor) {
+	if ext == nil {
+		return
+	}
+	if r := ext.ObservedFPSRational(); r != "" && s.fpsRational == "" {
+		s.fpsRational = r
+	}
+	if fps := ext.ObservedFPS(); fps >= 1 && fps <= 60 && s.fps == 0 {
 		s.fps = fps
+	}
+	if s.preRollSec == 0 && ext.PreRollSeconds() > 0 {
+		s.preRollSec = ext.PreRollSeconds()
 	}
 }
 
@@ -226,23 +237,26 @@ func EncodeXMTimestamp(t time.Time) uint32 {
 // across arbitrary WebSocket / Sofia TCP packet boundaries, trims pre-start GOPs
 // in memory, stops immediately past end, and records the stream's true FPS.
 type XMStreamExtractor struct {
-	dst            io.Writer
-	start          time.Time
-	end            time.Time
-	loc            *time.Location
-	decided        bool
-	rawPassthrough bool
-	buf            bytes.Buffer
-	remKeep        int
-	remSkip        int
-	startedWriting bool
-	preGOP         bytes.Buffer
-	preGOPTime     time.Time
-	wrote          int64
-	videoFrames    int
-	headerFPS      int
-	firstTS        time.Time
-	lastTS         time.Time
+	dst              io.Writer
+	start            time.Time
+	end              time.Time
+	loc              *time.Location
+	decided          bool
+	rawPassthrough   bool
+	buf              bytes.Buffer
+	remKeep          int
+	remSkip          int
+	startedWriting   bool
+	preGOP           bytes.Buffer
+	preGOPTime       time.Time
+	preGOPFrames     int
+	wrote            int64
+	videoFrames      int
+	headerFPS        int
+	firstTS          time.Time
+	lastTS           time.Time
+	lastSpanTS       time.Time
+	framesAtLastSpan int
 }
 
 // NewXMStreamExtractor creates a stateful XMHead -> Annex-B extractor for [start, end].
@@ -265,18 +279,43 @@ func NewXMStreamExtractor(dst io.Writer, start, end time.Time) *XMStreamExtracto
 func (e *XMStreamExtractor) WroteBytes() int64  { return e.wrote }
 func (e *XMStreamExtractor) VideoFrames() int   { return e.videoFrames }
 func (e *XMStreamExtractor) InFlightBytes() int { return e.remKeep }
-func (e *XMStreamExtractor) ObservedFPS() int {
-	if e.headerFPS >= 5 && e.headerFPS <= 60 {
-		return e.headerFPS
+
+// PreRollSeconds returns how many seconds before start the retained keyframe began.
+func (e *XMStreamExtractor) PreRollSeconds() float64 {
+	if !e.start.IsZero() && !e.firstTS.IsZero() && e.firstTS.Before(e.start) {
+		return e.start.Sub(e.firstTS).Seconds()
 	}
-	if !e.firstTS.IsZero() && e.lastTS.After(e.firstTS) && e.videoFrames > 10 {
-		sec := e.lastTS.Sub(e.firstTS).Seconds()
-		if sec >= 2 {
-			est := int(float64(e.videoFrames)/sec + 0.5)
-			if est >= 5 && est <= 60 {
+	return 0
+}
+
+// ObservedFPSRational returns the exact wall-clock rational frame rate "<frames>/<seconds>"
+// measured across complete GOP spans [firstTS .. lastSpanTS], so cameras running at 6fps,
+// 12fps, 20fps, 25fps, or night-vision VFR remux at 1.000x real-world wall-clock speed.
+func (e *XMStreamExtractor) ObservedFPSRational() string {
+	if !e.firstTS.IsZero() && e.lastSpanTS.After(e.firstTS) && e.framesAtLastSpan >= 4 {
+		spanSec := int(e.lastSpanTS.Sub(e.firstTS).Seconds())
+		if spanSec >= 4 && e.framesAtLastSpan >= spanSec && e.framesAtLastSpan <= spanSec*65 {
+			return fmt.Sprintf("%d/%d", e.framesAtLastSpan, spanSec)
+		}
+	}
+	if fps := e.ObservedFPS(); fps > 0 {
+		return strconv.Itoa(fps)
+	}
+	return ""
+}
+
+func (e *XMStreamExtractor) ObservedFPS() int {
+	if !e.firstTS.IsZero() && e.lastSpanTS.After(e.firstTS) && e.framesAtLastSpan >= 4 {
+		sec := e.lastSpanTS.Sub(e.firstTS).Seconds()
+		if sec >= 4 {
+			est := int(float64(e.framesAtLastSpan)/sec + 0.5)
+			if est >= 1 && est <= 65 {
 				return est
 			}
 		}
+	}
+	if e.headerFPS >= 1 && e.headerFPS <= 65 {
+		return e.headerFPS
 	}
 	return 0
 }
@@ -303,10 +342,12 @@ func (e *XMStreamExtractor) flushPreGOP() error {
 	}
 	n, err := e.dst.Write(e.preGOP.Bytes())
 	e.wrote += int64(n)
+	e.videoFrames += e.preGOPFrames
 	if e.firstTS.IsZero() && !e.preGOPTime.IsZero() {
 		e.firstTS = e.preGOPTime
 	}
 	e.preGOP.Reset()
+	e.preGOPFrames = 0
 	return err
 }
 
@@ -412,7 +453,7 @@ func (e *XMStreamExtractor) Feed(chunk []byte) error {
 				goto saveRemainder
 			}
 			fps := int(data[cur+5])
-			if fps >= 5 && fps <= 60 {
+			if fps >= 1 && fps <= 65 {
 				e.headerFPS = fps
 			}
 			ts := DecodeXMTimestamp(binary.LittleEndian.Uint32(data[cur+8:cur+12]), e.loc)
@@ -428,18 +469,23 @@ func (e *XMStreamExtractor) Feed(chunk []byte) error {
 						return err
 					}
 				}
+				if !e.firstTS.IsZero() && ts.After(e.firstTS) && e.videoFrames > 0 {
+					e.lastSpanTS = ts
+					e.framesAtLastSpan = e.videoFrames
+				}
 				e.buf.Reset()
 				return ErrXMStopTimeReached
 			}
 			if !e.startedWriting {
 				if e.start.IsZero() || ts.IsZero() || !ts.Before(e.start) {
 					// Include preceding GOP if start fell mid-GOP so frame 0 is an IDR keyframe.
-					if !ts.IsZero() && e.preGOP.Len() > 0 && ts.After(e.start) && e.start.Sub(e.preGOPTime) <= 10*time.Second {
+					if !ts.IsZero() && e.preGOP.Len() > 0 && ts.After(e.start) && e.start.Sub(e.preGOPTime) <= 12*time.Second {
 						if err := e.flushPreGOP(); err != nil {
 							return err
 						}
 					} else {
 						e.preGOP.Reset()
+						e.preGOPFrames = 0
 					}
 					e.startedWriting = true
 					if e.firstTS.IsZero() && !ts.IsZero() {
@@ -447,6 +493,7 @@ func (e *XMStreamExtractor) Feed(chunk []byte) error {
 					}
 				} else {
 					e.preGOP.Reset()
+					e.preGOPFrames = 1
 					e.preGOPTime = ts
 				}
 			}
@@ -454,6 +501,9 @@ func (e *XMStreamExtractor) Feed(chunk []byte) error {
 				if !ts.IsZero() {
 					if e.firstTS.IsZero() {
 						e.firstTS = ts
+					} else if ts.After(e.firstTS) && e.videoFrames > 0 {
+						e.lastSpanTS = ts
+						e.framesAtLastSpan = e.videoFrames
 					}
 					e.lastTS = ts
 				}
@@ -462,7 +512,7 @@ func (e *XMStreamExtractor) Feed(chunk []byte) error {
 			cur += 16
 			e.remKeep = frameLen
 
-		case 0xFB: // 16-byte extended P-frame header (>64KB P-frame)
+		case 0xFB: // 16-byte extended P-frame header
 			if len(data)-cur < 16 {
 				goto saveRemainder
 			}
@@ -473,23 +523,30 @@ func (e *XMStreamExtractor) Feed(chunk []byte) error {
 			}
 			if e.startedWriting {
 				e.videoFrames++
+			} else if e.preGOP.Len() > 0 || !e.preGOPTime.IsZero() {
+				e.preGOPFrames++
 			}
 			cur += 16
 			e.remKeep = frameLen
 
-		case 0xFD: // 8-byte P-frame header
-			frameLen := int(binary.LittleEndian.Uint16(data[cur+6 : cur+8]))
+		case 0xFD: // 8-byte P-frame header: [0..3]=00 00 01 FD, [4..7]=uint32 LE payloadLen!
+			frameLen := int(binary.LittleEndian.Uint32(data[cur+4 : cur+8]))
+			if frameLen < 0 || frameLen > maxSofiaPayloadBytes {
+				cur += 4
+				continue
+			}
 			if e.startedWriting {
 				e.videoFrames++
+			} else if e.preGOP.Len() > 0 || !e.preGOPTime.IsZero() {
+				e.preGOPFrames++
 			}
 			cur += 8
 			e.remKeep = frameLen
 
-		case 0xFA, 0xF9: // 8-byte Audio / Info header (skip to preserve pure Annex-B video ES)
+		case 0xFA, 0xF9: // 8-byte Audio / Info header: [4]=codec/sub, [5]=rate, [6..7]=uint16 LE len
 			frameLen := int(binary.LittleEndian.Uint16(data[cur+6 : cur+8]))
 			cur += 8
 			e.remSkip = frameLen
-
 		default:
 			cur += 4
 		}
@@ -633,26 +690,31 @@ func (c *Client) ExportMP4Faststart(ctx context.Context, channel int, start, end
 	}
 	demuxFmt := DetectAnnexBCodec(head[:n])
 
-	fps := st.fps
-	if fps <= 0 {
-		if si, serr := c.GetStreamInfo(ctx, channel, 0); serr == nil && si.FPS > 0 {
-			fps = si.FPS
-		} else {
-			fps = 25
+	fpsArg := st.fpsRational
+	if fpsArg == "" {
+		fps := st.fps
+		if fps <= 0 {
+			if si, serr := c.GetStreamInfo(ctx, channel, 0); serr == nil && si.FPS > 0 {
+				fps = si.FPS
+			} else {
+				fps = 25
+			}
 		}
+		fpsArg = strconv.Itoa(fps)
 	}
 	durSec := int(end.Sub(start).Seconds())
 	if durSec <= 0 {
 		durSec = 300
 	}
+	extraPreRoll := int(st.preRollSec + 0.99)
 
 	args := []string{
 		"-y", "-hide_banner", "-loglevel", "error",
 		"-fflags", "+genpts",
-		"-r", strconv.Itoa(fps),
+		"-r", fpsArg,
 		"-f", demuxFmt,
 		"-i", rawPath,
-		"-t", strconv.Itoa(durSec + 12),
+		"-t", strconv.Itoa(durSec + extraPreRoll + 2),
 		"-c:v", "copy", "-an",
 	}
 	if demuxFmt == "hevc" {
