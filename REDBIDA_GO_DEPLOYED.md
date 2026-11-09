@@ -149,6 +149,8 @@
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `763M` xuống **`421M/1923M`** (giải phóng `342 MB`), `go-shinobi-ksp` `~19.5 MB` (`11/11` Recording), `redbida-go` `~27.3 MB`, `ksp-go2rtc` `~15.8 MB`, `kspcam` `:2028` (`11/11` snapshots OK), `inut-bida-agent` `active`.
 - **`inut_205_56` (`77.88.205.56` — King Kong Thái Nguyên, `ke=mp4`, 9 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `779M` xuống **`392M/1923M`** (giải phóng `387 MB`), `go-shinobi-ksp` `~19.9 MB` (`9/9` Recording), `redbida-go` `~29.6 MB`, `ksp-go2rtc` `~15.8 MB`, `kspcam` `:2028` (`9/9` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_205_64` (`77.88.205.64` — Sky Billiards Club, `ke=sontungmtp`, 10 cam Dahua)**:
+  - **Ngày lên Full Go:** `2026-11-09` • `linux/arm64` • RAM giảm từ `1156M` xuống **`739M/1923M`** (giải phóng `417 MB`), Load **`0.94`** • Đã gỡ `netwatch.service`, khóa `kernel.sysrq=0`, `go-shinobi-ksp` `~17.1 MB` (`10/10` Recording, bảo toàn `867` clip `.mp4`), `redbida-go` `~28.2 MB` (thay thế 210MB Node-RED), `kspcam` `:2028` (`10/10` snapshots OK) • Chuẩn hóa `10/10` cam về Golden Bitrate **`1,536 Kbps VBR`** (GOP 50, SmartCodec=off) • Cắt clip 70s trong **`6.65s`**, tua Slow-Mo **`70ms` (`HTTP 206`)**.
 - **`inut_205_82` (`77.88.205.82` — Hoàng Tom Billiards, `ke=mia`, 16 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1205M` xuống **`632M/1923M`** (giải phóng `573 MB`), `go-shinobi-ksp` `~20.5 MB` (`16/16` Recording), `redbida-go` `~30.9 MB`, `ksp-go2rtc` `~16.1 MB`, `kspcam` `:2028` (`30/30` kênh snapshots OK), `inut-bida-agent` `active`.
 - **`inut_205_121` (`77.88.205.121` — Black Coffee Billiards, `ke=loicafe`, 6 cam)**:
