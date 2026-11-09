@@ -93,7 +93,7 @@ type remuxOpts struct {
 // up to 10 ffmpeg processes and holds hundreds of MB of /tmp (a ~1 GB tmpfs on
 // the deploy boxes), so concurrent builds — typically a user re-clicking the
 // download button — would OOM the box instead of just taking turns.
-var buildSem = make(chan struct{}, 1)
+var buildSem = make(chan struct{}, 2)
 
 func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts) error {
 	if len(chunks) == 0 {
@@ -202,7 +202,26 @@ func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts)
 	var errBuf strings.Builder
 	cmd.Stderr = &errBuf
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("mediaexport: concat: %w: %s", err, tail(errBuf.String(), 300))
+		if !opts.matroska && ctx.Err() == nil {
+			noAudArgs := []string{
+				"-nostdin",
+				"-f", "concat", "-safe", "0", "-i", listPath,
+				"-map", "0:v:0", "-c:v", "copy", "-an",
+				"-avoid_negative_ts", "make_zero",
+				"-tag:v", "hvc1",
+				"-movflags", "+faststart",
+				"-y", outPath,
+			}
+			var retryBuf strings.Builder
+			retryCmd := exec.CommandContext(ctx, "ffmpeg", noAudArgs...)
+			retryCmd.Stderr = &retryBuf
+			if retryErr := retryCmd.Run(); retryErr == nil {
+				err = nil
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("mediaexport: concat: %w: %s", err, tail(errBuf.String(), 300))
+		}
 	}
 
 	f, err := os.Open(outPath)

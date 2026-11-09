@@ -1176,6 +1176,10 @@ Khi người dùng yêu cầu **"nâng cấp full go cho `<node_id>`"** (ví d�
      - Cấu hình `/etc/media-automount.d/{f2fs,ext4,auto}` (với kernel 6.x dùng `errors=continue,noatime,users`; với kernel 5.15 sunxi `f2fs` không hỗ trợ `errors=continue` thì dùng `noatime,users`), dọn sạch thẻ nhớ ngoài khỏi `/etc/fstab`, remount nóng `/media/usb1` (tuyệt đối không format thẻ nhớ).
      - Tắt, `disable`, `mask` và xóa `netwatch.service` / `/usr/local/bin/netwatch_loop.sh`; đặt `kernel.sysrq = 0`.
      - Bảo toàn nguyên vẹn 100% các khóa branding trong `/root/ota-mqtt/change_ok/` (`ui_title`, `ui_bg`, `logo_header`, `logo_livestream`, `logo_header_text`, `custom_hashtags`, `shinobi_camera_id`, `shinobi_token`, `shinobi_monitor_token`).
+     - **Dọn sạch 100% Script & Daemon Legacy (BẮT BUỘC — Chống tự restart ngầm mỗi 60s)**:
+       - Kiểm tra và thay thế ngay `/usr/local/bin/shinobi-camera-watchdog.sh` sang bản thuần C `pgrep -f "/opt/go-shinobi-ksp/go-shinobi-ksp"` (tuyệt đối không để sót script cũ `SMART_PING_GUARD_V2` tìm `camera.js`, vốn sẽ gọi `pm2 restart camera` mỗi 60s làm đứt luồng HLS và hỏng `moov` của MP4!).
+       - Xóa bỏ các cronjob cũ `/etc/cron.d/shinobi-disk-cleaner`, `/etc/cron.d/shinobi-storage-guard`, `/usr/local/bin/shinobi-disk-cleaner.sh`, `/usr/local/bin/shinobi-storage-guard.sh`.
+       - Sau khi `--migrate-legacy` xong, bắt buộc `systemctl stop mariadb mysql && systemctl disable mariadb mysql`.
    - **Bước 2 (Triển khai Bộ 3 Dịch vụ Go trên `172.16.5.180` tại `/build/armbian-build/ansible`)**:
      - **`go-shinobi-ksp` (`:8080`, PM2 `camera`)**: Chạy `make go-shinobi inut_<subnet>_<host>` để chốt clip đang ghi, backup MySQL `ccio`, migrate 100% `Users`/`API`/`Monitors`/`Videos` sang SQLite `/opt/go-shinobi-ksp/shinobi.sqlite`, tắt/disable MariaDB, và ép cờ `-tag:v hvc1 -segment_format_options moov_size=262144:movflags=+faststart -segment_time 300`.
      - **`redbida-go` (`:2023`, PM2 `inut`)**: Chạy `make redbida-go inut_<subnet>_<host>` để chuyển PM2 `inut` từ Node-RED sang `redbida-go`.
@@ -1187,6 +1191,7 @@ Khi người dùng yêu cầu **"nâng cấp full go cho `<node_id>`"** (ví d�
      - `pm2 list`: `camera` (`go-shinobi-ksp`), `inut` (`redbida-go`), `ota-mqtt` đều `online` với `↺ = 0`.
      - `curl -s http://127.0.0.1:8080/healthz`, `curl -s http://127.0.0.1:2023/healthz`, `curl -s http://127.0.0.1:2028/healthz` đều trả về `ok`.
      - `ps -ef | grep ffmpeg`: chạy `/usr/bin/ffmpeg` với `-tag:v hvc1 -segment_format_options moov_size=262144:movflags=+faststart` và `-segment_time 300`.
+     - Theo dõi sau `>= 90 giây`: xác nhận `camera` (`go-shinobi-ksp`) vẫn giữ `↺ = 0` (`restarts = 0`, không có timer/cron legacy nào kill ngầm) và luồng HLS `fMP4` (`init.mp4` + `sN.m4s`, `hls_list_size >= 5`) tăng `MEDIA-SEQUENCE` liên tục.
    - **Check 2 — Cấu trúc MQTT `/data/alarms` trên `vnmap.inut.vn/device/86`**:
      - Trong payload `/data/alarms`, trường `usb` bắt buộc là mảng JSON `[]` (không được là `{}`), `p2p` chứa trạng thái các proxy FRPC, và `info` có đầy đủ tiền tố `"Camera uptime: ..."`, `"P2P uptime: ..."`, `"API req: ..."`, `"View: ..."`, tốc độ mạng `"eth0/end0  (U↑): ... Mbps  (D↓): ... Mbps"` và danh sách thiết bị kết nối.
      - Mở `https://vnmap.inut.vn/device/86`, tìm theo mã node (ví dụ `5.98`, `5.67`, `6.14`, `6.10`) $\to$ xác nhận `0 pageerror` và hiển thị đầy đủ nút `[P2P]`, `[SỐ USB: 0]` cùng các dòng thông số.

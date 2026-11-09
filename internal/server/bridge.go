@@ -1025,18 +1025,33 @@ func (b *nvrBridge) pullAndRemuxZeroCPU(ctx context.Context, tgt resolvedBridgeT
 		//    auto-discovering custom RTSP ports (e.g. 1554) via ISAPI adminAccesses.
 		rtspPort := b.resolveHikRTSPPort(ctx, d)
 		parallel := 4
-		chunkSec := 60
-		if tgt.IsCamSD || durSec <= 65 {
+		chunkSec := 30
+		switch {
+		case tgt.IsCamSD:
 			parallel = 1
 			chunkSec = int(durSec) + 1
+		case durSec <= 20:
+			parallel = 1
+			chunkSec = int(durSec) + 1
+		case durSec <= 95:
+			parallel = 5
+			chunkSec = 15
+		case durSec <= 185:
+			parallel = 4
+			chunkSec = 35
+		default:
+			parallel = 5
+			chunkSec = 60
 		}
 		outFile, err := os.Create(outMP4)
 		if err != nil {
 			return err
 		}
+		// Pass true (-an) on first pass so G.711 pcm_mulaw/pcm_alaw tracks on Hikvision NVRs
+		// never fail/retry chunk fetches or waste RTSP sessions.
 		rtspErr := mediaexport.FastMP4Range(ctx, outFile, start, end, chunkSec, func(cs, ce time.Time) string {
 			return buildHikRTSPURL(d.Host, rtspPort, d.Username, d.Password, hikCh, cs, ce)
-		}, false, parallel)
+		}, true, parallel)
 		_ = outFile.Close()
 		if rtspErr != nil {
 			return rtspErr
