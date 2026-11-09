@@ -52,9 +52,12 @@
 - **QUY TRÌNH AUTOMOUNT FIX `errors=continue` CHO MỌI NODE (Bắt Buộc Trong Golden Hardening)**:
   - Quản lý thẻ nhớ 100% qua udev automount, không phụ thuộc fstab:
     1. Tạo 3 file cấu hình trong `/etc/media-automount.d/`:
-       - `/etc/media-automount.d/f2fs`:
+       - `/etc/media-automount.d/f2fs` (lưu ý: `f2fs` chỉ hỗ trợ `errors=continue` từ Linux kernel `6.3+` trở lên; với các box kernel `5.15` hoặc `6.1` như Rockchip `6.1.63-current-rockchip64`, **bắt buộc dùng `AUTOMOUNT_OPTS="noatime,users"`** để tránh lỗi `f2fs: Unrecognized mount option "errors=continue"` làm mất mount thẻ nhớ sau khi reboot):
          ```sh
+         # Trên kernel >= 6.3 (ví dụ 6.6.x sunxi64):
          AUTOMOUNT_OPTS="errors=continue,noatime,users"
+         # Trên kernel 5.15 hoặc 6.1 (ví dụ 6.1.63-current-rockchip64):
+         # AUTOMOUNT_OPTS="noatime,users"
          AUTOMOUNT_TYPE="f2fs"
          ```
        - `/etc/media-automount.d/ext4`:
@@ -1173,7 +1176,7 @@ Khi người dùng yêu cầu **"nâng cấp full go cho `<node_id>`"** (ví d�
 2. **Các Bước Thực Thi Bắt Buộc Khi Nâng Cấp Full Go**:
    - **Bước 1 (Golden Hardening & Bảo toàn 100% Branding/Video)**:
      - Kiểm tra kiến trúc (`uname -m`: `aarch64` dùng bản `arm64`, `armv7l` dùng bản `armv7`), RAM, dung lượng `/media/usb1`.
-     - Cấu hình `/etc/media-automount.d/{f2fs,ext4,auto}` (với kernel 6.x dùng `errors=continue,noatime,users`; với kernel 5.15 sunxi `f2fs` không hỗ trợ `errors=continue` thì dùng `noatime,users`), dọn sạch thẻ nhớ ngoài khỏi `/etc/fstab`, remount nóng `/media/usb1` (tuyệt đối không format thẻ nhớ).
+     - Cấu hình `/etc/media-automount.d/{f2fs,ext4,auto}` (với `ext4`/`auto` dùng `errors=continue,noatime,users`; với `f2fs`, chỉ dùng `errors=continue,noatime,users` trên kernel `>= 6.3`, còn trên kernel `5.15` hoặc `6.1` như Rockchip `6.1.63` **bắt buộc dùng `noatime,users`** vì F2FS chưa nhận cờ `errors=continue`), dọn sạch thẻ nhớ ngoài khỏi `/etc/fstab`, remount nóng `/media/usb1` (tuyệt đối không format thẻ nhớ).
      - Tắt, `disable`, `mask` và xóa `netwatch.service` / `/usr/local/bin/netwatch_loop.sh`; đặt `kernel.sysrq = 0`.
      - Bảo toàn nguyên vẹn 100% các khóa branding trong `/root/ota-mqtt/change_ok/` (`ui_title`, `ui_bg`, `logo_header`, `logo_livestream`, `logo_header_text`, `custom_hashtags`, `shinobi_camera_id`, `shinobi_token`, `shinobi_monitor_token`).
      - **Dọn sạch 100% Script & Daemon Legacy (BẮT BUỘC — Chống tự restart ngầm mỗi 60s)**:

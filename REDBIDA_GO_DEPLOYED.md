@@ -97,8 +97,8 @@
   - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM giảm từ `643M` xuống **`261M/999M`** (giải phóng `382 MB`), `go-shinobi-ksp` `~9.3 MB` (`6/6` Recording), `redbida-go` `~6.6 MB`, `kspcam` `:2028` (`5/5` cam online snapshots OK), `inut-bida-agent` `active`.
 - **`inut_204_22` (`77.88.204.22` — VSP Pickleball, `ke=lAxKsdIBux`, 14 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1372M` xuống **`713M/3974M`** (giải phóng `659 MB`), `go-shinobi-ksp` `~19.9 MB` (`14/14` Recording), `redbida-go` `~13.5 MB`, `kspcam` `:2028` (`13/13` cam online snapshots OK), `inut-bida-agent` `active`.
-- **`inut_204_107` (`77.88.204.107` — Trang Hoàng Pickleball, `ke=cam4107`, 16 cam)**:
-  - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `1161M` xuống **`547M/1980M`** (giải phóng `614 MB`), `go-shinobi-ksp` `~18.7 MB` (`16/16` Recording), `redbida-go` `~13.3 MB`, `kspcam` `:2028` (`16/16` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_204_107` (`77.88.204.107` / `4.107` — Trang Hoàng Pickleball, `ke=cam4107`, 16 cam — `85%` Storage Guard + Sẵn Sàng `Hybrid Bridge`)**:
+  - **Ngày lên Full Go & Fix F2FS Automount Kernel `6.1.63`:** `2026-11-08` (cập nhật `2026-11-09`) • `linux/arm64` (`rk3318`, `6.1.63-current-rockchip64`) • Sửa `/etc/media-automount.d/f2fs` về `noatime,users` cho kernel `6.1` và đưa thẻ nhớ `117 GB` về ngưỡng `85% / 80%` (`~216` clip/sân), bật sẵn đường ống `bridge` + `nvr_direct_fallback: true` + `cut_spool_dir: "/dev/shm/redbida-cuts"` (chờ liên kết mật khẩu đầu ghi Hikvision `192.168.1.201:80`), RAM **`517M/1980M`**, `16/16` Recording & Live HLS `fMP4` OK, `kspcam` `:2028` & `inut-bida-agent` `active`.
 - **`inut_204_135` (`77.88.204.135` — HTP Pickleball, `ke=b389`, 6 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/arm64` • RAM giảm từ `955M` xuống **`539M/1923M`** (giải phóng `416 MB`), `go-shinobi-ksp` `~18.7 MB` (`6/6` Recording), `redbida-go` `~13.9 MB`, `kspcam` `:2028` (`6/6` snapshots OK), `inut-bida-agent` `active`.
 - **`inut_204_157` (`77.88.204.157` — Kely Pickleball, `ke=kely`, 13 cam)**:
