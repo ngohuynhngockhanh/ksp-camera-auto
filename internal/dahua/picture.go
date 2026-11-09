@@ -3,12 +3,12 @@ package dahua
 import (
 	"context"
 	"fmt"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/isapi"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
-
-	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/isapi"
 )
 
 // GetPicture reads back a channel's full color + picture-tuning config:
@@ -79,8 +79,25 @@ func (c *Client) SetPicture(ch int, colorChanges, optionsChanges map[string]any)
 			return nil, nil, err
 		}
 		mergeNested(obj, optionsChanges)
+		// Mirror top-level DayNightColor into NightOptions/NormalOptions so
+		// active scheduled sub-profiles (e.g. Imou/Dahua VideoInMode) also
+		// honor Full-Color (0), Auto (1), or B&W (2) immediately.
+		if rawDNC, hasDNC := optionsChanges["DayNightColor"]; hasDNC {
+			dncVal := obj["DayNightColor"]
+			for _, subKey := range []string{"NightOptions", "NormalOptions"} {
+				if sub, ok := obj[subKey].(map[string]any); ok {
+					if _, exists := sub["DayNightColor"]; exists {
+						sub["DayNightColor"] = dncVal
+					}
+				}
+			}
+			_ = rawDNC
+		}
 		if err := c.setTable("VideoInOptions", table); err != nil {
 			return nil, nil, err
+		}
+		if _, hasDNC := optionsChanges["DayNightColor"]; hasDNC {
+			c.syncDayNightAndSupplementLight(ch, toInt(obj["DayNightColor"]))
 		}
 	}
 	return c.GetPicture(ch)
@@ -100,8 +117,100 @@ func mergeNested(dst, src map[string]any) {
 				continue
 			}
 		}
+		// Coerce numeric strings (e.g. HTML <select> "0"/"1"/"2" for
+		// DayNightColor, Rotate90, ExposureMode) when the device's existing
+		// field is a JSON number so Sonia cJSON_IsNumber accepts the write.
+		if s, isStr := v.(string); isStr {
+			if _, dstIsNum := dst[k].(float64); dstIsNum {
+				if f, err := strconv.ParseFloat(strings.TrimSpace(s), 64); err == nil {
+					dst[k] = f
+					continue
+				}
+			}
+		}
 		dst[k] = v
 	}
+}
+
+// syncDayNightAndSupplementLight best-effort synchronizes auxiliary Dahua/Imou
+// day-night and dual-light tables (VideoInDayNight, LightGlobal, Lighting_V2,
+// LightingScheme) when DayNightColor changes:
+//   - dnc == 0 (Full-Color / Always Color): sets VideoInDayNight[*].Mode = "Color",
+//     enables LightGlobal, sets WhiteLight PercentOfMaxBrightness = 100 in
+//     Lighting_V2 across Day/Night/Normal profiles, and attempts WhiteLightMode
+//     on Dual-Light models supporting writable LightingScheme.
+//   - dnc == 1 (Auto): sets VideoInDayNight[*].Mode = "Brightness".
+//   - dnc == 2 (Always B&W): sets VideoInDayNight[*].Mode = "BlackWhite".
+func (c *Client) syncDayNightAndSupplementLight(ch, dnc int) {
+	dnMode := "Brightness"
+	switch dnc {
+	case 0:
+		dnMode = "Color"
+	case 2:
+		dnMode = "BlackWhite"
+	}
+	if dnTable, err := c.getTable("VideoInDayNight"); err == nil && ch >= 0 && ch < len(dnTable) {
+		if profiles, ok := dnTable[ch].([]any); ok {
+			changed := false
+			for _, p := range profiles {
+				if pm, ok := p.(map[string]any); ok {
+					pm["Mode"] = dnMode
+					changed = true
+				}
+			}
+			if changed {
+				_ = c.setTable("VideoInDayNight", dnTable)
+			}
+		}
+	}
+	if dnc != 0 {
+		return
+	}
+	if lgTable, err := c.getTable("LightGlobal"); err == nil && ch >= 0 && ch < len(lgTable) {
+		if lgObj, ok := lgTable[ch].(map[string]any); ok {
+			lgObj["Enable"] = true
+			_ = c.setTable("LightGlobal", lgTable)
+		}
+	}
+	if v2Table, err := c.getTable("Lighting_V2"); err == nil && ch >= 0 && ch < len(v2Table) {
+		if profiles, ok := v2Table[ch].([]any); ok {
+			changed := false
+			for _, prof := range profiles {
+				entries, ok := prof.([]any)
+				if !ok {
+					continue
+				}
+				for _, item := range entries {
+					em, ok := item.(map[string]any)
+					if !ok || em["LightType"] != "WhiteLight" {
+						continue
+					}
+					if _, hasMode := em["Mode"]; hasMode {
+						em["Mode"] = "Auto"
+					}
+					if toInt(em["PercentOfMaxBrightness"]) == 0 {
+						em["PercentOfMaxBrightness"] = float64(100)
+					}
+					changed = true
+				}
+			}
+			if changed {
+				_ = c.setTable("Lighting_V2", v2Table)
+			}
+		}
+	}
+	// Best-effort switch Dual-Light cameras (Imou Cruiser/Bullet, Dahua Full-Color)
+	// from InfraredMode to WhiteLightMode if their firmware permits writing LightingScheme.
+	_, _ = c.Call("configManager.setConfig", map[string]any{
+		"name": "LightingScheme",
+		"table": []any{
+			[]any{
+				map[string]any{"LightingMode": "WhiteLightMode"},
+				map[string]any{"LightingMode": "WhiteLightMode"},
+				map[string]any{"LightingMode": "WhiteLightMode"},
+			},
+		},
+	})
 }
 
 // videoColorObj navigates table[ch][0] to the color-config object.
@@ -134,6 +243,12 @@ func videoColorObj(table []any, ch int) (map[string]any, error) {
 // opens a separate connection from the DVRIP session. host must be bare (no
 // port).
 func GetVideoInputCaps(ctx context.Context, host, user, pass string, channel int, timeout time.Duration) (map[string]any, error) {
+	// Cap best-effort HTTP :80 CGI probe at 2.5s so standalone Imou/Dahua IPCs
+	// whose port 80 is a non-CGI stub (or behind DVRIP-only NAT) never stall
+	// GET /api/picture for 30s.
+	if timeout <= 0 || timeout > 2500*time.Millisecond {
+		timeout = 2500 * time.Millisecond
+	}
 	digest := isapi.NewDigestTransport(user, pass, nil)
 	client := &http.Client{Transport: digest, Timeout: timeout}
 	url := fmt.Sprintf("http://%s:80/cgi-bin/devVideoInput.cgi?action=getCaps&channel=%d", host, channel)

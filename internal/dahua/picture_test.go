@@ -80,3 +80,22 @@ func TestParseCapsLines(t *testing.T) {
 		t.Errorf("WhiteBalance = %v", caps["WhiteBalance"])
 	}
 }
+
+func TestMergeNestedCoercesNumericStrings(t *testing.T) {
+	dst := map[string]any{
+		"DayNightColor": float64(1),
+		"WhiteBalance":  "Auto",
+	}
+	src := map[string]any{
+		"DayNightColor": "0",
+		"WhiteBalance":  "Sunny",
+	}
+	mergeNested(dst, src)
+	n, ok := dst["DayNightColor"].(float64)
+	if !ok || n != 0 {
+		t.Fatalf("expected DayNightColor coerced to float64(0), got %T(%v)", dst["DayNightColor"], dst["DayNightColor"])
+	}
+	if dst["WhiteBalance"] != "Sunny" {
+		t.Fatalf("expected WhiteBalance string preserved, got %v", dst["WhiteBalance"])
+	}
+}
