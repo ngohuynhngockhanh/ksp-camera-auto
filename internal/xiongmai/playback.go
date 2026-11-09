@@ -45,25 +45,51 @@ func (c *Client) FindRecordings(ctx context.Context, channel int, start, end tim
 	return out, nil
 }
 
-// QueryRecordFiles returns detailed Xiongmai RecordFile entries for [start, end],
+// QueryRecordFiles returns detailed Xiongmai RecordFile entries overlapping [start, end],
 // automatically paging when OPFileQuery returns full 64-segment batches.
+// On short sub-hour queries (e.g. 5-minute virtual NVR segment inside a 1-hour .h264 file),
+// if exact [start, end] returns empty, it widens the OPFileQuery BeginTime lookback by 65m
+// and filters for segments genuinely overlapping [start, end].
 func (c *Client) QueryRecordFiles(ctx context.Context, channel int, start, end time.Time) ([]RecordFile, error) {
 	tr, err := c.Transport(ctx)
 	if err != nil {
 		return nil, err
 	}
-	cursor := start
+	files, err := c.queryRecordFilesRaw(ctx, tr, channel, start, end)
+	if err != nil {
+		return nil, err
+	}
+	if len(files) == 0 && end.After(start) && end.Sub(start) <= 2*time.Hour {
+		files, err = c.queryRecordFilesRaw(ctx, tr, channel, start.Add(-65*time.Minute), end)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if start.IsZero() || end.IsZero() {
+		return files, nil
+	}
+	filtered := make([]RecordFile, 0, len(files))
+	for _, f := range files {
+		if f.EndTime.After(start) && f.BeginTime.Before(end) {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered, nil
+}
+
+func (c *Client) queryRecordFilesRaw(ctx context.Context, tr Transport, channel int, queryStart, queryEnd time.Time) ([]RecordFile, error) {
+	cursor := queryStart
 	seen := make(map[string]struct{})
 	var all []RecordFile
 
-	for page := 0; page < 32; page++ {
-		if !cursor.Before(end) {
+	for range 32 {
+		if !cursor.Before(queryEnd) {
 			break
 		}
 		param := map[string]any{
 			"Channel":        channel,
 			"BeginTime":      cursor.Format(xmTimeLayout),
-			"EndTime":        end.Format(xmTimeLayout),
+			"EndTime":        queryEnd.Format(xmTimeLayout),
 			"Type":           "h264",
 			"Event":          "*",
 			"DriverTypeMask": "0x0000FFFF",
@@ -90,8 +116,8 @@ func (c *Client) QueryRecordFiles(ctx context.Context, channel int, start, end t
 			fn := strings.TrimSpace(stringFieldAny(m, "FileName"))
 			bStr := strings.TrimSpace(stringFieldAny(m, "BeginTime"))
 			eStr := strings.TrimSpace(stringFieldAny(m, "EndTime"))
-			bt, err1 := time.ParseInLocation(xmTimeLayout, bStr, start.Location())
-			et, err2 := time.ParseInLocation(xmTimeLayout, eStr, start.Location())
+			bt, err1 := time.ParseInLocation(xmTimeLayout, bStr, queryStart.Location())
+			et, err2 := time.ParseInLocation(xmTimeLayout, eStr, queryStart.Location())
 			if err1 != nil || err2 != nil || !et.After(bt) {
 				continue
 			}
@@ -136,75 +162,382 @@ func parseHexKB(s string) int64 {
 	return int64(n)
 }
 
-// StripXMMediaFrames extracts elementary H.264/H.265 Annex-B video NAL units
-// from Xiongmai's proprietary media packet wrapper (XMHead / 1424 frames):
-//   - I-Frame header (16 bytes): `00 00 01 FC` (H.264) or `00 00 01 FE` (H.265 implicit)
-//     followed by [type, fps, width/8, height/8, timestamp(4B), payloadLen(4B LE)]
-//   - P/B-Frame header (8 bytes): `00 00 01 FD` + [reserved(2B), payloadLen(2B LE)]
-//   - Audio frame header (8 bytes): `00 00 01 FA` + [type, rate, payloadLen(2B LE)] (skipped for pure video ES)
-//
-// If the buffer already starts with standard Annex-B `00 00 00 01` without XM
-// frame markers, it is returned verbatim.
-func StripXMMediaFrames(buf []byte) []byte {
-	if len(buf) < 8 {
-		return buf
+// ErrXMStopTimeReached signals that XMStreamExtractor has reached an I-Frame
+// beyond the requested end timestamp so the caller can close the stream early.
+var ErrXMStopTimeReached = errors.New("xiongmai: playback stop timestamp reached")
+
+type xmStatsCtxKey struct{}
+
+type xmStreamStats struct {
+	fps int
+}
+
+func (s *xmStreamStats) recordFPS(fps int) {
+	if fps >= 5 && fps <= 60 && s.fps == 0 {
+		s.fps = fps
 	}
-	// Quick check: if no 00 00 01 F[A-F] marker exists at offset 0, check if raw Annex-B.
-	if !(buf[0] == 0x00 && buf[1] == 0x00 && buf[2] == 0x01 && buf[3] >= 0xF9) {
-		idx := findXMFrameMarker(buf)
-		if idx < 0 {
-			return buf
+}
+
+func withXMStreamStats(ctx context.Context, st *xmStreamStats) context.Context {
+	return context.WithValue(ctx, xmStatsCtxKey{}, st)
+}
+
+func xmStatsFromContext(ctx context.Context) *xmStreamStats {
+	st, _ := ctx.Value(xmStatsCtxKey{}).(*xmStreamStats)
+	return st
+}
+
+// DecodeXMTimestamp decodes Xiongmai's 32-bit packed DATETIME from bytes [8:12]
+// of an XMHead I-Frame (`00 00 01 FC` or `00 00 01 FE`).
+func DecodeXMTimestamp(ts uint32, loc *time.Location) time.Time {
+	if ts == 0 {
+		return time.Time{}
+	}
+	if loc == nil {
+		loc = time.Local
+	}
+	sec := int(ts & 0x3F)
+	min := int((ts >> 6) & 0x3F)
+	hour := int((ts >> 12) & 0x1F)
+	day := int((ts >> 17) & 0x1F)
+	month := int((ts >> 22) & 0x0F)
+	year := 2000 + int((ts>>26)&0x3F)
+	if year < 2010 || month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || min > 59 || sec > 59 {
+		return time.Time{}
+	}
+	return time.Date(year, time.Month(month), day, hour, min, sec, 0, loc)
+}
+
+// EncodeXMTimestamp packs a wall-clock time into Xiongmai's 32-bit XMHead timestamp.
+func EncodeXMTimestamp(t time.Time) uint32 {
+	if t.IsZero() || t.Year() < 2000 {
+		return 0
+	}
+	yr := uint32((t.Year() - 2000) & 0x3F)
+	mo := uint32(int(t.Month()) & 0x0F)
+	dy := uint32(t.Day() & 0x1F)
+	hr := uint32(t.Hour() & 0x1F)
+	mn := uint32(t.Minute() & 0x3F)
+	sc := uint32(t.Second() & 0x3F)
+	return (yr << 26) | (mo << 22) | (dy << 17) | (hr << 12) | (mn << 6) | sc
+}
+
+// XMStreamExtractor stateful demuxer extracts clean H.264/H.265 Annex-B video
+// across arbitrary WebSocket / Sofia TCP packet boundaries, trims pre-start GOPs
+// in memory, stops immediately past end, and records the stream's true FPS.
+type XMStreamExtractor struct {
+	dst            io.Writer
+	start          time.Time
+	end            time.Time
+	loc            *time.Location
+	decided        bool
+	rawPassthrough bool
+	buf            bytes.Buffer
+	remKeep        int
+	remSkip        int
+	startedWriting bool
+	preGOP         bytes.Buffer
+	preGOPTime     time.Time
+	wrote          int64
+	videoFrames    int
+	headerFPS      int
+	firstTS        time.Time
+	lastTS         time.Time
+}
+
+// NewXMStreamExtractor creates a stateful XMHead -> Annex-B extractor for [start, end].
+func NewXMStreamExtractor(dst io.Writer, start, end time.Time) *XMStreamExtractor {
+	loc := time.Local
+	if !start.IsZero() {
+		loc = start.Location()
+	} else if !end.IsZero() {
+		loc = end.Location()
+	}
+	return &XMStreamExtractor{
+		dst:            dst,
+		start:          start,
+		end:            end,
+		loc:            loc,
+		startedWriting: start.IsZero(),
+	}
+}
+
+func (e *XMStreamExtractor) WroteBytes() int64  { return e.wrote }
+func (e *XMStreamExtractor) VideoFrames() int   { return e.videoFrames }
+func (e *XMStreamExtractor) InFlightBytes() int { return e.remKeep }
+func (e *XMStreamExtractor) ObservedFPS() int {
+	if e.headerFPS >= 5 && e.headerFPS <= 60 {
+		return e.headerFPS
+	}
+	if !e.firstTS.IsZero() && e.lastTS.After(e.firstTS) && e.videoFrames > 10 {
+		sec := e.lastTS.Sub(e.firstTS).Seconds()
+		if sec >= 2 {
+			est := int(float64(e.videoFrames)/sec + 0.5)
+			if est >= 5 && est <= 60 {
+				return est
+			}
 		}
-		buf = buf[idx:]
+	}
+	return 0
+}
+
+func (e *XMStreamExtractor) emitVideo(b []byte) error {
+	if len(b) == 0 {
+		return nil
+	}
+	if e.startedWriting {
+		n, err := e.dst.Write(b)
+		e.wrote += int64(n)
+		return err
+	}
+	const maxPreGOPBytes = 4 << 20
+	if e.preGOP.Len()+len(b) <= maxPreGOPBytes {
+		_, _ = e.preGOP.Write(b)
+	}
+	return nil
+}
+
+func (e *XMStreamExtractor) flushPreGOP() error {
+	if e.preGOP.Len() == 0 {
+		return nil
+	}
+	n, err := e.dst.Write(e.preGOP.Bytes())
+	e.wrote += int64(n)
+	if e.firstTS.IsZero() && !e.preGOPTime.IsZero() {
+		e.firstTS = e.preGOPTime
+	}
+	e.preGOP.Reset()
+	return err
+}
+
+// Feed processes the next WebSocket or Sofia 1424 media chunk.
+func (e *XMStreamExtractor) Feed(chunk []byte) error {
+	if len(chunk) == 0 {
+		return nil
+	}
+	pos := 0
+	// 1. Drain any in-flight video or audio/info payload spanning across chunks.
+	for pos < len(chunk) && (e.remKeep > 0 || e.remSkip > 0) {
+		if e.remKeep > 0 {
+			take := e.remKeep
+			if take > len(chunk)-pos {
+				take = len(chunk) - pos
+			}
+			if err := e.emitVideo(chunk[pos : pos+take]); err != nil {
+				return err
+			}
+			pos += take
+			e.remKeep -= take
+		}
+		if pos < len(chunk) && e.remSkip > 0 {
+			take := e.remSkip
+			if take > len(chunk)-pos {
+				take = len(chunk) - pos
+			}
+			pos += take
+			e.remSkip -= take
+		}
+	}
+	if pos >= len(chunk) {
+		return nil
 	}
 
-	var out bytes.Buffer
-	out.Grow(len(buf))
-	pos := 0
-	for pos+8 <= len(buf) {
-		if !(buf[pos] == 0x00 && buf[pos+1] == 0x00 && buf[pos+2] == 0x01 && buf[pos+3] >= 0xF9) {
-			next := findXMFrameMarker(buf[pos+1:])
-			if next < 0 {
-				out.Write(buf[pos:])
-				break
-			}
-			pos += 1 + next
-			continue
+	if e.rawPassthrough {
+		e.startedWriting = true
+		return e.emitVideo(chunk[pos:])
+	}
+
+	_, _ = e.buf.Write(chunk[pos:])
+	data := e.buf.Bytes()
+
+	if !e.decided {
+		if len(data) < 8 {
+			return nil
 		}
-		marker := buf[pos+3]
-		switch marker {
-		case 0xFC, 0xFE: // I-frame (16-byte header)
-			if pos+16 > len(buf) {
-				return out.Bytes()
-			}
-			frameLen := int(binary.LittleEndian.Uint32(buf[pos+12 : pos+16]))
-			end := pos + 16 + frameLen
-			if frameLen < 0 || end > len(buf) {
-				out.Write(buf[pos+16:])
-				return out.Bytes()
-			}
-			out.Write(buf[pos+16 : end])
-			pos = end
-		case 0xFD: // P-frame (8-byte header)
-			frameLen := int(binary.LittleEndian.Uint16(buf[pos+6 : pos+8]))
-			end := pos + 8 + frameLen
-			if end > len(buf) {
-				out.Write(buf[pos+8:])
-				return out.Bytes()
-			}
-			out.Write(buf[pos+8 : end])
-			pos = end
-		case 0xFA, 0xF9: // Audio / Info frame (8-byte header) — skip audio to keep clean Annex-B video ES
-			frameLen := int(binary.LittleEndian.Uint16(buf[pos+6 : pos+8]))
-			end := pos + 8 + frameLen
-			if end > len(buf) {
-				return out.Bytes()
-			}
-			pos = end
-		default:
-			pos += 4
+		e.decided = true
+		if findXMFrameMarker(data) < 0 {
+			e.rawPassthrough = true
+			e.startedWriting = true
+			e.buf.Reset()
+			return e.emitVideo(data)
 		}
 	}
+
+	cur := 0
+	for cur < len(data) {
+		if e.remKeep > 0 {
+			take := e.remKeep
+			if take > len(data)-cur {
+				take = len(data) - cur
+			}
+			if err := e.emitVideo(data[cur : cur+take]); err != nil {
+				return err
+			}
+			cur += take
+			e.remKeep -= take
+			continue
+		}
+		if e.remSkip > 0 {
+			take := e.remSkip
+			if take > len(data)-cur {
+				take = len(data) - cur
+			}
+			cur += take
+			e.remSkip -= take
+			continue
+		}
+
+		if len(data)-cur < 8 {
+			break
+		}
+		if !(data[cur] == 0x00 && data[cur+1] == 0x00 && data[cur+2] == 0x01 && data[cur+3] >= 0xF9 && data[cur+3] <= 0xFE) {
+			idx := findXMFrameMarker(data[cur+1:])
+			if idx < 0 {
+				// Keep trailing 3 bytes in case a 00 00 01 F* marker straddles the chunk end.
+				keepTail := 3
+				if len(data)-cur < keepTail {
+					keepTail = len(data) - cur
+				}
+				cur = len(data) - keepTail
+				break
+			}
+			cur += 1 + idx
+			continue
+		}
+
+		marker := data[cur+3]
+		switch marker {
+		case 0xFC, 0xFE: // 16-byte I-frame header
+			if len(data)-cur < 16 {
+				goto saveRemainder
+			}
+			fps := int(data[cur+5])
+			if fps >= 5 && fps <= 60 {
+				e.headerFPS = fps
+			}
+			ts := DecodeXMTimestamp(binary.LittleEndian.Uint32(data[cur+8:cur+12]), e.loc)
+			frameLen := int(binary.LittleEndian.Uint32(data[cur+12 : cur+16]))
+			if frameLen < 0 || frameLen > maxSofiaPayloadBytes {
+				cur += 4
+				continue
+			}
+			// Check end-of-window stop condition on keyframe boundary.
+			if !e.end.IsZero() && !ts.IsZero() && ts.After(e.end) {
+				if !e.startedWriting && e.preGOP.Len() > 0 {
+					if err := e.flushPreGOP(); err != nil {
+						return err
+					}
+				}
+				e.buf.Reset()
+				return ErrXMStopTimeReached
+			}
+			if !e.startedWriting {
+				if e.start.IsZero() || ts.IsZero() || !ts.Before(e.start) {
+					// Include preceding GOP if start fell mid-GOP so frame 0 is an IDR keyframe.
+					if !ts.IsZero() && e.preGOP.Len() > 0 && ts.After(e.start) && e.start.Sub(e.preGOPTime) <= 10*time.Second {
+						if err := e.flushPreGOP(); err != nil {
+							return err
+						}
+					} else {
+						e.preGOP.Reset()
+					}
+					e.startedWriting = true
+					if e.firstTS.IsZero() && !ts.IsZero() {
+						e.firstTS = ts
+					}
+				} else {
+					e.preGOP.Reset()
+					e.preGOPTime = ts
+				}
+			}
+			if e.startedWriting {
+				if !ts.IsZero() {
+					if e.firstTS.IsZero() {
+						e.firstTS = ts
+					}
+					e.lastTS = ts
+				}
+				e.videoFrames++
+			}
+			cur += 16
+			e.remKeep = frameLen
+
+		case 0xFB: // 16-byte extended P-frame header (>64KB P-frame)
+			if len(data)-cur < 16 {
+				goto saveRemainder
+			}
+			frameLen := int(binary.LittleEndian.Uint32(data[cur+12 : cur+16]))
+			if frameLen < 0 || frameLen > maxSofiaPayloadBytes {
+				cur += 4
+				continue
+			}
+			if e.startedWriting {
+				e.videoFrames++
+			}
+			cur += 16
+			e.remKeep = frameLen
+
+		case 0xFD: // 8-byte P-frame header
+			frameLen := int(binary.LittleEndian.Uint16(data[cur+6 : cur+8]))
+			if e.startedWriting {
+				e.videoFrames++
+			}
+			cur += 8
+			e.remKeep = frameLen
+
+		case 0xFA, 0xF9: // 8-byte Audio / Info header (skip to preserve pure Annex-B video ES)
+			frameLen := int(binary.LittleEndian.Uint16(data[cur+6 : cur+8]))
+			cur += 8
+			e.remSkip = frameLen
+
+		default:
+			cur += 4
+		}
+	}
+
+saveRemainder:
+	if cur >= len(data) {
+		e.buf.Reset()
+	} else if cur > 0 {
+		rem := append([]byte(nil), data[cur:]...)
+		e.buf.Reset()
+		_, _ = e.buf.Write(rem)
+	}
+	return nil
+}
+
+// Finish flushes any buffered single-GOP or raw tail at end-of-stream.
+func (e *XMStreamExtractor) Finish() error {
+	if !e.decided && e.buf.Len() > 0 {
+		data := append([]byte(nil), e.buf.Bytes()...)
+		e.buf.Reset()
+		e.decided = true
+		if findXMFrameMarker(data) < 0 {
+			e.rawPassthrough = true
+			e.startedWriting = true
+			return e.emitVideo(data)
+		}
+	}
+	if !e.startedWriting && e.preGOP.Len() > 0 {
+		e.startedWriting = true
+		if err := e.flushPreGOP(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// StripXMMediaFrames extracts elementary H.264/H.265 Annex-B video NAL units
+// from a single buffer of Xiongmai media frames (stateless convenience wrapper).
+func StripXMMediaFrames(buf []byte) []byte {
+	if len(buf) == 0 {
+		return buf
+	}
+	var out bytes.Buffer
+	out.Grow(len(buf))
+	ext := NewXMStreamExtractor(&out, time.Time{}, time.Time{})
+	_ = ext.Feed(buf)
+	_ = ext.Finish()
 	return out.Bytes()
 }
 
@@ -280,7 +613,8 @@ func (c *Client) ExportMP4Faststart(ctx context.Context, channel int, start, end
 	if err != nil {
 		return err
 	}
-	dlErr := c.DownloadNative(ctx, rawFile, channel, start, end)
+	var st xmStreamStats
+	dlErr := c.DownloadNative(withXMStreamStats(ctx, &st), rawFile, channel, start, end)
 	_ = rawFile.Close()
 	if dlErr != nil {
 		return dlErr
@@ -299,9 +633,13 @@ func (c *Client) ExportMP4Faststart(ctx context.Context, channel int, start, end
 	}
 	demuxFmt := DetectAnnexBCodec(head[:n])
 
-	fps := 25
-	if si, serr := c.GetStreamInfo(ctx, channel, 0); serr == nil && si.FPS > 0 {
-		fps = si.FPS
+	fps := st.fps
+	if fps <= 0 {
+		if si, serr := c.GetStreamInfo(ctx, channel, 0); serr == nil && si.FPS > 0 {
+			fps = si.FPS
+		} else {
+			fps = 25
+		}
 	}
 	durSec := int(end.Sub(start).Seconds())
 	if durSec <= 0 {
@@ -314,7 +652,7 @@ func (c *Client) ExportMP4Faststart(ctx context.Context, channel int, start, end
 		"-r", strconv.Itoa(fps),
 		"-f", demuxFmt,
 		"-i", rawPath,
-		"-t", strconv.Itoa(durSec + 2),
+		"-t", strconv.Itoa(durSec + 12),
 		"-c:v", "copy", "-an",
 	}
 	if demuxFmt == "hevc" {

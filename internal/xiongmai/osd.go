@@ -194,7 +194,9 @@ func toMapSlice(in []any) []map[string]any {
 }
 
 // GetRemoteDevices reads NetWork.RemoteDeviceV3 on a Xiongmai HVR/NVR and maps
-// configured IP channels to dahua.RemoteChannel (1-based NVR channel index).
+// configured IP channels to dahua.RemoteChannel (0-based Channel index).
+// Handles hex SingleConnId ("0x00000004" -> Decoder[3]) and skips NoConfig slots
+// where SingleConnId is explicitly 0 ("0x00000000").
 func (c *Client) GetRemoteDevices(ctx context.Context) ([]dahua.RemoteChannel, error) {
 	tr, err := c.Transport(ctx)
 	if err != nil {
@@ -202,6 +204,13 @@ func (c *Client) GetRemoteDevices(ctx context.Context) ([]dahua.RemoteChannel, e
 	}
 	sys, _ := c.GetSystemInfo(ctx)
 	titles, _ := c.GetChannelTitles(ctx)
+
+	var chnStatuses []map[string]any
+	if stResp, serr := tr.GetConfig(ctx, "NetWork.ChnStatus"); serr == nil {
+		if stArr, ok := stResp["NetWork.ChnStatus"].([]any); ok {
+			chnStatuses = toMapSlice(stArr)
+		}
+	}
 
 	resp, err := tr.GetConfig(ctx, "NetWork.RemoteDeviceV3")
 	if err != nil {
@@ -212,8 +221,8 @@ func (c *Client) GetRemoteDevices(ctx context.Context) ([]dahua.RemoteChannel, e
 		}
 	}
 
-	rawArr, ok := resp["NetWork.RemoteDeviceV3"].([]any)
-	if !ok {
+	rawArr, isV3 := resp["NetWork.RemoteDeviceV3"].([]any)
+	if !isV3 {
 		rawArr, _ = resp["NetWork.RemoteDevice"].([]any)
 	}
 	var out []dahua.RemoteChannel
@@ -224,37 +233,69 @@ func (c *Client) GetRemoteDevices(ctx context.Context) ([]dahua.RemoteChannel, e
 		}
 		enable := boolFieldAny(m, "Enable")
 		nvrCh1 := sys.VideoInChannel + nDig + 1
-		singleID := intFieldAny(m, "SingleConnId")
-		if singleID <= 0 {
-			singleID = 1
+		ch0 := nvrCh1 - 1
+
+		if ch0 >= 0 && ch0 < len(chnStatuses) {
+			st := strings.TrimSpace(stringFieldAny(chnStatuses[ch0], "Status"))
+			if strings.EqualFold(st, "NoConfig") {
+				continue
+			}
 		}
+
 		var ip string
 		var port int
-		if decs, ok := m["Decoder"].([]any); ok && len(decs) > 0 {
-			idx := singleID - 1
-			if idx < 0 || idx >= len(decs) {
-				idx = 0
-			}
-			if dm, ok := decs[idx].(map[string]any); ok {
-				ip = strings.TrimSpace(stringFieldAny(dm, "IPAddress", "Address"))
-				// Handle hex IP if firmware encoded IPAddress as 0x...
-				if strings.HasPrefix(ip, "0x") || strings.HasPrefix(ip, "0X") {
-					if decIP, herr := HexIPToDecIP(ip); herr == nil {
-						ip = decIP
-					}
+		if isV3 {
+			rawSingleID, hasSingleID := m["SingleConnId"]
+			singleID := 1
+			if hasSingleID {
+				parsedID, valid := parseIntOrHex(rawSingleID)
+				if valid && parsedID <= 0 {
+					// SingleConnId = "0x00000000" indicates an unconfigured digital slot.
+					continue
 				}
-				port = intFieldAny(dm, "Port")
+				if valid {
+					singleID = parsedID
+				}
 			}
+			if decs, ok := m["Decoder"].([]any); ok && len(decs) > 0 {
+				idx := singleID - 1
+				if idx < 0 || idx >= len(decs) {
+					idx = 0
+				}
+				if dm, ok := decs[idx].(map[string]any); ok {
+					ip = strings.TrimSpace(stringFieldAny(dm, "IPAddress", "Address"))
+					if strings.HasPrefix(ip, "0x") || strings.HasPrefix(ip, "0X") {
+						if decIP, herr := HexIPToDecIP(ip); herr == nil {
+							ip = decIP
+						}
+					}
+					port = intFieldAny(dm, "Port")
+				}
+			}
+		} else {
+			if !enable {
+				continue
+			}
+			ip = strings.TrimSpace(stringFieldAny(m, "IPAddress", "Address"))
+			if strings.HasPrefix(ip, "0x") || strings.HasPrefix(ip, "0X") {
+				if decIP, herr := HexIPToDecIP(ip); herr == nil {
+					ip = decIP
+				}
+			}
+			port = intFieldAny(m, "Port")
 		}
 		if ip == "" || ip == "0.0.0.0" {
 			continue
 		}
 		chName := ""
-		if nvrCh1-1 >= 0 && nvrCh1-1 < len(titles) {
-			chName = titles[nvrCh1-1]
+		if ch0 >= 0 && ch0 < len(titles) {
+			chName = titles[ch0]
+		}
+		if chName == "" && ch0 >= 0 && ch0 < len(chnStatuses) {
+			chName = strings.TrimSpace(stringFieldAny(chnStatuses[ch0], "ChnName"))
 		}
 		out = append(out, dahua.RemoteChannel{
-			Channel: nvrCh1 - 1, // dahua.RemoteChannel.Channel is 0-based
+			Channel: ch0, // dahua.RemoteChannel.Channel is 0-based
 			Enable:  enable,
 			Address: ip,
 			Port:    port,
@@ -288,9 +329,10 @@ func (c *Client) snapshotViaRTSP(ctx context.Context, channel1Based, stream int)
 	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
+	effUser := c.EffectiveUsername(ctx)
 	candidates := []string{
-		BuildRTSPURL(c.host, c.username, c.password, channel1Based, sIdx),
-		fmt.Sprintf("rtsp://%s:%s@%s:554/0", c.username, c.password, c.host),
+		BuildRTSPURL(c.host, effUser, c.password, channel1Based, sIdx),
+		fmt.Sprintf("rtsp://%s:%s@%s:554/0", effUser, c.password, c.host),
 	}
 	var lastErr error
 	for _, rtspURL := range candidates {

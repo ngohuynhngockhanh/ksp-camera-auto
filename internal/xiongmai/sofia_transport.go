@@ -553,7 +553,7 @@ func (t *SofiaTCPTransport) DownloadRecordFile(ctx context.Context, w io.Writer,
 		return err
 	}
 
-	var wrote int64
+	ext := NewXMStreamExtractor(w, start, end)
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -561,7 +561,7 @@ func (t *SofiaTCPTransport) DownloadRecordFile(ctx context.Context, w io.Writer,
 		_ = dataConn.SetReadDeadline(time.Now().Add(15 * time.Second))
 		dh, err := readSofiaHeader(dataConn)
 		if err != nil {
-			if errors.Is(err, io.EOF) && wrote > 0 {
+			if errors.Is(err, io.EOF) && ext.WroteBytes() > 0 {
 				break
 			}
 			return err
@@ -579,17 +579,21 @@ func (t *SofiaTCPTransport) DownloadRecordFile(ctx context.Context, w io.Writer,
 			break
 		}
 		if dh.MessageID == MsgPlayBackData && len(payload) > 0 {
-			es := StripXMMediaFrames(payload)
-			if len(es) > 0 {
-				n, werr := w.Write(es)
-				wrote += int64(n)
-				if werr != nil {
-					return werr
+			if err := ext.Feed(payload); err != nil {
+				if errors.Is(err, ErrXMStopTimeReached) {
+					break
 				}
+				return err
 			}
 		}
 	}
-	if wrote == 0 {
+	if err := ext.Finish(); err != nil {
+		return err
+	}
+	if st := xmStatsFromContext(ctx); st != nil {
+		st.recordFPS(ext.ObservedFPS())
+	}
+	if ext.WroteBytes() == 0 {
 		return fmt.Errorf("xiongmai sofia OPPlayBack returned 0 media bytes")
 	}
 	return nil
@@ -612,6 +616,14 @@ func (t *SofiaTCPTransport) Close() error {
 	return err
 }
 
+// EffectiveUsername returns the authenticated Sofia username.
+func (t *SofiaTCPTransport) EffectiveUsername() string {
+	if t.username == "" {
+		return "admin"
+	}
+	return t.username
+}
+
 func stringFieldAny(m map[string]any, keys ...string) string {
 	for _, k := range keys {
 		if v, ok := m[k].(string); ok {
@@ -623,11 +635,10 @@ func stringFieldAny(m map[string]any, keys ...string) string {
 
 func intFieldAny(m map[string]any, keys ...string) int {
 	for _, k := range keys {
-		switch v := m[k].(type) {
-		case float64:
-			return int(v)
-		case int:
-			return v
+		if v, exists := m[k]; exists {
+			if n, ok := parseIntOrHex(v); ok {
+				return n
+			}
 		}
 	}
 	return 0

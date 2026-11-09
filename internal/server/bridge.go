@@ -387,7 +387,14 @@ func (s *Server) resolveBridgeTarget(idParam, midParam string, reqChannel int, h
 			if d.IsNVR {
 				continue
 			}
-			if strings.EqualFold(shinobi.DeviceToMid(d), midParam) || strings.EqualFold(strings.TrimSpace(d.Name), midParam) || strings.EqualFold(d.ID, midParam) {
+			firstTok := ""
+			if fields := strings.Fields(d.Name); len(fields) > 0 {
+				firstTok = fields[0]
+			}
+			if strings.EqualFold(shinobi.DeviceToMid(d), midParam) ||
+				strings.EqualFold(strings.TrimSpace(d.Name), midParam) ||
+				(firstTok != "" && strings.EqualFold(firstTok, midParam)) ||
+				strings.EqualFold(d.ID, midParam) {
 				cam = d
 				found = true
 				break

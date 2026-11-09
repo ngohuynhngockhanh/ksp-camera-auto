@@ -14,10 +14,12 @@ import (
 )
 
 var (
-	shortChannelRe = regexp.MustCompile(`^/(\d+)/\d+/?$`)
-	hikChannelRe   = regexp.MustCompile(`(?i)/streaming/channels/(\d+)`)
-	sanitizerRe    = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
-	cameraNameRe   = regexp.MustCompile(`(?i)^camera\s*0*(\d+)$`)
+	shortChannelRe    = regexp.MustCompile(`^/(\d+)/\d+/?$`)
+	hikChannelRe      = regexp.MustCompile(`(?i)/streaming/channels/(\d+)`)
+	sanitizerRe       = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
+	cameraNameRe      = regexp.MustCompile(`(?i)^camera\s*0*(\d+)$`)
+	cameraPrefixRe    = regexp.MustCompile(`(?i)^camera0*(\d+)(?:\s|$)`)
+	cameraCustomMidRe = regexp.MustCompile(`(?i)^(camera\d+_[a-zA-Z0-9_]+)(?:\s|$)`)
 )
 
 // GoldenCustRecordFlags enforces H.265 hvc1 tag and per-segment movflags=+faststart so
@@ -64,7 +66,16 @@ func (d MonitorDetails) MarshalJSON() ([]byte, error) {
 
 // DeviceToMid generates a URL-safe, deterministic Shinobi monitor ID from a config.Device.
 func DeviceToMid(d config.Device) string {
-	if m := cameraNameRe.FindStringSubmatch(strings.TrimSpace(d.Name)); len(m) > 1 {
+	trimmed := strings.TrimSpace(d.Name)
+	if m := cameraCustomMidRe.FindStringSubmatch(trimmed); len(m) > 1 {
+		return strings.ToLower(m[1])
+	}
+	if m := cameraNameRe.FindStringSubmatch(trimmed); len(m) > 1 {
+		if num, err := strconv.Atoi(m[1]); err == nil && num > 0 {
+			return fmt.Sprintf("camera%02d", num)
+		}
+	}
+	if m := cameraPrefixRe.FindStringSubmatch(trimmed); len(m) > 1 {
 		if num, err := strconv.Atoi(m[1]); err == nil && num > 0 {
 			return fmt.Sprintf("camera%02d", num)
 		}

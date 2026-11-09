@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -156,6 +157,7 @@ type RecordFile struct {
 type Transport interface {
 	Name() string
 	Login(ctx context.Context) (*LoginInfo, error)
+	EffectiveUsername() string
 	LoginInfo() *LoginInfo
 	GetInfo(ctx context.Context, name string) (map[string]any, error)
 	GetAbility(ctx context.Context, name string) (map[string]any, error)
@@ -197,4 +199,31 @@ func parseSessionHex(s string) uint32 {
 	var v uint32
 	_, _ = fmt.Sscanf(s, "%x", &v)
 	return v
+}
+
+// parseIntOrHex parses JSON numbers or decimal/0x-hex strings (e.g. "0x00000004" -> 4).
+func parseIntOrHex(v any) (int, bool) {
+	switch val := v.(type) {
+	case float64:
+		return int(val), true
+	case int:
+		return val, true
+	case int64:
+		return int(val), true
+	case string:
+		s := strings.TrimSpace(val)
+		if s == "" {
+			return 0, false
+		}
+		if strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X") {
+			if n, err := strconv.ParseUint(s[2:], 16, 64); err == nil {
+				return int(n), true
+			}
+			return 0, false
+		}
+		if n, err := strconv.Atoi(s); err == nil {
+			return n, true
+		}
+	}
+	return 0, false
 }

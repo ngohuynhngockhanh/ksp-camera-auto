@@ -8,12 +8,14 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
 	"net"
 	"net/http"
 	"net/url"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -26,16 +28,20 @@ type PreLoginInfo struct {
 	TCPPort  int    `json:"TCPPort"`
 }
 
-// doXiongmaiHTTP executes an HTTP request and transparently falls back to a raw
-// HTTP/1.0 wire exchange when Xiongmai's embedded uc-httpd 1.0.0 emits a leading
-// space on header lines (e.g. " Content-type: text/plain\r\n"), which Go's strict
-// net/textproto MIME reader rejects with "malformed MIME header initial line".
+// doXiongmaiHTTP executes a single atomic HTTP request against Xiongmai's
+// embedded uc-httpd 1.0.0. For plain http:// URLs it uses doRawHTTP10 directly
+// so uc-httpd's non-RFC leading space (" Content-type: text/plain\r\n") never
+// causes net/http to fail response parsing and double-POST stateful CGI calls
+// (such as GetSalt, Login, SetConfig, or websocket.cgi).
 func doXiongmaiHTTP(ctx context.Context, hc *http.Client, method, rawURL, contentType string, body []byte, timeout time.Duration, maxBytes int64) (int, []byte, error) {
 	if maxBytes <= 0 {
 		maxBytes = 8 << 20
 	}
 	if timeout <= 0 {
 		timeout = 15 * time.Second
+	}
+	if strings.HasPrefix(strings.ToLower(rawURL), "http://") {
+		return doRawHTTP10(ctx, method, rawURL, contentType, body, timeout, maxBytes)
 	}
 	if hc == nil {
 		hc = &http.Client{Timeout: timeout}
@@ -48,15 +54,12 @@ func doXiongmaiHTTP(ctx context.Context, hc *http.Client, method, rawURL, conten
 		req.Header.Set("Content-Type", contentType)
 	}
 	resp, err := hc.Do(req)
-	if err == nil {
-		defer resp.Body.Close()
-		respBytes, rerr := io.ReadAll(io.LimitReader(resp.Body, maxBytes))
-		return resp.StatusCode, respBytes, rerr
-	}
-	if !strings.Contains(err.Error(), "malformed MIME header") {
+	if err != nil {
 		return 0, nil, err
 	}
-	return doRawHTTP10(ctx, method, rawURL, contentType, body, timeout, maxBytes)
+	defer resp.Body.Close()
+	respBytes, rerr := io.ReadAll(io.LimitReader(resp.Body, maxBytes))
+	return resp.StatusCode, respBytes, rerr
 }
 
 func doRawHTTP10(ctx context.Context, method, rawURL, contentType string, body []byte, timeout time.Duration, maxBytes int64) (int, []byte, error) {
@@ -179,6 +182,16 @@ func NewCGITransport(host string, port int, username, password string, timeout t
 }
 
 func (c *CGITransport) Name() string { return "http-cgi" }
+
+// EffectiveUsername returns the authenticated username (after any GetRandomUser resolution).
+func (c *CGITransport) EffectiveUsername() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.username == "" {
+		return "admin"
+	}
+	return c.username
+}
 
 func (c *CGITransport) LoginInfo() *LoginInfo {
 	c.mu.Lock()
@@ -518,13 +531,14 @@ func (c *CGITransport) Snapshot(ctx context.Context, channel int) ([]byte, error
 	if _, err := c.Login(ctx); err != nil {
 		return nil, err
 	}
-	// Try Xiongmai standard HTTP snapshot endpoints: /webcapture.jpg and /cgi-bin/snapshot.cgi
+	effUser := c.EffectiveUsername()
+	// 1. Try Xiongmai HTTP snapshot endpoints (/webcapture.jpg and /cgi-bin/snapshot.cgi).
 	endpoints := []string{
 		fmt.Sprintf("%s/webcapture.jpg?command=snap&channel=%d&user=%s&password=%s",
-			c.baseURL, channel+1, url.QueryEscape(c.username), url.QueryEscape(c.password)),
+			c.baseURL, channel+1, url.QueryEscape(effUser), url.QueryEscape(c.password)),
 		fmt.Sprintf("%s/webcapture.jpg?command=snap&channel=%d", c.baseURL, channel),
 		fmt.Sprintf("%s/cgi-bin/snapshot.cgi?chn=%d&u=%s&p=%s",
-			c.baseURL, channel, url.QueryEscape(c.username), url.QueryEscape(c.password)),
+			c.baseURL, channel, url.QueryEscape(effUser), url.QueryEscape(c.password)),
 	}
 	for _, u := range endpoints {
 		statusCode, data, err := doXiongmaiHTTP(ctx, c.hc, http.MethodGet, u, "", nil, c.timeout, 4<<20)
@@ -535,7 +549,76 @@ func (c *CGITransport) Snapshot(ctx context.Context, channel int) ([]byte, error
 			return data, nil
 		}
 	}
+	// 2. Fallback: pull 1 keyframe over WebSocket /websocket-bin/Type=HttpRealplay on HTTP port.
+	if jpg, werr := c.snapshotViaWSRealplay(ctx, channel); werr == nil && len(jpg) > 0 {
+		return jpg, nil
+	}
 	return nil, fmt.Errorf("xiongmai CGI snapshot endpoint unavailable")
+}
+
+func (c *CGITransport) snapshotViaWSRealplay(ctx context.Context, channel int) ([]byte, error) {
+	ffPath, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	salt := c.salt
+	c.mu.Unlock()
+	if salt == "" {
+		return nil, fmt.Errorf("missing CGI salt")
+	}
+
+	sctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+
+	for _, streamName := range []string{"Sub", "Main"} {
+		wsConn, br, err := c.dialWebSocketPath(sctx, fmt.Sprintf("/websocket-bin/Type=HttpRealplay?Salt=%s&Channel=%d&Stream=%s&XMHead=1",
+			url.QueryEscape(salt), channel, streamName))
+		if err != nil {
+			continue
+		}
+		var esBuf bytes.Buffer
+		ext := NewXMStreamExtractor(&esBuf, time.Time{}, time.Time{})
+		deadline := time.Now().Add(4 * time.Second)
+		for time.Now().Before(deadline) {
+			if ext.VideoFrames() >= 2 || (ext.VideoFrames() >= 1 && ext.InFlightBytes() == 0 && esBuf.Len() > 256) {
+				break
+			}
+			_ = wsConn.SetReadDeadline(deadline)
+			op, payload, rerr := readWSFrame(br, wsConn)
+			if rerr != nil || op == 8 {
+				break
+			}
+			if op == 2 && len(payload) > 0 {
+				_ = ext.Feed(payload)
+			}
+		}
+		_ = wsConn.Close()
+		_ = ext.Finish()
+		if esBuf.Len() < 64 {
+			continue
+		}
+		demuxFmt := DetectAnnexBCodec(esBuf.Bytes())
+		// Append a trailing Annex-B AUD startcode so FFmpeg's raw parser flushes single-frame IDR buffers.
+		_, _ = esBuf.Write([]byte{0x00, 0x00, 0x00, 0x01, 0x09, 0xF0})
+		cmd := exec.CommandContext(sctx, ffPath,
+			"-hide_banner", "-loglevel", "error",
+			"-f", demuxFmt,
+			"-i", "pipe:0",
+			"-frames:v", "1",
+			"-q:v", "4",
+			"-f", "image2",
+			"-vcodec", "mjpeg",
+			"pipe:1",
+		)
+		cmd.Stdin = bytes.NewReader(esBuf.Bytes())
+		var stdout bytes.Buffer
+		cmd.Stdout = &stdout
+		if err := cmd.Run(); err == nil && bytes.HasPrefix(stdout.Bytes(), []byte{0xFF, 0xD8, 0xFF}) {
+			return stdout.Bytes(), nil
+		}
+	}
+	return nil, fmt.Errorf("ws HttpRealplay snapshot unavailable")
 }
 
 // DownloadRecordFile streams recorded H.264/H.265 media over Xiongmai's native
@@ -593,7 +676,7 @@ func (c *CGITransport) DownloadRecordFile(ctx context.Context, w io.Writer, chan
 		return err
 	}
 
-	var wrote int64
+	ext := NewXMStreamExtractor(w, start, end)
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -601,7 +684,7 @@ func (c *CGITransport) DownloadRecordFile(ctx context.Context, w io.Writer, chan
 		_ = wsConn.SetReadDeadline(time.Now().Add(15 * time.Second))
 		op, payload, err := readWSFrame(br, wsConn)
 		if err != nil {
-			if wrote > 0 {
+			if ext.WroteBytes() > 0 {
 				break
 			}
 			return err
@@ -616,23 +699,33 @@ func (c *CGITransport) DownloadRecordFile(ctx context.Context, w io.Writer, chan
 			continue
 		}
 		if op == 2 && len(payload) > 0 { // Binary media frame
-			es := StripXMMediaFrames(payload)
-			if len(es) > 0 {
-				n, werr := w.Write(es)
-				wrote += int64(n)
-				if werr != nil {
-					return werr
+			if err := ext.Feed(payload); err != nil {
+				if errors.Is(err, ErrXMStopTimeReached) {
+					break
 				}
+				return err
 			}
 		}
 	}
-	if wrote == 0 {
+	if err := ext.Finish(); err != nil {
+		return err
+	}
+	if st := xmStatsFromContext(ctx); st != nil {
+		st.recordFPS(ext.ObservedFPS())
+	}
+	if ext.WroteBytes() == 0 {
 		return fmt.Errorf("xiongmai ws HttpPlayBack returned 0 media bytes")
 	}
 	return nil
 }
 
 func (c *CGITransport) dialWebSocketPlayback(ctx context.Context, salt string, channel int) (net.Conn, *bufio.Reader, error) {
+	path := fmt.Sprintf("/websocket-bin/Type=HttpPlayBack?Salt=%s&Channel=%d&Stream=Main&XMHead=1",
+		url.QueryEscape(salt), channel)
+	return c.dialWebSocketPath(ctx, path)
+}
+
+func (c *CGITransport) dialWebSocketPath(ctx context.Context, path string) (net.Conn, *bufio.Reader, error) {
 	addr := net.JoinHostPort(c.host, fmt.Sprintf("%d", c.port))
 	dialer := net.Dialer{Timeout: c.timeout}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
@@ -642,8 +735,6 @@ func (c *CGITransport) dialWebSocketPlayback(ctx context.Context, salt string, c
 	var keyRaw [16]byte
 	_, _ = rand.Read(keyRaw[:])
 	wsKey := base64.StdEncoding.EncodeToString(keyRaw[:])
-	path := fmt.Sprintf("/websocket-bin/Type=HttpPlayBack?Salt=%s&Channel=%d&Stream=Main&XMHead=1",
-		url.QueryEscape(salt), channel)
 	handshake := fmt.Sprintf("GET %s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n",
 		path, addr, wsKey)
 	_ = conn.SetDeadline(time.Now().Add(c.timeout))

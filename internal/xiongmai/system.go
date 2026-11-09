@@ -12,15 +12,16 @@ import (
 
 // SystemInfoData represents Xiongmai's SystemInfo response block.
 type SystemInfoData struct {
-	SerialNo        string
-	SoftWareVersion string
-	Hardware        string
-	DeviceModel     string
-	BuildTime       string
-	VideoInChannel  int
-	DigChannel      int
-	AudioInChannel  int
-	UpdataTime      string
+	SerialNo         string
+	SoftWareVersion  string
+	Hardware         string
+	DeviceModel      string
+	BuildTime        string
+	VideoInChannel   int
+	DigChannel       int
+	AudioInChannel   int
+	UpdataTime       string
+	DeviceRunTimeMin int
 }
 
 // TotalChannels returns analog + digital channels reported by SystemInfo.
@@ -55,15 +56,16 @@ func (c *Client) GetSystemInfo(ctx context.Context) (SystemInfoData, error) {
 		return SystemInfoData{}, fmt.Errorf("xiongmai: missing SystemInfo object")
 	}
 	data := SystemInfoData{
-		SerialNo:        strings.TrimSpace(stringFieldAny(m, "SerialNo")),
-		SoftWareVersion: strings.TrimSpace(stringFieldAny(m, "SoftWareVersion")),
-		Hardware:        strings.TrimSpace(stringFieldAny(m, "Hardware")),
-		DeviceModel:     strings.TrimSpace(stringFieldAny(m, "DeviceModel")),
-		BuildTime:       strings.TrimSpace(stringFieldAny(m, "BuildTime")),
-		VideoInChannel:  intFieldAny(m, "VideoInChannel"),
-		DigChannel:      intFieldAny(m, "DigChannel"),
-		AudioInChannel:  intFieldAny(m, "AudioInChannel"),
-		UpdataTime:      strings.TrimSpace(stringFieldAny(m, "UpdataTime")),
+		SerialNo:         strings.TrimSpace(stringFieldAny(m, "SerialNo")),
+		SoftWareVersion:  strings.TrimSpace(stringFieldAny(m, "SoftWareVersion")),
+		Hardware:         strings.TrimSpace(stringFieldAny(m, "Hardware", "HardWare")),
+		DeviceModel:      strings.TrimSpace(stringFieldAny(m, "DeviceModel")),
+		BuildTime:        strings.TrimSpace(stringFieldAny(m, "BuildTime")),
+		VideoInChannel:   intFieldAny(m, "VideoInChannel"),
+		DigChannel:       intFieldAny(m, "DigChannel"),
+		AudioInChannel:   intFieldAny(m, "AudioInChannel"),
+		UpdataTime:       strings.TrimSpace(stringFieldAny(m, "UpdataTime")),
+		DeviceRunTimeMin: intFieldAny(m, "DeviceRunTime"),
 	}
 	// Fallback to LoginInfo ChannelNum if both VideoInChannel and DigChannel are 0.
 	if data.VideoInChannel == 0 && data.DigChannel == 0 {
@@ -84,6 +86,160 @@ func (c *Client) GetSerialNumber(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return sys.SerialNo, nil
+}
+
+// GetUptime returns the NVR/camera uptime reported by SystemInfo.DeviceRunTime
+// (in minutes, per Xiongmai Web/html/cfg/Info_Version.js:70).
+func (c *Client) GetUptime(ctx context.Context) (time.Duration, error) {
+	tr, err := c.Transport(ctx)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := tr.GetInfo(ctx, "SystemInfo")
+	if err != nil {
+		return 0, err
+	}
+	m, _ := resp["SystemInfo"].(map[string]any)
+	if m == nil {
+		return 0, fmt.Errorf("xiongmai: missing SystemInfo")
+	}
+	mins := intFieldAny(m, "DeviceRunTime")
+	if mins < 0 {
+		mins = 0
+	}
+	return time.Duration(mins) * time.Minute, nil
+}
+
+// GetRecordState reads Xiongmai's Record config table and maps per-channel
+// recording schedules onto dahua.RecordChannelState for NVR Health & Watchdog.
+func (c *Client) GetRecordState(ctx context.Context, channelCount int) ([]dahua.RecordChannelState, error) {
+	tr, err := c.Transport(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := tr.GetConfig(ctx, "Record")
+	if err != nil {
+		return nil, err
+	}
+	arr, ok := resp["Record"].([]any)
+	if !ok {
+		return nil, fmt.Errorf("xiongmai: missing Record array")
+	}
+	if channelCount <= 0 || channelCount > len(arr) {
+		channelCount = len(arr)
+	}
+	out := make([]dahua.RecordChannelState, 0, channelCount)
+	for ch := range channelCount {
+		st := dahua.RecordChannelState{Channel: ch}
+		m, _ := arr[ch].(map[string]any)
+		if m != nil {
+			modeStr := strings.TrimSpace(stringFieldAny(m, "RecordMode"))
+			has24x7Mask := hasXiongmai24x7Mask(m["Mask"])
+			switch {
+			case strings.EqualFold(modeStr, "ClosedRecord"):
+				st.Enable = false
+				st.Mode = 2
+				st.Timing24x7 = false
+			case strings.EqualFold(modeStr, "ManualRecord"):
+				st.Enable = true
+				st.Mode = 1
+				st.Timing24x7 = true
+			default: // "ConfigRecord" (or empty on older firmware when Mask is active)
+				st.Enable = has24x7Mask || strings.EqualFold(modeStr, "ConfigRecord")
+				st.Mode = 1
+				st.Timing24x7 = has24x7Mask
+			}
+		}
+		out = append(out, st)
+	}
+	return out, nil
+}
+
+func hasXiongmai24x7Mask(rawMask any) bool {
+	days, ok := rawMask.([]any)
+	if !ok || len(days) < 7 {
+		return false
+	}
+	for day := range 7 {
+		periods, ok := days[day].([]any)
+		if !ok || len(periods) == 0 {
+			return false
+		}
+		dayActive := false
+		for _, p := range periods {
+			if v, ok := parseIntOrHex(p); ok && v != 0 {
+				dayActive = true
+				break
+			}
+		}
+		if !dayActive {
+			return false
+		}
+	}
+	return true
+}
+
+func buildXiongmai24x7Mask() [][]string {
+	out := make([][]string, 7)
+	for day := range 7 {
+		out[day] = []string{"0x00000007", "0x00000000", "0x00000000", "0x00000000", "0x00000000", "0x00000000"}
+	}
+	return out
+}
+
+// EnableTimingRecord enables 24/7 continuous recording (ConfigRecord + 0x7 mask)
+// on the specified 0-based channels.
+func (c *Client) EnableTimingRecord(ctx context.Context, channels []int) error {
+	tr, err := c.Transport(ctx)
+	if err != nil {
+		return err
+	}
+	resp, err := tr.GetConfig(ctx, "Record")
+	if err != nil {
+		return err
+	}
+	arr, ok := resp["Record"].([]any)
+	if !ok {
+		return fmt.Errorf("xiongmai: missing Record array")
+	}
+	for _, ch := range channels {
+		if ch < 0 || ch >= len(arr) {
+			continue
+		}
+		m, ok := arr[ch].(map[string]any)
+		if !ok {
+			continue
+		}
+		m["RecordMode"] = "ConfigRecord"
+		m["Mask"] = buildXiongmai24x7Mask()
+	}
+	_, err = tr.SetConfig(ctx, "Record", arr)
+	return err
+}
+
+// RestartRecording briefly toggles ClosedRecord -> ConfigRecord on stale channels.
+func (c *Client) RestartRecording(ctx context.Context, channels []int) error {
+	tr, err := c.Transport(ctx)
+	if err != nil {
+		return err
+	}
+	resp, err := tr.GetConfig(ctx, "Record")
+	if err != nil {
+		return err
+	}
+	arr, ok := resp["Record"].([]any)
+	if !ok {
+		return fmt.Errorf("xiongmai: missing Record array")
+	}
+	for _, ch := range channels {
+		if ch >= 0 && ch < len(arr) {
+			if m, ok := arr[ch].(map[string]any); ok {
+				m["RecordMode"] = "ClosedRecord"
+			}
+		}
+	}
+	_, _ = tr.SetConfig(ctx, "Record", arr)
+	return c.EnableTimingRecord(ctx, channels)
 }
 
 // Reboot triggers an immediate device restart via OPMachine Action="Reboot".
@@ -163,7 +319,7 @@ func (c *Client) GetStorageInfo(ctx context.Context) ([]dahua.StorageDevice, err
 			physNo = i
 		}
 		var totalBytes, freeBytes int64
-		health := "Normal"
+		health := "Success"
 		parts, _ := disk["Partition"].([]any)
 		for _, pRaw := range parts {
 			pm, ok := pRaw.(map[string]any)
@@ -180,7 +336,7 @@ func (c *Client) GetStorageInfo(ctx context.Context) ([]dahua.StorageDevice, err
 			continue
 		}
 		diskName := fmt.Sprintf("Disk-%d", physNo)
-		isErr := health != "Normal"
+		isErr := health != "Success"
 		out = append(out, dahua.StorageDevice{
 			Name:  diskName,
 			State: health,

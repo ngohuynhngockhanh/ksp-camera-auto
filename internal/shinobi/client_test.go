@@ -460,6 +460,14 @@ func TestBuildMonitorConfigAndDeviceToMid(t *testing.T) {
 	if mid := shinobi.DeviceToMid(dCam2); mid != "camera02" {
 		t.Errorf("unexpected Camera 2 mid: got %s, want camera02", mid)
 	}
+	dPrefixed := config.Device{ID: "192.168.77.71:80", Name: "camera01 3. hiviz3", Host: "192.168.77.71"}
+	if mid := shinobi.DeviceToMid(dPrefixed); mid != "camera01" {
+		t.Errorf("unexpected prefixed camera01 mid: got %s, want camera01", mid)
+	}
+	dCustom := config.Device{ID: "192.168.77.32:80", Name: "camera04_hik 4. Cam tong", Host: "192.168.77.32"}
+	if mid := shinobi.DeviceToMid(dCustom); mid != "camera04_hik" {
+		t.Errorf("unexpected custom camera04_hik mid: got %s, want camera04_hik", mid)
+	}
 
 	// 3. Tiandy
 	dTiandy := config.Device{

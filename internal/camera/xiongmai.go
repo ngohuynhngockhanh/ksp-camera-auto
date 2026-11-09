@@ -23,6 +23,7 @@ var (
 	_ RemoteDeviceLister = (*xiongmaiCamera)(nil)
 	_ AutoRebootConfig   = (*xiongmaiCamera)(nil)
 	_ DeviceTimeConfig   = (*xiongmaiCamera)(nil)
+	_ NVRHealthConfig    = (*xiongmaiCamera)(nil)
 	_ Recorder           = (*xiongmaiCamera)(nil)
 	_ PTZControl         = (*xiongmaiCamera)(nil)
 	_ RawRPC             = (*xiongmaiCamera)(nil)
@@ -460,6 +461,22 @@ func (x *xiongmaiCamera) GetTimeConfig(ctx context.Context) (dahua.TimeConfig, e
 
 func (x *xiongmaiCamera) SetTimeConfig(ctx context.Context, cfg dahua.TimeConfig) error {
 	return x.client.SetTimeConfig(ctx, cfg)
+}
+
+func (x *xiongmaiCamera) GetRecordState(ctx context.Context, channelCount int) ([]dahua.RecordChannelState, error) {
+	return x.client.GetRecordState(ctx, channelCount)
+}
+
+func (x *xiongmaiCamera) EnableTimingRecord(ctx context.Context, channels []int) error {
+	return x.client.EnableTimingRecord(ctx, channels)
+}
+
+func (x *xiongmaiCamera) RestartRecording(ctx context.Context, channels []int) error {
+	return x.client.RestartRecording(ctx, channels)
+}
+
+func (x *xiongmaiCamera) GetUptime(ctx context.Context) (time.Duration, error) {
+	return x.client.GetUptime(ctx)
 }
 
 func (x *xiongmaiCamera) FindRecordings(ctx context.Context, channel int, start, end time.Time) ([]dahua.Recording, error) {

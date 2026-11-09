@@ -390,6 +390,9 @@ func (c *Client) SetSmartCodec(ctx context.Context, channel int, enable bool) er
 func (c *Client) GetStreamInfo(ctx context.Context, channel, stream int) (StreamInfo, error) {
 	_, chEntry, _, err := c.fetchEncodeChannel(ctx, channel)
 	if err != nil {
+		if fallback, ferr := c.getStreamInfoFromChnStatus(ctx, channel, stream); ferr == nil {
+			return fallback, nil
+		}
 		return StreamInfo{}, err
 	}
 	smart, _ := c.GetSmartCodec(ctx, channel)
@@ -398,6 +401,58 @@ func (c *Client) GetStreamInfo(ctx context.Context, channel, stream int) (Stream
 		return StreamInfo{}, err
 	}
 	return si, nil
+}
+
+func (c *Client) getStreamInfoFromChnStatus(ctx context.Context, channel, stream int) (StreamInfo, error) {
+	tr, err := c.Transport(ctx)
+	if err != nil {
+		return StreamInfo{}, err
+	}
+	resp, err := tr.GetConfig(ctx, "NetWork.ChnStatus")
+	if err != nil {
+		return StreamInfo{}, err
+	}
+	arr, ok := resp["NetWork.ChnStatus"].([]any)
+	if !ok || channel < 0 || channel >= len(arr) {
+		return StreamInfo{}, fmt.Errorf("xiongmai ChnStatus: channel %d unavailable", channel)
+	}
+	m, ok := arr[channel].(map[string]any)
+	if !ok {
+		return StreamInfo{}, fmt.Errorf("xiongmai ChnStatus[%d]: invalid entry", channel)
+	}
+	status := strings.TrimSpace(stringFieldAny(m, "Status"))
+	if status == "" || strings.EqualFold(status, "NoConfig") {
+		return StreamInfo{}, fmt.Errorf("xiongmai ChnStatus[%d]: %s", channel, status)
+	}
+	return parseChnStatusStream(m, channel+1, stream)
+}
+
+func parseChnStatusStream(m map[string]any, channel1Based, stream int) (StreamInfo, error) {
+	curRes := strings.TrimSpace(stringFieldAny(m, "CurRes"))
+	parts := strings.Split(curRes, "/")
+	resToken := ""
+	if stream == 0 && len(parts) > 0 {
+		resToken = strings.TrimSpace(parts[0])
+	} else if stream > 0 && len(parts) > 1 {
+		resToken = strings.TrimSpace(parts[1])
+	}
+	w, h := ParseResolutionCode(resToken)
+	if w == 0 && stream == 0 {
+		w, h = 1920, 1080
+	} else if w == 0 {
+		w, h = 704, 576
+	}
+	return StreamInfo{
+		Channel:        channel1Based,
+		Stream:         stream,
+		Width:          w,
+		Height:         h,
+		ResolutionCode: resToken,
+		FPS:            25,
+		Compression:    "H.264",
+		AudioCodec:     "G.711A",
+		Name:           strings.TrimSpace(stringFieldAny(m, "ChnName")),
+	}, nil
 }
 
 // ProbeAll reads all channels' Main and Sub1 streams plus channel titles and OSD lines.

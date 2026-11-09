@@ -48,7 +48,7 @@ classDiagram
         +FindRecordings/ExportMP4Faststart()
     }
     class xiongmaiCamera {
-        +Implements camera.Camera + 11 Capability Interfaces
+        +Implements camera.Camera + 12 Capability Interfaces (incl. NVRHealthConfig)
     }
     Transport <|.. SofiaTCPTransport
     Transport <|.. CGITransport
@@ -78,11 +78,15 @@ classDiagram
    - Địa chỉ IP trong `NetWork.NetCommon` lưu dạng Hex Little-Endian (`"0x8A4DA8C0"` $\leftrightarrow$ `"192.168.77.138"`).
 5. **Đường dẫn RTSP Chuẩn & Zero-CPU Playback Bridge**:
    - RTSP: `rtsp://<user>:<pass>@<host>:554/user=<user>_password=<pass>_channel=<1..N>_stream=<0|1>.sdp?real_stream`
-   - Tách vỏ khung media Xiongmai (`00 00 01 FC/FE/FD/FA`) thành luồng H.264/H.265 Annex-B sạch và đóng gói MP4 `+faststart` với `-c:v copy -an` (`0% CPU` transcode).
-6. **Tự động giải mã `GetRandomUser` (`admin` $\to$ `admin1`) & Tương thích `uc-httpd 1.0.0`**:
-   - Trên firmware Xiongmai đời mới (`V4.03.R11.C6380233`, `BuildTime: 2023-04-14`), tên tài khoản `admin`, `root`, `system`, `guest`, `administrator` bị chặn cứng bởi quy tắc `IDS_ACC_InvalidUserName` (`Ret = 101`). Khi cấu hình `username: "admin"`, `CGITransport` tự động gọi `/cgi-bin/resetpwd.cgi` (`GetDevInfo` lấy `SerialNo` + `GetRandomUser` lấy `Info`), giải mã `AES-128-CBC` ZeroPadding với khóa `key = SerialNo[5:11] + SerialNo[1:7] + SerialNo[8:12]` để lấy tên tài khoản quản trị thực tế (`p1:admin1 p2:101 t:...` $\to$ `admin1`) trước khi gọi `Login`.
-   - Web server nhúng `uc-httpd 1.0.0` trên đầu ghi trả dòng header đầu tiên có dấu cách thừa (`" Content-type: text/plain\r\n"`). `doXiongmaiHTTP` tự động fallback sang raw `HTTP/1.0` (`doRawHTTP10`) khi `net/http` báo lỗi `malformed MIME header initial line`.
-
+   - **Zero-CPU Hybrid Playback Bridge (`XMStreamExtractor`)**: Tách vỏ khung media Xiongmai (`00 00 01 FC/FE/FD/FB/FA/F9`) xuyên biên gói WebSocket / Sofia TCP `1424`, đọc trực tiếp `FPS` tại byte `[5]` và timestamp nén 32-bit tại byte `[8:12]` của I-Frame để giữ lại đúng GOP trước `start`, ngắt kết nối sớm ngay khi vượt `end` trên các file NVR dài 1 giờ (`200–750 MB`), và đóng gói MP4 `+faststart` với `-c:v copy -an` (`0% CPU` transcode).
+6. **Tương thích Full NVR & Shinobi Hybrid 1:1 như Dahua / Hikvision**:
+   - **`GetRemoteDevices` (`/api/nvr/scan` & `/api/nvr/link`)**: Giải mã `SingleConnId` dạng chuỗi Hex (`"0x00000004"` $\to$ `Decoder[3]`), tự động bỏ qua các khe `NoConfig` (`"0x00000000"` hoặc `NetWork.ChnStatus == "NoConfig"`).
+   - **`Probe` kênh RTSP-Proxy (`NetWork.ChnStatus`)**: Khi đầu ghi IP NVR (`VideoInChannel == 0`) thu luồng RTSP thuần không qua bộ mã hóa (`AVEnc.Encode` trả `Ret = 607`), tự động fallback đọc `NetWork.ChnStatus` (`CurRes: "1080P/D1"`).
+   - **`NVRHealthConfig` (`/api/nvr/health` & Watchdog)**: Đọc `SystemInfo.DeviceRunTime`, bảng lịch `Record` (`ConfigRecord` / `ManualRecord` / `ClosedRecord` + mặt nạ `Mask` 7 ngày) và `StorageInfo` (`State: "Success"`).
+   - **`Snapshot` WebSocket `HttpRealplay`**: Khi đầu ghi tắt `/webcapture.jpg`, tự động kéo 1 IDR keyframe qua `/websocket-bin/Type=HttpRealplay` ngay trên cổng HTTP `80` (hoạt động xuyên NAT không cần mở cổng RTSP `554`).
+7. **Tự động giải mã `GetRandomUser` (`admin` $\to$ `admin1`) & Tương thích `uc-httpd 1.0.0`**:
+   - Khi cấu hình `username: "admin"`, `CGITransport` tự động gọi `/cgi-bin/resetpwd.cgi` (`GetDevInfo` + `GetRandomUser`) để ánh xạ sang tên tài khoản quản trị thực tế (`admin1`) và đồng bộ `EffectiveUsername()` cho cả RTSP/Snapshot.
+   - Đối với URL `http://`, `doXiongmaiHTTP` gửi trực tiếp qua `doRawHTTP10` nguyên tử (1 request = 1 response), xử lý triệt để lỗi dấu cách đầu dòng `" Content-type: text/plain\r\n"` của `uc-httpd 1.0.0` mà không bao giờ gửi lặp 2 lần các lệnh CGI có trạng thái (`GetSalt`, `Login`, `SetConfig`, `websocket.cgi`).
 ---
 
 ## 3. Hồ Sơ Thiết Bị Thực Tế Tại Node `inut_208_4` (Nhà Yến Anh Hùng Gò Vấp)
@@ -95,25 +99,25 @@ classDiagram
 - **Ổ cứng (`StorageInfo`):** `0x000E8E0D` ($\approx 953.8\text{ GB}$ / $1\text{ TB}$), đang ghi hình bình thường (`Status: 0`).
 - **Danh sách tài khoản quản trị (Group `admin`, đủ 55 quyền + đồng bộ `System.ExUserMap` cho RTSP `:554`):**
 
-| Vai trò | Username | Password | Băm `MD5_8` | Mã `System.ExUserMap` | Ghi chú |
-|---|---|---|---|---|---|
-| **Admin chính (`RandomUser`)** | `admin1` | `Inut12345` | `IgCDPz7Q` | `00111W51dDEyMzQS` | Tự động điền trên Web UI & tự động ánh xạ khi `kspcam` cấu hình `username: admin` |
-| **Admin dự phòng (Backup)** | `admin2` | `Inut12345` | `IgCDPz7Q` | `00111W51dDEyMzQS` | Tài khoản dự phòng đồng bộ mật khẩu `Inut12345` (55 quyền + RTSP `:554`) |
-| **Admin nội bộ / HDMI** | `pymid` | `pymid123` | `vg22TaVl` | `0011=cHltaWQxMjN` | Tài khoản `AutoLogin` trên màn hình HDMI cục bộ (`Memo: "admin 's account"`) |
+| Vai trò | Username | Password | Ghi chú |
+|---|---|---|---|
+| **Admin chính (`RandomUser`)** | `admin1` | `<REDACTED>` | Tự động điền trên Web UI & tự động ánh xạ khi `kspcam` cấu hình `username: admin` |
+| **Admin dự phòng (Backup)** | `admin2` | `<REDACTED>` | Tài khoản dự phòng đồng bộ 55 quyền + `System.ExUserMap` cho RTSP `:554` |
+| **Admin nội bộ / HDMI** | `pymid` | `<REDACTED>` | Tài khoản `AutoLogin` trên màn hình HDMI cục bộ |
 
 ### 3.2 Bảng Kênh Camera IP Con Trên Đầu Ghi `192.168.77.138` (`NetWork.RemoteDeviceV3`)
 
-| Kênh | Tên | Trạng thái | Độ phân giải | IP Camera con | Cổng / Giao thức | User | Password | Đường dẫn RTSP Main Stream |
-|---|---|---|---|---|---|---|---|---|
-| **CH01** | `D01` | `Connected` | `1080P/D1` | `192.168.77.71` | `554` / `RTSP` | `admin` | `pymid123` | `rtsp://192.168.77.71:554/0` |
-| **CH02** | `D02` | `Offline` | `Unknown` | `192.168.77.218` | `554` / `RTSP` | `admin` | `pymid123` | `rtsp://192.168.77.218:554/Streaming/Channels/0` |
-| **CH03** | `D03` | `Connected` | `1080P/704x576` | `192.168.77.34` | `554` / `RTSP` | `admin` | `tranhung1591984` | `rtsp://192.168.77.34:554/user=admin_password=tranhung1591984_channel=1_stream=0.sdp?real_stream` |
-| **CH04** | `D04` | `Connected` | `1080P/720x576` | `192.168.77.146` | `554` / `RTSP` | `admin` | `admin` | `rtsp://192.168.77.146:554/0` |
-| **CH05** | `D05` | `Connected` | `1080P/D1` | `192.168.77.178` | `554` / `RTSP` | `admin` | `admin` | `rtsp://192.168.77.178:554/0` |
-| **CH06** | `D06` | `Connected` | `1080P/VGA` | `192.168.77.160` | `554` / `RTSP` | `admin` | `L2E8D64D` | `rtsp://192.168.77.160:554/cam/realmonitor?channel=1&subtype=0` |
-| **CH07** | `D07` | `Connected` | `1080P/704x576` | `192.168.77.65` | `554` / `RTSP` | `admin` | `pymid123` | `rtsp://192.168.77.65:554/user=admin_password=pymid123_channel=1_stream=0.sdp?real_stream` |
-| **CH08** | `D08` | `Connected` | `1080P/QVGA` | `192.168.77.205` | `554` / `RTSP` | `admin` | `tranhung159` | `rtsp://192.168.77.205:554/Streaming/Channels/101` |
-| **CH09** | `D09` | `Connected` | `1080P/VGA` | `192.168.77.84` | `554` / `RTSP` | `admin` | `L21ACFE9` | `rtsp://192.168.77.84/cam/realmonitor?channel=1&subtype=0&unicast=true&proto=Onvif` |
-| **CH10** | `D10` | `Connected` | `1080P/VGA` | `192.168.77.147` | `554` / `RTSP` | `admin` | `L2B74148` | `rtsp://192.168.77.147:554/cam/realmonitor?channel=1&subtype=0` |
-| **CH11** | `D11` | `Offline` | `Unknown` | `192.168.77.98` | `554` / `RTSP` | `admin` | `tranhung159` | `rtsp://192.168.77.98:554/user=admin_password=tranhung159_channel=1_stream=0.sdp?real_stream` |
-| **CH12–16** | `D12–16` | `NoConfig` | — | — | — | — | — | *(Chưa gán kênh)* |
+| Kênh | Tên | Trạng thái | Độ phân giải | IP Camera con | Cổng / Giao thức | Monitor Shinobi (`mid`) |
+|---|---|---|---|---|---|---|
+| **CH01** | `D01` | `Connected` | `1080P/D1` | `192.168.77.71` | `554` / `RTSP` | `camera01` |
+| **CH02** | `D02` | `Offline` | `Unknown` | `192.168.77.218` | `554` / `RTSP` | `camera02` |
+| **CH03** | `D03` | `Connected` | `1080P/704x576` | `192.168.77.34` | `554` / `RTSP` | `camera03` |
+| **CH04** | `D04` | `Connected` | `1080P/720x576` | `192.168.77.146` | `554` / `RTSP` | `camera04` |
+| **CH05** | `D05` | `Connected` | `1080P/D1` | `192.168.77.178` | `554` / `RTSP` | `camera05` |
+| **CH06** | `D06` | `Connected` | `1080P/VGA` | `192.168.77.160` | `554` / `RTSP` | `camera06` |
+| **CH07** | `D07` | `Connected` | `1080P/704x576` | `192.168.77.65` | `554` / `RTSP` | `camera07` |
+| **CH08** | `D08` | `Connected` | `1080P/QVGA` | `192.168.77.205` | `554` / `RTSP` | `camera08` |
+| **CH09** | `D09` | `Connected` | `1080P/VGA` | `192.168.77.84` | `554` / `RTSP` | `camera09` |
+| **CH10** | `D10` | `Connected` | `1080P/VGA` | `192.168.77.147` | `554` / `RTSP` | `camera10` |
+| **CH11** | `D11` | `Offline` | `Unknown` | `192.168.77.98` | `554` / `RTSP` | *(Chưa gán)* |
+| **CH12–16** | `D12–16` | `NoConfig` | — | — | — | *(Chưa gán kênh)* |

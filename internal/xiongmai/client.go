@@ -76,6 +76,20 @@ func (c *Client) ActiveTransportName() string {
 	return c.transport.Name()
 }
 
+// EffectiveUsername returns the authenticated username (resolving e.g. "admin" -> "admin1"
+// on RSA-hardened Xiongmai HVRs/NVRs when connected).
+func (c *Client) EffectiveUsername(ctx context.Context) string {
+	if tr, err := c.Transport(ctx); err == nil && tr != nil {
+		if u := tr.EffectiveUsername(); u != "" {
+			return u
+		}
+	}
+	if c.username == "" {
+		return "admin"
+	}
+	return c.username
+}
+
 // Transport resolves (and authenticates on first use) the active Transport.
 func (c *Client) Transport(ctx context.Context) (Transport, error) {
 	c.mu.Lock()

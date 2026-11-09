@@ -1293,6 +1293,16 @@ func (s *Server) tryFastRAMStreamSnapshot(ctx context.Context, d config.Device, 
 	if mid := shinobi.DeviceToMid(d); mid != "" {
 		candidateMids = append(candidateMids, mid)
 	}
+	if d.IsNVR {
+		wantCh := channel + 1
+		for _, peer := range s.inv.List() {
+			if !peer.IsNVR && peer.NVRID == d.ID && peer.NVRChannel == wantCh {
+				if mid := shinobi.DeviceToMid(peer); mid != "" {
+					candidateMids = append([]string{mid}, candidateMids...)
+				}
+			}
+		}
+	}
 	if len(candidateMids) == 0 {
 		return nil, fmt.Errorf("no candidate mid")
 	}
@@ -1318,39 +1328,52 @@ func (s *Server) tryFastRAMStreamSnapshot(ctx context.Context, d config.Device, 
 	return nil, fmt.Errorf("no fresh RAM stream segment")
 }
 func decodeFrameFromRecentTS(ctx context.Context, dir string, cutoff time.Time) ([]byte, bool) {
-	tsFiles, _ := filepath.Glob(filepath.Join(dir, "*.ts"))
-	type tsCand struct {
+	type segCand struct {
 		path string
 		mod  time.Time
 	}
-	var cands []tsCand
-	for _, f := range tsFiles {
-		st, err := os.Stat(f)
-		if err != nil || st.Size() <= 1024 {
-			continue
+	collect := func(pattern string) []segCand {
+		files, _ := filepath.Glob(filepath.Join(dir, pattern))
+		var out []segCand
+		for _, f := range files {
+			st, err := os.Stat(f)
+			if err != nil || st.Size() <= 1024 {
+				continue
+			}
+			if !cutoff.IsZero() && !st.ModTime().After(cutoff) {
+				continue
+			}
+			out = append(out, segCand{path: f, mod: st.ModTime()})
 		}
-		if !cutoff.IsZero() && !st.ModTime().After(cutoff) {
-			continue
-		}
-		cands = append(cands, tsCand{path: f, mod: st.ModTime()})
-	}
-	for i := 0; i < len(cands); i++ {
-		for j := i + 1; j < len(cands); j++ {
-			if cands[j].mod.After(cands[i].mod) {
-				cands[i], cands[j] = cands[j], cands[i]
+		for i := range len(out) {
+			for j := i + 1; j < len(out); j++ {
+				if out[j].mod.After(out[i].mod) {
+					out[i], out[j] = out[j], out[i]
+				}
 			}
 		}
+		if len(out) > 3 {
+			out = out[:3]
+		}
+		return out
 	}
-	if len(cands) > 3 {
-		cands = cands[:3]
-	}
-	if len(cands) == 0 {
-		return nil, false
-	}
+
+	inputFmt := "mpegts"
 	var buf bytes.Buffer
-	for i := len(cands) - 1; i >= 0; i-- {
-		if b, err := os.ReadFile(cands[i].path); err == nil && len(b) > 1024 {
-			_, _ = buf.Write(b)
+	if cands := collect("*.ts"); len(cands) > 0 {
+		for i := len(cands) - 1; i >= 0; i-- {
+			if b, err := os.ReadFile(cands[i].path); err == nil && len(b) > 1024 {
+				_, _ = buf.Write(b)
+			}
+		}
+	} else if m4sCands := collect("*.m4s"); len(m4sCands) > 0 {
+		initBytes, err := os.ReadFile(filepath.Join(dir, "init.mp4"))
+		if err == nil && len(initBytes) > 128 {
+			inputFmt = "mp4"
+			_, _ = buf.Write(initBytes)
+			if segBytes, serr := os.ReadFile(m4sCands[0].path); serr == nil && len(segBytes) > 1024 {
+				_, _ = buf.Write(segBytes)
+			}
 		}
 	}
 	if buf.Len() <= 1024 {
@@ -1365,7 +1388,7 @@ func decodeFrameFromRecentTS(ctx context.Context, dir string, cutoff time.Time) 
 		"-probesize", "262144",
 		"-analyzeduration", "500000",
 		"-skip_frame", "nokey",
-		"-f", "mpegts",
+		"-f", inputFmt,
 		"-i", "pipe:0",
 		"-vf", "scale=640:-2",
 		"-frames:v", "1",
@@ -1401,6 +1424,16 @@ func (s *Server) fallbackSnapshotFromShinobiOrRTSP(ctx context.Context, d config
 	}
 	if mid := shinobi.DeviceToMid(d); mid != "" {
 		candidateMids = append(candidateMids, mid)
+	}
+	if d.IsNVR {
+		wantCh := channel + 1
+		for _, peer := range s.inv.List() {
+			if !peer.IsNVR && peer.NVRID == d.ID && peer.NVRChannel == wantCh {
+				if mid := shinobi.DeviceToMid(peer); mid != "" {
+					candidateMids = append([]string{mid}, candidateMids...)
+				}
+			}
+		}
 	}
 
 	var autoHostRTSP string

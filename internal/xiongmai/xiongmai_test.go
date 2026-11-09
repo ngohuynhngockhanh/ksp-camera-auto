@@ -650,3 +650,152 @@ func TestUcHttpdLeadingSpaceHeaderAndRandomUserResolution(t *testing.T) {
 		t.Fatalf("unexpected LoginInfo: %+v", info)
 	}
 }
+
+func TestXMStreamExtractorChunkSpanningAndTimeWindowTrim(t *testing.T) {
+	loc := time.Local
+	tPre := time.Date(2026, 11, 9, 11, 29, 58, 0, loc)
+	tIn := time.Date(2026, 11, 9, 11, 30, 2, 0, loc)
+	tPost := time.Date(2026, 11, 9, 11, 35, 3, 0, loc)
+
+	// Build 3 GOPs where the in-window IDR payload deliberately embeds false 00 00 01 FA
+	// CABAC bytes and is split across tiny 11-byte chunks.
+	idrPre := []byte{0x00, 0x00, 0x00, 0x01, 0x67, 0x4D, 0x00, 0x2A}
+	idrIn := []byte{0x00, 0x00, 0x00, 0x01, 0x65, 0xAA, 0x00, 0x00, 0x01, 0xFA, 0xBB, 0xCC, 0xDD}
+	pIn := []byte{0x00, 0x00, 0x00, 0x01, 0x41, 0x9A, 0x77}
+	idrPost := []byte{0x00, 0x00, 0x00, 0x01, 0x65, 0xEE, 0xFF}
+
+	makeIFrame := func(tm time.Time, fps byte, nal []byte) []byte {
+		hdr := make([]byte, 16)
+		copy(hdr[:4], []byte{0x00, 0x00, 0x01, 0xFC})
+		hdr[4] = 0x02
+		hdr[5] = fps
+		binary.LittleEndian.PutUint32(hdr[8:12], EncodeXMTimestamp(tm))
+		binary.LittleEndian.PutUint32(hdr[12:16], uint32(len(nal)))
+		return append(hdr, nal...)
+	}
+	makePFrame := func(nal []byte) []byte {
+		hdr := make([]byte, 8)
+		copy(hdr[:4], []byte{0x00, 0x00, 0x01, 0xFD})
+		binary.LittleEndian.PutUint16(hdr[6:8], uint16(len(nal)))
+		return append(hdr, nal...)
+	}
+	makeAudio := func(aud []byte) []byte {
+		hdr := make([]byte, 8)
+		copy(hdr[:4], []byte{0x00, 0x00, 0x01, 0xFA})
+		binary.LittleEndian.PutUint16(hdr[6:8], uint16(len(aud)))
+		return append(hdr, aud...)
+	}
+
+	var wire bytes.Buffer
+	wire.Write(makeIFrame(tPre, 20, idrPre))
+	wire.Write(makeAudio([]byte{1, 2, 3, 4, 5}))
+	wire.Write(makeIFrame(tIn, 20, idrIn))
+	wire.Write(makePFrame(pIn))
+	wire.Write(makeIFrame(tPost, 20, idrPost))
+
+	reqStart := time.Date(2026, 11, 9, 11, 30, 0, 0, loc)
+	reqEnd := time.Date(2026, 11, 9, 11, 35, 0, 0, loc)
+
+	var out bytes.Buffer
+	ext := NewXMStreamExtractor(&out, reqStart, reqEnd)
+	raw := wire.Bytes()
+	stoppedEarly := false
+	for off := 0; off < len(raw); off += 11 {
+		endOff := off + 11
+		if endOff > len(raw) {
+			endOff = len(raw)
+		}
+		if err := ext.Feed(raw[off:endOff]); err != nil {
+			if errors.Is(err, ErrXMStopTimeReached) {
+				stoppedEarly = true
+				break
+			}
+			t.Fatalf("ext.Feed err: %v", err)
+		}
+	}
+	_ = ext.Finish()
+	if !stoppedEarly {
+		t.Fatalf("expected ErrXMStopTimeReached on post-window I-frame")
+	}
+	if ext.ObservedFPS() != 20 {
+		t.Fatalf("ObservedFPS = %d, want 20", ext.ObservedFPS())
+	}
+	// Must contain pre-start GOP (within 2s before reqStart) + in-window IDR (including embedded 00 00 01 FA!) + P-frame, and NOT idrPost!
+	want := append(append(append([]byte{}, idrPre...), idrIn...), pIn...)
+	if !bytes.Equal(out.Bytes(), want) {
+		t.Fatalf("extracted ES = %x, want %x", out.Bytes(), want)
+	}
+}
+
+func TestHexSingleConnIdRemoteDevicesAndNVRHealth(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		s := string(body)
+		switch {
+		case strings.Contains(r.URL.Path, "resetpwd.cgi"):
+			_, _ = w.Write([]byte(`{"Ret":102}`))
+		case strings.Contains(r.URL.Path, "login.cgi") && strings.Contains(s, "GetSalt"):
+			_, _ = w.Write([]byte(`{"Ret":100,"Salt":"12345678","LoginEncryptionType":"MD5_8","DataEncryptionType":"NONE"}`))
+		case strings.Contains(r.URL.Path, "login.cgi") && strings.Contains(s, "Login"):
+			_, _ = w.Write([]byte(`{"Ret":100,"SessionID":"0x00000010","ChannelNum":4,"DeviceType":"HVR"}`))
+		case strings.Contains(r.URL.Path, "getinfo.cgi") && strings.Contains(s, "SystemInfo"):
+			_, _ = w.Write([]byte(`{"Ret":100,"SystemInfo":{"SerialNo":"SN16","HardWare":"NBD80S16S-KL","VideoInChannel":0,"DigChannel":4,"DeviceRunTime":"0x00000078"}}`))
+		case strings.Contains(r.URL.Path, "getconfig.cgi") && strings.Contains(s, "ChannelTitle"):
+			_, _ = w.Write([]byte(`{"Ret":100,"ChannelTitle":["D01","D02","D03","D04"]}`))
+		case strings.Contains(r.URL.Path, "getconfig.cgi") && strings.Contains(s, "NetWork.ChnStatus"):
+			_, _ = w.Write([]byte(`{"Ret":100,"NetWork.ChnStatus":[{"ChnName":"D01","CurRes":"1080P/D1","Status":"Connected"},{"ChnName":"D02","CurRes":"4M/VGA","Status":"Connected"},{"ChnName":"D03","CurRes":"Unknown","Status":"NoConfig"},{"ChnName":"D04","CurRes":"Unknown","Status":"NoConfig"}]}`))
+		case strings.Contains(r.URL.Path, "getconfig.cgi") && strings.Contains(s, "NetWork.RemoteDeviceV3"):
+			_, _ = w.Write([]byte(`{"Ret":100,"NetWork.RemoteDeviceV3":[
+				{"Enable":true,"SingleConnId":"0x00000001","Decoder":[{"IPAddress":"192.168.77.71","Port":554}]},
+				{"Enable":true,"SingleConnId":"0x00000004","Decoder":[{"IPAddress":"192.168.77.71","Port":554},{"IPAddress":"192.168.77.218","Port":554},{"IPAddress":"192.168.77.194","Port":34567},{"IPAddress":"192.168.77.146","Port":554}]},
+				{"Enable":true,"SingleConnId":"0x00000000","Decoder":[{"IPAddress":"192.168.77.71","Port":554}]},
+				{"Enable":true,"SingleConnId":"0x00000000","Decoder":[{"IPAddress":"192.168.77.71","Port":554}]}
+			]}`))
+		case strings.Contains(r.URL.Path, "getconfig.cgi") && strings.Contains(s, "AVEnc.Encode"):
+			_, _ = w.Write([]byte(`{"Ret":607}`))
+		case strings.Contains(r.URL.Path, "getconfig.cgi") && strings.Contains(s, "Record"):
+			mask7 := `[["0x00000007","0x0"],["0x00000007","0x0"],["0x00000007","0x0"],["0x00000007","0x0"],["0x00000007","0x0"],["0x00000007","0x0"],["0x00000007","0x0"]]`
+			_, _ = w.Write([]byte(`{"Ret":100,"Record":[{"RecordMode":"ConfigRecord","Mask":` + mask7 + `},{"RecordMode":"ClosedRecord","Mask":` + mask7 + `}]}`))
+		case strings.Contains(r.URL.Path, "setconfig.cgi"):
+			_, _ = w.Write([]byte(`{"Ret":100}`))
+		default:
+			_, _ = w.Write([]byte(`{"Ret":100}`))
+		}
+	}))
+	defer srv.Close()
+	u := srv.Listener.Addr().(*net.TCPAddr)
+	cl := NewWithTransport(u.IP.String(), u.Port, "admin", "pass", 5*time.Second,
+		NewCGITransport(u.IP.String(), u.Port, "admin", "pass", 5*time.Second))
+	defer cl.Close()
+
+	ctx := context.Background()
+	rems, err := cl.GetRemoteDevices(ctx)
+	if err != nil || len(rems) != 2 {
+		t.Fatalf("GetRemoteDevices = %+v, err=%v (want 2 configured channels)", rems, err)
+	}
+	if rems[0].Channel != 0 || rems[0].Address != "192.168.77.71" {
+		t.Fatalf("rems[0] = %+v, want ch=0 192.168.77.71", rems[0])
+	}
+	if rems[1].Channel != 1 || rems[1].Address != "192.168.77.146" {
+		t.Fatalf("rems[1] = %+v, want ch=1 192.168.77.146 (SingleConnId=0x4 -> Decoder[3])", rems[1])
+	}
+
+	// Verify ChnStatus Probe fallback when AVEnc.Encode returns Ret=607
+	si, err := cl.GetStreamInfo(ctx, 1, 0)
+	if err != nil || si.Width != 2560 || si.Height != 1440 {
+		t.Fatalf("ChnStatus GetStreamInfo fallback = %+v, err=%v", si, err)
+	}
+
+	// Verify NVRHealthConfig (GetUptime + GetRecordState + EnableTimingRecord)
+	up, err := cl.GetUptime(ctx)
+	if err != nil || up != 120*time.Minute {
+		t.Fatalf("GetUptime = %v, err=%v (want 2h0m)", up, err)
+	}
+	states, err := cl.GetRecordState(ctx, 2)
+	if err != nil || len(states) != 2 || !states[0].Enable || !states[0].Timing24x7 || states[1].Enable {
+		t.Fatalf("GetRecordState = %+v, err=%v", states, err)
+	}
+	if err := cl.EnableTimingRecord(ctx, []int{1}); err != nil {
+		t.Fatalf("EnableTimingRecord err: %v", err)
+	}
+}
