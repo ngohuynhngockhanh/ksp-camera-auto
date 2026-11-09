@@ -85,6 +85,17 @@
     pkill -9 -f netwatch_loop.sh 2>/dev/null || true
     rm -f /usr/local/bin/netwatch_loop.sh /root/netwatch_installer.sh 2>/dev/null || true
     ```
+
+### 1.4 Quy Tắc SSH Trực Tiếp Vào Edge Node (Direct SSH — TUYỆT ĐỐI KHÔNG Nhảy Qua Ansible)
+- **Kết nối trực tiếp qua mạng Tinc VPN (`tun0` — `77.88.0.0/16`)**:
+  - Máy trạm này đã thông tuyến trực tiếp tới toàn bộ dải Edge Box `77.88.200.* .. 77.88.207.*` và đã lưu cặp khóa chuẩn lấy từ `macbookpro@192.168.30.73` tại **`~/.ssh/id_rsa_macbook`** (public key: **`~/.ssh/id_rsa_macbook.pub`**, fingerprint `SHA256:pF1qNoPCKSdm/3TxR4vSPhb4o0ksZZPxNc5Lutzh42Y`) kèm cấu hình tự động trong `~/.ssh/config`.
+  - **Khi cần kiểm tra, gỡ lỗi, đọc log hoặc cập nhật trực tiếp một Edge Node**: Bắt buộc chạy SSH/SCP **1-hop trực tiếp**:
+    ```bash
+    ssh root@77.88.<subnet>.<host> "<command>"
+    # Hoặc chỉ định tường minh key:
+    ssh -i ~/.ssh/id_rsa_macbook root@77.88.<subnet>.<host> "<command>"
+    ```
+  - **CẤM chạy SSH lồng 2 tầng (`ssh root@172.16.5.180 "ssh root@77.88.x.y ..."` )**: Việc nhảy trung gian qua máy chủ Ansible `172.16.5.180` vừa thừa thãi vừa dễ gây vỡ dấu nháy shell (`'` / `"` / `|`), dẫn đến chạy nhầm lệnh hệ thống ngay trên máy chủ Ansible. Chỉ kết nối vào `172.16.5.180` khi thực sự cần chạy `ansible-playbook` hàng loạt.
 ---
 
 ## 2. Bản đồ kiến trúc hệ thống (System Architecture)
@@ -1183,9 +1194,10 @@ Khi người dùng yêu cầu **"nâng cấp full go cho `<node_id>`"** (ví d�
        - Kiểm tra và thay thế ngay `/usr/local/bin/shinobi-camera-watchdog.sh` sang bản thuần C `pgrep -f "/opt/go-shinobi-ksp/go-shinobi-ksp"` (tuyệt đối không để sót script cũ `SMART_PING_GUARD_V2` tìm `camera.js`, vốn sẽ gọi `pm2 restart camera` mỗi 60s làm đứt luồng HLS và hỏng `moov` của MP4!).
        - Xóa bỏ các cronjob cũ `/etc/cron.d/shinobi-disk-cleaner`, `/etc/cron.d/shinobi-storage-guard`, `/usr/local/bin/shinobi-disk-cleaner.sh`, `/usr/local/bin/shinobi-storage-guard.sh`.
        - Sau khi `--migrate-legacy` xong, bắt buộc `systemctl stop mariadb mysql && systemctl disable mariadb mysql`.
-   - **Bước 2 (Triển khai Bộ 3 Dịch vụ Go trên `172.16.5.180` tại `/build/armbian-build/ansible`)**:
-     - **`go-shinobi-ksp` (`:8080`, PM2 `camera`)**: Chạy `make go-shinobi inut_<subnet>_<host>` để chốt clip đang ghi, backup MySQL `ccio`, migrate 100% `Users`/`API`/`Monitors`/`Videos` sang SQLite `/opt/go-shinobi-ksp/shinobi.sqlite`, tắt/disable MariaDB, và ép cờ `-tag:v hvc1 -segment_format_options moov_size=262144:movflags=+faststart -segment_time 300`.
-     - **`redbida-go` (`:2023`, PM2 `inut`)**: Chạy `make redbida-go inut_<subnet>_<host>` để chuyển PM2 `inut` từ Node-RED sang `redbida-go`.
+   - **Bước 2 (Triển khai Bộ 3 Dịch vụ Go — Ưu tiên SCP/SSH trực tiếp qua `~/.ssh/id_rsa_macbook`, không nhảy lồng qua `172.16.5.180`)**:
+     - Kết nối trực tiếp `ssh -i ~/.ssh/id_rsa_macbook root@77.88.<subnet>.<host>` (hoặc `scp` trực tiếp binary từ `dist/` lên Box) để kiểm tra và cập nhật; chỉ dùng `make go-shinobi` / `make redbida-go` trên `172.16.5.180` khi chạy playbook hàng loạt.
+     - **`go-shinobi-ksp` (`:8080`, PM2 `camera`)**: Chốt clip đang ghi, backup MySQL `ccio`, migrate 100% `Users`/`API`/`Monitors`/`Videos` sang SQLite `/opt/go-shinobi-ksp/shinobi.sqlite`, tắt/disable MariaDB, và ép cờ `-tag:v hvc1 -segment_format_options moov_size=524288 -segment_time 300`.
+     - **`redbida-go` (`:2023`, PM2 `inut`)**: Chuyển PM2 `inut` từ Node-RED sang `redbida-go`.
      - **`kspcam` (`:2028`) & `inut-bida-agent`**: Cập nhật binary mới nhất theo kiến trúc (`arm64` / `armv7`), đảm bảo `systemctl is-active kspcam inut-bida-agent` đều `active`.
    - **Bước 3 (Ghi nhận vào Sổ cái Triển khai)**:
      - Cập nhật thông tin node vào cả `GO_SHINOBI_DEPLOYED.md` và `REDBIDA_GO_DEPLOYED.md` (lưu ý: tuyệt đối viết `<REDACTED_TOKEN>` thay vì paste chuỗi token thật vào file markdown để không kích hoạt cảnh báo GitGuardian).

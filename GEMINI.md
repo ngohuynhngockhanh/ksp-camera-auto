@@ -38,6 +38,14 @@
   - Luôn **tôn trọng và giữ nguyên** toàn bộ thông tin branding đã có sẵn của quán/sân (`ui_title`, `logo_livestream`, `logo_header`, `logo_header_text`, `ui_bg`, `custom_hashtags`).
   - CHỈ ghi đè khi người dùng **nói rõ từ khóa "ghi đè"** (hoặc yêu cầu reset/overwrite branding).
 
+### 1.3 Quy Tắc SSH Trực Tiếp Vào Edge Node (Direct SSH — Không Nhảy Qua Ansible)
+- Khi cần SSH/SCP tới bất kỳ Edge Box nào (`77.88.200.* .. 77.88.207.*`), kết nối **trực tiếp 1-hop** từ máy trạm bằng khóa **`~/.ssh/id_rsa_macbook`** (public key `~/.ssh/id_rsa_macbook.pub`, đã cấu hình tự động trong `~/.ssh/config`):
+  ```bash
+  ssh root@77.88.<subnet>.<host> "<command>"
+  # Hoặc: ssh -i ~/.ssh/id_rsa_macbook root@77.88.<subnet>.<host> "<command>"
+  ```
+- **Tuyệt đối không** chạy SSH lồng qua máy chủ Ansible (`ssh root@172.16.5.180 "ssh root@77.88.x.y ..."` ) để tránh lỗi vỡ dấu nháy shell và chạy nhầm lệnh trên máy chủ Ansible.
+
 ---
 
 ## 2. Bản đồ kiến trúc hệ thống (System Architecture)

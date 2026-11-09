@@ -69,3 +69,5 @@ Mọi triển khai `go-shinobi-ksp` bắt buộc giữ nguyên chữ ký đườ
      2) Chạy `/opt/go-shinobi-ksp/go-shinobi-ksp --config /opt/go-shinobi-ksp/config.yaml --migrate-legacy` để chuyển 100% `Users`, `API` keys (`shinobi_token`, `shinobi_monitor_token`), `Monitors`, và `Videos` sang SQLite.
      3) Chuyển PM2 `camera` sang `go-shinobi-ksp`, tắt/disable `mariadb`/`mysql`, cài đặt `shinobi-camera-watchdog.sh` + `shinobi-storage-guard.sh` tương thích kép.
      4) Kiểm tra `make backup-shinobi <target>` và cập nhật node vào file `GO_SHINOBI_DEPLOYED.md`.
+3. **Quy tắc SSH Trực Tiếp Vào Edge Node (Không Nhảy Qua `172.16.5.180`)**:
+   - Khi cần SSH/SCP tới bất kỳ Edge Node nào (`77.88.200.* .. 77.88.207.*`), kết nối **trực tiếp 1-hop** bằng khóa `~/.ssh/id_rsa_macbook` (public key `~/.ssh/id_rsa_macbook.pub`, đã cấu hình tự động trong `~/.ssh/config`): `ssh root@77.88.<subnet>.<host>`. Tuyệt đối không chạy SSH lồng qua `172.16.5.180`.
