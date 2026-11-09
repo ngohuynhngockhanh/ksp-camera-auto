@@ -250,8 +250,19 @@ func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts)
 // non-AAC audio stream (e.g. G.711 pcm_alaw/pcm_mulaw in MPEG-TS), fetchChunk
 // automatically retries once with -an (0% CPU) so video export succeeds cleanly.
 func fetchChunk(ctx context.Context, c Chunk, outPath string, opts remuxOpts) error {
-	runOnce := func(dropAudio bool) error {
-		args := []string{"-nostdin", "-rtsp_transport", "tcp", "-i", c.URL}
+	runOnce := func(dropAudio bool, useFastProxy bool) error {
+		inputURL := c.URL
+		var cleanup func()
+		if useFastProxy {
+			if pURL, cleanFn, ok := startHikFastRTSPProxy(ctx, c.URL); ok {
+				inputURL = pURL
+				cleanup = cleanFn
+			}
+		}
+		if cleanup != nil {
+			defer cleanup()
+		}
+		args := []string{"-nostdin", "-rtsp_transport", "tcp", "-i", inputURL}
 		if c.Seconds > 0 {
 			args = append(args, "-t", strconv.Itoa(c.Seconds))
 		}
@@ -280,9 +291,14 @@ func fetchChunk(ctx context.Context, c Chunk, outPath string, opts remuxOpts) er
 		}
 		return nil
 	}
-	if err := runOnce(false); err != nil {
+	if err := runOnce(false, true); err != nil {
 		if !opts.matroska && !opts.transcodeAudio && ctx.Err() == nil {
-			if errNoAudio := runOnce(true); errNoAudio == nil {
+			if errNoAudio := runOnce(true, true); errNoAudio == nil {
+				return nil
+			}
+		}
+		if ctx.Err() == nil && strings.Contains(c.URL, "/Streaming/tracks/") {
+			if errDirect := runOnce(true, false); errDirect == nil {
 				return nil
 			}
 		}

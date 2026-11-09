@@ -1073,18 +1073,18 @@ func (b *nvrBridge) pullAndRemuxZeroCPU(ctx context.Context, tgt resolvedBridgeT
 		case tgt.IsCamSD:
 			parallel = 1
 			chunkSec = int(durSec) + 1
-		case durSec <= 20:
+		case durSec <= 40:
 			parallel = 1
 			chunkSec = int(durSec) + 1
 		case durSec <= 95:
-			parallel = 5
-			chunkSec = 15
+			parallel = 2
+			chunkSec = 40
 		case durSec <= 185:
-			parallel = 4
-			chunkSec = 35
-		default:
-			parallel = 5
+			parallel = 3
 			chunkSec = 60
+		default:
+			parallel = 4
+			chunkSec = 75
 		}
 		outFile, err := os.Create(outMP4)
 		if err != nil {
