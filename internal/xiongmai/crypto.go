@@ -231,3 +231,61 @@ func DecIPToHexIP(ipStr string) (string, error) {
 	v := binary.LittleEndian.Uint32(ip)
 	return fmt.Sprintf("0x%08X", v), nil
 }
+
+// DeriveRandomUserAESKey derives the 16-character AES-128-CBC key from a
+// Xiongmai device's SerialNo (minimum 12 chars) per Web/plugin/function.js:2815:
+//
+//	key = SerialNo[5:11] + SerialNo[1:7] + SerialNo[8:12]
+func DeriveRandomUserAESKey(serialNo string) (string, bool) {
+	sn := strings.TrimSpace(serialNo)
+	if len(sn) < 12 {
+		return "", false
+	}
+	return sn[5:11] + sn[1:7] + sn[8:12], true
+}
+
+// DecryptRandomUserInfo decrypts the Base64 Info / InfoUser payload returned by
+// POST /cgi-bin/resetpwd.cgi {"Name":"GetRandomUser"} (or DVRIP MsgID 1660)
+// using the AES-128-CBC ZeroPadding key derived from SerialNo.
+// Format of decrypted string: "p1:<username> p2:<password_or_101> t:<token>"
+func DecryptRandomUserInfo(serialNo, b64Info string) (user, pwd string, err error) {
+	key, ok := DeriveRandomUserAESKey(serialNo)
+	if !ok {
+		return "", "", fmt.Errorf("xiongmai: SerialNo %q too short for GetRandomUser key", serialNo)
+	}
+	dec, err := AESDecryptZeroPadB64([]byte(strings.TrimSpace(b64Info)), key)
+	if err != nil {
+		return "", "", err
+	}
+	for _, field := range strings.Fields(string(dec)) {
+		if strings.HasPrefix(field, "p1:") {
+			user = strings.TrimPrefix(field, "p1:")
+		} else if strings.HasPrefix(field, "p2:") {
+			pwd = strings.TrimPrefix(field, "p2:")
+		}
+	}
+	if user == "" {
+		return "", "", fmt.Errorf("xiongmai: p1:<user> absent in decrypted GetRandomUser %q", string(dec))
+	}
+	return user, pwd, nil
+}
+
+// EncodeExUserMapPassword encodes a plaintext password for System.ExUserMap
+// (used by Xiongmai HVR/NVR RTSP :554 digest/URL authentication) per
+// encodePassword() in Web/plugin/function.js:1172:
+//
+//	base = Base64(plain)
+//	out  = fmt.Sprintf("00%02d", len(base)-1) + base[len-1] + base[1:len-1] + base[0]
+func EncodeExUserMapPassword(plain string) string {
+	if len(plain) == 0 {
+		return ""
+	}
+	b64 := base64.StdEncoding.EncodeToString([]byte(plain))
+	if len(b64) < 2 {
+		return b64
+	}
+	ch1 := b64[0]
+	ch2 := b64[len(b64)-1]
+	mid := b64[1 : len(b64)-1]
+	return fmt.Sprintf("00%02d%c%s%c", len(b64)-1, ch2, mid, ch1)
+}

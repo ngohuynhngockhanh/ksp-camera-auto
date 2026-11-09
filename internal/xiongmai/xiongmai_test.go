@@ -1,6 +1,7 @@
 package xiongmai
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -529,5 +530,123 @@ func TestCGITransportRSAAndAESWithBypassHVR(t *testing.T) {
 	defer badCl.Close()
 	if _, err := badCl.GetSerialNumber(ctx); !errors.Is(err, ErrAuthFailed) {
 		t.Fatalf("expected ErrAuthFailed on bad password, got %v", err)
+	}
+}
+
+func TestDecryptRandomUserInfoAndExUserMapPassword(t *testing.T) {
+	// Real vector captured from NBD80S16S-KL (192.168.77.138 on inut_208_4)
+	sn := "c1beba4793bccbdapnx9"
+	b64Info := "WkXIjh88NHCtm6VEwc90GNTswQ+HmDddpipZekdf/YQ="
+	key, ok := DeriveRandomUserAESKey(sn)
+	if !ok || key != "a4793b1beba493bc" {
+		t.Fatalf("DeriveRandomUserAESKey = (%q, %v), want (a4793b1beba493bc, true)", key, ok)
+	}
+	user, pwd, err := DecryptRandomUserInfo(sn, b64Info)
+	if err != nil {
+		t.Fatalf("DecryptRandomUserInfo: %v", err)
+	}
+	if user != "admin1" || pwd != "101" {
+		t.Fatalf("DecryptRandomUserInfo = (%q, %q), want (admin1, 101)", user, pwd)
+	}
+
+	if got := MD5_8("Inut12345"); got != "IgCDPz7Q" {
+		t.Fatalf("MD5_8(Inut12345) = %q, want IgCDPz7Q", got)
+	}
+	if got := EncodeExUserMapPassword("Inut12345"); got != "00111W51dDEyMzQS" {
+		t.Fatalf("EncodeExUserMapPassword(Inut12345) = %q, want 00111W51dDEyMzQS", got)
+	}
+}
+
+func TestUcHttpdLeadingSpaceHeaderAndRandomUserResolution(t *testing.T) {
+	privKey, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		t.Fatalf("rsa.GenerateKey: %v", err)
+	}
+	pubKeyStr := fmt.Sprintf("%s,%06X", strings.ToUpper(privKey.PublicKey.N.Text(16)), privKey.PublicKey.E)
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	const salt = "OuIEvLHp"
+	const sn = "c1beba4793bccbdapnx9"
+	const realUser = "admin1"
+	const realPass = "Inut12345"
+
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				_ = c.SetDeadline(time.Now().Add(3 * time.Second))
+				br := bufio.NewReader(c)
+				var hdrLines []string
+				contentLen := 0
+				for {
+					line, err := br.ReadString('\n')
+					if err != nil {
+						return
+					}
+					hdrLines = append(hdrLines, line)
+					if strings.HasPrefix(strings.ToLower(line), "content-length:") {
+						_, _ = fmt.Sscanf(strings.TrimSpace(strings.SplitN(line, ":", 2)[1]), "%d", &contentLen)
+					}
+					if line == "\r\n" || line == "\n" {
+						break
+					}
+				}
+				rawReq := strings.Join(hdrLines, "")
+				bodyBytes := make([]byte, contentLen)
+				if contentLen > 0 {
+					_, _ = io.ReadFull(br, bodyBytes)
+				}
+				body := strings.TrimSpace(string(bodyBytes))
+				var respBody string
+				switch {
+				case strings.Contains(rawReq, "/cgi-bin/resetpwd.cgi") && strings.Contains(body, "GetDevInfo"):
+					respBody = `{"Name":"GetDevInfo","Ret":100,"GetDevInfo":{"SerialNo":"` + sn + `"}}`
+				case strings.Contains(rawReq, "/cgi-bin/resetpwd.cgi") && strings.Contains(body, "GetRandomUser"):
+					respBody = `{"Name":"GetRandomUser","Ret":100,"GetRandomUser":{"Info":"WkXIjh88NHCtm6VEwc90GNTswQ+HmDddpipZekdf/YQ="}}`
+				case strings.Contains(rawReq, "/cgi-bin/login.cgi") && strings.Contains(body, "GetSalt"):
+					respBody = fmt.Sprintf(`{"Ret":100,"Salt":%q,"PublicKey":%q,"LoginEncryptionType":"RSA/MD5_8","DataEncryptionType":"AES"}`, salt, pubKeyStr)
+				case strings.Contains(rawReq, "/cgi-bin/login.cgi") && strings.Contains(body, "Login"):
+					var req map[string]any
+					_ = json.Unmarshal([]byte(body), &req)
+					uHex, _ := req["User"].(string)
+					sHex, _ := req["Sign"].(string)
+					uRaw, _ := hex.DecodeString(uHex)
+					sRaw, _ := hex.DecodeString(sHex)
+					uDec, _ := rsa.DecryptPKCS1v15(rand.Reader, privKey, uRaw)
+					sDec, _ := rsa.DecryptPKCS1v15(rand.Reader, privKey, sRaw)
+					if string(uDec) == realUser && string(sDec) == salt+HexMD5Lower(realPass) {
+						respBody = `{"Ret":100,"SessionID":"0x00000024","ChannelNum":16,"DeviceType ":"HVR","AliveInterval":21}`
+					} else {
+						respBody = `{"Ret":106,"Tip":"User error"}`
+					}
+				default:
+					respBody = `{"Ret":100}`
+				}
+				// Deliberately emit uc-httpd 1.0.0's malformed leading space on the first header line!
+				wire := fmt.Sprintf("HTTP/1.0 200 OK\r\n Content-type: text/plain\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: %d\r\n\r\n%s", len(respBody), respBody)
+				_, _ = c.Write([]byte(wire))
+			}(conn)
+		}
+	}()
+
+	tcpAddr := ln.Addr().(*net.TCPAddr)
+	// Configure username="admin" — CGITransport must auto-resolve "admin" -> "admin1" via resetpwd.cgi
+	// AND tolerate uc-httpd 1.0.0's leading space on " Content-type: text/plain"!
+	tr := NewCGITransport(tcpAddr.IP.String(), tcpAddr.Port, "admin", realPass, 3*time.Second)
+	info, err := tr.Login(context.Background())
+	if err != nil {
+		t.Fatalf("CGITransport.Login with uc-httpd header + admin->admin1 auto-resolve failed: %v", err)
+	}
+	if info.ChannelNum != 16 || info.SessionIDHex != "0x00000024" {
+		t.Fatalf("unexpected LoginInfo: %+v", info)
 	}
 }

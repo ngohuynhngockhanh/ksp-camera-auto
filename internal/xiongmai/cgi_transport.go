@@ -26,30 +26,109 @@ type PreLoginInfo struct {
 	TCPPort  int    `json:"TCPPort"`
 }
 
+// doXiongmaiHTTP executes an HTTP request and transparently falls back to a raw
+// HTTP/1.0 wire exchange when Xiongmai's embedded uc-httpd 1.0.0 emits a leading
+// space on header lines (e.g. " Content-type: text/plain\r\n"), which Go's strict
+// net/textproto MIME reader rejects with "malformed MIME header initial line".
+func doXiongmaiHTTP(ctx context.Context, hc *http.Client, method, rawURL, contentType string, body []byte, timeout time.Duration, maxBytes int64) (int, []byte, error) {
+	if maxBytes <= 0 {
+		maxBytes = 8 << 20
+	}
+	if timeout <= 0 {
+		timeout = 15 * time.Second
+	}
+	if hc == nil {
+		hc = &http.Client{Timeout: timeout}
+	}
+	req, err := http.NewRequestWithContext(ctx, method, rawURL, bytes.NewReader(body))
+	if err != nil {
+		return 0, nil, err
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	resp, err := hc.Do(req)
+	if err == nil {
+		defer resp.Body.Close()
+		respBytes, rerr := io.ReadAll(io.LimitReader(resp.Body, maxBytes))
+		return resp.StatusCode, respBytes, rerr
+	}
+	if !strings.Contains(err.Error(), "malformed MIME header") {
+		return 0, nil, err
+	}
+	return doRawHTTP10(ctx, method, rawURL, contentType, body, timeout, maxBytes)
+}
+
+func doRawHTTP10(ctx context.Context, method, rawURL, contentType string, body []byte, timeout time.Duration, maxBytes int64) (int, []byte, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return 0, nil, err
+	}
+	hostPort := u.Host
+	if !strings.Contains(hostPort, ":") {
+		hostPort = net.JoinHostPort(hostPort, "80")
+	}
+	dialer := net.Dialer{Timeout: timeout}
+	conn, err := dialer.DialContext(ctx, "tcp", hostPort)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+
+	reqURI := u.RequestURI()
+	if reqURI == "" {
+		reqURI = "/"
+	}
+	var hdr bytes.Buffer
+	fmt.Fprintf(&hdr, "%s %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n", method, reqURI, u.Host)
+	if contentType != "" {
+		fmt.Fprintf(&hdr, "Content-Type: %s\r\n", contentType)
+	}
+	if len(body) > 0 || method == http.MethodPost {
+		fmt.Fprintf(&hdr, "Content-Length: %d\r\n", len(body))
+	}
+	hdr.WriteString("\r\n")
+	if len(body) > 0 {
+		hdr.Write(body)
+	}
+	if _, err := conn.Write(hdr.Bytes()); err != nil {
+		return 0, nil, err
+	}
+
+	br := bufio.NewReaderSize(conn, 64<<10)
+	statusLine, err := br.ReadString('\n')
+	if err != nil {
+		return 0, nil, err
+	}
+	statusCode := http.StatusOK
+	fields := strings.Fields(statusLine)
+	if len(fields) >= 2 {
+		_, _ = fmt.Sscanf(fields[1], "%d", &statusCode)
+	}
+	for {
+		line, err := br.ReadString('\n')
+		if err != nil || line == "\r\n" || line == "\n" {
+			break
+		}
+	}
+	respBytes, err := io.ReadAll(io.LimitReader(br, maxBytes))
+	return statusCode, respBytes, err
+}
+
 // ProbePreLoginCGI sends an unauthenticated GetPreLoginInfo probe to HTTP port
 // (default 80) to identify Xiongmai CGI-capable NVRs/HVRs/IPCs during LAN discovery.
 func ProbePreLoginCGI(ctx context.Context, baseURL string, timeout time.Duration) (*PreLoginInfo, error) {
 	if timeout <= 0 {
 		timeout = 1500 * time.Millisecond
 	}
-	hc := &http.Client{Timeout: timeout}
 	u := strings.TrimRight(baseURL, "/") + "/cgi-bin/login.cgi"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, strings.NewReader(`{"Name":"GetPreLoginInfo"}`))
+	statusCode, body, err := doXiongmaiHTTP(ctx, nil, http.MethodPost, u, "application/json", []byte(`{"Name":"GetPreLoginInfo"}`), timeout, 64<<10)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := hc.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("xiongmai GetPreLoginInfo HTTP %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
-	if err != nil {
-		return nil, err
+	if statusCode != http.StatusOK {
+		return nil, fmt.Errorf("xiongmai GetPreLoginInfo HTTP %d", statusCode)
 	}
 	var info PreLoginInfo
 	if err := json.Unmarshal(bytes.TrimRight(body, "\x00\r\n "), &info); err != nil {
@@ -130,23 +209,60 @@ func (c *CGITransport) postRawJSON(ctx context.Context, cgiPath string, reqObj a
 		return nil, err
 	}
 	u := fmt.Sprintf("%s%s?randnum=%s", c.baseURL, cgiPath, randQuerySuffix())
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(raw))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json;charset=utf-8")
-	resp, err := c.hc.Do(req)
+	statusCode, respBytes, err := doXiongmaiHTTP(ctx, c.hc, http.MethodPost, u, "application/json;charset=utf-8", raw, c.timeout, 8<<20)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDialUnreachable, err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: CGI %s HTTP %d", ErrDialUnreachable, cgiPath, resp.StatusCode)
+	if statusCode != http.StatusOK {
+		return nil, fmt.Errorf("%w: CGI %s HTTP %d", ErrDialUnreachable, cgiPath, statusCode)
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	return respBytes, nil
+}
+
+// resolveRandomUserLocked queries /cgi-bin/resetpwd.cgi GetDevInfo + GetRandomUser
+// when the caller configured "admin" (or empty username) so NVRs where "admin"
+// was renamed to e.g. "admin1" (due to IDS_ACC_InvalidUserName on newer firmware)
+// authenticate on the first attempt without burning a failed login counter.
+func (c *CGITransport) resolveRandomUserLocked(ctx context.Context) {
+	if c.username != "" && !strings.EqualFold(c.username, "admin") {
+		return
+	}
+	devBody, err := c.postRawJSON(ctx, "/cgi-bin/resetpwd.cgi", map[string]any{"Name": "GetDevInfo"})
+	if err != nil {
+		return
+	}
+	var devResp map[string]any
+	if json.Unmarshal(bytes.TrimRight(devBody, "\x00\r\n "), &devResp) != nil || extractRet(devResp) != RetOK {
+		return
+	}
+	devInfo, _ := devResp["GetDevInfo"].(map[string]any)
+	sn := stringFieldAny(devInfo, "SerialNo")
+	if len(sn) < 12 {
+		return
+	}
+	randBody, err := c.postRawJSON(ctx, "/cgi-bin/resetpwd.cgi", map[string]any{"Name": "GetRandomUser"})
+	if err != nil {
+		return
+	}
+	var randResp map[string]any
+	if json.Unmarshal(bytes.TrimRight(randBody, "\x00\r\n "), &randResp) != nil || extractRet(randResp) != RetOK {
+		return
+	}
+	randInfo, _ := randResp["GetRandomUser"].(map[string]any)
+	infoStr := stringFieldAny(randInfo, "InfoUser", "Info")
+	if infoStr == "" {
+		return
+	}
+	if user, pwd, err := DecryptRandomUserInfo(sn, infoStr); err == nil && user != "" {
+		c.username = user
+		if c.password == "" && pwd != "" && pwd != "101" && pwd != "102" {
+			c.password = pwd
+		}
+	}
 }
 
 func (c *CGITransport) loginLocked(ctx context.Context) (*LoginInfo, error) {
+	c.resolveRandomUserLocked(ctx)
 	// Step 1: POST /cgi-bin/login.cgi {"Name":"GetSalt"}
 	saltBody, err := c.postRawJSON(ctx, "/cgi-bin/login.cgi", map[string]any{"Name": "GetSalt"})
 	if err != nil {
@@ -325,23 +441,12 @@ func (c *CGITransport) sendAuthenticatedLocked(ctx context.Context, cgiPath stri
 	}
 
 	u := fmt.Sprintf("%s%s?randnum=%s", c.baseURL, cgiPath, randQuerySuffix())
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(reqBytes))
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Content-Type", contentType)
-
-	httpResp, err := c.hc.Do(httpReq)
+	statusCode, respRaw, err := doXiongmaiHTTP(ctx, c.hc, http.MethodPost, u, contentType, reqBytes, c.timeout, 8<<20)
 	if err != nil {
 		return nil, fmt.Errorf("xiongmai CGI %s: %w", cgiPath, err)
 	}
-	defer httpResp.Body.Close()
-	respRaw, err := io.ReadAll(io.LimitReader(httpResp.Body, 8<<20))
-	if err != nil {
-		return nil, err
-	}
-	if httpResp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("xiongmai CGI %s HTTP %d", cgiPath, httpResp.StatusCode)
+	if statusCode != http.StatusOK {
+		return nil, fmt.Errorf("xiongmai CGI %s HTTP %d", cgiPath, statusCode)
 	}
 
 	var plain []byte
@@ -422,17 +527,11 @@ func (c *CGITransport) Snapshot(ctx context.Context, channel int) ([]byte, error
 			c.baseURL, channel, url.QueryEscape(c.username), url.QueryEscape(c.password)),
 	}
 	for _, u := range endpoints {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		statusCode, data, err := doXiongmaiHTTP(ctx, c.hc, http.MethodGet, u, "", nil, c.timeout, 4<<20)
 		if err != nil {
 			continue
 		}
-		resp, err := c.hc.Do(req)
-		if err != nil {
-			continue
-		}
-		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-		resp.Body.Close()
-		if resp.StatusCode == http.StatusOK && bytes.HasPrefix(data, []byte{0xFF, 0xD8, 0xFF}) {
+		if statusCode == http.StatusOK && bytes.HasPrefix(data, []byte{0xFF, 0xD8, 0xFF}) {
 			return data, nil
 		}
 	}

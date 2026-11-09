@@ -12,6 +12,8 @@ defaults:
     hikvision_port: 8000
     dahua_port: 37777
     tiandy_port: 554
+    raysharp_port: 80
+    xiongmai_port: 34567
     username: admin
     password: smarthome12345
     timeout_seconds: 30
@@ -43,3 +45,21 @@ anti_a:
     mode: random
     bitrate_kbps: 0
     smart_codec: null
+events:
+    enabled: true
+    box_id: ""
+    poll_interval_seconds: 2
+    mqtt_enabled: false
+    mqtt_broker_host: 127.0.0.1
+    mqtt_broker_port: 12369
+    mqtt_topic_prefix: kspcam/events
+    mqtt_include_snapshot: false
+    hub_push_enabled: false
+    max_retained_events: 200
+bridge:
+    enabled: true
+    api_key: ""
+    spool_dir: /dev/shm/kspcam-clips
+    max_spool_mb: 0
+    clip_ttl_seconds: 600
+    max_per_nvr: 2
