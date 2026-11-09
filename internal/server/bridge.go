@@ -579,6 +579,24 @@ func (b *nvrBridge) getRecordingsCached(ctx context.Context, tgt resolvedBridgeT
 		}
 		cctx, cancel := context.WithTimeout(context.Background(), to)
 		defer cancel()
+		release, slotErr := b.acquireHostSlot(cctx, tgt.Source.Host, tgt.IsCamSD)
+		if slotErr != nil {
+			return nil, slotErr
+		}
+		defer release()
+
+		if tgt.Source.Vendor == config.VendorDahua && !tgt.IsCamSD {
+			cgiCtx, cgiCancel := context.WithTimeout(cctx, 12*time.Second)
+			cgiList, cgiErr := dahua.FindRecordingsCGI(cgiCtx, tgt.Source.Host, tgt.Source.Port, tgt.Source.Username, tgt.Source.Password, tgt.Channel, start, end)
+			cgiCancel()
+			if cgiErr == nil {
+				b.recMu.Lock()
+				b.recCache[cacheKey] = recCacheEntry{fetchedAt: time.Now(), list: cgiList}
+				b.recMu.Unlock()
+				return cgiList, nil
+			}
+		}
+
 		cam, err := camera.Open(cctx, tgt.Source, to)
 		if err != nil {
 			return nil, err
@@ -909,6 +927,24 @@ func (b *nvrBridge) pullAndRemuxZeroCPU(ctx context.Context, tgt resolvedBridgeT
 		// Skipped on standalone [Cam-SD] IPCs (which silently drop 0xf4 frames until read timeout)
 		// so [Cam-SD] jumps straight to 1b (Rate-Control:no ~7x RTSP)!
 		if !tgt.IsCamSD {
+			// 1a-CGI. Stateless HTTP Digest loadfile.cgi (~5+ MB/s on LAN, immune to ST7108/root DVRIP RPC stalls).
+			cgiDavPath := filepath.Join(workDir, "raw_cgi.dav")
+			if cgiFile, err := os.Create(cgiDavPath); err == nil {
+				cgiErr := dahua.StreamDavCGI(ctx, cgiFile, d.Host, d.Port, d.Username, d.Password, tgt.Channel, start, end)
+				_ = cgiFile.Close()
+				if cgiErr == nil {
+					if fi, stErr := os.Stat(cgiDavPath); stErr == nil && fi.Size() > 1024 {
+						remuxErr := remuxCopyFileToFaststartMP4(ctx, "dhav", cgiDavPath, outMP4, 0, durSec)
+						_ = os.Remove(cgiDavPath)
+						if remuxErr == nil {
+							return nil
+						}
+					}
+				}
+				_ = os.Remove(cgiDavPath)
+			}
+
+			// 1a-DVRIP. Binary DVRIP 0xbb .dav download fallback (for NATed NVRs with only TCP 37777/8888 exposed).
 			davPath := filepath.Join(workDir, "raw.dav")
 			if davFile, err := os.Create(davPath); err == nil {
 				davErr := dahua.StreamDav(ctx, davFile, d.Host, d.Port, d.Username, d.Password, tgt.Channel, start, end)
