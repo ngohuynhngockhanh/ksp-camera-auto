@@ -94,8 +94,9 @@ func StreamPlayback(ctx context.Context, w io.Writer, host string, port int, use
 		"-nostdin",
 		"-rtsp_transport", "tcp",
 		"-i", rtsp,
-		"-c", "copy",
-		// The NVR records HEVC/H.265 on every channel (main AND sub). ffmpeg's
+		"-map", "0:v:0",
+		"-c:v", "copy",
+		"-an",
 		// default fourcc for an HEVC track in MP4 is "hev1", but Safari/iOS
 		// only plays HEVC-in-MP4 when the track is tagged "hvc1" — hev1 is
 		// silently refused (Chrome/Firefox can't decode HEVC at all either
