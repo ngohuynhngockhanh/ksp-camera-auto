@@ -242,6 +242,8 @@
   - **Ngày lên Full Go + Hybrid Cam-SD/NVR Hikvision:** `2026-11-10` • `linux/arm64` (`6.6.44-current-sunxi64`, 2GB RAM) • RAM giải phóng **`601 MB`** (từ `1,025 MB` xuống **`424 MB/1,923 MB`**, RAM khả dụng tăng lên **`1,354 MB`**, MariaDB & MySQL tắt và masked); `go-shinobi-ksp` `~16.2 MB`, `redbida-go` `~12.0 MB`, `kspcam` `:2028` `active`, `inut-bida-agent` `active` • Thẻ nhớ Box `/media/usb1` `60 GB` f2fs bảo toàn 100% video cũ (`2,212 -> 2,276` clips), Storage Guard `85%/80%` dọn dẹp cuốn chiếu an toàn • Kích hoạt **Hybrid Cam-SD / NVR Hikvision** (`DS-7632NXI-K2`, `192.168.1.198:80`, `192.168.1.199:81`), liên kết 11 camera (`Camera01..11` $\leftrightarrow$ `192.168.1.230..253:80`, `admin:<REDACTED_PASSWORD>`), tổng hợp virtual clips 5 phút `v_nvr_*`, tua Slow-Mo **`HTTP 206 Partial Content`** mượt mà.
 ---
 
+- **`inut_205_126` (`77.88.205.126` / `5.126` — CLB Bida Genz, `ke=genz`, 7 cam)**:
+  - **Ngày lên Full Go + Hybrid Cam-SD Bridge:** `2026-11-10` • `linux/arm64` (`6.6.44-current-sunxi64`, 2GB RAM) • RAM giải phóng **`430+ MB`** (từ `750+ MB` xuống **`320 MB/1,923 MB`**, RAM khả dụng tăng lên **`1,488 MB`**, MariaDB & MySQL tắt và masked); `go-shinobi-ksp` `~10.6 MB`, `redbida-go` `~14.1 MB`, `kspcam` `:2028` `active` (`9d85e07-dirty`), `go2rtc` `active` • Thẻ nhớ Box `/media/usb1` `60 GB` f2fs bảo toàn 100% video cũ (`886 -> 940+` clips), Storage Guard `85%/80%` dọn dẹp cuốn chiếu an toàn • Kích hoạt **Hybrid Cam-SD Bridge** (`85eaa13a0f000e5cca2ff05455d85cfd`), 7/7 mappings Cam-SD (`Camera01..07`), trích xuất clip SD trực tiếp qua bridge `:2028/api/v1/bridge/clip.mp4` **`HTTP 206 Partial Content`** mượt mà.
 ## 2. Lệnh Ansible Trên `172.16.5.180` (`/build/armbian-build/ansible`)
 
 ```bash
