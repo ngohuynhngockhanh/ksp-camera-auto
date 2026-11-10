@@ -244,6 +244,21 @@
 
 - **`inut_205_126` (`77.88.205.126` / `5.126` — CLB Bida Genz, `ke=genz`, 7 cam)**:
   - **Ngày lên Full Go + Hybrid Cam-SD Bridge:** `2026-11-10` • `linux/arm64` (`6.6.44-current-sunxi64`, 2GB RAM) • RAM giải phóng **`430+ MB`** (từ `750+ MB` xuống **`320 MB/1,923 MB`**, RAM khả dụng tăng lên **`1,488 MB`**, MariaDB & MySQL tắt và masked); `go-shinobi-ksp` `~10.6 MB`, `redbida-go` `~14.1 MB`, `kspcam` `:2028` `active` (`9d85e07-dirty`), `go2rtc` `active` • Thẻ nhớ Box `/media/usb1` `60 GB` f2fs bảo toàn 100% video cũ (`886 -> 940+` clips), Storage Guard `85%/80%` dọn dẹp cuốn chiếu an toàn • Kích hoạt **Hybrid Cam-SD Bridge** (`85eaa13a0f000e5cca2ff05455d85cfd`), 7/7 mappings Cam-SD (`Camera01..07`), trích xuất clip SD trực tiếp qua bridge `:2028/api/v1/bridge/clip.mp4` **`HTTP 206 Partial Content`** mượt mà.
+- **`inut_204_224` (`77.88.204.224` / `4.224` — Hợp Cơ Billiards Club - 1, `ke=hopco1`, 14 cam)**:
+  - **Ngày lên Full Go + Hybrid Bridge:** `2026-11-10` • `linux/arm64` (`rk3528`, RAM `2 GB`) • RAM: `513 MB / 1,794 MB` (khả dụng `1,072 MB`), MariaDB & MySQL tắt và masked; `go-shinobi-ksp` `:8080` (`23.3 MB`), `redbida-go` `:2023` (`14.1 MB`), `kspcam` `:2028` active (`1c74942-dirty`), Hybrid Bridge `enabled: true` • Thẻ nhớ `/media/usb1` f2fs (`2,720` MP4 clips) • Golden Hardening: netwatch masked, sysrq=0.
+
+- **`inut_204_225` (`77.88.204.225` / `4.225` — Hợp Cơ Billiards Club - 2, `ke=hopco1`, 15 cam)**:
+  - **Ngày lên Full Go + Hybrid Bridge:** `2026-11-10` • `linux/arm64` (`rk3528`, RAM `2 GB`) • RAM: `504 MB / 1,794 MB` (khả dụng `1,119 MB`), MariaDB & MySQL tắt và masked; `go-shinobi-ksp` `:8080` (`18.6 MB`), `redbida-go` `:2023` (`14.9 MB`), `kspcam` `:2028` active (`1c74942-dirty`), Hybrid Bridge `enabled: true` • Thẻ nhớ `/media/usb1` f2fs (`3,666` MP4 clips) • Golden Hardening: netwatch masked, sysrq=0.
+
+- **`inut_204_226` (`192.168.2.226` / `4.226` — Hợp Cơ Billiards Club - 3, `ke=hopco1`, 14 cam)**:
+  - **Ngày lên Full Go + Hybrid Bridge:** `2026-11-10` • `linux/arm64` (`rk3528`, RAM `2 GB`) • Onboarding từ MySQL ccio sang SQLite WAL, 0 clip mất (`2,435 -> 2,527` MP4 clips) • RAM: `581 MB / 1,794 MB` (khả dụng `1,034 MB`), MariaDB & MySQL tắt và masked; `go-shinobi-ksp` `:8080` (`18.3 MB`), `redbida-go` `:2023` (`13.8 MB`), `kspcam` `:2028` active (`1c74942-dirty`), Hybrid Bridge `enabled: true` • Thẻ nhớ `/media/usb1` f2fs • Golden Hardening: netwatch masked, sysrq=0.
+
+- **`inut_204_254` (`77.88.204.254` / `4.254` — 99 Billiards CS10 - 1, `ke=99101`, 15 cam)**:
+  - **Ngày lên Full Go + Hybrid Bridge:** `2026-11-10` • `linux/arm64` (`rk3528`, RAM `2 GB`) • Onboarding từ MySQL ccio sang SQLite WAL, 0 clip mất (`3,453 -> 3,586+` MP4 clips) • RAM: `804 MB / 1,975 MB` (khả dụng `1,171 MB`), MariaDB & MySQL tắt và masked; `go-shinobi-ksp` `:8080` (`18.0 MB`), `redbida-go` `:2023` (`12.6 MB`), `kspcam` `:2028` active (`9d85e07-dirty`), Hybrid Bridge `enabled: true` (`971bab1e44c4417a119712c893d7ad8c`), 15/15 mappings NVR Hikvision DS-7632NXI-K2 (`192.168.1.13:80`, kênh 1..15, `live:inut161@`) • Thẻ nhớ `/media/usb1` f2fs • Golden Hardening: netwatch masked, sysrq=0.
+
+- **`inut_206_28` (`77.88.206.28` / `6.28` — 99 Billiards CS10 - 2, `ke=99102`, 15 cam)**:
+  - **Ngày lên Full Go + Hybrid Bridge:** `2026-11-10` • `linux/arm64` (`rk3528`, RAM `1.8 GB`) • Onboarding từ MySQL ccio sang SQLite WAL, 0 clip mất (`2,527 -> 2,648+` MP4 clips) • RAM: `550 MB / 1,794 MB` (khả dụng `1,092 MB`), MariaDB & MySQL tắt và masked; `go-shinobi-ksp` `:8080` (`16.3 MB`), `redbida-go` `:2023` (`13.9 MB`), `kspcam` `:2028` active (`9d85e07-dirty`), Hybrid Bridge `enabled: true` (`a08a20a2123935fc786cc969654d8d45`), 15/15 mappings NVR Hikvision DS-7632NXI-K2 (`192.168.1.13:80`, kênh 16..30, `live:inut161@`) • Thẻ nhớ `/media/usb1` f2fs • Golden Hardening: netwatch masked, sysrq=0.
+
 ## 2. Lệnh Ansible Trên `172.16.5.180` (`/build/armbian-build/ansible`)
 
 ```bash
