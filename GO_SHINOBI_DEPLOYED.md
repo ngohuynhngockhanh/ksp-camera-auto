@@ -136,6 +136,7 @@
 - **`inut_204_144` (`77.88.204.144` — Lio Kig Billiads Club):** `ke=replaceemmc` • `8` cam • RAM giảm từ `962 MB` xuống **`502 MB`** • `8/8` Recording & `8/8` snapshots `:2028` OK.
 - **`inut_204_34` (`77.88.204.34` — Billiards Guu Pool Arena):** `ke=bida2391` • `16` cam • RAM giảm từ `1579 MB` xuống **`674 MB`** • `16/16` Recording & `16/16` snapshots `:2028` OK.
 - **`inut_204_200` (`77.88.204.200` / `4.200` — F - Zone Billiards):** `ke=timbo` • `17` cam (`16` active online, `1` offline) • RAM giảm từ `2118 MB` xuống **`1400 MB`** (Free RAM: `2.5 GB`, MariaDB tắt & mask) • `16/16` active continuous 5-min MP4 Recording OK • NVR Dahua `192.168.1.199:37777` 8CH (`live:inut123@`) đã quét & phân tích: kênh 1-5 là camera an ninh quầy/khuôn viên, kênh 6 `192.168.1.211` không có lịch ghi NVR, toàn bộ 17 bàn bida ghi hình độc lập 100% trên thẻ nhớ Box-SD (`/media/usb1`, f2fs).
+- **`inut_201_237` (`77.88.201.237` / `1.237` — Bida Dũng Huê):** `ke=kao` • `6` cam • `linux/armv7` • RAM giảm từ `783 MB` xuống **`370 MB`** (giải phóng **`413 MB`**, RAM khả dụng tăng vọt lên **`580 MB / 999 MB`**, MariaDB tắt & mask) • `camera01..04` ghi hình liên tục 5 phút/clip trên thẻ Box-SD (`/media/usb1`, f2fs `30 GB`, Storage Guard `85%`) • `camera10` (`192.168.1.236`) có thẻ nhớ 32GB onboard (`/dev/mmc0`, `/mnt/sd`) kích hoạt thành công chế độ **Cam-SD Hybrid Bridge** (`v_nvr_*` clips), phát trực tiếp HTTP 206 và cắt clip `/cut-video-stream` tức thì với 0% CPU encode.
 ---
 
 ## 2. Quy Trình Chuẩn Onboarding Từ Shinobi Cũ Lên Go-Shinobi-KSP (Zero Clip Loss)

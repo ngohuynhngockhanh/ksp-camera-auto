@@ -85,6 +85,8 @@
 
 - **`inut_202_173` (`77.88.202.173` — Thế Trâm Pickleball, `ke=dmdeabhancca`, 1 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM giảm từ `561M` xuống **`225M/999M`** (giải phóng `336 MB`), `go-shinobi-ksp` `~17.0 MB` (`1/1` Recording), `redbida-go` `~11.7 MB`, `kspcam` `:2028` (`1/1` snapshots OK), `inut-bida-agent` `active`.
+- **`inut_201_237` (`77.88.201.237` / `1.237` — Bida Dũng Huê, `ke=kao`, 6 cam — `Full Go + Cam-SD Hybrid Bridge`)**:
+  - **Ngày lên Full Go:** `2026-11-10` • `linux/armv7` (`5.15.80-sunxi`, RAM `999 MB`) • RAM giải phóng **`413 MB`** (từ `783 MB` xuống **`370 MB/999 MB`**, RAM khả dụng tăng lên **`580 MB`**, MariaDB tắt & mask); `go-shinobi-ksp` `~15.2 MB`, `redbida-go` `~26.5 MB`, `kspcam` `:2028` (`1.4 MB`), `inut-bida-agent` `active` (`2.0 MB`); `camera01..04` ghi hình liên tục 5 phút/clip trên thẻ nhớ Box-SD (`/media/usb1`, f2fs `30 GB`, Storage Guard `85%`); riêng `camera10` (`192.168.1.236`) có thẻ nhớ 32GB onboard (`/dev/mmc0`, `/mnt/sd`) kích hoạt thành công chế độ **Cam-SD Hybrid Bridge** (`33` clips `v_nvr_*`), tua Slow-Mo tức thì **`9.4 ms` (`HTTP 206 Partial Content`)**, cắt clip `/cut-video-stream` 60s vắt qua thẻ nhớ camera thành công với 0% CPU encode (`3.36 MB`).
 - **`inut_202_210` (`77.88.202.210` — Lang Biang Pickleball Club, `ke=INUTJSCSO1VIETNAMNHEMAYCONVO`, 2 cam)**:
   - **Ngày lên Full Go:** `2026-11-08` • `linux/armv7` • RAM giảm từ `579M` xuống **`280M/999M`** (giải phóng `299 MB`), `go-shinobi-ksp` `~14.5 MB` (`2/2` Recording), `redbida-go` `~10.8 MB`, `kspcam` `:2028` (`2/2` snapshots OK), `inut-bida-agent` `active`.
 - **`inut_202_218` (`77.88.202.218` — PFA T-Tennis & Pickleball, `ke=pfareal`, 2 cam)**:
