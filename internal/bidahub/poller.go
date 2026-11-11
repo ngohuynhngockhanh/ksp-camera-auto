@@ -216,6 +216,8 @@ func (s *Server) handleTunnelEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Only heartbeats carry the box identity (RedBida keys) needed to create a box record;
+	// tunnel registration requires the box to be enrolled already.
 	if _, exists := s.store.GetBox(boxID); !exists {
 		req := s.store.RecordEnrollment(boxID, secret, clientIPFromRequest(r), socModel)
 		writeJSON(w, http.StatusForbidden, map[string]any{
@@ -296,6 +298,11 @@ type HeartbeatPayload struct {
 	UptimeHuman              string            `json:"uptime_human,omitempty"`
 	Monitors                 []*ShinobiMonitor `json:"monitors,omitempty"`
 	HardeningScore           *int              `json:"hardening_score,omitempty"`
+	// Box identity read from the edge itself (not telemetry): LAN IP, CPU arch and the
+	// RedBida keys in /root/ota-mqtt/change_ok (secrets excluded, frpc tokens redacted).
+	LANIP       string            `json:"lan_ip,omitempty"`
+	Arch        string            `json:"arch,omitempty"`
+	RedBidaKeys map[string]string `json:"redbida_keys,omitempty"`
 }
 
 // FormatUptimeHuman formats uptime seconds as "Xd Yh", "Yh Zm", or "Zm".
@@ -319,6 +326,7 @@ func FormatUptimeHuman(sec int64) string {
 }
 
 func applyHeartbeatToBox(b *Box, p HeartbeatPayload, source string) {
+	applyBoxIdentity(b, p)
 	if p.Online != nil {
 		b.Online = *p.Online
 	} else {
@@ -517,8 +525,7 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		secret = strings.TrimSpace(r.Header.Get("X-Box-Secret"))
 	}
 
-	if _, exists := s.store.GetBox(boxID); !exists {
-		req := s.store.RecordEnrollment(boxID, secret, clientIPFromRequest(r), payload.SoCModel)
+	if ok, req := s.admitBox(boxID, secret, clientIPFromRequest(r), payload); !ok {
 		writeJSON(w, http.StatusForbidden, map[string]any{
 			"error":       "ENROLLMENT_PENDING",
 			"box_id":      req.BoxID,

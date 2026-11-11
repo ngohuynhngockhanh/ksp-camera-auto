@@ -33,6 +33,7 @@ type AgentConfig struct {
 	KspcamPort        int
 	ShinobiPort       int
 	NodeRedPort       int
+	RedBidaKeyDir     string
 }
 
 // EdgeAgent maintains a persistent outbound WebSocket + Yamux reverse tunnel to inut-bida-hub
@@ -71,6 +72,9 @@ func NewEdgeAgent(cfg AgentConfig) *EdgeAgent {
 	}
 	if cfg.NodeRedPort <= 0 {
 		cfg.NodeRedPort = 1880
+	}
+	if strings.TrimSpace(cfg.RedBidaKeyDir) == "" {
+		cfg.RedBidaKeyDir = DefaultRedBidaKeyDir
 	}
 	return &EdgeAgent{
 		cfg: cfg,
@@ -369,6 +373,9 @@ func (a *EdgeAgent) CollectTelemetry() HeartbeatPayload {
 		RXMbps:         &rxMbps,
 		UptimeSec:      uptimeSec,
 		UptimeHuman:    uptimeHuman,
+		LANIP:          sampleLANIP(),
+		Arch:           machineArch(),
+		RedBidaKeys:    readRedBidaKeys(a.cfg.RedBidaKeyDir),
 	}
 
 	a.mu.Lock()
