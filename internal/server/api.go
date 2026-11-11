@@ -30,6 +30,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mediaexport"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/shinobi"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/tiandy"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/tvt"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/xiongmai"
 )
 
@@ -212,8 +213,8 @@ func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "host is required")
 		return
 	}
-	if req.Vendor != config.VendorDahua && req.Vendor != config.VendorHikvision && req.Vendor != config.VendorTiandy && req.Vendor != config.VendorRaysharp && req.Vendor != config.VendorXiongmai {
-		writeErr(w, http.StatusBadRequest, "vendor must be dahua, hikvision, tiandy, raysharp or xiongmai")
+	if req.Vendor != config.VendorDahua && req.Vendor != config.VendorHikvision && req.Vendor != config.VendorTiandy && req.Vendor != config.VendorRaysharp && req.Vendor != config.VendorXiongmai && req.Vendor != config.VendorTVT {
+		writeErr(w, http.StatusBadRequest, "vendor must be dahua, hikvision, tiandy, raysharp, xiongmai or tvt")
 		return
 	}
 	if req.Port == 0 {
@@ -226,6 +227,8 @@ func (s *Server) handleCamerasUpsert(w http.ResponseWriter, r *http.Request) {
 			req.Port = s.cfg.Defaults.RaysharpPort
 		case config.VendorXiongmai:
 			req.Port = s.cfg.Defaults.XiongmaiPort
+		case config.VendorTVT:
+			req.Port = s.cfg.Defaults.TVTPort
 		default:
 			req.Port = s.cfg.Defaults.HikvisionPort
 		}
@@ -775,7 +778,7 @@ func (s *Server) openDeviceCamera(w http.ResponseWriter, r *http.Request, id str
 // never set the field (the frontend doesn't send it yet) keep behaving
 // byte-identically to before this method grew a vendor parameter.
 func (s *Server) nvrDeviceFrom(host string, port int, user, pass, name string, vendor config.Vendor) config.Device {
-	if vendor != config.VendorHikvision && vendor != config.VendorTiandy && vendor != config.VendorRaysharp && vendor != config.VendorXiongmai {
+	if vendor != config.VendorHikvision && vendor != config.VendorTiandy && vendor != config.VendorRaysharp && vendor != config.VendorXiongmai && vendor != config.VendorTVT {
 		vendor = config.VendorDahua
 	}
 	if port == 0 {
@@ -788,6 +791,8 @@ func (s *Server) nvrDeviceFrom(host string, port int, user, pass, name string, v
 			port = s.cfg.Defaults.RaysharpPort
 		case config.VendorXiongmai:
 			port = s.cfg.Defaults.XiongmaiPort
+		case config.VendorTVT:
+			port = s.cfg.Defaults.TVTPort
 		default:
 			port = s.cfg.Defaults.DahuaPort
 		}
@@ -1510,6 +1515,8 @@ func (s *Server) fallbackSnapshotFromShinobiOrRTSP(ctx context.Context, d config
 			rtspPath = fmt.Sprintf("/rtsp/streaming?channel=%d&subtype=0", wantCh)
 		} else if d.Vendor == config.VendorXiongmai {
 			rtspPath = xiongmai.BuildRTSPPath(d.Username, d.Password, wantCh, 0)
+		} else if d.Vendor == config.VendorTVT {
+			rtspPath = tvt.BuildRTSPLivePath(wantCh, 0)
 		}
 		u := &url.URL{
 			Scheme: "rtsp",

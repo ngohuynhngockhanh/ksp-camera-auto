@@ -94,6 +94,32 @@ type remuxOpts struct {
 // the deploy boxes), so concurrent builds — typically a user re-clicking the
 // download button — would OOM the box instead of just taking turns.
 var buildSem = make(chan struct{}, 2)
+var (
+	rtspTimeoutFlagOnce sync.Once
+	rtspTimeoutFlagName string
+)
+
+// detectRTSPSocketTimeoutFlag probes `ffmpeg -hide_banner -h demuxer=rtsp` once
+// so RTSP chunk fetches always pass a bounded 8-second TCP read timeout (-stimeout
+// on FFmpeg 4/5, -rw_timeout if present) without accidentally triggering FFmpeg 5's
+// deprecated `-timeout` listen mode.
+func detectRTSPSocketTimeoutFlag() string {
+	rtspTimeoutFlagOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-h", "demuxer=rtsp").CombinedOutput()
+		if err != nil {
+			return
+		}
+		txt := string(out)
+		if strings.Contains(txt, "-stimeout") {
+			rtspTimeoutFlagName = "-stimeout"
+		} else if strings.Contains(txt, "-rw_timeout") {
+			rtspTimeoutFlagName = "-rw_timeout"
+		}
+	})
+	return rtspTimeoutFlagName
+}
 
 func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts) error {
 	if len(chunks) == 0 {
@@ -262,7 +288,11 @@ func fetchChunk(ctx context.Context, c Chunk, outPath string, opts remuxOpts) er
 		if cleanup != nil {
 			defer cleanup()
 		}
-		args := []string{"-nostdin", "-rtsp_transport", "tcp", "-i", inputURL}
+		args := []string{"-nostdin"}
+		if tf := detectRTSPSocketTimeoutFlag(); tf != "" {
+			args = append(args, tf, "8000000")
+		}
+		args = append(args, "-rtsp_transport", "tcp", "-i", inputURL)
 		if c.Seconds > 0 {
 			args = append(args, "-t", strconv.Itoa(c.Seconds))
 		}

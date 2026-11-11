@@ -14,6 +14,7 @@ defaults:
     tiandy_port: 554
     raysharp_port: 80
     xiongmai_port: 34567
+    tvt_port: 80
     username: admin
     password: smarthome12345
     timeout_seconds: 30

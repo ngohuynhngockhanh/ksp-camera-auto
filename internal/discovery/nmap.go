@@ -83,6 +83,7 @@ func ScanSubnet(ctx context.Context, cidr string) ([]Result, error) {
 	results := parseNmapOutput(string(out))
 	enrichPort80Raysharp(ctx, results)
 	enrichPort80Xiongmai(ctx, results)
+	enrichPort80TVT(ctx, results)
 	return results, nil
 }
 

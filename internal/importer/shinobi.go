@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/tvt"
 )
 
 // shinobiMonitor is the subset of a Shinobi monitor object we read. Details is
@@ -98,6 +99,8 @@ func ParseShinobi(data []byte, hikPort, dahuaPort int) (Result, error) {
 			port = 80
 		} else if vendor == config.VendorXiongmai {
 			port = 34567
+		} else if vendor == config.VendorTVT {
+			port = 80
 		}
 		name := m.Name
 		if name == "" {
@@ -149,6 +152,9 @@ var (
 // (Dahua/Tiandy realmonitor), the short /N/M path (Tiandy NVR), or
 // /Streaming/Channels/<id> (Hik, id = channel*100+stream). 0 when none.
 func parseChannel(rawURL, path string) int {
+	if ch, ok := tvt.ParseChannelFromRTSP(rawURL, path); ok {
+		return ch
+	}
 	if u, err := url.Parse(strings.TrimSpace(rawURL)); err == nil {
 		if n, err := strconv.Atoi(u.Query().Get("channel")); err == nil && n > 0 {
 			return n
@@ -204,6 +210,8 @@ func detectVendor(path string) config.Vendor {
 		return config.VendorRaysharp
 	case strings.Contains(p, "real_stream") || strings.Contains(p, "_stream=") || (strings.Contains(p, "user=") && strings.Contains(p, "_password=")):
 		return config.VendorXiongmai
+	case tvt.IsTVTRTSPPath(p):
+		return config.VendorTVT
 	case strings.Contains(p, "/streaming/channels"):
 		return config.VendorHikvision
 	default:

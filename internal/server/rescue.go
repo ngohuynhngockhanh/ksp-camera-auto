@@ -21,6 +21,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mcp"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/shinobi"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/tvt"
 )
 
 var (
@@ -200,6 +201,11 @@ func extractRTSPChannelAndVendor(autoHost, pathStr string) (config.Vendor, int, 
 		vendor = config.VendorXiongmai
 		if m := rescueDahuaChRe.FindStringSubmatch(combined); len(m) == 2 {
 			ch, _ = strconv.Atoi(m[1])
+		}
+	} else if tvt.IsTVTRTSPPath(combined) {
+		vendor = config.VendorTVT
+		if n, ok := tvt.ParseChannelFromRTSP(autoHost, pathStr); ok {
+			ch = n
 		}
 	}
 	return vendor, ch, host, user, pass, rtspPort

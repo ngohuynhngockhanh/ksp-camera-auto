@@ -493,6 +493,18 @@ Dòng Camera IP (Vitacam, iCSee, XMEye, JFTech) và Đầu ghi DVR/HVR/NVR của
 
 ---
 
+### 3.4d TVT Digital / Secuvision (`internal/tvt` — Dual-Plane NVMS-9000 XML, ONVIF Profile S/G & RTSP Replay)
+
+Dòng đầu ghi NVR và Camera IP của Shenzhen TVT Digital Technology (`vendor: "tvt"`, cổng mặc định `80`), bao gồm các dòng OEM quốc tế **Secuvision Australia** (`NVR-0804B1-4P`, `NVR-0808B2-8P`, `NVR-0816B2-16P`) và **Speco Technologies N9K**:
+1. **Đàm phán Hai Tầng Điều Khiển (`NVMS-9000 XML` $\leftrightarrow$ `ONVIF Profile S + Profile G`)**:
+   - Tầng Web XML `/reqLogin` + `/doLogin` xác thực thách thức `hex(SHA512(hex(MD5(password)) + "#" + nonce))` kèm `Cookie: sessionId=<guid>` và giải mã `AES-128-ECB` `sessionKey`.
+   - Khi tài khoản cấu hình chỉ có quyền media/ONVIF (như tài khoản `rtsp`), `tvt.Client` tự động chuyển mạch sang SOAP `WS-UsernameToken PasswordDigest` trên `/onvif/device_service`, `/onvif/Media2` (đọc chuẩn `H265` vs `H264`, `GovLength`), `/onvif/Recording` và `/onvif/SearchRecording` (`GetRecordingInformation` + `FindEvents` lọc `RecordingHistory/Recording/State`).
+2. **Đường dẫn RTSP Live & Replay `0% CPU`**:
+   - Live: `rtsp://<user>:<pass>@<host>:554/chID=<1..N>&streamType=main|sub&linkType=tcp`.
+   - Replay / Hybrid Export: `rtsp://<user>:<pass>@<host>:554/chID=<1..N>&date=YYYY-MM-DD&time=HH:MM:SS&timelen=<sec+5>&streamType=main&linkType=tcp` (tự động tính độ lệch múi giờ thực tế của NVR qua `GetSystemDateAndTime`). Tài liệu đầy đủ: [`docs/PROTOCOL-TVT.md`](./docs/PROTOCOL-TVT.md).
+
+---
+
 ### 3.5 Hệ thống Dò tìm Thiết bị Mạng (Discovery Subsystem)
 
 Package `internal/discovery` kết hợp 4 cơ chế quét song song:

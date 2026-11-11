@@ -173,7 +173,7 @@ function rememberProbeResult(id, payload) {
 }
 
 function cameraSerialHtml(c) {
-  if (c.vendor !== 'dahua' && c.vendor !== 'raysharp' && c.vendor !== 'xiongmai') return '<span class="muted">–</span>';
+  if (c.vendor !== 'dahua' && c.vendor !== 'raysharp' && c.vendor !== 'xiongmai' && c.vendor !== 'tvt') return '<span class="muted">–</span>';
   if (!c.serialNumber) return '<span class="muted">chưa dò SN</span>';
   return `<div class="camera-serial"><code>${escapeHtml(c.serialNumber)}</code>` +
     `<div class="camera-serial-qr" data-testid="camera-serial-qr" data-serial="${escapeHtml(c.serialNumber)}"></div></div>`;
@@ -614,7 +614,7 @@ function resolveLegacyHash() {
     document.getElementById('nvr-port').value = nvr ? nvr.port : 37777;
     document.getElementById('nvr-user').value = nvr ? nvr.username : 'admin';
     document.getElementById('nvr-pass').value = '';
-    document.getElementById('nvr-vendor').value = (nvr && ['dahua', 'hikvision', 'raysharp', 'xiongmai', 'tiandy'].includes(nvr.vendor)) ? nvr.vendor : 'hikvision';
+    document.getElementById('nvr-vendor').value = (nvr && ['dahua', 'hikvision', 'raysharp', 'xiongmai', 'tvt', 'tiandy'].includes(nvr.vendor)) ? nvr.vendor : 'hikvision';
     scanRows = [];
     document.getElementById('nvr-tbody').innerHTML = '<tr><td colspan="4" class="empty-hint">Nhập đầu ghi rồi bấm "Quét đầu ghi".</td></tr>';
     document.getElementById('nvr-save-btn').disabled = true;
@@ -2515,7 +2515,7 @@ function applyDetailCapabilities(cam) {
   const isFullVendor = cam.vendor === 'dahua' || cam.vendor === 'raysharp';
   const isMaintOrPTZ = isFullVendor || cam.vendor === 'xiongmai';
   const isAI = cam.vendor === 'raysharp';
-  const canEncode = ['dahua', 'hikvision', 'tiandy', 'raysharp', 'xiongmai'].includes(cam.vendor);
+  const canEncode = ['dahua', 'hikvision', 'tiandy', 'raysharp', 'xiongmai', 'tvt'].includes(cam.vendor);
   const canNetwork = ['dahua', 'hikvision', 'tiandy', 'raysharp', 'xiongmai'].includes(cam.vendor);
   const fullOnly = `Chỉ Dahua/KBVision và Raysharp hỗ trợ — camera này là ${cam.vendor}.`;
   const caps = {
@@ -3210,6 +3210,7 @@ function scanVendorClass(value) {
   if (/(^|[^a-z0-9])tiandy([^a-z0-9]|$)/.test(text)) return 'tiandy';
   if (/(^|[^a-z0-9])(raysharp|advantech|n10256|vc31)([^a-z0-9]|$)/.test(text)) return 'raysharp';
   if (/(^|[^a-z0-9])(xiongmai|xmeye|icsee|vitacam|jftech|sofia)([^a-z0-9]|$)/.test(text)) return 'xiongmai';
+  if (/(^|[^a-z0-9])(tvt|nvms|secuvision|nvr-08|td-33|td-31)([^a-z0-9]|$)/.test(text)) return 'tvt';
   return '';
 }
 
@@ -3233,6 +3234,7 @@ function normalizeScanResult(raw) {
   if (!port && vendor === 'dahua') port = 37777;
   if (!port && vendor === 'hikvision') port = 8000;
   if (!port && vendor === 'xiongmai') port = 34567;
+  if (!port && vendor === 'tvt') port = 80;
   return Object.assign(result, { vendor, port });
 }
 

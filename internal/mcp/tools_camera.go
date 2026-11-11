@@ -21,7 +21,7 @@ func registerCameraInventoryTools(r *Registry, cfg *config.Config, inv *config.I
 			Properties: map[string]any{
 				"vendor": map[string]any{
 					"type":        "string",
-					"enum":        []string{"hikvision", "dahua", "tiandy", "raysharp", "xiongmai"},
+					"enum":        []string{"hikvision", "dahua", "tiandy", "raysharp", "xiongmai", "tvt"},
 					"description": "Filter cameras by vendor family",
 				},
 				"isNvr": map[string]any{
@@ -99,7 +99,7 @@ func registerCameraInventoryTools(r *Registry, cfg *config.Config, inv *config.I
 				},
 				"vendor": map[string]any{
 					"type":        "string",
-					"enum":        []string{"hikvision", "dahua", "tiandy", "raysharp", "xiongmai"},
+					"enum":        []string{"hikvision", "dahua", "tiandy", "raysharp", "xiongmai", "tvt"},
 					"description": "Vendor family identifier",
 				},
 				"username": map[string]any{
@@ -176,10 +176,10 @@ func registerCameraInventoryTools(r *Registry, cfg *config.Config, inv *config.I
 
 		vendor := config.Vendor(strings.ToLower(strings.TrimSpace(req.Vendor)))
 		switch vendor {
-		case config.VendorDahua, config.VendorHikvision, config.VendorTiandy, config.VendorRaysharp, config.VendorXiongmai:
+		case config.VendorDahua, config.VendorHikvision, config.VendorTiandy, config.VendorRaysharp, config.VendorXiongmai, config.VendorTVT:
 			// valid
 		default:
-			return NewErrorResult(fmt.Sprintf("unsupported vendor %q (must be dahua, hikvision, tiandy, raysharp, or xiongmai)", req.Vendor)), fmt.Errorf("unsupported vendor")
+			return NewErrorResult(fmt.Sprintf("unsupported vendor %q (must be dahua, hikvision, tiandy, raysharp, xiongmai, or tvt)", req.Vendor)), fmt.Errorf("unsupported vendor")
 		}
 
 		id := strings.TrimSpace(req.ID)

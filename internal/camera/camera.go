@@ -16,6 +16,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/hik"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/raysharp"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/tiandy"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/tvt"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/xiongmai"
 )
 
@@ -399,6 +400,9 @@ func Open(ctx context.Context, d config.Device, timeout time.Duration) (Camera, 
 	case config.VendorXiongmai:
 		cl := xiongmai.New(d.Host, d.Port, d.Username, d.Password, timeout)
 		return &xiongmaiCamera{client: cl, device: d, timeout: timeout}, nil
+	case config.VendorTVT:
+		cl := tvt.New(d.Host, d.Port, d.Username, d.Password, timeout)
+		return &tvtCamera{client: cl, device: d, timeout: timeout}, nil
 	default:
 		return nil, fmt.Errorf("unknown vendor %q", d.Vendor)
 	}

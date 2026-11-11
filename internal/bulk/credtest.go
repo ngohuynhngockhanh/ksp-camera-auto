@@ -127,6 +127,11 @@ func normalizeCredTestTarget(t CredTestTarget, defaults config.Defaults) (config
 			if port <= 0 {
 				port = builtIn.XiongmaiPort
 			}
+		case config.VendorTVT:
+			port = defaults.TVTPort
+			if port <= 0 {
+				port = builtIn.TVTPort
+			}
 		case config.VendorTiandy:
 			port = defaults.TiandyPort
 			if port <= 0 {
@@ -153,6 +158,8 @@ func normalizeCredTestVendor(raw string) (config.Vendor, bool) {
 		return config.VendorRaysharp, true
 	case "xiongmai", "xmeye", "icsee", "xm", "vitacam", "jftech", "sofia":
 		return config.VendorXiongmai, true
+	case "tvt", "nvms", "nvms-9000", "secuvision", "speco":
+		return config.VendorTVT, true
 	case "tiandy":
 		return config.VendorTiandy, true
 	default:

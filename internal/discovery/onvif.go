@@ -217,6 +217,13 @@ func vendorFromText(s string) string {
 		strings.Contains(lower, "jftech") ||
 		strings.Contains(lower, "h264dvr"):
 		return "xiongmai"
+	case strings.Contains(lower, "tvt") ||
+		strings.Contains(lower, "nvms") ||
+		strings.Contains(lower, "secuvision") ||
+		strings.Contains(lower, "nvr-08") ||
+		strings.Contains(lower, "td-33") ||
+		strings.Contains(lower, "td-31"):
+		return "tvt"
 	case hasTextToken(lower, "lc") || dahuaIPCModelHint(lower) || genericDahuaONVIFHint(lower):
 		return "dahua"
 	default:
@@ -269,6 +276,8 @@ func onvifPortForVendor(vendor string) int {
 		return 80
 	case "xiongmai":
 		return 34567
+	case "tvt":
+		return 80
 	default:
 		return 0
 	}

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/config"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/tvt"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/xiongmai"
 )
 
@@ -115,6 +116,8 @@ func (c *Client) BuildMonitorConfig(d config.Device) MonitorConfig {
 		path = fmt.Sprintf("/rtsp/streaming?channel=%d&subtype=0", channel)
 	case config.VendorXiongmai:
 		path = xiongmai.BuildRTSPPath(d.Username, d.Password, channel, 0)
+	case config.VendorTVT:
+		path = tvt.BuildRTSPLivePath(channel, 0)
 	default:
 		// Default to Dahua/Hik standard path
 		path = fmt.Sprintf("/cam/realmonitor?channel=%d&subtype=0", channel)
@@ -139,7 +142,7 @@ func (c *Client) BuildMonitorConfig(d config.Device) MonitorConfig {
 	acodec := "copy"
 	streamAcodec := "copy"
 	recordAcodec := "copy"
-	if d.Vendor == config.VendorRaysharp || d.Vendor == config.VendorXiongmai {
+	if d.Vendor == config.VendorRaysharp || d.Vendor == config.VendorXiongmai || d.Vendor == config.VendorTVT {
 		// Raysharp & Xiongmai Sofia chips output G.711A/G.711U by default;
 		// disable audio copy to preserve 0% CPU zero-transcoding.
 		acodec = "no"
@@ -306,6 +309,8 @@ func (c *Client) SyncFromShinobi(ctx context.Context, inv *config.Inventory) (*S
 			configPort = 80
 		} else if vendor == config.VendorXiongmai {
 			configPort = 34567
+		} else if vendor == config.VendorTVT {
+			configPort = 80
 		}
 		// Check if host already exists in inventory with a different port (e.g. 8888 fallback)
 		if existing, ok := inv.FindByHost(host, 0); ok && existing.Port > 0 {
@@ -425,6 +430,8 @@ func detectVendorFromPath(path string) config.Vendor {
 		return config.VendorRaysharp
 	case strings.Contains(p, "real_stream") || strings.Contains(p, "_stream=") || (strings.Contains(p, "user=") && strings.Contains(p, "_password=")):
 		return config.VendorXiongmai
+	case tvt.IsTVTRTSPPath(p):
+		return config.VendorTVT
 	case strings.Contains(p, "/streaming/channels"):
 		return config.VendorHikvision
 	default:
@@ -433,6 +440,9 @@ func detectVendorFromPath(path string) config.Vendor {
 }
 
 func parseChannelFromURLAndPath(rawURL, path string) int {
+	if ch, ok := tvt.ParseChannelFromRTSP(rawURL, path); ok {
+		return ch
+	}
 	if rawURL != "" {
 		if u, err := url.Parse(strings.TrimSpace(rawURL)); err == nil {
 			if n, err := strconv.Atoi(u.Query().Get("channel")); err == nil && n > 0 {

@@ -21,6 +21,7 @@ const (
 	VendorTiandy    Vendor = "tiandy"   // Dahua-lineage RTSP; review-only over RTSP+ONVIF (pure-Go, no NetSDK)
 	VendorRaysharp  Vendor = "raysharp" // Raysharp / Advantech NVR & AI IP Camera (HTTP JSON API V1.0)
 	VendorXiongmai  Vendor = "xiongmai" // Xiongmai / XMEye / iCSee / Vitacam / Sofia (TCP 34567 + HTTP CGI 80)
+	VendorTVT       Vendor = "tvt"      // TVT Digital / Secuvision / Speco NVMS-9000 & ONVIF Profile S/G (HTTP 80 + RTSP 554)
 )
 
 // Server holds web UI listener + login settings.
@@ -53,6 +54,7 @@ type Defaults struct {
 	TiandyPort   int    `yaml:"tiandy_port"`
 	RaysharpPort int    `yaml:"raysharp_port"`
 	XiongmaiPort int    `yaml:"xiongmai_port"`
+	TVTPort      int    `yaml:"tvt_port"`
 	Username     string `yaml:"username"`
 	Password     string `yaml:"password"`
 	// TimeoutSeconds bounds one device operation; higher helps slow multi-channel
@@ -232,6 +234,7 @@ func Default() Config {
 			TiandyPort:     554,
 			RaysharpPort:   80,
 			XiongmaiPort:   34567,
+			TVTPort:        80,
 			Username:       "admin",
 			Password:       "smarthome12345",
 			TimeoutSeconds: 30,
@@ -349,6 +352,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Defaults.XiongmaiPort == 0 {
 		c.Defaults.XiongmaiPort = d.Defaults.XiongmaiPort
+	}
+	if c.Defaults.TVTPort == 0 {
+		c.Defaults.TVTPort = d.Defaults.TVTPort
 	}
 	if c.Defaults.Username == "" {
 		c.Defaults.Username = d.Defaults.Username
