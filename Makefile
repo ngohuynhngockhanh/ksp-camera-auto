@@ -59,6 +59,7 @@ sync-ansible: build-all
 	scp $(DIST)/$(BINARY)-linux-arm64 root@172.16.5.180:/build/armbian-build/ansible/playbook/roles/app_ksp_bida/files/kspcam
 	scp $(DIST)/$(BINARY)-linux-arm64 root@172.16.5.180:/build/armbian-build/ansible/playbook/roles/app_ksp_bida/files/kspcam-linux-arm64
 	scp $(DIST)/$(BINARY)-linux-armv7 root@172.16.5.180:/build/armbian-build/ansible/playbook/roles/app_ksp_bida/files/kspcam-armhf
+	scp $(DIST)/$(AGENT_BINARY)-linux-arm64 $(DIST)/$(AGENT_BINARY)-linux-armv7 $(DIST)/$(AGENT_BINARY)-linux-amd64 root@172.16.5.180:/build/armbian-build/ansible/playbook/roles/app_ksp_bida/files/
 	@echo ">>> Successfully synced binaries to Ansible controller (172.16.5.180)."
 
 # Optional Hikvision SDK (8000) build. Requires the HCNetSDK: set HIKSDK to the
