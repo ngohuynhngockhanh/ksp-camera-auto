@@ -259,6 +259,9 @@
 - **`inut_206_28` (`77.88.206.28` / `6.28` — 99 Billiards CS10 - 2, `ke=99102`, 15 cam)**:
   - **Ngày lên Full Go + Hybrid Bridge:** `2026-11-10` • `linux/arm64` (`rk3528`, RAM `1.8 GB`) • Onboarding từ MySQL ccio sang SQLite WAL, 0 clip mất (`2,527 -> 2,648+` MP4 clips) • RAM: `550 MB / 1,794 MB` (khả dụng `1,092 MB`), MariaDB & MySQL tắt và masked; `go-shinobi-ksp` `:8080` (`16.3 MB`), `redbida-go` `:2023` (`13.9 MB`), `kspcam` `:2028` active (`9d85e07-dirty`), Hybrid Bridge `enabled: true` (`a08a20a2123935fc786cc969654d8d45`), 15/15 mappings NVR Hikvision DS-7632NXI-K2 (`192.168.1.13:80`, kênh 16..30, `live:inut161@`) • Thẻ nhớ `/media/usb1` f2fs • Golden Hardening: netwatch masked, sysrq=0.
 
+- **`inut_205_9` (`77.88.205.9` / `5.9` — Wukong Billiards, `ke=wukong`, 11 cam)**:
+  - **Ngày lên Full Go + Hybrid Bridge:** `2026-11-11` • `linux/arm64` (`6.6.44-current-sunxi64`, RAM `2 GB`) • Onboarding từ MySQL ccio sang SQLite WAL, 0 clip mất (`2,744 -> 2,777+` MP4 clips) • RAM: `742 MB / 1,923 MB` (khả dụng `1,180 MB`, trước đó `443 MB`), MariaDB & MySQL tắt và masked; `go-shinobi-ksp` `:8080` (`20 MB`), `redbida-go` `:2023` (`16 MB`, `d7c8e8d`), `kspcam` `:2028` active (`ad6f6b6`), Hybrid Bridge `enabled: true`, 11/11 mappings NVR Hikvision DS-7616NI-K1(B) (`192.168.1.108:80`, kênh `2, 4..11, 13, 14`) • Giữ nguyên 100% branding (`Wukong Billiards`, logo Billiard Live) • `/data/alarms`: `usb` là mảng `[]`, `p2p` đủ proxy • CORS `Access-Control-Allow-Origin: *`, Range `206` trên `:2023`/`:8080` • Thẻ nhớ `/media/usb1` f2fs • Golden Hardening: netwatch masked, sysrq=0.
+
 ## 2. Lệnh Ansible Trên `172.16.5.180` (`/build/armbian-build/ansible`)
 
 ```bash
