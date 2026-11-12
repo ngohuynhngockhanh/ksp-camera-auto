@@ -3,6 +3,7 @@ package hik
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/dahua"
@@ -31,6 +32,13 @@ func (c *Client) FindRecordings(ctx context.Context, channel int, start, end tim
 	trackID := channel*100 + 1
 	segs, err := c.isapi.SearchTrack(ctx, trackID, start, end, 200)
 	if err != nil {
+		errStr := strings.ToLower(err.Error())
+		if strings.Contains(errStr, "invalid operation") ||
+			strings.Contains(errStr, "invalidoperation") ||
+			strings.Contains(errStr, "nostoragedevice") ||
+			strings.Contains(errStr, "no storage device") {
+			return []dahua.Recording{}, nil
+		}
 		return nil, fmt.Errorf("hik: find recordings: %w", err)
 	}
 

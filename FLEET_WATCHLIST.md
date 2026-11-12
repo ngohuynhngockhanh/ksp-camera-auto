@@ -932,3 +932,68 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
     - Cập nhật toàn bộ 10 monitor trong Shinobi (`cust_input: ""`, `cust_stream: ""`, `acodec: "copy"`, `stream_acodec: "copy"`, `record_acodec: "copy"`, `cutoff: "5"`, `hls_time: "2"`, `hls_list_size: "3"`, gắn `-tag:v hvc1 -segment_format_options movflags=+faststart`), đặt `doSnapshot: false`, `deleteOrphans: false`, vá `snapProcess.terminate()` trong `libs/monitor.js`, nâng `Users.details.size = "100000"` (`100 GB / 10 ngày`), và chuyển `hls_using_go2rtc = false`.
     - **Tắt và mask vĩnh viễn `netwatch.service`** (`rm -f /usr/local/bin/netwatch_loop.sh`), kích hoạt **ZRAM Swap `1.8 GiB` (`lz4`)**, khóa cứng `kernel.sysrq = 0`, `vm.swappiness = 80`, cấu hình `/etc/media-automount.d/` (`noatime,users` cho kernel 6.1), cài đặt Storage Guard 15p `90% -> 80%`, Smart Watchdog V4 60s, PM2 Memory Guard (`camera: 280M`, `inut: 280M`, `ota-mqtt: 120M`, log `/dev/null`), và `iptables` `80 -> 2023`.
   - Trạng thái: **Đủ 14/14 tiến trình (`7/7` bàn đang bật điện: `camera01, 02, 03, 05, 06, 09, 10`)** chạy mượt; toàn bộ 7 luồng HLS đều đạt chuẩn **`#EXT-X-TARGETDURATION: 2` (`#EXTINF: 2.03s – 2.06s`, `.ts` nhẹ `~391–447 KB`)**, băng thông `eth0` hạ xuống chỉ còn **`7.5 Mbps`** (`Dropped = 0`), RAM khả dụng **`775 MiB`** + ZRAM Swap `1.8 GiB` trống `100%`.
+
+- [x] **Node `inut_204_151`** (Bida Văn Minh 2 - HS — `77.88.204.151`, group `vanminh2`)
+  - Phần cứng: Amlogic/Rockchip ARM64 (`aarch64`, kernel `6.1.155-ophub`), RAM **1.8 GiB** (`1,794 MB`), Thẻ nhớ **128 GB** (`118G` F2FS `/dev/mmcblk1p1`), Cổng mạng `eth0` (`192.168.1.41/24`)
+  - Số lượng camera: 11 camera Hikvision 1080p (`1920x1080 @ 25fps`, `camera01` .. `camera11` tại `192.168.1.193..210:80`)
+  - Quá trình chuyển đổi Full Go & Golden Hardening (Bảo toàn 100% 86 GB video cũ, 0 clip mất):
+    - Onboarding thành công từ Shinobi Node.js cũ + MariaDB `ccio` sang **iNut NVR (`Go-Shinobi-KSP` `:8080`)** thuần Go (SQLite WAL `shinobi.sqlite`); bảo toàn toàn bộ `2,430` video MySQL và `2,404` video đĩa (`mp4_before=2430, mp4_after=2449`).
+    - Thay thế Node-RED bằng **`redbida-go` `:2023`**, cập nhật **`kspcam` `:2028`** (`arm64`), kích hoạt **`inut-bida-agent`** với Yamux reverse tunnel tới hub.
+    - RAM giải phóng **`872 MB`** (từ `1,402 MB` xuống **`530 MB/1,794 MB`**, RAM khả dụng tăng vọt từ `250 MB` lên **`1,244 MB`** / `1.2 GiB`), dừng và mask vĩnh viễn MariaDB/MySQL.
+    - Golden Hardening: netwatch gỡ bỏ và mask, `kernel.sysrq = 0` (sysctl & persisted), automount systemd override `Type=oneshot`, `/etc/media-automount.d/{auto,ext4,f2fs}` đặt `AUTOMOUNT_OPTS="noatime,users"` (chuẩn kernel < 6.3), fstab sạch `/media/usb1`.
+  - Trạng thái kiểm chứng: **11/11 tiến trình FFmpeg ghi hình liên tục**, CPU remux copy 0% encode burden; file MP4 đạt chuẩn faststart `moov` tại byte `0x20`; HTTP 206 Partial Content OK; `node tools/cameralive/check_compat.js 77.88.204.151 0` đạt **100% PASS**; PM2 `restarts = 0` trên toàn bộ services; backup cấu hình monitors lưu tại `monitors_vanminh2_inut_204_151.json`.
+
+- [x] **Node `inut_204_153`** (Bida 889 — `77.88.204.153`, group `889`)
+  - Phần cứng: Amlogic/Rockchip ARM64 (`aarch64`, kernel `6.1.155-ophub`), RAM **1.8 GiB** (`1,794 MB`), Thẻ nhớ **128 GB** (`117G` F2FS `/dev/mmcblk1p1`), Cổng mạng `eth0` (`192.168.1.254/24`)
+  - Số lượng camera: 15 monitor (`camera01` .. `camera15`), gồm 13 camera Dahua 3K (`2880x1620 @ 30fps`) và 2 kênh `camera07, 08` qua đầu ghi Dahua NVR `192.168.1.26:37777`
+  - Quá trình chuyển đổi Full Go, Golden Hardening & Hybrid Setup (Bảo toàn 100% 82 GB video cũ, 0 clip mất):
+    - Onboarding thành công từ Shinobi Node.js cũ + MariaDB `ccio` sang **iNut NVR (`Go-Shinobi-KSP` `:8080`)** thuần Go (SQLite WAL `shinobi.sqlite`); bảo toàn toàn bộ `3,205` video MySQL và `3,155` video đĩa (`mp4_before=3184, mp4_after=3238`).
+    - Thay thế Node-RED bằng **`redbida-go` `:2023`**, cập nhật **`kspcam` `:2028`** (`arm64`), kích hoạt **`inut-bida-agent`** với Yamux reverse tunnel tới hub.
+    - RAM giải phóng **`617 MB`** (từ `1,097 MB` xuống **`480 MB/1,794 MB`**, RAM khả dụng tăng từ `532 MB` lên **`1,280 MB`** / `1.3 GiB`), dừng và mask vĩnh viễn MariaDB/MySQL.
+    - Kích hoạt **Hybrid Cam-SD + Dahua NVR**: `camera07, 08` liên kết kênh 2 & 3 đầu ghi Dahua `192.168.1.26:37777` trả về bản ghi `.dav` mượt mà, 13 camera bàn độc lập chạy chế độ `isCamSd: true`.
+    - Golden Hardening: netwatch gỡ bỏ và mask, `kernel.sysrq = 0` (sysctl & persisted), automount systemd override `Type=oneshot`, `/etc/media-automount.d/{auto,ext4,f2fs}` đặt `AUTOMOUNT_OPTS="noatime,users"` (chuẩn kernel < 6.3), fstab sạch `/media/usb1`.
+  - Trạng thái kiểm chứng: **15/15 tiến trình FFmpeg ghi hình liên tục**, CPU remux copy 0% encode burden; file MP4 đạt chuẩn faststart `moov` tại byte `0x20`; HTTP 206 Partial Content OK; `node tools/cameralive/check_compat.js 77.88.204.153 0` đạt **100% PASS**; PM2 `restarts = 0` trên toàn bộ services; backup cấu hình monitors lưu tại `monitors_889_inut_204_153.json`.
+
+- [x] **Node `inut_204_154`** (NguyenSa Caphe & Billiards — `77.88.204.154`, group `minh`)
+  - Phần cứng: Amlogic/Rockchip ARM64 (`aarch64`, kernel `6.1.155-ophub`), RAM **1.8 GiB** (`1,794 MB`), Thẻ nhớ **64 GB** (`59G` F2FS `/dev/mmcblk1p1` 41GB used), Cổng mạng `eth0` (`192.168.1.10/24`)
+  - Số lượng camera: 6 monitor Dahua (`camera01` .. `camera06` tại `192.168.1.200..205:554/37777`, 5 active Online & Recording, `camera02` offline từ trước)
+  - Quá trình chuyển đổi Full Go, Golden Hardening & Hybrid Setup (Bảo toàn 100% video cũ, 0 clip mất):
+    - Onboarding thành công từ Shinobi Node.js cũ + MariaDB `ccio` sang **iNut NVR (`Go-Shinobi-KSP` `:8080`)** thuần Go (SQLite WAL `shinobi.sqlite`); bảo toàn toàn bộ `2,942` video MySQL và `2,944` video đĩa (`mp4_before=2944, mp4_after=2957`).
+    - Thay thế Node-RED bằng **`redbida-go` `:2023`**, cập nhật **`kspcam` `:2028`** (`arm64`), kích hoạt **`inut-bida-agent`** với Yamux reverse tunnel tới hub (`wss://inut-bida.p2p.inut.io.vn/fleet/tunnel?box_id=inut_204_154`).
+    - RAM giải phóng **`457 MB`** (từ `854 MB` xuống **`397 MB/1,794 MB`**, RAM khả dụng tăng từ `804 MB` lên **`1,259 MB`** / `1.2 GiB`), dừng và mask vĩnh viễn MariaDB/MySQL.
+    - Kích hoạt **Hybrid Cam-SD + Box-SD**: 6/6 camera bàn độc lập chạy chế độ `isCamSd: true`, `bridge.enabled: true`.
+    - Golden Hardening: netwatch gỡ bỏ và mask, `kernel.sysrq = 0` (sysctl & persisted trong `/etc/sysctl.d/99-sysrq.conf`), automount systemd override `Type=oneshot`, `/etc/media-automount.d/{auto,ext4,f2fs}` đặt `AUTOMOUNT_OPTS="noatime,users"` (chuẩn kernel < 6.3), fstab sạch `/media/usb1`, hot remount `noatime`.
+  - Trạng thái kiểm chứng: **5/5 tiến trình FFmpeg ghi hình liên tục**, CPU remux copy 0% encode burden; file MP4 đạt chuẩn faststart `moov` tại byte `0x20`; HTTP 206 Partial Content OK; `node tools/cameralive/check_compat.js 77.88.204.154 0` đạt **100% PASS**; PM2 `restarts = 0` trên camera; backup cấu hình monitors lưu tại `monitors_minh_inut_204_154.json`.
+
+- [x] **Node `inut_204_155`** (Bida Bảo Anh 2 — `77.88.204.155`, group `baoanh2`)
+  - Phần cứng: Amlogic/Rockchip ARM64 (`aarch64`, kernel `6.1.155-ophub`), RAM **1.8 GiB** (`1,794 MB`), Thẻ nhớ **64 GB** (`59G` F2FS `/dev/mmcblk1p1` 42GB used), Cổng mạng `eth0` (`192.168.1.6/24`)
+  - Số lượng camera: 8 monitor Dahua 2K (`camera01` .. `camera08` tại `192.168.1.190..197:554/37777`, 8/8 Online & Recording)
+  - Quá trình chuyển đổi Full Go, Golden Hardening & Hybrid Setup (Bảo toàn 100% video cũ, 0 clip mất):
+    - Onboarding thành công từ Shinobi Node.js cũ + MariaDB `ccio` sang **iNut NVR (`Go-Shinobi-KSP` `:8080`)** thuần Go (SQLite WAL `shinobi.sqlite`); bảo toàn toàn bộ `970` video MySQL và `968` video đĩa (`mp4_before=968, mp4_after=992`).
+    - Thay thế Node-RED bằng **`redbida-go` `:2023`**, cập nhật **`kspcam` `:2028`** (`arm64`), kích hoạt **`inut-bida-agent`** với Yamux reverse tunnel tới hub (`wss://inut-bida.p2p.inut.io.vn/fleet/tunnel?box_id=inut_204_155`).
+    - RAM giải phóng **`618 MB`** (từ `1,079 MB` xuống **`461 MB/1,794 MB`**, RAM khả dụng tăng từ `594 MB` lên **`1,211 MB`** / `1.2 GiB`), dừng và mask vĩnh viễn MariaDB/MySQL.
+    - Kích hoạt **Hybrid Cam-SD + Box-SD**: 8/8 camera bàn độc lập chạy chế độ `isCamSd: true`, `bridge.enabled: true`.
+    - Golden Hardening: netwatch gỡ bỏ và mask, `kernel.sysrq = 0` (sysctl & persisted trong `/etc/sysctl.d/99-sysrq.conf`), automount systemd override `Type=oneshot`, `/etc/media-automount.d/{auto,ext4,f2fs}` đặt `AUTOMOUNT_OPTS="noatime,users"` (chuẩn kernel < 6.3), fstab sạch `/media/usb1`, hot remount `noatime`.
+  - Trạng thái kiểm chứng: **8/8 tiến trình FFmpeg ghi hình liên tục**, CPU remux copy 0% encode burden; file MP4 đạt chuẩn faststart `moov` tại byte `0x20`; HTTP 206 Partial Content OK; `node tools/cameralive/check_compat.js 77.88.204.155 0` đạt **100% PASS**; PM2 `restarts = 0` trên camera; backup cấu hình monitors lưu tại `monitors_baoanh2_inut_204_155.json`.
+
+- [x] **Node `inut_204_156`** (KN Pickleball — `77.88.204.156`, group `kn`)
+  - Phần cứng: Amlogic/Rockchip ARM64 (`aarch64`, kernel `6.1.155-ophub`), RAM **1.8 GiB** (`1,794 MB`), Thẻ nhớ **64 GB** (`58G` F2FS `/dev/mmcblk1p1` 41GB used), Cổng mạng `eth0` (`192.168.1.6/24`)
+  - Số lượng camera: 4 monitor Dahua 1080p (`camera01` .. `camera04` tại `192.168.1.161, .162, .163, .241:554/37777`, 4/4 Online & Recording)
+  - Quá trình chuyển đổi Full Go, Golden Hardening & Hybrid Setup (Bảo toàn 100% video cũ, 0 clip mất):
+    - Onboarding thành công từ Shinobi Node.js cũ + MariaDB `ccio` sang **iNut NVR (`Go-Shinobi-KSP` `:8080`)** thuần Go (SQLite WAL `shinobi.sqlite`); bảo toàn toàn bộ `1,320` video MySQL và `1,342` video đĩa (`mp4_before=1342, mp4_after=1352`).
+    - Thay thế Node-RED bằng **`redbida-go` `:2023`**, cập nhật **`kspcam` `:2028`** (`arm64`), kích hoạt **`inut-bida-agent`** với Yamux reverse tunnel tới hub (`wss://inut-bida.p2p.inut.io.vn/fleet/tunnel?box_id=inut_204_156`).
+    - RAM giải phóng **`441 MB`** (từ `829 MB` xuống **`388 MB/1,794 MB`**, RAM khả dụng tăng từ `814 MB` lên **`1,252 MB`** / `1.2 GiB`), dừng và mask vĩnh viễn MariaDB/MySQL.
+    - Kích hoạt **Hybrid Cam-SD + Box-SD**: 4/4 camera bàn độc lập chạy chế độ `isCamSd: true`, `bridge.enabled: true`.
+    - Golden Hardening: netwatch gỡ bỏ và mask, `kernel.sysrq = 0` (sysctl & persisted trong `/etc/sysctl.d/99-sysrq.conf`), automount systemd override `Type=oneshot`, `/etc/media-automount.d/{auto,ext4,f2fs}` đặt `AUTOMOUNT_OPTS="noatime,users"` (chuẩn kernel < 6.3), fstab sạch `/media/usb1`, hot remount `noatime`.
+  - Trạng thái kiểm chứng: **4/4 tiến trình FFmpeg ghi hình liên tục**, CPU remux copy 0% encode burden; file MP4 đạt chuẩn faststart `moov` tại byte `0x20`; HTTP 206 Partial Content OK; `node tools/cameralive/check_compat.js 77.88.204.156 0` đạt **100% PASS**; PM2 `restarts = 0` trên camera; backup cấu hình monitors lưu tại `monitors_kn_inut_204_156.json`.
+
+- [x] **Node `inut_204_161`** (NTV Quảng Nam — `77.88.204.161`, group `ntv`)
+  - Phần cứng: Amlogic/Rockchip ARM64 (`aarch64`, kernel `6.1.155-ophub`), RAM **1.8 GiB** (`1,794 MB`), Thẻ nhớ **128 GB** (`117G` F2FS `/dev/mmcblk1p1` 86GB used), Cổng mạng `eth0` (`192.168.1.48/24`)
+  - Số lượng camera: 12 monitor Dahua 3K (`camera01` .. `camera12` tại `192.168.1.211..222:554/37777`, 12/12 Online & Recording)
+  - Quá trình chuyển đổi Full Go, Golden Hardening & Hybrid Setup (Bảo toàn 100% video cũ, 0 clip mất):
+    - Onboarding thành công từ Shinobi Node.js cũ + MariaDB `ccio` sang **iNut NVR (`Go-Shinobi-KSP` `:8080`)** thuần Go (SQLite WAL `shinobi.sqlite`); bảo toàn toàn bộ `2,055` video MySQL và `2,065` video đĩa (`mp4_before=2065, mp4_after=2102`).
+    - Thay thế Node-RED bằng **`redbida-go` `:2023`**, cập nhật **`kspcam` `:2028`** (`arm64`), kích hoạt **`inut-bida-agent`** với Yamux reverse tunnel tới hub (`wss://inut-bida.p2p.inut.io.vn/fleet/tunnel?box_id=inut_204_161`).
+    - RAM giải phóng **`463 MB`** (từ `975 MB` xuống **`512 MB/1,794 MB`**, Swap giảm từ `173 MB` xuống `44 MB`, RAM khả dụng tăng từ `704 MB` lên **`1,156 MB`** / `1.1 GiB`), dừng và mask vĩnh viễn MariaDB/MySQL.
+    - Kích hoạt **Hybrid Cam-SD + Box-SD**: 12/12 camera bàn độc lập chạy chế độ `isCamSd: true`, `bridge.enabled: true`.
+    - Golden Hardening: netwatch gỡ bỏ và mask, `kernel.sysrq = 0` (sysctl & persisted trong `/etc/sysctl.d/99-sysrq.conf`), automount systemd override `Type=oneshot`, `/etc/media-automount.d/{auto,ext4,f2fs}` đặt `AUTOMOUNT_OPTS="noatime,users"` (chuẩn kernel < 6.3), fstab sạch `/media/usb1`, hot remount `noatime`.
+  - Trạng thái kiểm chứng: **12/12 tiến trình FFmpeg ghi hình liên tục**, CPU remux copy 0% encode burden; file MP4 đạt chuẩn faststart `moov` tại byte `0x20`; HTTP 206 Partial Content OK; `node tools/cameralive/check_compat.js 77.88.204.161 0` đạt **100% PASS**; PM2 `restarts = 0` trên camera; backup cấu hình monitors lưu tại `monitors_ntv_inut_204_161.json`.
