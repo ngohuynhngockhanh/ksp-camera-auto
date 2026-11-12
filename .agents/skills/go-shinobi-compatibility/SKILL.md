@@ -71,3 +71,24 @@ Mọi triển khai `go-shinobi-ksp` bắt buộc giữ nguyên chữ ký đườ
      4) Kiểm tra `make backup-shinobi <target>` và cập nhật node vào file `GO_SHINOBI_DEPLOYED.md`.
 3. **Quy tắc SSH Trực Tiếp Vào Edge Node (Không Nhảy Qua `172.16.5.180`)**:
    - Khi cần SSH/SCP tới bất kỳ Edge Node nào (`77.88.200.* .. 77.88.207.*`), kết nối **trực tiếp 1-hop** bằng khóa `~/.ssh/id_rsa_macbook` (public key `~/.ssh/id_rsa_macbook.pub`, đã cấu hình tự động trong `~/.ssh/config`): `ssh root@77.88.<subnet>.<host>`. Tuyệt đối không chạy SSH lồng qua `172.16.5.180`.
+
+---
+
+## 5. Kiểm Tra Tương Thích App Bảng Điểm & Livestream Camera Live (`com.loc4atnt.cameralive`)
+
+1. **Lưu trữ Bundle Bền Vững Trên Đĩa (`/home/ksp/.cache/cameralive/`)**:
+   - Tuyệt đối **KHÔNG lưu vào `/tmp/`** vì `/tmp` nằm trên tmpfs/bị xóa sạch khi reboot!
+   - CodePush bundle được giải nén và lưu bền vững tại: `/home/ksp/.cache/cameralive/public/assets/index-*.js`.
+2. **Công Cụ Kiểm Tra Tự Động 1-Lệnh (`tools/cameralive/check_compat.js`)**:
+   ```bash
+   # Kiểm tra tương thích URL bàn, license, HLS fMP4 Go-Shinobi & sinh lệnh FFmpeg RTMP:
+   node tools/cameralive/check_compat.js <box_ip_or_domain> <table_id>
+   # Ví dụ kiểm tra node 4.36 bàn 0 kèm thử nghiệm socket RTMP live 4s:
+   node tools/cameralive/check_compat.js 77.88.204.36 0 --test-rtmp
+   ```
+3. **Bản Đồ Luồng Hoạt Động Của Camera Live Với Box Full Go**:
+   - **Nhập URL bàn (`/landing`):** Nhập `http://<ip>:2023/#!/0` (hoặc `<ip>:2023/#!/0`). Hàm `TC()` bóc tách `ip`, `port=2023`, `table=0`, gọi `GET /api/v1/0?not_device_info=true`.
+   - **Kiểm tra License (`valid_license`):** Trả về `valid_license: ""` (rỗng) cho phép mọi màn hình/tablet chạy bình thường (`lines.length === 0` trả về `true` trong hàm `E3()`).
+   - **Điều hướng HLS 303:** `redbida-go` `:2023` nhận `GET /hls/<ke>/<mid>/s.m3u8?app=live`, trả về `303 See Other` sang `http://<ip>:8080/<token>/hls/<ke>/<mid>/s.m3u8`.
+   - **Phát luồng HLS:** `go-shinobi-ksp` `:8080` cấp phát playlist fMP4 (`#EXT-X-VERSION:7`, target duration `2s`, `init.mp4` + `sN.m4s`, 25fps HEVC).
+   - **Livestream Custom RTMP (`mWe` -> `ffmpeg-kit`):** Khi bấm *"Bắt đầu phát trực tiếp"*, FFmpeg trên điện thoại/tablet đọc HLS Go-Shinobi, ghép âm thanh câm `anullsrc=channel_layout=mono:sample_rate=44100`, overlay logo/bảng điểm, transcode H.264 Ultrafast CBR 4000k + AAC 96k đẩy lên RTMP. Box iNut chỉ remux fMP4, chịu tải **`0% CPU Encode`**.
