@@ -1245,7 +1245,18 @@ Khi người dùng yêu cầu **"nâng cấp full go cho `<node_id>`"** (ví d�
           print("Latest CodePush label:", info["label"], "download_url:", info["download_url"])
           '
           ```
-       2. Tải `download_url` về `/tmp/cameralive-codepush-latest/bundle.zip`, giải nén `public/assets/index-*.js`, và chạy hàm giải mã bảng chuỗi `_0x...` ở đầu file để kiểm tra logic thực tế của bản phát hành mới nhất (hiện tại `v41`).
+       2. **Lưu trữ bundle bền vững trên đĩa (`/home/ksp/.cache/cameralive/`)**: Tuyệt đối **KHÔNG dùng `/tmp/`** vì `/tmp` nằm trên tmpfs/bị xóa sạch khi máy chủ reboot! Tải và giải nén bundle CodePush trực tiếp vào `/home/ksp/.cache/cameralive/public/assets/index-*.js`.
+       3. **Công cụ tự động hóa 1-lệnh (`tools/cameralive/check_compat.js`)**:
+          ```bash
+          # Kiểm tra tương thích URL bàn, license, HLS fMP4 Go-Shinobi & sinh lệnh FFmpeg RTMP:
+          node tools/cameralive/check_compat.js 77.88.204.36 0
+          # Thử nghiệm đẩy trực tiếp luồng RTMP socket 4 giây vào loopback receiver:
+          node tools/cameralive/check_compat.js 77.88.204.36 0 --test-rtmp
+          ```
+     - **Quy trình luồng dữ liệu Livestream & Custom RTMP của Camera Live**:
+       - **Nhập bàn (`/landing`):** Người dùng nhập `http://<ip>:2023/#!/0` (hoặc `<ip>:2023/#!/0`). Hàm `TC()` bóc tách `ip`, `port=2023`, `table=0`, gọi `GET /api/v1/0?not_device_info=true`.
+       - **Lấy luồng HLS:** Hàm `kg()` dựng URL luồng `http://<ip>:2023/hls/<ke>/<mid>/s.m3u8?app=live`. `redbida-go` `:2023` trả về `303 See Other` sang `http://<ip>:8080/<token>/hls/<ke>/<mid>/s.m3u8`. `go-shinobi-ksp` `:8080` cấp phát ngay m3u8 fMP4 (`#EXT-X-VERSION:7`, target duration `2s`, `init.mp4` + `sN.m4s`).
+       - **Khởi chạy Custom RTMP (`mWe` -> `cordova-plugin-ffmpeg` / `ffmpeg-kit`):** Khi người dùng bấm *"Bắt đầu phát trực tiếp"*, FFmpeg trên thiết bị di động/tablet tự động đọc HLS Go-Shinobi, chèn âm thanh câm `anullsrc=channel_layout=mono:sample_rate=44100` (nếu camera không có mic), scale & overlay logo + bảng điểm tỉ số, transcode `libx264` ultrafast zerolatency CBR 4000k + AAC 96k và đẩy thẳng lên RTMP đích (`rtmp://...`). Box iNut chỉ gánh **0% CPU Encode** vì việc transcode hoàn toàn do điện thoại/tablet thực hiện.
      - **Quy tắc sống còn cho `/api/v1/:id` và `valid_license` (Bảng điểm `rk3566_r`, `D01`, `HSD-215`)**:
        - Ứng dụng `com.loc4atnt.cameralive` chạy trong Capacitor WebView với **`Origin: http://localhost`** và gọi cross-origin `fetch("http://<ip>:2023/api/v1/<id>?id=<device_id>&model=<model>&manufacturer=...")`.
        - Server `:2023` (`redbida-go`) **BẮT BUỘC phải trả về `Access-Control-Allow-Origin: *`** trên mọi phản hồi HTTP (bao gồm `OPTIONS`). Nếu thiếu `Access-Control-Allow-Origin: *`, WebView chặn `fetch()` do lỗi CORS khiến hàm `TC()` trả về `null` $\to$ `source.type` rơi về `"url"` thay vì `"dict"` $\to$ app hiểu nhầm là không có license và văng thông báo `landing.invalidLicense`!
