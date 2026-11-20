@@ -22,7 +22,7 @@ func main() {
 	var (
 		port          = flag.Int("port", 2090, "HTTP listen port")
 		bindAddr      = flag.String("bind", "0.0.0.0", "HTTP bind address")
-		dataPath      = flag.String("data", "/opt/inut-bida-hub/data/hub-state.json", "Path to persistent hub state file")
+		dataPath      = flag.String("data", "/opt/inut-bida-hub/data/hub.sqlite", "Path to persistent hub SQLite WAL database")
 		dbAlias       = flag.String("db", "", "Alias for -data (systemd unit compatibility)")
 		watchlistPath = flag.String("watchlist", "FLEET_WATCHLIST.md", "Path to FLEET_WATCHLIST.md")
 		adminUser     = flag.String("admin-user", "", "Admin username (overrides INUT_BIDA_ADMIN_USER)")
@@ -70,9 +70,9 @@ func main() {
 
 	srv, err := bidahub.NewServer(cfg)
 	if err != nil {
-		// Fallback to local ./data/hub-state.json if /opt/inut-bida-hub is not writable by non-root user
-		if resolvedData == "/opt/inut-bida-hub/data/hub-state.json" {
-			cfg.DataPath = "./data/hub-state.json"
+		// Fallback to local ./data/hub.sqlite if /opt/inut-bida-hub is not writable by non-root user
+		if resolvedData == "/opt/inut-bida-hub/data/hub.sqlite" || resolvedData == "/opt/inut-bida-hub/data/hub-state.json" {
+			cfg.DataPath = "./data/hub.sqlite"
 			srv, err = bidahub.NewServer(cfg)
 		}
 		if err != nil {

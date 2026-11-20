@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -20,46 +21,92 @@ import (
 
 type persistedState = StoreData
 
-// Store manages the thread-safe, atomically persisted fleet state.
+// Store manages the thread-safe, SQLite-WAL persisted fleet state.
 type Store struct {
-	mu          sync.RWMutex
-	dataPath    string
-	dirty       bool
-	saveTimer   *time.Timer
-	clubs       []*Club
-	clubByID    map[string]*Club
-	clubByToken map[string]*Club
-	boxes       []*Box
-	boxByID     map[string]*Box
-	users       map[string]*UserAccount
-	resetOTPs   map[string]*PasswordResetOTP
-	lockouts    map[string]*LockoutEntry
-	sessions    map[string]*Session
-	enrollments map[string]*EnrollmentRequest
-	aiEvents    []*AIEvent
+	mu             sync.RWMutex
+	dataPath       string
+	sqlitePath     string
+	legacyJSONPath string
+	mirrorJSONPath string
+	db             *sql.DB
+	dirty          bool
+	fullDirty      bool
+	dirtyBoxes     map[string]struct{}
+	dirtyClubs     map[string]struct{}
+	saveTimer      *time.Timer
+	clubs          []*Club
+	clubByID       map[string]*Club
+	clubByToken    map[string]*Club
+	boxes          []*Box
+	boxByID        map[string]*Box
+	users          map[string]*UserAccount
+	resetOTPs      map[string]*PasswordResetOTP
+	lockouts       map[string]*LockoutEntry
+	sessions       map[string]*Session
+	enrollments    map[string]*EnrollmentRequest
+	aiEvents       []*AIEvent
 }
 
 const telemetrySaveDebounce = 5 * time.Second
 
-// NewStore loads state from dataPath if present, seeding from watchlistPath (or built-in catalog) and persisting atomically.
+// NewStore loads state from SQLite WAL (auto-migrating from legacy hub-state.json if present),
+// seeding from watchlistPath (or built-in catalog) and persisting atomically.
 func NewStore(dataPath string, watchlistPath string) (*Store, error) {
+	sqlitePath, legacyJSONPath, mirrorJSONPath := resolveSQLiteAndJSONPaths(dataPath)
 	s := &Store{
-		dataPath:    dataPath,
-		clubByID:    make(map[string]*Club),
-		clubByToken: make(map[string]*Club),
-		boxByID:     make(map[string]*Box),
-		users:       make(map[string]*UserAccount),
-		resetOTPs:   make(map[string]*PasswordResetOTP),
-		lockouts:    make(map[string]*LockoutEntry),
-		sessions:    make(map[string]*Session),
-		enrollments: make(map[string]*EnrollmentRequest),
+		dataPath:       dataPath,
+		sqlitePath:     sqlitePath,
+		legacyJSONPath: legacyJSONPath,
+		mirrorJSONPath: mirrorJSONPath,
+		clubByID:       make(map[string]*Club),
+		clubByToken:    make(map[string]*Club),
+		boxByID:        make(map[string]*Box),
+		users:          make(map[string]*UserAccount),
+		resetOTPs:      make(map[string]*PasswordResetOTP),
+		lockouts:       make(map[string]*LockoutEntry),
+		sessions:       make(map[string]*Session),
+		enrollments:    make(map[string]*EnrollmentRequest),
+	}
+
+	if sqlitePath != "" {
+		db, err := openAndMigrateSQLite(sqlitePath)
+		if err != nil {
+			return nil, err
+		}
+		s.db = db
 	}
 
 	seedClubs, seedBoxes := LoadOrSeedWatchlist(watchlistPath)
 
 	loaded := false
-	if dataPath != "" {
-		if raw, err := os.ReadFile(dataPath); err == nil && len(raw) > 0 {
+	if s.db != nil {
+		if st, ok, err := loadStateFromSQLite(s.db); err == nil && ok {
+			s.clubs = st.Clubs
+			s.boxes = st.Boxes
+			if st.Users != nil {
+				s.users = st.Users
+			}
+			if st.ResetOTPs != nil {
+				s.resetOTPs = st.ResetOTPs
+			}
+			if st.Lockouts != nil {
+				s.lockouts = st.Lockouts
+			}
+			if st.Sessions != nil {
+				s.sessions = st.Sessions
+			}
+			if st.Enrollments != nil {
+				s.enrollments = st.Enrollments
+			}
+			if st.AIEvents != nil {
+				s.aiEvents = st.AIEvents
+			}
+			loaded = true
+		}
+	}
+
+	if !loaded && legacyJSONPath != "" {
+		if raw, err := os.ReadFile(legacyJSONPath); err == nil && len(raw) > 0 {
 			var st persistedState
 			if err := json.Unmarshal(raw, &st); err == nil && len(st.Clubs) > 0 && len(st.Boxes) > 0 {
 				s.clubs = st.Clubs
@@ -249,10 +296,19 @@ func (s *Store) saveLocked() error {
 		s.saveTimer = nil
 	}
 	s.dirty = false
-	if s.dataPath == "" {
+	s.fullDirty = false
+
+	if s.db != nil {
+		if err := s.syncAllToSQLiteLocked(); err != nil {
+			return fmt.Errorf("sqlite sync: %w", err)
+		}
+	}
+
+	// Only write a legacy JSON mirror if dataPath explicitly ends with .json (for backward-compatible tests).
+	if s.mirrorJSONPath == "" {
 		return nil
 	}
-	dir := filepath.Dir(s.dataPath)
+	dir := filepath.Dir(s.mirrorJSONPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
@@ -272,22 +328,22 @@ func (s *Store) saveLocked() error {
 	if err != nil {
 		return fmt.Errorf("marshal state: %w", err)
 	}
-	tmpPath := fmt.Sprintf("%s.tmp.%d", s.dataPath, time.Now().UnixNano())
+	tmpPath := fmt.Sprintf("%s.tmp.%d", s.mirrorJSONPath, time.Now().UnixNano())
 	if err := os.WriteFile(tmpPath, payload, 0o600); err != nil {
 		return fmt.Errorf("write temp state: %w", err)
 	}
-	if err := os.Rename(tmpPath, s.dataPath); err != nil {
+	if err := os.Rename(tmpPath, s.mirrorJSONPath); err != nil {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("rename state: %w", err)
 	}
 	return nil
 }
 
-// scheduleSaveLocked coalesces high-frequency telemetry writes so hub-state.json
-// is marshaled and written to disk at most once per telemetrySaveDebounce window
-// (and flushed synchronously on Save() / Server.Close()).
+// scheduleSaveLocked coalesces high-frequency telemetry writes so only dirty box rows
+// are committed to SQLite WAL once per telemetrySaveDebounce window
+// (and flushed synchronously on Save() / Close()).
 func (s *Store) scheduleSaveLocked() {
-	if s.dataPath == "" {
+	if s.db == nil && s.mirrorJSONPath == "" {
 		return
 	}
 	s.dirty = true
@@ -303,15 +359,41 @@ func (s *Store) flushDirty() {
 	if !s.dirty {
 		return
 	}
+	s.dirty = false
+	if s.db != nil && !s.fullDirty {
+		_ = s.syncDirtyTelemetryToSQLiteLocked()
+		return
+	}
 	_ = s.saveLocked()
 }
 
-// Save persists the current state atomically to disk.
+// Save persists the current state atomically to SQLite WAL (and legacy JSON mirror if configured).
 func (s *Store) Save() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.rebuildIndexesLocked()
 	return s.saveLocked()
+}
+
+// Close flushes any pending telemetry writes to SQLite WAL and closes the underlying SQLite connection.
+func (s *Store) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rebuildIndexesLocked()
+	err := s.saveLocked()
+	if s.db != nil {
+		_, _ = s.db.Exec("PRAGMA wal_checkpoint(PASSIVE);")
+		_ = s.db.Close()
+		s.db = nil
+	}
+	return err
+}
+
+// SQLiteDB returns the underlying SQLite database connection (for inspection and migration tests).
+func (s *Store) SQLiteDB() *sql.DB {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.db
 }
 
 // Clubs returns a snapshot slice of all clubs with dynamically recomputed online/box/camera counts.
@@ -394,7 +476,7 @@ func (s *Store) GetBoxesByClub(clubID string) []*Box {
 	return out
 }
 
-// UpdateBox mutates a box in-place under write lock and schedules a coalesced state save.
+// UpdateBox mutates a box in-place under write lock and schedules a coalesced row-level SQLite WAL write.
 func (s *Store) UpdateBox(id string, fn func(b *Box) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -406,16 +488,38 @@ func (s *Store) UpdateBox(id string, fn func(b *Box) error) error {
 		return err
 	}
 	s.rebuildIndexesLocked()
+	if s.dirtyBoxes == nil {
+		s.dirtyBoxes = make(map[string]struct{})
+	}
+	s.dirtyBoxes[id] = struct{}{}
+	if b.ClubID != "" {
+		if s.dirtyClubs == nil {
+			s.dirtyClubs = make(map[string]struct{})
+		}
+		s.dirtyClubs[b.ClubID] = struct{}{}
+	}
 	s.scheduleSaveLocked()
 	return nil
 }
 
-// BatchUpdateBoxes mutates multiple boxes in-place under a single write lock, rebuilds indexes, and schedules a coalesced state save.
+// BatchUpdateBoxes mutates multiple boxes in-place under a single write lock, rebuilds indexes, and schedules a coalesced SQLite WAL write.
 func (s *Store) BatchUpdateBoxes(fn func(boxByID map[string]*Box) int) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	updated := fn(s.boxByID)
 	s.rebuildIndexesLocked()
+	if s.dirtyBoxes == nil {
+		s.dirtyBoxes = make(map[string]struct{}, len(s.boxes))
+	}
+	if s.dirtyClubs == nil {
+		s.dirtyClubs = make(map[string]struct{}, len(s.clubs))
+	}
+	for id, b := range s.boxByID {
+		s.dirtyBoxes[id] = struct{}{}
+		if b != nil && b.ClubID != "" {
+			s.dirtyClubs[b.ClubID] = struct{}{}
+		}
+	}
 	s.scheduleSaveLocked()
 	return updated, nil
 }

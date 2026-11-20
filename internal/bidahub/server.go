@@ -195,14 +195,14 @@ func (s *Server) Handler() http.Handler {
 	return s
 }
 
-// Close stops background polling and persists state.
+// Close stops background polling and persists state to SQLite WAL.
 func (s *Server) Close() error {
 	s.stopOnce.Do(func() {
 		close(s.stopCh)
 		s.closeAllYamuxSessions()
 		s.stopMQTTSubscriber()
 	})
-	return s.store.Save()
+	return s.store.Close()
 }
 
 // ServeHTTP dispatches all HTTP requests for inut-bida-hub.
