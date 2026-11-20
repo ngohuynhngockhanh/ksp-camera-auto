@@ -24,6 +24,8 @@ type persistedState = StoreData
 type Store struct {
 	mu          sync.RWMutex
 	dataPath    string
+	dirty       bool
+	saveTimer   *time.Timer
 	clubs       []*Club
 	clubByID    map[string]*Club
 	clubByToken map[string]*Club
@@ -36,6 +38,8 @@ type Store struct {
 	enrollments map[string]*EnrollmentRequest
 	aiEvents    []*AIEvent
 }
+
+const telemetrySaveDebounce = 5 * time.Second
 
 // NewStore loads state from dataPath if present, seeding from watchlistPath (or built-in catalog) and persisting atomically.
 func NewStore(dataPath string, watchlistPath string) (*Store, error) {
@@ -240,6 +244,11 @@ func (s *Store) snapshotClubLocked(c *Club) *Club {
 }
 
 func (s *Store) saveLocked() error {
+	if s.saveTimer != nil {
+		s.saveTimer.Stop()
+		s.saveTimer = nil
+	}
+	s.dirty = false
 	if s.dataPath == "" {
 		return nil
 	}
@@ -272,6 +281,29 @@ func (s *Store) saveLocked() error {
 		return fmt.Errorf("rename state: %w", err)
 	}
 	return nil
+}
+
+// scheduleSaveLocked coalesces high-frequency telemetry writes so hub-state.json
+// is marshaled and written to disk at most once per telemetrySaveDebounce window
+// (and flushed synchronously on Save() / Server.Close()).
+func (s *Store) scheduleSaveLocked() {
+	if s.dataPath == "" {
+		return
+	}
+	s.dirty = true
+	if s.saveTimer == nil {
+		s.saveTimer = time.AfterFunc(telemetrySaveDebounce, s.flushDirty)
+	}
+}
+
+func (s *Store) flushDirty() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.saveTimer = nil
+	if !s.dirty {
+		return
+	}
+	_ = s.saveLocked()
 }
 
 // Save persists the current state atomically to disk.
@@ -330,6 +362,14 @@ func (s *Store) Boxes() []*Box {
 	return out
 }
 
+// HasBox checks whether a box ID exists in the store without cloning the Box struct.
+func (s *Store) HasBox(id string) bool {
+	s.mu.RLock()
+	_, ok := s.boxByID[id]
+	s.mu.RUnlock()
+	return ok
+}
+
 // GetBox returns a cloned Box by ID.
 func (s *Store) GetBox(id string) (*Box, bool) {
 	s.mu.RLock()
@@ -354,7 +394,7 @@ func (s *Store) GetBoxesByClub(clubID string) []*Box {
 	return out
 }
 
-// UpdateBox mutates a box in-place under write lock and persists state.
+// UpdateBox mutates a box in-place under write lock and schedules a coalesced state save.
 func (s *Store) UpdateBox(id string, fn func(b *Box) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -366,18 +406,17 @@ func (s *Store) UpdateBox(id string, fn func(b *Box) error) error {
 		return err
 	}
 	s.rebuildIndexesLocked()
-	return s.saveLocked()
+	s.scheduleSaveLocked()
+	return nil
 }
 
-// BatchUpdateBoxes mutates multiple boxes in-place under a single write lock, rebuilds indexes, and persists state once.
+// BatchUpdateBoxes mutates multiple boxes in-place under a single write lock, rebuilds indexes, and schedules a coalesced state save.
 func (s *Store) BatchUpdateBoxes(fn func(boxByID map[string]*Box) int) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	updated := fn(s.boxByID)
 	s.rebuildIndexesLocked()
-	if err := s.saveLocked(); err != nil {
-		return updated, err
-	}
+	s.scheduleSaveLocked()
 	return updated, nil
 }
 

@@ -144,7 +144,7 @@ func (s *Server) handleYamuxTunnelUpgrade(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if _, exists := s.store.GetBox(boxID); !exists {
+	if !s.store.HasBox(boxID) {
 		req := s.store.RecordEnrollment(boxID, secret, clientIPFromRequest(r), socModel)
 		writeJSON(w, http.StatusForbidden, map[string]any{
 			"error":       "ENROLLMENT_PENDING",

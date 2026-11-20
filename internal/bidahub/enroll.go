@@ -21,7 +21,7 @@ func (s *Server) validBoxSecret(secret string) bool {
 // admitBox returns true when boxID is known, auto-enrolling it first when the box presents
 // the fleet key. Unknown boxes with any other secret are queued for manual approval.
 func (s *Server) admitBox(boxID, secret, remoteIP string, p HeartbeatPayload) (bool, *EnrollmentRequest) {
-	if _, ok := s.store.GetBox(boxID); ok {
+	if s.store.HasBox(boxID) {
 		return true, nil
 	}
 	if s.validBoxSecret(secret) {

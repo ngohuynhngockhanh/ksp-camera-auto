@@ -218,7 +218,7 @@ func (s *Server) handleTunnelEndpoint(w http.ResponseWriter, r *http.Request) {
 
 	// Only heartbeats carry the box identity (RedBida keys) needed to create a box record;
 	// tunnel registration requires the box to be enrolled already.
-	if _, exists := s.store.GetBox(boxID); !exists {
+	if !s.store.HasBox(boxID) {
 		req := s.store.RecordEnrollment(boxID, secret, clientIPFromRequest(r), socModel)
 		writeJSON(w, http.StatusForbidden, map[string]any{
 			"error":       "ENROLLMENT_PENDING",
@@ -804,7 +804,12 @@ func (s *Server) fetchBoxSystemMetrics(ctx context.Context, boxID string) (Heart
 func (s *Server) probeSingleBox(ctx context.Context, box *Box) {
 	if s.HasYamuxSession(box.ID) {
 		if pingMs, err := s.MeasureYamuxRTT(box.ID); err == nil {
-			metricsPayload, metricsOK := s.fetchBoxSystemMetrics(ctx, box.ID)
+			var metricsPayload HeartbeatPayload
+			var metricsOK bool
+			// Skip redundant Yamux HTTP metrics pull when the box is actively pushing live heartbeats.
+			if box.TelemetrySource != "live" || box.LastSeen.IsZero() || time.Since(box.LastSeen) > 45*time.Second {
+				metricsPayload, metricsOK = s.fetchBoxSystemMetrics(ctx, box.ID)
+			}
 			_ = s.store.UpdateBox(box.ID, func(b *Box) error {
 				if metricsOK {
 					applyHeartbeatToBox(b, metricsPayload, "live")
