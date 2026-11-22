@@ -24,6 +24,7 @@ type persistedState = StoreData
 // Store manages the thread-safe, SQLite-WAL persisted fleet state.
 type Store struct {
 	mu             sync.RWMutex
+	dbMu           sync.Mutex // lock order: s.mu -> s.dbMu (never acquire s.mu inside s.dbMu)
 	dataPath       string
 	sqlitePath     string
 	legacyJSONPath string
@@ -381,19 +382,53 @@ func (s *Store) Close() error {
 	defer s.mu.Unlock()
 	s.rebuildIndexesLocked()
 	err := s.saveLocked()
+	s.dbMu.Lock()
 	if s.db != nil {
 		_, _ = s.db.Exec("PRAGMA wal_checkpoint(PASSIVE);")
 		_ = s.db.Close()
 		s.db = nil
 	}
+	s.dbMu.Unlock()
 	return err
 }
 
+var errNoSQLiteDB = fmt.Errorf("sqlite db not initialized")
+
 // SQLiteDB returns the underlying SQLite database connection (for inspection and migration tests).
 func (s *Store) SQLiteDB() *sql.DB {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
 	return s.db
+}
+
+// WithSQLiteDB executes fn with exclusive access to the SQLite connection.
+// Callers MUST NOT acquire s.mu inside fn (lock hierarchy: s.mu -> s.dbMu).
+func (s *Store) WithSQLiteDB(fn func(db *sql.DB) error) error {
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
+	if s.db == nil {
+		return errNoSQLiteDB
+	}
+	return fn(s.db)
+}
+
+// WithSQLiteTx executes fn inside a single SQLite transaction with exclusive DB access.
+// Callers MUST NOT acquire s.mu inside fn (lock hierarchy: s.mu -> s.dbMu).
+func (s *Store) WithSQLiteTx(fn func(tx *sql.Tx) error) error {
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
+	if s.db == nil {
+		return errNoSQLiteDB
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	if err := fn(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
 
 // Clubs returns a snapshot slice of all clubs with dynamically recomputed online/box/camera counts.

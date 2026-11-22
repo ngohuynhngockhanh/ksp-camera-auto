@@ -33,14 +33,19 @@ type AgentConfig struct {
 	KspcamPort        int
 	ShinobiPort       int
 	NodeRedPort       int
+	RedBidaPort       int
 	RedBidaKeyDir     string
+	AnalyticsInterval time.Duration
+	AnalyticsStateDir string
 }
 
 // EdgeAgent maintains a persistent outbound WebSocket + Yamux reverse tunnel to inut-bida-hub
 // and pushes periodic live system telemetry heartbeats without SSH or VPN dependencies.
 type EdgeAgent struct {
-	cfg        AgentConfig
-	httpClient *http.Client
+	cfg                 AgentConfig
+	httpClient          *http.Client
+	analyticsHTTPClient *http.Client
+	analyticsMu         sync.Mutex
 
 	mu          sync.Mutex
 	prevCPUTot  uint64
@@ -73,13 +78,25 @@ func NewEdgeAgent(cfg AgentConfig) *EdgeAgent {
 	if cfg.NodeRedPort <= 0 {
 		cfg.NodeRedPort = 1880
 	}
+	if cfg.RedBidaPort <= 0 {
+		cfg.RedBidaPort = 2023
+	}
 	if strings.TrimSpace(cfg.RedBidaKeyDir) == "" {
 		cfg.RedBidaKeyDir = DefaultRedBidaKeyDir
+	}
+	if cfg.AnalyticsInterval <= 0 {
+		cfg.AnalyticsInterval = 5 * time.Minute
+	}
+	if strings.TrimSpace(cfg.AnalyticsStateDir) == "" {
+		cfg.AnalyticsStateDir = DefaultAnalyticsStateDir
 	}
 	return &EdgeAgent{
 		cfg: cfg,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
+		},
+		analyticsHTTPClient: &http.Client{
+			Timeout: 2 * time.Second,
 		},
 	}
 }
@@ -121,12 +138,13 @@ func normalizeBoxID(raw string) string {
 	return s
 }
 
-// Run starts both the periodic heartbeat loop and the persistent outbound Yamux tunnel loop.
+// Run starts the periodic heartbeat loop, analytics rollup loop, and persistent outbound Yamux tunnel loop.
 func (a *EdgeAgent) Run(ctx context.Context) error {
 	// Warm up CPU & RX delta counters
 	_ = a.CollectTelemetry()
 
 	go a.runHeartbeatLoop(ctx)
+	go a.runAnalyticsLoop(ctx)
 	return a.runTunnelLoop(ctx)
 }
 

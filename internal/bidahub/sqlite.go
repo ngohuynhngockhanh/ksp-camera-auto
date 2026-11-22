@@ -147,12 +147,145 @@ var bidahubSQLiteMigrations = []sqliteMigration{
 			return nil
 		},
 	},
+	{
+		Version: 202611220001,
+		Name:    "add_usage_analytics_tables",
+		Source:  "CREATE TABLE usage_box_hourly, usage_box_daily, usage_camera_daily, analytics_ingest_batches;",
+		Up: func(tx *sql.Tx) error {
+			stmts := []string{
+				`CREATE TABLE IF NOT EXISTS usage_box_hourly (
+					box_id TEXT NOT NULL,
+					club_id TEXT NOT NULL DEFAULT '',
+					source TEXT NOT NULL DEFAULT '',
+					ai_enabled INTEGER NOT NULL DEFAULT 0,
+					source_epoch TEXT NOT NULL DEFAULT '',
+					bucket_hour TEXT NOT NULL,
+					qr_views INTEGER NOT NULL DEFAULT 0,
+					page_views INTEGER NOT NULL DEFAULT 0,
+					unique_visitors INTEGER NOT NULL DEFAULT 0,
+					live_hls INTEGER NOT NULL DEFAULT 0,
+					vod_plays INTEGER NOT NULL DEFAULT 0,
+					clip_downloads INTEGER NOT NULL DEFAULT 0,
+					timeline_opens INTEGER NOT NULL DEFAULT 0,
+					cut_clips INTEGER NOT NULL DEFAULT 0,
+					cut_seconds INTEGER NOT NULL DEFAULT 0,
+					ai_studio_opens INTEGER NOT NULL DEFAULT 0,
+					ai_videos_loads INTEGER NOT NULL DEFAULT 0,
+					ai_analyzes INTEGER NOT NULL DEFAULT 0,
+					ai_shots INTEGER NOT NULL DEFAULT 0,
+					ai_pots INTEGER NOT NULL DEFAULT 0,
+					ai_pool_runs INTEGER NOT NULL DEFAULT 0,
+					ai_carom_runs INTEGER NOT NULL DEFAULT 0,
+					ai_exports_ios INTEGER NOT NULL DEFAULT 0,
+					ai_exports_desktop INTEGER NOT NULL DEFAULT 0,
+					ai_export_relay INTEGER NOT NULL DEFAULT 0,
+					ai_errors INTEGER NOT NULL DEFAULT 0,
+					http_errors INTEGER NOT NULL DEFAULT 0,
+					bytes_out INTEGER NOT NULL DEFAULT 0,
+					os_ios INTEGER NOT NULL DEFAULT 0,
+					os_android INTEGER NOT NULL DEFAULT 0,
+					os_desktop INTEGER NOT NULL DEFAULT 0,
+					os_app INTEGER NOT NULL DEFAULT 0,
+					os_other INTEGER NOT NULL DEFAULT 0,
+					base_json TEXT NOT NULL DEFAULT '{}',
+					updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					PRIMARY KEY (box_id, bucket_hour)
+				);`,
+				`CREATE INDEX IF NOT EXISTS idx_usage_box_hourly_hour ON usage_box_hourly(bucket_hour);`,
+				`CREATE INDEX IF NOT EXISTS idx_usage_box_hourly_club_hour ON usage_box_hourly(club_id, bucket_hour);`,
+				`CREATE TABLE IF NOT EXISTS usage_box_daily (
+					box_id TEXT NOT NULL,
+					club_id TEXT NOT NULL DEFAULT '',
+					source TEXT NOT NULL DEFAULT '',
+					ai_enabled INTEGER NOT NULL DEFAULT 0,
+					source_epoch TEXT NOT NULL DEFAULT '',
+					bucket_date TEXT NOT NULL,
+					qr_views INTEGER NOT NULL DEFAULT 0,
+					page_views INTEGER NOT NULL DEFAULT 0,
+					unique_visitors INTEGER NOT NULL DEFAULT 0,
+					live_hls INTEGER NOT NULL DEFAULT 0,
+					vod_plays INTEGER NOT NULL DEFAULT 0,
+					clip_downloads INTEGER NOT NULL DEFAULT 0,
+					timeline_opens INTEGER NOT NULL DEFAULT 0,
+					cut_clips INTEGER NOT NULL DEFAULT 0,
+					cut_seconds INTEGER NOT NULL DEFAULT 0,
+					ai_studio_opens INTEGER NOT NULL DEFAULT 0,
+					ai_videos_loads INTEGER NOT NULL DEFAULT 0,
+					ai_analyzes INTEGER NOT NULL DEFAULT 0,
+					ai_shots INTEGER NOT NULL DEFAULT 0,
+					ai_pots INTEGER NOT NULL DEFAULT 0,
+					ai_pool_runs INTEGER NOT NULL DEFAULT 0,
+					ai_carom_runs INTEGER NOT NULL DEFAULT 0,
+					ai_exports_ios INTEGER NOT NULL DEFAULT 0,
+					ai_exports_desktop INTEGER NOT NULL DEFAULT 0,
+					ai_export_relay INTEGER NOT NULL DEFAULT 0,
+					ai_errors INTEGER NOT NULL DEFAULT 0,
+					http_errors INTEGER NOT NULL DEFAULT 0,
+					bytes_out INTEGER NOT NULL DEFAULT 0,
+					os_ios INTEGER NOT NULL DEFAULT 0,
+					os_android INTEGER NOT NULL DEFAULT 0,
+					os_desktop INTEGER NOT NULL DEFAULT 0,
+					os_app INTEGER NOT NULL DEFAULT 0,
+					os_other INTEGER NOT NULL DEFAULT 0,
+					base_json TEXT NOT NULL DEFAULT '{}',
+					updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					PRIMARY KEY (box_id, bucket_date)
+				);`,
+				`CREATE INDEX IF NOT EXISTS idx_usage_box_daily_date ON usage_box_daily(bucket_date);`,
+				`CREATE INDEX IF NOT EXISTS idx_usage_box_daily_club_date ON usage_box_daily(club_id, bucket_date);`,
+				`CREATE TABLE IF NOT EXISTS usage_camera_daily (
+					box_id TEXT NOT NULL,
+					club_id TEXT NOT NULL DEFAULT '',
+					camera_id TEXT NOT NULL,
+					table_name TEXT NOT NULL DEFAULT '',
+					source_epoch TEXT NOT NULL DEFAULT '',
+					bucket_date TEXT NOT NULL,
+					qr_views INTEGER NOT NULL DEFAULT 0,
+					unique_visitors INTEGER NOT NULL DEFAULT 0,
+					live_hls INTEGER NOT NULL DEFAULT 0,
+					vod_plays INTEGER NOT NULL DEFAULT 0,
+					clip_downloads INTEGER NOT NULL DEFAULT 0,
+					timeline_opens INTEGER NOT NULL DEFAULT 0,
+					cut_clips INTEGER NOT NULL DEFAULT 0,
+					cut_seconds INTEGER NOT NULL DEFAULT 0,
+					ai_studio_opens INTEGER NOT NULL DEFAULT 0,
+					ai_analyzes INTEGER NOT NULL DEFAULT 0,
+					ai_shots INTEGER NOT NULL DEFAULT 0,
+					ai_pots INTEGER NOT NULL DEFAULT 0,
+					ai_exports INTEGER NOT NULL DEFAULT 0,
+					ai_errors INTEGER NOT NULL DEFAULT 0,
+					bytes_out INTEGER NOT NULL DEFAULT 0,
+					base_json TEXT NOT NULL DEFAULT '{}',
+					updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					PRIMARY KEY (box_id, bucket_date, camera_id)
+				);`,
+				`CREATE INDEX IF NOT EXISTS idx_usage_cam_daily_date ON usage_camera_daily(bucket_date);`,
+				`CREATE INDEX IF NOT EXISTS idx_usage_cam_daily_club_date ON usage_camera_daily(club_id, bucket_date);`,
+				`CREATE TABLE IF NOT EXISTS analytics_ingest_batches (
+					box_id TEXT NOT NULL,
+					batch_id TEXT NOT NULL,
+					received_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					PRIMARY KEY (box_id, batch_id)
+				);`,
+				`CREATE INDEX IF NOT EXISTS idx_analytics_ingest_batches_received_at ON analytics_ingest_batches(received_at);`,
+			}
+			for _, stmt := range stmts {
+				if _, err := tx.Exec(stmt); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	},
 }
 
 func resolveSQLiteAndJSONPaths(dataPath string) (sqlitePath, legacyJSONPath, mirrorJSONPath string) {
 	dataPath = strings.TrimSpace(dataPath)
 	if dataPath == "" {
 		return "", "", ""
+	}
+	if dataPath == ":memory:" {
+		return ":memory:", "", ""
 	}
 	lower := strings.ToLower(dataPath)
 	if strings.HasSuffix(lower, ".sqlite") || strings.HasSuffix(lower, ".db") || strings.HasSuffix(lower, ".sqlite3") {
@@ -464,6 +597,8 @@ func upsertBoxTx(tx *sql.Tx, b *Box, now time.Time) error {
 // syncDirtyTelemetryToSQLiteLocked writes ONLY the modified boxes and their parent clubs
 // to the SQLite WAL database in a single lightweight transaction.
 func (s *Store) syncDirtyTelemetryToSQLiteLocked() error {
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
 	if s.db == nil || (len(s.dirtyBoxes) == 0 && len(s.dirtyClubs) == 0) {
 		s.dirtyBoxes = nil
 		s.dirtyClubs = nil
@@ -506,6 +641,8 @@ func (s *Store) syncDirtyTelemetryToSQLiteLocked() error {
 
 // syncAllToSQLiteLocked persists the full Store state into SQLite in a single transaction.
 func (s *Store) syncAllToSQLiteLocked() error {
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
 	if s.db == nil {
 		return nil
 	}

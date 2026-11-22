@@ -161,6 +161,9 @@ func NewServer(cfg Config) (*Server, error) {
 	if strings.TrimSpace(cfg.MQTTBroker) != "" {
 		s.StartMQTTSubscriber(cfg.MQTTBroker, cfg.MQTTUser, cfg.MQTTPass, cfg.MQTTTopic)
 	}
+	if s.store.SQLiteDB() != nil {
+		go s.analyticsPrunerLoop()
+	}
 
 	return s, nil
 }
@@ -282,6 +285,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if path == "/api/agent/events" || path == "/fleet/api/agent/events" {
 		s.handleAgentEventsPush(w, r)
+		return
+	}
+	if path == "/fleet/api/analytics/ingest" || path == "/api/analytics/ingest" {
+		s.handleAnalyticsIngest(w, r)
 		return
 	}
 	// 6. All remaining routes require Hub authentication (cookie, X-Hub-Key, or Bearer token)
@@ -406,6 +413,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if path == "/fleet/api/remote-config" || path == "/api/remote-config" {
 		s.handleFleetRemoteConfig(w, r)
+		return
+	}
+	if path == "/fleet/api/analytics/overview" || path == "/api/analytics/overview" {
+		s.handleAnalyticsOverview(w, r)
+		return
+	}
+	if path == "/fleet/api/analytics/cameras" || path == "/api/analytics/cameras" {
+		s.handleAnalyticsCameras(w, r)
+		return
+	}
+	if path == "/fleet/api/analytics/export.csv" || path == "/api/analytics/export.csv" {
+		s.handleAnalyticsExportCSV(w, r)
 		return
 	}
 	writeJSON(w, http.StatusNotFound, map[string]any{

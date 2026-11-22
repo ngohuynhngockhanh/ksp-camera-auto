@@ -96,6 +96,10 @@
         <span>📦 Gói Bàn Giao &amp; Cổng Chủ Quán QR</span>
         <span class="nav-badge tabular-nums" id="nav-badge-handover">QR</span>
       </button>
+      <button type="button" class="nav-tab" data-view="analytics" id="nav-analytics">
+        <span>📊 Thống Kê &amp; Analytics</span>
+        <span class="nav-badge tabular-nums" id="nav-badge-analytics">LIVE</span>
+      </button>
     </nav>
   </header>
 
@@ -378,6 +382,217 @@
             </div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         VIEW 7: #analytics — Fleet Usage, Peak Hours, AI Studio & Table Drill-Down
+         ====================================================================== -->
+    <section id="view-analytics" class="view-panel" data-view-panel="analytics">
+      <!-- Analytics Control Bar -->
+      <div class="toolbar-card">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div class="filter-chips" id="analytics-range-chips" role="group" aria-label="Khung thời gian thống kê">
+            <button type="button" class="filter-chip" data-range="24h">24 giờ</button>
+            <button type="button" class="filter-chip active" data-range="7d">7 ngày</button>
+            <button type="button" class="filter-chip" data-range="30d">30 ngày</button>
+            <button type="button" class="filter-chip" data-range="90d">90 ngày</button>
+          </div>
+          <span id="analytics-date-window" class="badge badge-neutral mono">--</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <select id="analytics-club-filter" class="select" aria-label="Lọc theo CLB">
+            <option value="">Tất cả CLB</option>
+          </select>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;padding:0 4px;">
+            <input type="checkbox" id="analytics-ai-only">
+            <span>🤖 Chỉ đội AI Studio</span>
+          </label>
+          <button type="button" id="analytics-refresh-btn" class="btn" title="Tải lại dữ liệu thống kê">
+            🔄 Làm mới
+          </button>
+          <a id="analytics-export-csv" href="/fleet/api/analytics/export.csv?range=7d" class="btn btn-cyan" download>
+            ⬇️ Xuất CSV
+          </a>
+        </div>
+      </div>
+
+      <!-- 6 SCADA Analytics KPI Cards -->
+      <div class="kpi-grid tabular-nums">
+        <article class="kpi-card cyan" id="akpi-qr-card">
+          <div class="kpi-label">
+            <span>1. Quét QR &amp; Xem Trang</span>
+            <span>📱</span>
+          </div>
+          <div class="kpi-value" id="akpi-qr-val">0 <span class="kpi-val-sub">/ 0 trang</span></div>
+          <div class="kpi-sub" id="akpi-qr-sub">
+            <span>0 CLB · 0 Box hoạt động</span>
+          </div>
+        </article>
+
+        <article class="kpi-card" id="akpi-visitors-card">
+          <div class="kpi-label">
+            <span>2. Khách Duy Nhất</span>
+            <span>👥</span>
+          </div>
+          <div class="kpi-value" id="akpi-visitors-val">0</div>
+          <div class="kpi-sub" id="akpi-visitors-sub">
+            <span>Live HLS: 0</span>
+            <span>VOD: 0</span>
+          </div>
+        </article>
+
+        <article class="kpi-card" id="akpi-clips-card">
+          <div class="kpi-label">
+            <span>3. Tải Clip &amp; Cắt CheckVAR</span>
+            <span>✂️</span>
+          </div>
+          <div class="kpi-value" id="akpi-clips-val">0</div>
+          <div class="kpi-sub" id="akpi-clips-sub">
+            <span>Tải 0 · Cắt 0</span>
+            <span>0 phút cắt</span>
+          </div>
+        </article>
+
+        <article class="kpi-card purple" id="akpi-ai-card">
+          <div class="kpi-label">
+            <span>4. AI Studio &amp; Phân Tích</span>
+            <span>🤖</span>
+          </div>
+          <div class="kpi-value" id="akpi-ai-val">0 <span class="kpi-val-sub">/ 0 mở</span></div>
+          <div class="kpi-sub" id="akpi-ai-sub">
+            <span>0 cú · 0 bi lỗ</span>
+            <span>Xuất 0/0</span>
+          </div>
+        </article>
+
+        <article class="kpi-card cyan" id="akpi-bw-card">
+          <div class="kpi-label">
+            <span>5. Băng Thông Xuất</span>
+            <span>📡</span>
+          </div>
+          <div class="kpi-value" id="akpi-bw-val">0 B</div>
+          <div class="kpi-sub" id="akpi-bw-sub">
+            <span>Chuyển đổi Tải+Cắt/QR</span>
+            <span>0.0%</span>
+          </div>
+        </article>
+
+        <article class="kpi-card" id="akpi-err-card">
+          <div class="kpi-label">
+            <span>6. Sức Khỏe &amp; Tỷ Lệ Lỗi</span>
+            <span>🩺</span>
+          </div>
+          <div class="kpi-value" id="akpi-err-val">0</div>
+          <div class="kpi-sub" id="akpi-err-sub">
+            <span>HTTP: 0 · AI: 0</span>
+            <span>Ổn định</span>
+          </div>
+        </article>
+      </div>
+
+      <!-- Graceful Empty State Callout (shown when selected range has zero events) -->
+      <div id="analytics-empty-banner" class="analytics-empty-banner" style="display:none;" role="status">
+        <span>ℹ️ Chưa có dữ liệu trong khung thời gian này — box sẽ tự động đẩy rollup mỗi 5 phút.</span>
+        <span class="mono" style="font-size:12px;">GMT+7 · 5m Rollup Sync</span>
+      </div>
+
+      <!-- Pure Inline SVG Charts Row: Peak Hours (0h-23h) + Daily Trend -->
+      <div class="analytics-charts-grid tabular-nums">
+        <div class="glass-panel">
+          <div class="analytics-card-head">
+            <div>
+              <h2 class="analytics-card-title">🕒 Biểu Đồ Khung Giờ Vàng (0h–23h GMT+7)</h2>
+              <p class="analytics-card-sub">Phân bổ lưu lượng theo khung giờ thực tế toàn hệ thống</p>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span id="analytics-peak-badge" class="badge badge-amber">🔥 Đỉnh: --</span>
+              <div class="analytics-legend">
+                <span class="analytics-legend-item"><span class="analytics-legend-dot" style="background:var(--cyan);"></span>QR Views</span>
+                <span class="analytics-legend-item"><span class="analytics-legend-dot" style="background:var(--emerald);"></span>Tải &amp; Cắt</span>
+                <span class="analytics-legend-item"><span class="analytics-legend-dot" style="background:var(--purple);"></span>AI Runs</span>
+              </div>
+            </div>
+          </div>
+          <div id="analytics-peak-chart" class="analytics-svg-wrap"></div>
+        </div>
+
+        <div class="glass-panel">
+          <div class="analytics-card-head">
+            <div>
+              <h2 class="analytics-card-title">📈 Xu Hướng Theo Ngày</h2>
+              <p class="analytics-card-sub" id="analytics-daily-sub">Biến động lượt quét QR, tải/cắt clip &amp; phân tích AI</p>
+            </div>
+            <div class="analytics-legend">
+              <span class="analytics-legend-item"><span class="analytics-legend-dot" style="background:var(--cyan);"></span>QR Views</span>
+              <span class="analytics-legend-item"><span class="analytics-legend-dot" style="background:var(--emerald);"></span>Tải &amp; Cắt</span>
+              <span class="analytics-legend-item"><span class="analytics-legend-dot" style="background:var(--purple);"></span>AI Phân Tích</span>
+            </div>
+          </div>
+          <div id="analytics-daily-chart" class="analytics-svg-wrap"></div>
+        </div>
+      </div>
+
+      <!-- Device OS Breakdown + AI Studio Breakdown -->
+      <div class="analytics-breakdown-grid tabular-nums">
+        <div class="glass-panel">
+          <div class="analytics-card-head">
+            <div>
+              <h2 class="analytics-card-title">📱 Phân Bổ Thiết Bị (iOS / Android / Desktop / App Kiosk)</h2>
+              <p class="analytics-card-sub">Nhận diện tự động từ User-Agent &amp; tham số App Kiosk</p>
+            </div>
+            <span id="analytics-os-total" class="badge badge-cyan">0 thiết bị</span>
+          </div>
+          <div id="analytics-os-breakdown" class="breakdown-list"></div>
+        </div>
+
+        <div class="glass-panel">
+          <div class="analytics-card-head">
+            <div>
+              <h2 class="analytics-card-title">🤖 Chi Tiết AI Studio (Pool vs Carom · Xuất Video iOS / Desktop)</h2>
+              <p class="analytics-card-sub">Theo dõi tỷ lệ bộ môn AI &amp; kênh xuất video (iPhone Relay vs Desktop Blob)</p>
+            </div>
+            <span id="analytics-ai-boxes-badge" class="badge badge-purple">0 Box AI</span>
+          </div>
+          <div id="analytics-ai-breakdown" class="breakdown-list"></div>
+          <div id="analytics-ai-pills" class="analytics-pill-row"></div>
+        </div>
+      </div>
+
+      <!-- Top Clubs / Top Boxes Table (Sortable + Click Row to Drill Down) -->
+      <div class="glass-panel tabular-nums">
+        <div class="analytics-card-head">
+          <div>
+            <h2 class="analytics-card-title" id="analytics-top-title">🏆 Xếp Hạng Sử Dụng Theo Quán / Box</h2>
+            <p class="analytics-card-sub">Bấm vào tiêu đề cột để sắp xếp · Bấm vào một dòng để lọc chi tiết bảng Top Từng Bàn / Camera bên dưới</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <div class="segmented-toggle" id="analytics-group-toggle" role="group" aria-label="Chế độ xem xếp hạng">
+              <button type="button" class="segmented-btn active" data-group="clubs">🏢 Theo Quán</button>
+              <button type="button" class="segmented-btn" data-group="boxes">📦 Theo Box</button>
+            </div>
+          </div>
+        </div>
+        <div id="analytics-top-table-wrap"></div>
+      </div>
+
+      <!-- Top Tables / Cameras Table (camera01..28) -->
+      <div class="glass-panel tabular-nums">
+        <div class="analytics-card-head">
+          <div>
+            <h2 class="analytics-card-title">🎱 Top Từng Bàn / Camera (<code>camera01..28</code>)</h2>
+            <p class="analytics-card-sub">Chi tiết tương tác QR, Live/VOD, Tải Clip, CheckVAR &amp; AI Studio từng bàn</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span id="analytics-drill-indicator" style="display:none;align-items:center;gap:6px;">
+              <span class="badge badge-cyan" id="analytics-drill-label">Đang lọc</span>
+              <button type="button" class="btn btn-xs" id="analytics-clear-drill-btn">✕ Bỏ lọc</button>
+            </span>
+            <span id="analytics-cameras-count" class="badge badge-neutral">0 bàn</span>
+          </div>
+        </div>
+        <div id="analytics-cameras-table-wrap"></div>
       </div>
     </section>
 

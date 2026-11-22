@@ -131,9 +131,49 @@
       border-color: var(--cyan);
       background: rgba(6, 182, 212, 0.14);
     }
+    .portal-analytics-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin: 12px 0 14px;
+    }
+    .portal-analytics-kpi-grid .kpi-card {
+      padding: 12px 13px;
+    }
+    .portal-analytics-kpi-grid .kpi-value {
+      font-size: 20px;
+    }
+    .portal-analytics-body {
+      display: grid;
+      grid-template-columns: 1fr 1.15fr;
+      gap: 14px;
+      align-items: start;
+    }
+    .portal-analytics-subcard {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .portal-analytics-os-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+    @media (max-width: 860px) {
+      .portal-analytics-body {
+        grid-template-columns: 1fr;
+      }
+    }
     @media (max-width: 767px) {
       .portal-quick-grid {
         grid-template-columns: 1fr;
+      }
+      .portal-analytics-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
   </style>
@@ -209,6 +249,86 @@
           </div>
         </div>
         <div class="qr-svg-box" id="portal-cstore-qr-inline" style="width:104px;height:104px;flex-shrink:0;"></div>
+      </div>
+    </section>
+
+    <!-- Club-Isolated Usage Analytics Panel for Shop Owner -->
+    <section class="glass-panel tabular-nums" id="portal-analytics-section" style="margin-bottom:18px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <div>
+          <h2 style="margin:0;font-size:16px;">📊 Thống Kê Khách Dùng Tại Quán</h2>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">
+            Dữ liệu lượt quét QR, tải clip CheckVAR, AI Studio &amp; giờ vàng riêng của quán (GMT+7)
+          </div>
+        </div>
+        <div class="filter-chips" id="portal-analytics-range" role="group" aria-label="Khung thời gian thống kê tại quán">
+          <button type="button" class="filter-chip" data-range="24h">Hôm nay (24h)</button>
+          <button type="button" class="filter-chip active" data-range="7d">7 ngày</button>
+          <button type="button" class="filter-chip" data-range="30d">30 ngày</button>
+        </div>
+      </div>
+
+      <!-- 4 Compact Shop Owner KPI Cards -->
+      <div class="portal-analytics-kpi-grid">
+        <article class="kpi-card cyan">
+          <div class="kpi-label"><span>Lượt Quét QR</span><span>📱</span></div>
+          <div class="kpi-value" id="pa-kpi-qr">0</div>
+          <div class="kpi-sub" id="pa-kpi-qr-sub"><span>0 lượt xem trang</span></div>
+        </article>
+        <article class="kpi-card">
+          <div class="kpi-label"><span>Khách Duy Nhất</span><span>👥</span></div>
+          <div class="kpi-value" id="pa-kpi-visitors">0</div>
+          <div class="kpi-sub" id="pa-kpi-visitors-sub"><span>Live: 0 · VOD: 0</span></div>
+        </article>
+        <article class="kpi-card">
+          <div class="kpi-label"><span>Tải &amp; Cắt Clip</span><span>✂️</span></div>
+          <div class="kpi-value" id="pa-kpi-clips">0</div>
+          <div class="kpi-sub" id="pa-kpi-clips-sub"><span>Tải 0 · Cắt 0 (0 phút)</span></div>
+        </article>
+        <article class="kpi-card purple">
+          <div class="kpi-label"><span>AI Studio &amp; Cú Đánh</span><span>🤖</span></div>
+          <div class="kpi-value" id="pa-kpi-ai">0</div>
+          <div class="kpi-sub" id="pa-kpi-ai-sub"><span>0 cú · 0 bi lỗ · 0 xuất</span></div>
+        </article>
+      </div>
+
+      <div id="pa-empty-notice" class="analytics-empty-banner" style="display:none;margin-bottom:12px;">
+        <span>ℹ️ Chưa có dữ liệu thống kê trong khung thời gian này — thiết bị tại quán sẽ tự động đồng bộ mỗi 5 phút.</span>
+      </div>
+
+      <!-- Mini Peak-Hour SVG Chart + Top Tables Table -->
+      <div class="portal-analytics-body">
+        <div class="portal-analytics-subcard">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+            <strong style="font-size:13px;">🕒 Khung Giờ Vàng (0h–23h GMT+7)</strong>
+            <span id="pa-peak-badge" class="badge badge-neutral">Đỉnh: --</span>
+          </div>
+          <div id="pa-peak-chart" class="analytics-svg-wrap" style="min-height:155px;"></div>
+          <div id="pa-os-pills" class="portal-analytics-os-pills"></div>
+        </div>
+
+        <div class="portal-analytics-subcard">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+            <strong style="font-size:13px;">🎱 Top Bàn Được Xem / Tải Nhiều Nhất</strong>
+            <span id="pa-cameras-badge" class="badge badge-cyan">0 bàn</span>
+          </div>
+          <div class="table-scroll">
+            <table class="scada-table tabular-nums" id="pa-top-cameras-table">
+              <thead>
+                <tr>
+                  <th>Bàn / Camera</th>
+                  <th>Quét QR</th>
+                  <th>Khách</th>
+                  <th>Tải / Cắt</th>
+                  <th>AI Studio</th>
+                </tr>
+              </thead>
+              <tbody id="pa-top-cameras-tbody">
+                <tr><td colspan="5" class="analytics-empty-cell">Đang tải thống kê bàn...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -348,6 +468,27 @@
           n = 0;
         }
         return decimals !== undefined ? n.toFixed(decimals) : String(Math.round(n));
+      }
+
+      function fmtInt(val) {
+        var n = Number(val);
+        if (val === null || val === undefined || val === '' || isNaN(n)) n = 0;
+        return Math.round(n).toLocaleString('vi-VN');
+      }
+
+      function fmtCompact(val) {
+        var n = Number(val) || 0;
+        if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+        if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+        return String(Math.round(n));
+      }
+
+      function fmtCutMin(seconds) {
+        var s = Number(seconds) || 0;
+        if (s <= 0) return '0 phút';
+        if (s < 60) return Math.round(s) + ' giây';
+        var m = s / 60;
+        return (m < 10 ? m.toFixed(1) : Math.round(m).toLocaleString('vi-VN')) + ' phút';
       }
 
       /* Extract portal_token from location.pathname (/portal/<token> or /portal/<token>/) */
@@ -877,7 +1018,238 @@
       document.getElementById('portal-qr-modal-close').addEventListener('click', function () {
         document.getElementById('portal-qr-modal').classList.remove('open');
       });
-      document.getElementById('portal-refresh-btn').addEventListener('click', loadPortalStatus);
+      var portalAnalyticsRange = '7d';
+      var portalAnalyticsReqSeq = 0;
+
+      function renderPortalMiniPeakChart(peakHours) {
+        var wrap = document.getElementById('pa-peak-chart');
+        var badge = document.getElementById('pa-peak-badge');
+        if (!wrap) return;
+
+        var W = 460;
+        var H = 165;
+        var padL = 36;
+        var padR = 8;
+        var padT = 10;
+        var padB = 24;
+        var plotW = W - padL - padR;
+        var plotH = H - padT - padB;
+
+        var byHour = {};
+        (Array.isArray(peakHours) ? peakHours : []).forEach(function (r) {
+          var hr = Number(r.hour);
+          if (hr >= 0 && hr <= 23) byHour[hr] = r;
+        });
+
+        var hours = [];
+        var maxTot = 0;
+        var peakHour = -1;
+        var peakVal = 0;
+        for (var h = 0; h < 24; h++) {
+          var row = byHour[h] || {};
+          var qr = Number(row.qr_views) || 0;
+          var dc = Number(row.downloads_cuts) || 0;
+          var ai = Number(row.ai_runs) || 0;
+          var uv = Number(row.unique_visitors) || 0;
+          var tot = qr + dc + ai;
+          hours.push({ hour: h, qr: qr, dc: dc, ai: ai, uv: uv, tot: tot });
+          if (tot > maxTot) maxTot = tot;
+          if (tot > peakVal) {
+            peakVal = tot;
+            peakHour = h;
+          }
+        }
+
+        var yMax = maxTot > 0 ? Math.ceil(maxTot * 1.15) : 4;
+        var grid = [];
+        for (var t = 0; t <= 3; t++) {
+          var frac = t / 3;
+          var y = padT + plotH * (1 - frac);
+          grid.push(
+            '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="var(--border)" stroke-width="1" ' + (t > 0 ? 'stroke-dasharray="3 3"' : '') + '/>' +
+            '<text x="' + (padL - 5) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end" font-size="9.5" fill="var(--text-muted)">' + esc(fmtCompact(Math.round(yMax * frac))) + '</text>'
+          );
+        }
+
+        var slotW = plotW / 24;
+        var barW = Math.max(5, slotW - 5);
+        var yBase = padT + plotH;
+        var bars = hours.map(function (it, idx) {
+          var xSlot = padL + idx * slotW;
+          var xBar = xSlot + (slotW - barW) / 2;
+          var isPeak = (idx === peakHour && peakVal > 0);
+
+          var hQr = it.qr > 0 ? Math.max(2, (it.qr / yMax) * plotH) : 0;
+          var hDc = it.dc > 0 ? Math.max(2, (it.dc / yMax) * plotH) : 0;
+          var hAi = it.ai > 0 ? Math.max(2, (it.ai / yMax) * plotH) : 0;
+          var sumH = hQr + hDc + hAi;
+          if (sumH > plotH && sumH > 0) {
+            var sc = plotH / sumH;
+            hQr *= sc;
+            hDc *= sc;
+            hAi *= sc;
+          }
+
+          var yQr = yBase - hQr;
+          var yDc = yQr - hDc;
+          var yAi = yDc - hAi;
+          var hp = (it.hour < 10 ? '0' : '') + it.hour;
+          var tip = hp + ':00–' + hp + ':59 (GMT+7)\nQR Views: ' + fmtInt(it.qr) + '\nKhách duy nhất: ' + fmtInt(it.uv) + '\nTải & Cắt: ' + fmtInt(it.dc) + '\nAI Studio: ' + fmtInt(it.ai);
+          var showLbl = (idx % 3 === 0 || idx === 23 || isPeak);
+
+          return '<g class="svg-bar-group">' +
+            '<title>' + esc(tip) + '</title>' +
+            (isPeak ? '<rect x="' + (xSlot + 1).toFixed(1) + '" y="' + padT + '" width="' + (slotW - 2).toFixed(1) + '" height="' + plotH + '" rx="3" fill="var(--amber-bg)" stroke="var(--amber-border)" stroke-width="1"/>' : '') +
+            '<rect class="svg-hover-bg" x="' + (xSlot + 1).toFixed(1) + '" y="' + padT + '" width="' + (slotW - 2).toFixed(1) + '" height="' + plotH + '" rx="2" fill="transparent"/>' +
+            (hQr > 0 ? '<rect x="' + xBar.toFixed(1) + '" y="' + yQr.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + hQr.toFixed(1) + '" rx="1.2" fill="var(--cyan)"/>' : '') +
+            (hDc > 0 ? '<rect x="' + xBar.toFixed(1) + '" y="' + yDc.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + hDc.toFixed(1) + '" rx="1.2" fill="var(--emerald)"/>' : '') +
+            (hAi > 0 ? '<rect x="' + xBar.toFixed(1) + '" y="' + yAi.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + hAi.toFixed(1) + '" rx="1.2" fill="var(--purple)"/>' : '') +
+            (showLbl ? '<text x="' + (xSlot + slotW / 2).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="9.5" font-weight="' + (isPeak ? '700' : '500') + '" fill="' + (isPeak ? 'var(--amber)' : 'var(--text-muted)') + '">' + it.hour + 'h</text>' : '') +
+          '</g>';
+        });
+
+        var emptyTxt = maxTot === 0
+          ? '<text x="' + (padL + plotW / 2).toFixed(1) + '" y="' + (padT + plotH / 2).toFixed(1) + '" text-anchor="middle" font-size="11.5" fill="var(--text-muted)">Chưa có lưu lượng theo khung giờ</text>'
+          : '';
+
+        wrap.innerHTML = '<svg class="analytics-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Biểu đồ giờ vàng của quán">' +
+          grid.join('') + bars.join('') + emptyTxt + '</svg>';
+
+        if (badge) {
+          if (peakHour >= 0 && peakVal > 0) {
+            var hh = (peakHour < 10 ? '0' : '') + peakHour;
+            badge.className = 'badge badge-amber';
+            badge.textContent = '🔥 Đỉnh: ' + hh + ':00 (' + fmtInt(peakVal) + ')';
+          } else {
+            badge.className = 'badge badge-neutral';
+            badge.textContent = 'Đỉnh: --';
+          }
+        }
+      }
+
+      function renderPortalAnalytics(data) {
+        var d = data || {};
+        var kpi = d.kpi || {};
+        var os = d.os_breakdown || {};
+        var topCams = Array.isArray(d.top_cameras) ? d.top_cameras : [];
+
+        var qr = Number(kpi.qr_views) || 0;
+        var pv = Number(kpi.page_views) || 0;
+        var uv = Number(kpi.unique_visitors) || 0;
+        var live = Number(kpi.live_hls) || 0;
+        var vod = Number(kpi.vod_plays) || 0;
+        var dl = Number(kpi.clip_downloads) || 0;
+        var cuts = Number(kpi.cut_clips) || 0;
+        var cutSec = Number(kpi.cut_seconds) || 0;
+        var aiRuns = Number(kpi.ai_analyzes) || 0;
+        var aiShots = Number(kpi.ai_shots) || 0;
+        var aiPots = Number(kpi.ai_pots) || 0;
+        var aiExp = (Number(kpi.ai_exports_ios) || 0) + (Number(kpi.ai_exports_desktop) || 0);
+
+        var elQr = document.getElementById('pa-kpi-qr');
+        var elQrSub = document.getElementById('pa-kpi-qr-sub');
+        if (elQr) elQr.textContent = fmtInt(qr);
+        if (elQrSub) elQrSub.innerHTML = '<span>' + esc(fmtInt(pv)) + ' lượt xem trang</span>';
+
+        var elVis = document.getElementById('pa-kpi-visitors');
+        var elVisSub = document.getElementById('pa-kpi-visitors-sub');
+        if (elVis) elVis.textContent = fmtInt(uv);
+        if (elVisSub) elVisSub.innerHTML = '<span>Live: ' + esc(fmtInt(live)) + ' · VOD: ' + esc(fmtInt(vod)) + '</span>';
+
+        var elClips = document.getElementById('pa-kpi-clips');
+        var elClipsSub = document.getElementById('pa-kpi-clips-sub');
+        if (elClips) elClips.textContent = fmtInt(dl + cuts);
+        if (elClipsSub) elClipsSub.innerHTML = '<span>Tải ' + esc(fmtInt(dl)) + ' · Cắt ' + esc(fmtInt(cuts)) + ' (' + esc(fmtCutMin(cutSec)) + ')</span>';
+
+        var elAi = document.getElementById('pa-kpi-ai');
+        var elAiSub = document.getElementById('pa-kpi-ai-sub');
+        if (elAi) elAi.textContent = fmtInt(aiRuns);
+        if (elAiSub) elAiSub.innerHTML = '<span>' + esc(fmtInt(aiShots)) + ' cú · ' + esc(fmtInt(aiPots)) + ' lỗ · ' + esc(fmtInt(aiExp)) + ' xuất</span>';
+
+        var totalActivity = qr + pv + uv + live + vod + dl + cuts + aiRuns + topCams.length;
+        var notice = document.getElementById('pa-empty-notice');
+        if (notice) notice.style.display = totalActivity === 0 ? 'flex' : 'none';
+
+        renderPortalMiniPeakChart(d.peak_hours || []);
+
+        var osPills = document.getElementById('pa-os-pills');
+        if (osPills) {
+          var ios = Number(os.ios) || 0;
+          var andr = Number(os.android) || 0;
+          var desk = Number(os.desktop) || 0;
+          var app = Number(os.app) || 0;
+          var oth = Number(os.other) || 0;
+          var osTot = ios + andr + desk + app + oth;
+          var pct = function (v) { return osTot > 0 ? Math.round((v / osTot) * 100) + '%' : '0%'; };
+          osPills.innerHTML =
+            '<span class="badge badge-cyan">🍎 iOS ' + esc(pct(ios)) + '</span>' +
+            '<span class="badge badge-emerald">🤖 Android ' + esc(pct(andr)) + '</span>' +
+            '<span class="badge badge-purple">💻 Desktop ' + esc(pct(desk)) + '</span>' +
+            (app > 0 ? '<span class="badge badge-amber">📺 App ' + esc(pct(app)) + '</span>' : '');
+        }
+
+        var camBadge = document.getElementById('pa-cameras-badge');
+        if (camBadge) camBadge.textContent = fmtInt(topCams.length) + ' bàn';
+
+        var tbody = document.getElementById('pa-top-cameras-tbody');
+        if (tbody) {
+          if (!topCams.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="analytics-empty-cell">Chưa có dữ liệu từng bàn trong khung này.</td></tr>';
+          } else {
+            tbody.innerHTML = topCams.slice(0, 12).map(function (c) {
+              var dc = (Number(c.clip_downloads) || 0) + (Number(c.cut_clips) || 0);
+              return '<tr>' +
+                '<td><strong>' + esc(c.table_name || c.camera_id || 'Bàn') + '</strong>' +
+                  '<div class="cell-sub mono">' + esc(c.camera_id || '') + '</div></td>' +
+                '<td><strong class="text-cyan">' + esc(fmtInt(c.qr_views)) + '</strong></td>' +
+                '<td>' + esc(fmtInt(c.unique_visitors)) + '</td>' +
+                '<td><strong class="text-emerald">' + esc(fmtInt(dc)) + '</strong>' +
+                  '<div class="cell-sub">Tải ' + esc(fmtInt(c.clip_downloads)) + ' · Cắt ' + esc(fmtInt(c.cut_clips)) + '</div></td>' +
+                '<td><strong class="text-purple">' + esc(fmtInt(c.ai_analyzes)) + '</strong>' +
+                  '<div class="cell-sub">' + esc(fmtInt(c.ai_shots)) + ' cú</div></td>' +
+              '</tr>';
+            }).join('');
+          }
+        }
+      }
+
+      function loadPortalAnalytics() {
+        var token = getPortalToken();
+        if (!token) return Promise.resolve();
+        var seq = ++portalAnalyticsReqSeq;
+        var url = '/portal/' + encodeURIComponent(token) + '/api/analytics?range=' + encodeURIComponent(portalAnalyticsRange || '7d');
+        return fetch(url, { headers: { 'Accept': 'application/json' } })
+          .then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+          })
+          .then(function (data) {
+            if (seq !== portalAnalyticsReqSeq) return;
+            renderPortalAnalytics(data || {});
+          })
+          .catch(function () {
+            if (seq !== portalAnalyticsReqSeq) return;
+            renderPortalAnalytics({});
+          });
+      }
+
+      var paRangeWrap = document.getElementById('portal-analytics-range');
+      if (paRangeWrap) {
+        paRangeWrap.addEventListener('click', function (e) {
+          var chip = e.target.closest('.filter-chip[data-range]');
+          if (!chip) return;
+          portalAnalyticsRange = chip.getAttribute('data-range') || '7d';
+          paRangeWrap.querySelectorAll('.filter-chip').forEach(function (c) {
+            c.classList.toggle('active', c === chip);
+          });
+          loadPortalAnalytics();
+        });
+      }
+
+      document.getElementById('portal-refresh-btn').addEventListener('click', function () {
+        loadPortalStatus();
+        loadPortalAnalytics();
+      });
 
       document.getElementById('theme-toggle').addEventListener('click', function () {
         var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
@@ -887,7 +1259,9 @@
       });
 
       loadPortalStatus();
+      loadPortalAnalytics();
       setInterval(loadPortalStatus, 20000);
+      setInterval(loadPortalAnalytics, 60000);
     })();
   </script>
 </body>
