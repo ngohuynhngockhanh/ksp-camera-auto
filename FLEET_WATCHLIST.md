@@ -100,7 +100,7 @@ Khi triển khai onboarding quán mới (đặc biệt các quán nhiều camera
   - Phần cứng: Rockchip RK3528 (ARM64), LAN Local: `172.10.16.122/23`, MAC `02:06:06:06:06:60`
   - Hoạt động ổn định cùng phân đoạn LAN với `204_150` và `204_152`
 
-- [x] **Node `inut_204_157`** (Kely Pickleball — `77.88.204.157`, group `kely`)
+- [x] **Node `inut_204_157`** (Kaly Pickleball — `77.88.204.157`, group `kely`)
   - Phần cứng: ARM64 (Octopus Planet), RAM 1.8 GiB
   - Số lượng camera: 12 camera (12 sân Pickleball)
   - Cấu hình PM2 Memory Guard: `camera`: 220M | `inut`: 280M | `ota-mqtt`: 120M (log `/dev/null`)

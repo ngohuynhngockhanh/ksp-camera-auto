@@ -87,7 +87,7 @@ var builtInFleetSpecs = []seedBoxSpec{
 		PM2CameraMB: 350, HardeningScore: 8, Notes: "Multi-box CS11 Node 3 VIP, 19 cameras on 233GB ext4",
 	},
 	{
-		ID: "inut_204_157", ClubID: "club_kely_pickleball", ClubName: "Kely Pickleball", BoxName: "Kely Pickleball",
+		ID: "inut_204_157", ClubID: "club_kely_pickleball", ClubName: "Kaly Pickleball", BoxName: "Kaly Pickleball",
 		Branding: "pickleball", VPNIP: "77.88.204.157", LANIP: "192.168.1.250", VirtualIP: "192.168.1.250",
 		SoCModel: "ARM64 Octopus Planet", Arch: "aarch64", RAMTotalMB: 1843, RAMAvailableMB: 890, ZRAMTotalMB: 3584, ZRAMAlgo: "lz4",
 		SDTotalGB: 118, SDUsedPct: 51, SDFSType: "f2fs", SDMountOpts: "rw,noatime,errors=continue",
