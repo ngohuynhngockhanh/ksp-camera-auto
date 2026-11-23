@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>iNut Bida Fleet Hub (:2090) — SCADA Central Control</title>
+  <title>iNut Bida Hub (:2090) — Fleet Control Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap">
   <link rel="stylesheet" href="/static/style.css">
   <script>
     (function () {
@@ -16,35 +19,43 @@
 </head>
 <body>
   <!-- ========================================================================
-       Sticky SCADA Dual-Canvas Topbar & Navigation
+       Compact Sticky Instrument Topbar & 6-View Navigation
        ======================================================================== -->
   <header class="scada-topbar">
     <div class="topbar-main">
       <div class="brand-cluster">
-        <div class="brand-logo" aria-hidden="true">iN</div>
+        <div class="brand-logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect x="2.5" y="2.5" width="19" height="19" rx="5" stroke="#27c6ed" stroke-width="1.8"/>
+            <circle cx="9.2" cy="9.2" r="2.2" fill="#f4a11a"/>
+            <path d="M9.2 13.5v4.3M14.8 7.5v10.3M14.8 11.4c0-1.6 1.2-2.6 2.6-2.6" stroke="#f2fbfc" stroke-width="1.9" stroke-linecap="round"/>
+          </svg>
+        </div>
         <div class="brand-titles">
           <h1 class="brand-title">
-            <span>iNut Bida Fleet Hub (:2090)</span>
-            <span class="badge badge-cyan mono">SCADA v1.0</span>
+            <span>iNut Bida Hub</span>
+            <span class="brand-port mono">:2090</span>
           </h1>
-          <span class="brand-sub">Trung tâm Điều hành Đội Box Bida &amp; Pickleball · 8-Step Golden Hardening · RedBida 17-Rule</span>
         </div>
       </div>
 
-      <!-- 3-Color Hardware Status LEDs + Real-Time SSE Badge -->
+      <!-- Status LEDs, Real-Time SSE Badge & Quick Utility Actions -->
       <div class="topbar-actions">
-        <div class="led-cluster tabular-nums" title="Trạng thái Phần cứng Toàn Đội (Xanh: Online chuẩn | Vàng: Cảnh báo | Đỏ: Offline)">
+        <div class="led-cluster tabular-nums" title="Trạng thái đội Box (Online | Cảnh báo | Offline)">
           <span class="led-item">
             <span class="led-dot emerald"></span>
-            <span id="led-online-count">0</span> Online
+            <strong id="led-online-count">0</strong>
+            <span class="led-text">Online</span>
           </span>
           <span class="led-item">
             <span class="led-dot amber"></span>
-            <span id="led-warn-count">0</span> Cảnh báo
+            <strong id="led-warn-count">0</strong>
+            <span class="led-text">Cảnh báo</span>
           </span>
           <span class="led-item">
             <span class="led-dot crimson"></span>
-            <span id="led-offline-count">0</span> Offline
+            <strong id="led-offline-count">0</strong>
+            <span class="led-text">Offline</span>
           </span>
         </div>
 
@@ -53,58 +64,74 @@
           <span id="sse-badge-text">LIVE SSE</span>
         </div>
 
-        <button type="button" id="cmd-palette-btn" class="btn" title="Tìm nhanh Box / CLB / IP / Lệnh (Ctrl+K)">
-          <span>🔍 Tìm nhanh</span>
+        <span class="topbar-divider" aria-hidden="true"></span>
+
+        <button type="button" id="cmd-palette-btn" class="btn btn-topbar" title="Tìm nhanh Box / CLB / IP / Lệnh (Ctrl+K)" aria-label="Tìm nhanh">
+          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <span class="btn-label-desktop">Tìm nhanh</span>
           <span class="kbd-hint">Ctrl+K</span>
         </button>
 
-        <button type="button" id="poll-now-btn" class="btn btn-cyan" title="Thăm dò &amp; làm mới tức thì toàn bộ Box">
-          🔄 Poll Now
+        <button type="button" id="poll-now-btn" class="btn btn-topbar btn-cyan" title="Thăm dò và làm mới tức thì toàn bộ Box" aria-label="Thăm dò ngay">
+          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+          <span class="btn-label-desktop">Poll</span>
         </button>
 
-        <button type="button" id="theme-toggle" class="btn" title="Chuyển nền SCADA Sáng (#eef5f4) / Tối (#071a24)">
-          🌗 Sáng / Tối
+        <button type="button" id="theme-toggle" class="btn btn-topbar btn-icon" title="Chuyển giao diện Sáng / Tối" aria-label="Chuyển giao diện Sáng / Tối">
+          <svg class="ui-icon" id="theme-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
         </button>
 
-
-        <button type="button" id="btnChangePassword" class="btn" title="Đổi mật khẩu quản trị">
-          🔑 Đổi mật khẩu
+        <button type="button" id="btnChangePassword" class="btn btn-topbar" title="Đổi mật khẩu quản trị" aria-label="Đổi mật khẩu">
+          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
+          <span class="btn-label-desktop">Mật khẩu</span>
         </button>
-        <a href="/logout" class="btn" title="Đăng xuất phiên quản trị">Đăng xuất</a>
+
+        <a href="/logout" class="btn btn-topbar" title="Đăng xuất phiên quản trị" aria-label="Đăng xuất">
+          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <span class="btn-label-desktop">Đăng xuất</span>
+        </a>
       </div>
     </div>
 
-    <!-- Primary 6-View Navigation Bar -->
-    <nav class="scada-nav" aria-label="Phân hệ điều hành chính">
-      <button type="button" class="nav-tab active" data-view="fleet" id="nav-fleet">
-        <span>📡 Đội Box (Fleet Matrix)</span>
-        <span class="nav-badge tabular-nums" id="nav-badge-fleet">0</span>
-      </button>
-      <button type="button" class="nav-tab" data-view="hardening" id="nav-hardening">
-        <span>🛡️ Chuẩn Hóa 8 Bước (Golden Hardening)</span>
-        <span class="nav-badge tabular-nums" id="nav-badge-hardening">8/8</span>
-      </button>
-      <button type="button" class="nav-tab" data-view="cameras" id="nav-cameras">
-        <span>🎥 Kho Camera &amp; NVR Toàn Đội</span>
-        <span class="nav-badge tabular-nums" id="nav-badge-cameras">0</span>
-      </button>
-      <button type="button" class="nav-tab" data-view="redbida" id="nav-redbida">
-        <span>🎛️ RedBida 17-Rule &amp; FRPC Domain</span>
-        <span class="nav-badge tabular-nums" id="nav-badge-redbida">17/17</span>
-      </button>
-      <button type="button" class="nav-tab" data-view="handover" id="nav-handover">
-        <span>📦 Gói Bàn Giao &amp; Cổng Chủ Quán QR</span>
-        <span class="nav-badge tabular-nums" id="nav-badge-handover">QR</span>
-      </button>
-      <button type="button" class="nav-tab" data-view="analytics" id="nav-analytics">
-        <span>📊 Thống Kê &amp; Analytics</span>
-        <span class="nav-badge tabular-nums" id="nav-badge-analytics">LIVE</span>
-      </button>
-    </nav>
+    <!-- Primary 6-View Navigation Bar (fits cleanly inside 1440px) -->
+    <div class="scada-nav-wrap">
+      <nav class="scada-nav" aria-label="Phân hệ điều hành chính">
+        <button type="button" class="nav-tab active" data-view="fleet" id="nav-fleet">
+          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><line x1="6" y1="6.5" x2="6.01" y2="6.5"/><line x1="6" y1="17.5" x2="6.01" y2="17.5"/></svg>
+          <span>Đội Box</span>
+          <span class="nav-badge tabular-nums" id="nav-badge-fleet">0</span>
+        </button>
+        <button type="button" class="nav-tab" data-view="hardening" id="nav-hardening">
+          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+          <span>Chuẩn Hóa 8 Bước</span>
+          <span class="nav-badge tabular-nums" id="nav-badge-hardening">8/8</span>
+        </button>
+        <button type="button" class="nav-tab" data-view="cameras" id="nav-cameras">
+          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
+          <span>Kho Camera</span>
+          <span class="nav-badge tabular-nums" id="nav-badge-cameras">0</span>
+        </button>
+        <button type="button" class="nav-tab" data-view="redbida" id="nav-redbida">
+          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="2" y1="14" x2="6" y2="14"/><line x1="10" y1="8" x2="14" y2="8"/><line x1="18" y1="16" x2="22" y2="16"/></svg>
+          <span>RedBida &amp; FRPC</span>
+          <span class="nav-badge tabular-nums" id="nav-badge-redbida">17/17</span>
+        </button>
+        <button type="button" class="nav-tab" data-view="handover" id="nav-handover">
+          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M17 17h4v4h-4z"/><path d="M21 14h-1"/><path d="M14 21v-1"/></svg>
+          <span>Bàn Giao &amp; QR</span>
+          <span class="nav-badge tabular-nums" id="nav-badge-handover">QR</span>
+        </button>
+        <button type="button" class="nav-tab" data-view="analytics" id="nav-analytics">
+          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span>Thống Kê</span>
+          <span class="nav-badge tabular-nums" id="nav-badge-analytics">LIVE</span>
+        </button>
+      </nav>
+    </div>
   </header>
 
   <!-- ========================================================================
-       Main SCADA Workspace
+       Main Workspace
        ======================================================================== -->
   <main class="scada-main">
 
@@ -115,8 +142,10 @@
       <div class="kpi-grid tabular-nums">
         <article class="kpi-card" id="kpi-clubs-boxes">
           <div class="kpi-label">
-            <span>1. Tổng CLB &amp; Box</span>
-            <span>🏢</span>
+            <span>Tổng CLB &amp; Box</span>
+            <span class="kpi-icon emerald" aria-hidden="true">
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><line x1="6" y1="6.5" x2="6.01" y2="6.5"/><line x1="6" y1="17.5" x2="6.01" y2="17.5"/></svg>
+            </span>
           </div>
           <div class="kpi-value" id="kpi-clubs-boxes-val">-- / --</div>
           <div class="kpi-sub" id="kpi-clubs-boxes-sub">
@@ -124,23 +153,27 @@
           </div>
         </article>
 
-        <article class="kpi-card cyan" id="kpi-cameras-ffmpeg">
+        <article class="kpi-card" id="kpi-cameras-ffmpeg">
           <div class="kpi-label">
-            <span>2. Camera &amp; Luồng FFmpeg</span>
-            <span>🎬</span>
+            <span>Camera &amp; FFmpeg</span>
+            <span class="kpi-icon" aria-hidden="true">
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
+            </span>
           </div>
           <div class="kpi-value" id="kpi-cameras-ffmpeg-val">-- / --</div>
           <div class="kpi-sub" id="kpi-cameras-ffmpeg-sub">
-            <span>Thực chạy / Kỳ vọng (2×N)</span>
+            <span>Thực chạy / Kỳ vọng (2xN)</span>
           </div>
         </article>
 
         <article class="kpi-card" id="kpi-sd-health">
           <div class="kpi-label">
-            <span>3. Thẻ Nhớ SD &amp; F2FS/ext4</span>
-            <span>💾</span>
+            <span>Thẻ Nhớ SD / F2FS</span>
+            <span class="kpi-icon emerald" aria-hidden="true">
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg>
+            </span>
           </div>
-          <div class="kpi-value" id="kpi-sd-health-val">100% OK</div>
+          <div class="kpi-value" id="kpi-sd-health-val">--%</div>
           <div class="kpi-sub" id="kpi-sd-health-sub">
             <span>errors=continue,noatime</span>
           </div>
@@ -148,8 +181,10 @@
 
         <article class="kpi-card" id="kpi-hardening">
           <div class="kpi-label">
-            <span>4. Chuẩn Hóa 8 Bước</span>
-            <span>🛡️</span>
+            <span>Chuẩn Hóa 8 Bước</span>
+            <span class="kpi-icon emerald" aria-hidden="true">
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+            </span>
           </div>
           <div class="kpi-value" id="kpi-hardening-val">-- / 8</div>
           <div class="kpi-sub" id="kpi-hardening-sub">
@@ -159,8 +194,10 @@
 
         <article class="kpi-card" id="kpi-domains">
           <div class="kpi-label">
-            <span>5. Tên Miền Store / C-Store</span>
-            <span>🌐</span>
+            <span>Tên Miền Store</span>
+            <span class="kpi-icon" aria-hidden="true">
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            </span>
           </div>
           <div class="kpi-value" id="kpi-domains-val">-- HTTP 200</div>
           <div class="kpi-sub" id="kpi-domains-sub">
@@ -168,14 +205,16 @@
           </div>
         </article>
 
-        <article class="kpi-card cyan" id="kpi-rtt">
+        <article class="kpi-card" id="kpi-rtt">
           <div class="kpi-label">
-            <span>6. Độ Trễ Đường Hầm &amp; VPN</span>
-            <span>⚡</span>
+            <span>Độ Trễ Tunnel</span>
+            <span class="kpi-icon amber" aria-hidden="true">
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </span>
           </div>
           <div class="kpi-value" id="kpi-rtt-val">-- ms</div>
           <div class="kpi-sub" id="kpi-rtt-sub">
-            <span>Yamux Tunnel + VPN 77.88.x.y</span>
+            <span>Yamux · VPN 77.88.x.y</span>
           </div>
         </article>
       </div>
@@ -183,20 +222,43 @@
       <!-- Fleet Filter & Search Toolbar -->
       <div class="toolbar-card">
         <div class="filter-chips" id="fleet-filter-chips" role="group" aria-label="Bộ lọc đội Box">
-          <button type="button" class="filter-chip active" data-filter="all">Tất cả (<span id="chip-count-all">0</span>)</button>
-          <button type="button" class="filter-chip" data-filter="online">🟢 Trực tuyến (<span id="chip-count-online">0</span>)</button>
-          <button type="button" class="filter-chip" data-filter="offline">🔴 Mất kết nối (<span id="chip-count-offline">0</span>)</button>
-          <button type="button" class="filter-chip" data-filter="ffmpeg-warn">⚠️ Cảnh báo FFmpeg (<span id="chip-count-ffmpeg">0</span>)</button>
-          <button type="button" class="filter-chip" data-filter="hardening-warn">🛡️ Cần vá Golden (<span id="chip-count-hardening">0</span>)</button>
-          <button type="button" class="filter-chip" data-filter="multi-box">🏢 CLB Nhiều Box (<span id="chip-count-multibox">0</span>)</button>
+          <button type="button" class="filter-chip active" data-filter="all">
+            <span>Tất cả</span>
+            <span class="chip-count" id="chip-count-all">0</span>
+          </button>
+          <button type="button" class="filter-chip" data-filter="online">
+            <span class="led-dot emerald"></span>
+            <span>Trực tuyến</span>
+            <span class="chip-count" id="chip-count-online">0</span>
+          </button>
+          <button type="button" class="filter-chip" data-filter="offline">
+            <span class="led-dot crimson"></span>
+            <span>Mất kết nối</span>
+            <span class="chip-count" id="chip-count-offline">0</span>
+          </button>
+          <button type="button" class="filter-chip" data-filter="ffmpeg-warn">
+            <svg class="ui-icon-sm text-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span>Cảnh báo FFmpeg</span>
+            <span class="chip-count" id="chip-count-ffmpeg">0</span>
+          </button>
+          <button type="button" class="filter-chip" data-filter="hardening-warn">
+            <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span>Cần vá Golden</span>
+            <span class="chip-count" id="chip-count-hardening">0</span>
+          </button>
+          <button type="button" class="filter-chip" data-filter="multi-box">
+            <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/></svg>
+            <span>CLB Nhiều Box</span>
+            <span class="chip-count" id="chip-count-multibox">0</span>
+          </button>
         </div>
 
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;">
+        <div class="toolbar-group">
+          <label class="check-label">
             <input type="checkbox" id="group-by-club-toggle" checked>
             <span>Gom nhóm theo CLB</span>
           </label>
-          <input type="search" id="fleet-search" class="input" placeholder="Tìm CLB, Box ID, IP VPN 77.88.x.y, group key..." style="min-width:260px;">
+          <input type="search" id="fleet-search" class="input search-input-wide" placeholder="Tìm CLB, Box ID, IP VPN, group key...">
         </div>
       </div>
 
@@ -209,25 +271,27 @@
          ====================================================================== -->
     <section id="view-hardening" class="view-panel" data-view-panel="hardening">
       <div class="safety-banner" id="hardening-safety-banner">
-        <div>
-          🛡️ Chế độ An toàn Tuyệt đối: Không bao giờ format thẻ nhớ / ổ đĩa (Zero Disk Formatting) — Mọi tác vụ chuẩn hóa udev/remount (`errors=continue,noatime`) bảo toàn 100% video ghi hình.
+        <div class="safety-banner-text">
+          <svg class="ui-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+          <span>Chế độ An toàn Tuyệt đối: Không bao giờ format thẻ nhớ / ổ đĩa (Zero Disk Formatting) — mọi tác vụ chuẩn hóa udev/remount bảo toàn 100% video ghi hình.</span>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
+        <div class="toolbar-group">
           <button type="button" id="bulk-remediate-btn" class="btn btn-primary">
-            🛠️ Vá Tự Động Toàn Bộ Box Chưa Đạt (8 Bước)
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            <span>Vá Tự Động Toàn Bộ Chưa Đạt (8 Bước)</span>
           </button>
         </div>
       </div>
 
       <div class="glass-panel">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <div class="panel-head">
           <div>
-            <h2 style="margin:0;font-size:16px;">Ma Trận Tuân Thủ 8 Bước Golden Hardening SOP</h2>
-            <p style="margin:4px 0 0;font-size:12px;color:var(--text-secondary);">
-              Kiểm toán trực tiếp: (1) ZRAM <code>mem_limit=0</code> · (2) PM2 Memory Guard + <code>/dev/null</code> · (3) <code>kernel.sysrq=0</code> · (4) Watchdog 60s · (5) Storage Guard 15m (90%→80%) · (6) udev <code>errors=continue</code> · (7) Clean <code>/etc/fstab</code> · (8) Shinobi <code>doSnapshot:false</code> + Fragmented MP4 <code>movflags=frag_keyframe+empty_moov+default_base_moof</code>
+            <h2 class="panel-title">Ma Trận Tuân Thủ 8 Bước Golden Hardening SOP</h2>
+            <p class="panel-sub">
+              Kiểm toán trực tiếp: (1) ZRAM <code>mem_limit=0</code> · (2) PM2 Memory Guard + <code>/dev/null</code> · (3) <code>kernel.sysrq=0</code> · (4) Watchdog 60s · (5) Storage Guard 15m (90%→80%) · (6) udev <code>errors=continue</code> · (7) Clean <code>/etc/fstab</code> · (8) Shinobi <code>doSnapshot:false</code> + Fragmented MP4 <code>frag_keyframe+empty_moov</code>.
             </p>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div class="toolbar-group">
             <select id="hardening-filter" class="select">
               <option value="all">Tất cả Box</option>
               <option value="needs_fix">Cần vá lỗi (&lt; 8/8)</option>
@@ -246,7 +310,7 @@
          ====================================================================== -->
     <section id="view-cameras" class="view-panel" data-view-panel="cameras">
       <div class="toolbar-card">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div class="toolbar-group">
           <select id="cam-club-filter" class="select">
             <option value="">Tất cả CLB</option>
           </select>
@@ -259,22 +323,23 @@
             <option value="Hikvision">Hikvision (ISAPI)</option>
             <option value="Tiandy">Tiandy (ONVIF/RTSP)</option>
           </select>
-          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;">
+          <label class="check-label">
             <input type="checkbox" id="cam-doublestream-filter">
-            <span>⚠️ Chỉ hiện Double-Streaming</span>
+            <span>Chỉ hiện Double-Streaming</span>
           </label>
           <input type="search" id="cam-search-input" class="input" placeholder="Tìm bàn, IP camera, box_id:host:port...">
         </div>
 
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div class="toolbar-group">
           <button type="button" id="bulk-golden-h265-btn" class="btn btn-primary">
-            ⚡ Áp dụng Chuẩn Bida Golden H.265
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Áp dụng Chuẩn Bida Golden H.265</span>
           </button>
         </div>
       </div>
 
       <div class="glass-panel">
-        <div id="cameras-summary-bar" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;"></div>
+        <div id="cameras-summary-bar" class="panel-head"></div>
         <div class="table-scroll">
           <table class="scada-table tabular-nums" id="cameras-table">
             <thead>
@@ -288,7 +353,7 @@
                 <th>Trạng Thái</th>
                 <th>Codec / FPS / Bitrate</th>
                 <th>Audio</th>
-                <th>Luồng Kép (Double-Stream)</th>
+                <th>Luồng Kép</th>
               </tr>
             </thead>
             <tbody id="cameras-tbody"></tbody>
@@ -304,27 +369,50 @@
       <div class="toolbar-card">
         <div class="filter-chips" id="redbida-brand-chips">
           <button type="button" class="filter-chip active" data-brand="all">Tất cả CLB</button>
-          <button type="button" class="filter-chip" data-brand="billiards">🎱 Billiards (Chuẩn RedBida)</button>
-          <button type="button" class="filter-chip" data-brand="pickleball">🏓 Pickleball (Bảo toàn Branding)</button>
-          <button type="button" class="filter-chip" data-brand="conflict">🚨 Xung đột FRPC Subdomain</button>
+          <button type="button" class="filter-chip" data-brand="billiards">
+            <svg class="ui-icon-sm text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>Billiards (RedBida)</span>
+          </button>
+          <button type="button" class="filter-chip" data-brand="pickleball">
+            <svg class="ui-icon-sm text-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="9.5" cy="9.5" r="0.8" fill="currentColor"/><circle cx="14.5" cy="9.5" r="0.8" fill="currentColor"/><circle cx="12" cy="14.5" r="0.8" fill="currentColor"/></svg>
+            <span>Pickleball (Bảo toàn Branding)</span>
+          </button>
+          <button type="button" class="filter-chip" data-brand="conflict">
+            <svg class="ui-icon-sm text-crimson" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span>Xung đột FRPC Subdomain</span>
+          </button>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <input type="search" id="redbida-search" class="input" placeholder="Tìm store-*, c-store-*, CLB, Box ID...">
+        <div class="toolbar-group">
+          <input type="search" id="redbida-search" class="input search-input-wide" placeholder="Tìm store-*, c-store-*, CLB, Box ID...">
         </div>
       </div>
 
       <!-- FRPC Subdomain Conflict & HTTP 200 Auditor -->
       <div class="glass-panel">
-        <h2 style="margin:0 0 8px;font-size:15px;">🌐 Kiểm Toán Tên Miền FRPC (<code>store-*</code> / <code>c-store-*</code>) &amp; Xung Đột Subdomain</h2>
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">
+              <svg class="ui-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              <span>Kiểm Toán Tên Miền FRPC (<code>store-*</code> / <code>c-store-*</code>) &amp; Xung Đột Subdomain</span>
+            </h2>
+          </div>
+        </div>
         <div id="redbida-domains-container" class="tabular-nums"></div>
       </div>
 
       <!-- Per-Box 17-Rule Inspector & Controlled Unlock Studio -->
       <div class="glass-panel">
-        <h2 style="margin:0 0 8px;font-size:15px;">🎛️ RedBida OTA-MQTT 17-Rule Golden Inspector &amp; Controlled Unlock</h2>
-        <p style="margin:0 0 12px;font-size:12px;color:var(--text-secondary);">
-          Bảo toàn tuyệt đối nhận diện thương hiệu <strong>🎱 Billiards</strong> vs <strong>🏓 Pickleball</strong> (Pika Sun, Kely, Heypick...). Hỗ trợ mở khóa có kiểm soát cho <code>frpc_config</code>, <code>eth0_virtual_ip</code>, <code>end0_virtual_ip</code>, <code>shinobi_group_key</code>, <code>ggcode</code> và 20 tab <code>[C01]..[C20]</code>.
-        </p>
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">
+              <svg class="ui-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="2" y1="14" x2="6" y2="14"/><line x1="10" y1="8" x2="14" y2="8"/><line x1="18" y1="16" x2="22" y2="16"/></svg>
+              <span>RedBida OTA-MQTT 17-Rule Golden Inspector &amp; Controlled Unlock</span>
+            </h2>
+            <p class="panel-sub">
+              Bảo toàn tuyệt đối nhận diện thương hiệu <strong>Billiards</strong> vs <strong>Pickleball</strong> (Pika Sun, Kely, Heypick...). Hỗ trợ mở khóa có kiểm soát cho <code>frpc_config</code>, <code>eth0_virtual_ip</code>, <code>end0_virtual_ip</code>, <code>shinobi_group_key</code>, <code>ggcode</code> và 20 tab <code>[C01]..[C20]</code>.
+            </p>
+          </div>
+        </div>
         <div id="redbida-boxes-container" class="tabular-nums"></div>
       </div>
     </section>
@@ -334,51 +422,63 @@
          ====================================================================== -->
     <section id="view-handover" class="view-panel" data-view-panel="handover">
       <div class="toolbar-card">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <label for="handover-club-select" style="font-weight:700;font-size:13px;">Chọn CLB / Quán Bàn Giao:</label>
-          <select id="handover-club-select" class="select" style="min-width:280px;"></select>
+        <div class="toolbar-group">
+          <label for="handover-club-select" class="check-label">Chọn CLB / Quán Bàn Giao:</label>
+          <select id="handover-club-select" class="select select-club-wide"></select>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div class="toolbar-group">
           <a id="handover-open-portal-btn" href="#" target="_blank" rel="noopener" class="btn btn-cyan">
-            🔑 Mở Cổng Chủ Quán (/portal/{token}/)
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            <span>Mở Cổng Chủ Quán</span>
           </a>
           <button type="button" id="copy-handover-btn" class="btn btn-primary">
-            📋 Sao Chép Gói Bàn Giao (Zalo / Telegram)
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span>Sao Chép Gói Bàn Giao (Zalo / Telegram)</span>
           </button>
         </div>
       </div>
 
       <div class="handover-layout">
         <div class="glass-panel">
-          <h2 style="margin:0 0 10px;font-size:15px;">📝 Mẫu Tin Nhắn Bàn Giao Chủ Quán (Zalo / Telegram)</h2>
-          <textarea id="handover-template-text" class="textarea mono" rows="16" style="width:100%;resize:vertical;" readonly></textarea>
-          <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;">
-            <div style="font-size:12px;color:var(--text-secondary);">
-              Link Clip QR Bền Vững (HMAC): <a id="handover-clip-link" href="#" target="_blank" rel="noopener" class="mono" style="color:var(--emerald);">/clip/...</a>
+          <div class="panel-head">
+            <h2 class="panel-title">
+              <svg class="ui-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              <span>Mẫu Tin Nhắn Bàn Giao Chủ Quán (Zalo / Telegram)</span>
+            </h2>
+          </div>
+          <textarea id="handover-template-text" class="textarea mono" rows="15" style="width:100%;resize:vertical;" readonly></textarea>
+          <div class="handover-clip-row">
+            <div class="handover-link-meta">
+              Link Clip QR Bền Vững (HMAC): <a id="handover-clip-link" href="#" target="_blank" rel="noopener" class="mono text-emerald">/clip/...</a>
             </div>
             <button type="button" id="copy-clip-url-btn" class="btn btn-xs">Sao chép Link Clip</button>
           </div>
         </div>
 
         <div class="glass-panel">
-          <h2 style="margin:0 0 12px;font-size:15px;">📱 Bộ Mã QR SVG Thuần (Không Phụ Thuộc CDN)</h2>
+          <div class="panel-head">
+            <h2 class="panel-title">
+              <svg class="ui-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M17 17h4v4h-4z"/></svg>
+              <span>Bộ Mã QR SVG Thuần (Offline-Ready)</span>
+            </h2>
+          </div>
           <div class="qr-cards-grid">
             <div class="qr-card">
-              <div style="font-weight:700;font-size:13px;">1. Xem Bàn &amp; Điểm Số (Store)</div>
+              <div class="qr-card-title">Xem Bàn &amp; Điểm Số (Store)</div>
               <div class="qr-svg-box" id="qr-store-container"></div>
-              <a id="handover-store-link" href="#" target="_blank" rel="noopener" class="mono" style="font-size:12px;color:var(--cyan);word-break:break-all;">--</a>
+              <a id="handover-store-link" href="#" target="_blank" rel="noopener" class="mono qr-card-url">--</a>
             </div>
 
             <div class="qr-card">
-              <div style="font-weight:700;font-size:13px;">2. Xem Camera &amp; Tua Video (C-Store)</div>
+              <div class="qr-card-title">Xem Camera &amp; Tua Video (C-Store)</div>
               <div class="qr-svg-box" id="qr-cstore-container"></div>
-              <a id="handover-cstore-link" href="#" target="_blank" rel="noopener" class="mono" style="font-size:12px;color:var(--cyan);word-break:break-all;">--</a>
+              <a id="handover-cstore-link" href="#" target="_blank" rel="noopener" class="mono qr-card-url">--</a>
             </div>
 
             <div class="qr-card">
-              <div style="font-weight:700;font-size:13px;">3. Cổng Chủ Quán Read-Only</div>
+              <div class="qr-card-title">Cổng Chủ Quán Read-Only</div>
               <div class="qr-svg-box" id="qr-portal-container"></div>
-              <a id="handover-portal-link" href="#" target="_blank" rel="noopener" class="mono" style="font-size:12px;color:var(--emerald);word-break:break-all;">--</a>
+              <a id="handover-portal-link" href="#" target="_blank" rel="noopener" class="mono qr-card-url text-emerald">--</a>
             </div>
           </div>
         </div>
@@ -391,7 +491,7 @@
     <section id="view-analytics" class="view-panel" data-view-panel="analytics">
       <!-- Analytics Control Bar -->
       <div class="toolbar-card">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div class="toolbar-group">
           <div class="filter-chips" id="analytics-range-chips" role="group" aria-label="Khung thời gian thống kê">
             <button type="button" class="filter-chip" data-range="24h">24 giờ</button>
             <button type="button" class="filter-chip active" data-range="7d">7 ngày</button>
@@ -401,29 +501,33 @@
           <span id="analytics-date-window" class="badge badge-neutral mono">--</span>
         </div>
 
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div class="toolbar-group">
           <select id="analytics-club-filter" class="select" aria-label="Lọc theo CLB">
             <option value="">Tất cả CLB</option>
           </select>
-          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;padding:0 4px;">
+          <label class="check-label">
             <input type="checkbox" id="analytics-ai-only">
-            <span>🤖 Chỉ đội AI Studio</span>
+            <span>Chỉ đội AI Studio</span>
           </label>
           <button type="button" id="analytics-refresh-btn" class="btn" title="Tải lại dữ liệu thống kê">
-            🔄 Làm mới
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+            <span>Làm mới</span>
           </button>
           <a id="analytics-export-csv" href="/fleet/api/analytics/export.csv?range=7d" class="btn btn-cyan" download>
-            ⬇️ Xuất CSV
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Xuất CSV</span>
           </a>
         </div>
       </div>
 
-      <!-- 6 SCADA Analytics KPI Cards -->
+      <!-- 6 Analytics KPI Cards -->
       <div class="kpi-grid tabular-nums">
-        <article class="kpi-card cyan" id="akpi-qr-card">
+        <article class="kpi-card" id="akpi-qr-card">
           <div class="kpi-label">
-            <span>1. Quét QR &amp; Xem Trang</span>
-            <span>📱</span>
+            <span>Quét QR &amp; Xem Trang</span>
+            <span class="kpi-icon" aria-hidden="true">
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M17 17h4v4h-4z"/></svg>
+            </span>
           </div>
           <div class="kpi-value" id="akpi-qr-val">0 <span class="kpi-val-sub">/ 0 trang</span></div>
           <div class="kpi-sub" id="akpi-qr-sub">
@@ -433,8 +537,10 @@
 
         <article class="kpi-card" id="akpi-visitors-card">
           <div class="kpi-label">
-            <span>2. Khách Duy Nhất</span>
-            <span>👥</span>
+            <span>Khách Duy Nhất</span>
+            <span class="kpi-icon emerald" aria-hidden="true">
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </span>
           </div>
           <div class="kpi-value" id="akpi-visitors-val">0</div>
           <div class="kpi-sub" id="akpi-visitors-sub">
@@ -445,8 +551,10 @@
 
         <article class="kpi-card" id="akpi-clips-card">
           <div class="kpi-label">
-            <span>3. Tải Clip &amp; Cắt CheckVAR</span>
-            <span>✂️</span>
+            <span>Tải Clip &amp; CheckVAR</span>
+            <span class="kpi-icon emerald" aria-hidden="true">
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+            </span>
           </div>
           <div class="kpi-value" id="akpi-clips-val">0</div>
           <div class="kpi-sub" id="akpi-clips-sub">
@@ -455,10 +563,12 @@
           </div>
         </article>
 
-        <article class="kpi-card purple" id="akpi-ai-card">
+        <article class="kpi-card" id="akpi-ai-card">
           <div class="kpi-label">
-            <span>4. AI Studio &amp; Phân Tích</span>
-            <span>🤖</span>
+            <span>AI Studio &amp; Phân Tích</span>
+            <span class="kpi-icon purple" aria-hidden="true">
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+            </span>
           </div>
           <div class="kpi-value" id="akpi-ai-val">0 <span class="kpi-val-sub">/ 0 mở</span></div>
           <div class="kpi-sub" id="akpi-ai-sub">
@@ -467,10 +577,12 @@
           </div>
         </article>
 
-        <article class="kpi-card cyan" id="akpi-bw-card">
+        <article class="kpi-card" id="akpi-bw-card">
           <div class="kpi-label">
-            <span>5. Băng Thông Xuất</span>
-            <span>📡</span>
+            <span>Băng Thông Xuất</span>
+            <span class="kpi-icon" aria-hidden="true">
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </span>
           </div>
           <div class="kpi-value" id="akpi-bw-val">0 B</div>
           <div class="kpi-sub" id="akpi-bw-sub">
@@ -481,8 +593,10 @@
 
         <article class="kpi-card" id="akpi-err-card">
           <div class="kpi-label">
-            <span>6. Sức Khỏe &amp; Tỷ Lệ Lỗi</span>
-            <span>🩺</span>
+            <span>Sức Khỏe &amp; Lỗi</span>
+            <span class="kpi-icon emerald" aria-hidden="true">
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </span>
           </div>
           <div class="kpi-value" id="akpi-err-val">0</div>
           <div class="kpi-sub" id="akpi-err-sub">
@@ -494,7 +608,10 @@
 
       <!-- Graceful Empty State Callout (shown when selected range has zero events) -->
       <div id="analytics-empty-banner" class="analytics-empty-banner" style="display:none;" role="status">
-        <span>ℹ️ Chưa có dữ liệu trong khung thời gian này — box sẽ tự động đẩy rollup mỗi 5 phút.</span>
+        <span class="safety-banner-text">
+          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>Chưa có dữ liệu trong khung thời gian này — box sẽ tự động đẩy rollup mỗi 5 phút.</span>
+        </span>
         <span class="mono" style="font-size:12px;">GMT+7 · 5m Rollup Sync</span>
       </div>
 
@@ -503,11 +620,14 @@
         <div class="glass-panel">
           <div class="analytics-card-head">
             <div>
-              <h2 class="analytics-card-title">🕒 Biểu Đồ Khung Giờ Vàng (0h–23h GMT+7)</h2>
+              <h2 class="analytics-card-title">
+                <svg class="ui-icon text-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>Biểu Đồ Khung Giờ Vàng (0h–23h GMT+7)</span>
+              </h2>
               <p class="analytics-card-sub">Phân bổ lưu lượng theo khung giờ thực tế toàn hệ thống</p>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              <span id="analytics-peak-badge" class="badge badge-amber">🔥 Đỉnh: --</span>
+            <div class="toolbar-group">
+              <span id="analytics-peak-badge" class="badge badge-amber">Đỉnh: --</span>
               <div class="analytics-legend">
                 <span class="analytics-legend-item"><span class="analytics-legend-dot" style="background:var(--cyan);"></span>QR Views</span>
                 <span class="analytics-legend-item"><span class="analytics-legend-dot" style="background:var(--emerald);"></span>Tải &amp; Cắt</span>
@@ -521,7 +641,10 @@
         <div class="glass-panel">
           <div class="analytics-card-head">
             <div>
-              <h2 class="analytics-card-title">📈 Xu Hướng Theo Ngày</h2>
+              <h2 class="analytics-card-title">
+                <svg class="ui-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                <span>Xu Hướng Theo Ngày</span>
+              </h2>
               <p class="analytics-card-sub" id="analytics-daily-sub">Biến động lượt quét QR, tải/cắt clip &amp; phân tích AI</p>
             </div>
             <div class="analytics-legend">
@@ -539,10 +662,13 @@
         <div class="glass-panel">
           <div class="analytics-card-head">
             <div>
-              <h2 class="analytics-card-title">📱 Phân Bổ Thiết Bị (iOS / Android / Desktop / App Kiosk)</h2>
+              <h2 class="analytics-card-title">
+                <svg class="ui-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                <span>Phân Bổ Thiết Bị (iOS / Android / Desktop / Kiosk)</span>
+              </h2>
               <p class="analytics-card-sub">Nhận diện tự động từ User-Agent &amp; tham số App Kiosk</p>
             </div>
-            <span id="analytics-os-total" class="badge badge-cyan">0 thiết bị</span>
+            <span id="analytics-os-total" class="badge badge-cyan">0 lượt</span>
           </div>
           <div id="analytics-os-breakdown" class="breakdown-list"></div>
         </div>
@@ -550,7 +676,10 @@
         <div class="glass-panel">
           <div class="analytics-card-head">
             <div>
-              <h2 class="analytics-card-title">🤖 Chi Tiết AI Studio (Pool vs Carom · Xuất Video iOS / Desktop)</h2>
+              <h2 class="analytics-card-title">
+                <svg class="ui-icon text-purple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+                <span>Chi Tiết AI Studio (Pool vs Carom · Xuất Video)</span>
+              </h2>
               <p class="analytics-card-sub">Theo dõi tỷ lệ bộ môn AI &amp; kênh xuất video (iPhone Relay vs Desktop Blob)</p>
             </div>
             <span id="analytics-ai-boxes-badge" class="badge badge-purple">0 Box AI</span>
@@ -564,13 +693,13 @@
       <div class="glass-panel tabular-nums">
         <div class="analytics-card-head">
           <div>
-            <h2 class="analytics-card-title" id="analytics-top-title">🏆 Xếp Hạng Sử Dụng Theo Quán / Box</h2>
+            <h2 class="analytics-card-title" id="analytics-top-title">Xếp Hạng Sử Dụng Theo Quán / Box</h2>
             <p class="analytics-card-sub">Bấm vào tiêu đề cột để sắp xếp · Bấm vào một dòng để lọc chi tiết bảng Top Từng Bàn / Camera bên dưới</p>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div class="toolbar-group">
             <div class="segmented-toggle" id="analytics-group-toggle" role="group" aria-label="Chế độ xem xếp hạng">
-              <button type="button" class="segmented-btn active" data-group="clubs">🏢 Theo Quán</button>
-              <button type="button" class="segmented-btn" data-group="boxes">📦 Theo Box</button>
+              <button type="button" class="segmented-btn active" data-group="clubs">Theo Quán</button>
+              <button type="button" class="segmented-btn" data-group="boxes">Theo Box</button>
             </div>
           </div>
         </div>
@@ -581,13 +710,16 @@
       <div class="glass-panel tabular-nums">
         <div class="analytics-card-head">
           <div>
-            <h2 class="analytics-card-title">🎱 Top Từng Bàn / Camera (<code>camera01..28</code>)</h2>
+            <h2 class="analytics-card-title">
+              <svg class="ui-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
+              <span>Top Từng Bàn / Camera (<code>camera01..28</code>)</span>
+            </h2>
             <p class="analytics-card-sub">Chi tiết tương tác QR, Live/VOD, Tải Clip, CheckVAR &amp; AI Studio từng bàn</p>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div class="toolbar-group">
             <span id="analytics-drill-indicator" style="display:none;align-items:center;gap:6px;">
               <span class="badge badge-cyan" id="analytics-drill-label">Đang lọc</span>
-              <button type="button" class="btn btn-xs" id="analytics-clear-drill-btn">✕ Bỏ lọc</button>
+              <button type="button" class="btn btn-xs" id="analytics-clear-drill-btn">Bỏ lọc</button>
             </span>
             <span id="analytics-cameras-count" class="badge badge-neutral">0 bàn</span>
           </div>
@@ -604,31 +736,40 @@
   <div id="box-drawer-backdrop" class="drawer-backdrop"></div>
   <aside id="box-drawer" class="box-drawer" aria-label="Chi tiết Box Bida / Pickleball">
     <div class="drawer-header">
-      <div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <h2 id="drawer-box-title" style="margin:0;font-size:16px;">Chi tiết Box</h2>
+      <div class="drawer-header-info">
+        <div class="drawer-title-row">
+          <h2 id="drawer-box-title" class="drawer-title">Chi tiết Box</h2>
           <span id="drawer-box-status-badge" class="badge badge-emerald">ONLINE</span>
         </div>
-        <div id="drawer-box-sub" class="mono" style="font-size:12px;color:var(--text-secondary);margin-top:3px;">--</div>
+        <div id="drawer-box-sub" class="mono drawer-sub">--</div>
       </div>
-      <button type="button" id="drawer-close-btn" class="btn btn-xs" aria-label="Đóng ngăn kéo">✕ Đóng</button>
+      <button type="button" id="drawer-close-btn" class="btn btn-xs" aria-label="Đóng ngăn kéo">
+        <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        <span>Đóng</span>
+      </button>
     </div>
 
     <div class="drawer-body tabular-nums">
       <!-- 1-Click Streaming Reverse Proxy Launchers -->
       <div class="drawer-section">
         <h3>
-          <span>🚀 Cổng Truy Cập Trực Tiếp (Streaming Reverse Proxy + 1-Click SSO)</span>
-          <span class="mono" style="font-size:11px;color:var(--emerald);">FlushInterval: -1</span>
+          <span class="drawer-section-title">
+            <svg class="ui-icon-sm text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            <span>Cổng Truy Cập Trực Tiếp (Reverse Proxy · SSO)</span>
+          </span>
+          <span class="mono text-emerald" style="font-size:11px;">FlushInterval: -1</span>
         </h3>
-        <div id="drawer-proxy-links" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+        <div id="drawer-proxy-links" class="toolbar-group"></div>
       </div>
 
-      <!-- Hardware & Storage Telemetry Bars -->
+      <!-- Hardware & Storage Telemetry -->
       <div class="drawer-section">
         <h3>
-          <span>📊 Tài nguyên Hệ thống Thời gian thực (On/Off · CPU · RAM · Heap · Avail · Swap · ZRAM &amp; Thẻ Nhớ Video)</span>
-          <span id="drawer-soc-badge" class="badge badge-neutral">--</span>
+          <span class="drawer-section-title">
+            <svg class="ui-icon-sm text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            <span>Tài Nguyên Hệ Thống Thời Gian Thực</span>
+          </span>
+          <span id="drawer-soc-badge" class="badge badge-neutral mono">--</span>
         </h3>
         <div id="drawer-telemetry" class="telemetry-grid"></div>
       </div>
@@ -636,7 +777,10 @@
       <!-- Shinobi Monitors vs Live FFmpeg Processes -->
       <div class="drawer-section">
         <h3>
-          <span>🎬 Shinobi Monitors vs Tiến Trình FFmpeg Thực Tế</span>
+          <span class="drawer-section-title">
+            <svg class="ui-icon-sm text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
+            <span>Shinobi Monitors vs Tiến Trình FFmpeg</span>
+          </span>
           <span id="drawer-ffmpeg-badge" class="badge badge-cyan">0 / 0</span>
         </h3>
         <div id="drawer-monitors"></div>
@@ -645,9 +789,13 @@
       <!-- 8-Step Golden Hardening Checklist for this Box -->
       <div class="drawer-section">
         <h3>
-          <span>🛡️ Kiểm Toán 8 Bước Golden Hardening</span>
+          <span class="drawer-section-title">
+            <svg class="ui-icon-sm text-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+            <span>Kiểm Toán 8 Bước Golden Hardening</span>
+          </span>
           <button type="button" id="drawer-remediate-btn" class="btn btn-primary btn-xs">
-            🛠️ Vá 1-Click (An Toàn 0-Format)
+            <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            <span>Vá 1-Click (0-Format)</span>
           </button>
         </h3>
         <div id="drawer-hardening"></div>
@@ -661,8 +809,8 @@
   <div id="cmd-palette" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Bảng lệnh nhanh">
     <div class="cmd-modal">
       <div class="cmd-input-wrap">
-        <span>🔍</span>
-        <input type="search" id="cmd-search-input" placeholder="Gõ tên CLB, mã Box (inut_204_141), IP VPN, hoặc lệnh nhanh..." autocomplete="off">
+        <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" id="cmd-search-input" placeholder="Gõ tên CLB, mã Box (inut_204_141), IP VPN, hoặc phân hệ..." autocomplete="off">
         <button type="button" id="cmd-close-btn" class="btn btn-xs">ESC</button>
       </div>
       <div id="cmd-results" class="cmd-results tabular-nums"></div>
@@ -673,49 +821,52 @@
        RedBida Controlled Unlock Editor Modal
        ======================================================================== -->
   <div id="redbida-editor-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Mở khóa cấu hình RedBida & FRPC">
-    <div class="cmd-modal" style="width:min(94vw,680px);">
+    <div class="cmd-modal cmd-modal-wide">
       <div class="drawer-header">
-        <div>
-          <h3 id="redbida-modal-title" style="margin:0;font-size:15px;">🔓 Mở Khóa Có Kiểm Soát RedBida &amp; FRPC</h3>
-          <div id="redbida-modal-sub" class="mono" style="font-size:12px;color:var(--text-secondary);">--</div>
+        <div class="drawer-header-info">
+          <h3 id="redbida-modal-title" class="drawer-title">Mở Khóa Có Kiểm Soát RedBida &amp; FRPC</h3>
+          <div id="redbida-modal-sub" class="mono drawer-sub">--</div>
         </div>
-        <button type="button" id="redbida-modal-close" class="btn btn-xs">✕ Đóng</button>
+        <button type="button" id="redbida-modal-close" class="btn btn-xs" aria-label="Đóng hộp thoại">
+          <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <span>Đóng</span>
+        </button>
       </div>
-      <form id="redbida-editor-form" autocomplete="off" style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+      <form id="redbida-editor-form" autocomplete="off" class="modal-form">
         <input type="hidden" id="rb-edit-box-id">
         <div class="telemetry-grid">
-          <div>
-            <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Shinobi Group Key (<code>shinobi_group_key</code>)</label>
-            <input type="text" id="rb-edit-group-key" class="input mono" style="width:100%;">
+          <div class="form-field">
+            <label for="rb-edit-group-key">Shinobi Group Key (<code>shinobi_group_key</code>)</label>
+            <input type="text" id="rb-edit-group-key" class="input mono">
           </div>
-          <div>
-            <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Mã GGCode (<code>ggcode</code>)</label>
-            <input type="text" id="rb-edit-ggcode" class="input mono" style="width:100%;">
+          <div class="form-field">
+            <label for="rb-edit-ggcode">Mã GGCode (<code>ggcode</code>)</label>
+            <input type="text" id="rb-edit-ggcode" class="input mono">
           </div>
-          <div>
-            <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">IP Ảo eth0 (<code>eth0_virtual_ip</code>)</label>
-            <input type="text" id="rb-edit-eth0-vip" class="input mono" style="width:100%;" placeholder="192.168.1.250">
+          <div class="form-field">
+            <label for="rb-edit-eth0-vip">IP Ảo eth0 (<code>eth0_virtual_ip</code>)</label>
+            <input type="text" id="rb-edit-eth0-vip" class="input mono" placeholder="192.168.1.250">
           </div>
-          <div>
-            <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">IP Ảo end0 (<code>end0_virtual_ip</code>)</label>
-            <input type="text" id="rb-edit-end0-vip" class="input mono" style="width:100%;" placeholder="192.168.1.250">
+          <div class="form-field">
+            <label for="rb-edit-end0-vip">IP Ảo end0 (<code>end0_virtual_ip</code>)</label>
+            <input type="text" id="rb-edit-end0-vip" class="input mono" placeholder="192.168.1.250">
           </div>
-          <div>
-            <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Tab <code>[C01]</code> (Bàn 1 / Sân 1)</label>
-            <input type="text" id="rb-edit-c01" class="input mono" style="width:100%;">
+          <div class="form-field">
+            <label for="rb-edit-c01">Tab <code>[C01]</code> (Bàn 1 / Sân 1)</label>
+            <input type="text" id="rb-edit-c01" class="input mono">
           </div>
-          <div>
-            <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Nhận diện Thương hiệu (Branding Guard)</label>
-            <input type="text" id="rb-edit-branding" class="input mono" style="width:100%;" readonly>
+          <div class="form-field">
+            <label for="rb-edit-branding">Nhận diện Thương hiệu (Branding Guard)</label>
+            <input type="text" id="rb-edit-branding" class="input mono" readonly>
           </div>
         </div>
-        <div>
-          <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Cấu hình FRPC (<code>frpc_config</code> — <code>store-*</code> / <code>c-store-*</code>)</label>
-          <textarea id="rb-edit-frpc" class="textarea mono" rows="4" style="width:100%;"></textarea>
+        <div class="form-field">
+          <label for="rb-edit-frpc">Cấu hình FRPC (<code>frpc_config</code> — <code>store-*</code> / <code>c-store-*</code>)</label>
+          <textarea id="rb-edit-frpc" class="textarea mono" rows="4"></textarea>
         </div>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px;">
-          <button type="button" id="rb-autofix-btn" class="btn btn-amber">⚡ Auto-Fix 17 Quy Tắc</button>
-          <button type="submit" class="btn btn-primary">💾 Lưu &amp; Áp Dụng (Bảo Toàn Branding)</button>
+        <div class="modal-actions">
+          <button type="button" id="rb-autofix-btn" class="btn btn-amber">Auto-Fix 17 Quy Tắc</button>
+          <button type="submit" class="btn btn-primary">Lưu &amp; Áp Dụng (Bảo Toàn Branding)</button>
         </div>
       </form>
     </div>
@@ -725,31 +876,34 @@
        Change Password Modal (#changePasswordModal) — Zero-Password-Retention
        ======================================================================== -->
   <div id="changePasswordModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Đổi mật khẩu tài khoản">
-    <div class="cmd-modal" style="width:min(94vw,460px);">
+    <div class="cmd-modal cmd-modal-narrow">
       <div class="drawer-header">
-        <div>
-          <h3 style="margin:0;font-size:15px;">🔑 Đổi Mật Khẩu Tài Khoản</h3>
-          <div class="mono" style="font-size:12px;color:var(--text-secondary);">Băm một chiều bcrypt · Tự động thu hồi phiên cũ</div>
+        <div class="drawer-header-info">
+          <h3 class="drawer-title">Đổi Mật Khẩu Tài Khoản</h3>
+          <div class="mono drawer-sub">Băm một chiều bcrypt · Tự động thu hồi phiên cũ</div>
         </div>
-        <button type="button" id="btnCloseChangePassword" class="btn btn-xs" aria-label="Đóng hộp thoại đổi mật khẩu">✕ Đóng</button>
+        <button type="button" id="btnCloseChangePassword" class="btn btn-xs" aria-label="Đóng hộp thoại đổi mật khẩu">
+          <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <span>Đóng</span>
+        </button>
       </div>
-      <form id="changePasswordForm" autocomplete="off" style="padding:16px;display:flex;flex-direction:column;gap:12px;">
-        <div>
-          <label for="cpCurrentPassword" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Mật khẩu hiện tại</label>
-          <input type="password" id="cpCurrentPassword" name="current_password" class="input" style="width:100%;" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="••••••••" required>
+      <form id="changePasswordForm" autocomplete="off" class="modal-form">
+        <div class="form-field">
+          <label for="cpCurrentPassword">Mật khẩu hiện tại</label>
+          <input type="password" id="cpCurrentPassword" name="current_password" class="input" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="••••••••" required>
         </div>
-        <div>
-          <label for="cpNewPassword" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Mật khẩu mới (tối thiểu 6 ký tự)</label>
-          <input type="password" id="cpNewPassword" name="new_password" class="input" style="width:100%;" minlength="6" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="••••••••" required>
+        <div class="form-field">
+          <label for="cpNewPassword">Mật khẩu mới (tối thiểu 6 ký tự)</label>
+          <input type="password" id="cpNewPassword" name="new_password" class="input" minlength="6" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="••••••••" required>
         </div>
-        <div>
-          <label for="cpConfirmPassword" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Xác nhận mật khẩu mới</label>
-          <input type="password" id="cpConfirmPassword" name="confirm_password" class="input" style="width:100%;" minlength="6" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="••••••••" required>
+        <div class="form-field">
+          <label for="cpConfirmPassword">Xác nhận mật khẩu mới</label>
+          <input type="password" id="cpConfirmPassword" name="confirm_password" class="input" minlength="6" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="••••••••" required>
         </div>
         <div id="cpErrorMsg" class="cp-error-banner" role="alert" aria-live="polite" style="display:none;"></div>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px;">
+        <div class="modal-actions">
           <button type="button" id="btnCancelChangePassword" class="btn">Hủy</button>
-          <button type="submit" id="btnSubmitChangePassword" class="btn btn-primary">💾 Cập nhật mật khẩu</button>
+          <button type="submit" id="btnSubmitChangePassword" class="btn btn-primary">Cập nhật mật khẩu</button>
         </div>
       </form>
     </div>

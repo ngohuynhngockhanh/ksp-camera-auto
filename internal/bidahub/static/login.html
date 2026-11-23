@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>iNut Bida Fleet Hub (:2090) — Đăng nhập SCADA</title>
+  <title>iNut Bida Fleet Hub (:2090) — Đăng nhập</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap">
   <link rel="stylesheet" href="/static/style.css">
   <script>
     (function () {
@@ -16,278 +19,760 @@
   <style>
     body.login-page {
       min-height: 100vh;
+      margin: 0;
+      padding: 76px 16px 32px;
       display: grid;
       place-items: center;
-      padding: 18px;
-      margin: 0;
+      font-family: var(--font-sans, "Be Vietnam Pro", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);
+      color: var(--text);
+      background-color: var(--bg);
+      background-image:
+        radial-gradient(640px 420px at 14% 12%, rgba(39, 198, 237, 0.11), transparent 68%),
+        radial-gradient(520px 360px at 88% 88%, rgba(244, 161, 26, 0.08), transparent 70%);
+      background-size: auto;
+      background-repeat: no-repeat;
+      overflow-x: clip;
     }
+
+    :root[data-theme="light"] body.login-page {
+      background-image:
+        radial-gradient(640px 420px at 14% 12%, rgba(11, 113, 132, 0.08), transparent 68%),
+        radial-gradient(520px 360px at 88% 88%, rgba(217, 119, 6, 0.06), transparent 70%);
+    }
+
+    .ico {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    .ico-sm {
+      width: 14px;
+      height: 14px;
+    }
+
+    .ico-md {
+      width: 18px;
+      height: 18px;
+    }
+
     .login-theme-toggle {
       position: fixed;
-      top: max(14px, env(safe-area-inset-top));
+      top: max(16px, env(safe-area-inset-top));
       right: 16px;
-      min-width: 44px;
-      min-height: 44px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
+      z-index: 20;
+      min-height: 40px;
+      padding: 0 14px;
+      border-radius: var(--radius-pill, 999px);
+      border: 1px solid var(--border-strong);
       background: var(--surface);
       color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: background-color var(--dur-fast, 150ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+                  border-color var(--dur-fast, 150ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+                  color var(--dur-fast, 150ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+    }
+
+    .login-theme-toggle:hover {
+      background: var(--card-hover);
+      border-color: var(--primary);
+    }
+
+    .login-theme-toggle:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring, 0 0 0 3px rgba(39, 198, 237, 0.35));
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--surface);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg, 14px);
+      padding: 32px 28px 24px;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .login-brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .inut-emblem {
+      width: 42px;
+      height: 42px;
+      border-radius: var(--radius-md, 10px);
+      background: #0b2230;
+      border: 1px solid rgba(39, 198, 237, 0.28);
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+
+    :root[data-theme="light"] .inut-emblem {
+      background: #071a24;
+      border-color: rgba(11, 113, 132, 0.30);
+    }
+
+    .login-brand-copy {
+      min-width: 0;
+    }
+
+    .login-title {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 1.2;
+      color: var(--text);
+    }
+
+    .login-meta-tag {
+      margin-top: 3px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--cyan);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .login-sub {
+      margin: 0 0 22px;
+      color: var(--text-secondary);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .login-field {
+      margin-bottom: 16px;
+    }
+
+    .login-field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .input-shell {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-leading-ico {
+      position: absolute;
+      left: 13px;
+      color: var(--text-muted);
+      pointer-events: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: color var(--dur-fast, 150ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+    }
+
+    .input-shell:focus-within .input-leading-ico {
+      color: var(--primary);
+    }
+
+    .login-field input {
+      width: 100%;
+      min-height: 44px;
+      padding: 10px 14px 10px 40px;
+      border-radius: var(--radius-md, 10px);
+      border: 1px solid var(--border);
+      background: var(--bg-subtle);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 15px;
+      line-height: 1.4;
+      transition: border-color var(--dur-fast, 150ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+                  box-shadow var(--dur-fast, 150ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+                  background-color var(--dur-fast, 150ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+    }
+
+    .login-field input.has-trailing {
+      padding-right: 44px;
+    }
+
+    .login-field input.otp-input {
+      padding-left: 14px;
+      padding-right: 14px;
+      text-align: center;
+      font-family: var(--font-mono, "Space Mono", ui-monospace, monospace);
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.28em;
+    }
+
+    .login-field input::placeholder {
+      color: var(--text-muted);
+      opacity: 0.9;
+    }
+
+    .login-field input:hover {
+      border-color: var(--border-strong);
+    }
+
+    .login-field input:focus {
+      outline: none;
+      border-color: var(--primary);
+      background: var(--bg);
+      box-shadow: var(--focus-ring, 0 0 0 3px rgba(39, 198, 237, 0.35));
+    }
+
+    .input-eye-btn {
+      position: absolute;
+      right: 4px;
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: var(--radius-sm, 6px);
+      background: transparent;
+      color: var(--text-muted);
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      padding: 0 12px;
-      font-size: 12px;
-      font-weight: 600;
-      box-shadow: var(--shadow-sm);
+      transition: color var(--dur-fast, 150ms) ease, background-color var(--dur-fast, 150ms) ease;
     }
-    .login-card {
-      width: min(94vw, 410px);
-      background: var(--glass-card);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid var(--border-strong);
-      border-radius: 16px;
-      padding: 30px 28px;
-      box-shadow: var(--shadow-lg);
-    }
-    .login-brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 10px;
-    }
-    .login-sub {
-      margin: 4px 0 20px;
-      color: var(--text-secondary);
-      font-size: 13px;
-    }
-    .login-field {
-      margin-bottom: 15px;
-    }
-    .login-field label {
-      display: block;
-      font-size: 12px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-      color: var(--text-secondary);
-      margin-bottom: 6px;
-    }
-    .login-field input {
-      width: 100%;
-      padding: 11px 13px;
-      min-height: 44px;
-      border-radius: 9px;
-      border: 1px solid var(--border);
-      background: var(--bg);
+
+    .input-eye-btn:hover {
       color: var(--text);
-      font-size: 15px;
+      background: var(--card-hover);
     }
-    .login-field input:focus {
-      outline: 2px solid var(--emerald);
-      border-color: transparent;
+
+    .input-eye-btn:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring, 0 0 0 3px rgba(39, 198, 237, 0.35));
     }
+
     .login-submit {
       width: 100%;
       min-height: 46px;
-      margin-top: 8px;
-      border: none;
-      border-radius: 10px;
+      margin-top: 6px;
+      padding: 0 18px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-md, 10px);
       background: var(--primary);
       color: var(--primary-fg);
-      font-size: 14px;
+      font-family: inherit;
+      font-size: 15px;
       font-weight: 700;
+      letter-spacing: -0.01em;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
       cursor: pointer;
+      transition: background-color var(--dur-fast, 150ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+                  transform var(--dur-fast, 150ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+                  opacity var(--dur-fast, 150ms) ease;
     }
-    .err-banner {
-      margin-top: 14px;
-      padding: 11px 13px;
-      border-radius: 9px;
-      background: var(--crimson-bg);
-      border: 1px solid var(--crimson-border);
-      color: var(--crimson);
-      font-size: 13px;
-      font-weight: 600;
-      display: none;
+
+    .login-submit:hover:not(:disabled) {
+      background: var(--primary-hover, var(--cyan));
     }
-    .err-banner.show {
-      display: block;
+
+    .login-submit:active:not(:disabled) {
+      transform: translateY(1px);
     }
-    .ok-banner {
-      margin-top: 14px;
-      padding: 11px 13px;
-      border-radius: 9px;
-      background: var(--emerald-bg);
-      border: 1px solid var(--emerald-border);
-      color: var(--emerald);
-      font-size: 13px;
-      font-weight: 600;
-      display: none;
+
+    .login-submit:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring, 0 0 0 3px rgba(39, 198, 237, 0.35));
     }
-    .ok-banner.show {
-      display: block;
+
+    .login-submit:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
+
     .login-aux-row {
-      margin-top: 12px;
+      margin-top: 14px;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-wrap: wrap;
       gap: 8px;
     }
+
+    .security-note {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .security-note .ico {
+      color: var(--emerald);
+    }
+
     .link-btn {
       appearance: none;
       background: transparent;
       border: none;
+      border-radius: var(--radius-sm, 6px);
       color: var(--cyan);
-      font-size: 13px;
+      font-family: inherit;
+      font-size: 12px;
       font-weight: 600;
       cursor: pointer;
       padding: 6px 4px;
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      text-decoration: none;
+      transition: color var(--dur-fast, 150ms) ease, background-color var(--dur-fast, 150ms) ease;
+    }
+
+    .link-btn:hover {
+      color: var(--text);
       text-decoration: underline;
       text-underline-offset: 3px;
     }
-    .link-btn:hover {
+
+    .link-btn:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring, 0 0 0 3px rgba(39, 198, 237, 0.35));
+    }
+
+    .err-banner,
+    .ok-banner {
+      margin-top: 14px;
+      padding: 11px 13px;
+      border-radius: var(--radius-md, 10px);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.5;
+      display: none;
+      align-items: flex-start;
+      gap: 9px;
+    }
+
+    .err-banner {
+      background: var(--crimson-bg);
+      border: 1px solid var(--crimson-border);
+      color: var(--crimson);
+    }
+
+    .ok-banner {
+      background: var(--emerald-bg);
+      border: 1px solid var(--emerald-border);
       color: var(--emerald);
     }
+
+    .err-banner.show,
+    .ok-banner.show {
+      display: flex;
+    }
+
+    .banner-text {
+      flex: 1;
+      min-width: 0;
+    }
+
     .forgot-panel {
       display: none;
       margin-top: 4px;
     }
+
     .forgot-panel.active {
       display: block;
     }
+
     .forgot-step {
       display: none;
     }
+
     .forgot-step.active {
       display: block;
     }
-    .step-badge-row {
+
+    .step-header {
+      margin-bottom: 16px;
+      padding: 10px 12px;
+      border-radius: var(--radius-md, 10px);
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+    }
+
+    .step-header-top {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 12px;
-      padding: 8px 11px;
-      border-radius: 8px;
-      background: var(--surface);
-      border: 1px solid var(--border);
+      flex-wrap: nowrap;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .step-indicator-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
       font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .step-indicator-label .ico {
+      color: var(--brand-amber, var(--amber));
+    }
+
+    .step-back-btn {
+      padding: 2px 4px;
+      font-size: 12px;
+      min-height: 28px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .step-progress {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .step-bar {
+      height: 3px;
+      border-radius: var(--radius-pill, 999px);
+      background: var(--border);
+      transition: background-color var(--dur-med, 220ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+    }
+
+    .step-bar.active {
+      background: var(--primary);
+    }
+
+    .forgot-helper {
+      margin: 0 0 14px;
+      font-size: 12px;
+      line-height: 1.55;
       color: var(--text-secondary);
     }
+
+    .forgot-helper code {
+      font-family: var(--font-mono, "Space Mono", ui-monospace, monospace);
+      font-size: 12px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
     .login-footer {
-      margin-top: 18px;
+      margin-top: 22px;
       padding-top: 14px;
       border-top: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
       font-size: 12px;
       color: var(--text-muted);
       font-variant-numeric: tabular-nums;
+    }
+
+    .login-footer-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--emerald);
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 480px) {
+      body.login-page {
+        padding: 72px 14px 24px;
+        align-content: start;
+      }
+
+      .login-card {
+        padding: 24px 18px 20px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+      }
     }
   </style>
 </head>
 <body class="login-page">
   <button class="login-theme-toggle" id="theme-toggle" type="button" aria-label="Đổi giao diện Sáng / Tối">
-    <span id="theme-toggle-label">🌗 Sáng / Tối</span>
+    <span id="theme-toggle-icon" aria-hidden="true"></span>
+    <span id="theme-toggle-label">Sáng / Tối</span>
   </button>
 
-  <div class="card login-card" id="login-card-shell">
+  <main class="card login-card" id="login-card-shell">
     <div class="login-brand">
-      <div class="brand-logo" aria-hidden="true">iN</div>
-      <div>
-        <h1 style="margin:0;font-size:17px;font-weight:800;">iNut Bida Fleet Hub (:2090)</h1>
-        <div class="mono" style="font-size:12px;color:var(--emerald);">SCADA Dual-Canvas Central Control</div>
+      <div class="inut-emblem" aria-hidden="true">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+          <rect x="2.5" y="2.5" width="19" height="19" rx="5" stroke="#27c6ed" stroke-width="1.8"/>
+          <circle cx="9.2" cy="9.2" r="2.2" fill="#f4a11a"/>
+          <path d="M9.2 13.5v4.3M14.8 7.5v10.3M14.8 11.4c0-1.6 1.2-2.6 2.6-2.6" stroke="#f2fbfc" stroke-width="1.9" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="login-brand-copy">
+        <h1 class="login-title">iNut Bida Fleet Hub</h1>
+        <div class="login-meta-tag tabular-nums">
+          <span>Trung tâm điều hành</span>
+          <span>·</span>
+          <span class="mono">:2090</span>
+        </div>
       </div>
     </div>
-    <p class="login-sub">Trung tâm điều hành 30+ Box Bida / Pickleball, Chuẩn hóa 8 bước Golden Hardening &amp; RedBida Studio.</p>
 
-    <div id="loginSuccessBanner" class="ok-banner" role="status" aria-live="polite"></div>
+    <p class="login-sub">Quản trị tập trung đội Box Bida &amp; Pickleball, chuẩn hóa Golden Hardening và cấu hình RedBida Studio.</p>
+
+    <div id="loginSuccessBanner" class="ok-banner" role="status" aria-live="polite">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>
+      </svg>
+      <span class="banner-text" id="loginSuccessText"></span>
+    </div>
 
     <form id="loginForm" data-legacy-id="login-form" method="post" action="/login" autocomplete="off">
       <div class="login-field">
         <label for="username">Tài khoản vận hành</label>
-        <input id="username" name="username" type="text" autocomplete="off" placeholder="admin" required autofocus>
+        <div class="input-shell">
+          <span class="input-leading-ico" aria-hidden="true">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+          </span>
+          <input id="username" name="username" type="text" autocomplete="off" placeholder="admin hoặc email quản trị" required autofocus>
+        </div>
       </div>
 
       <div class="login-field">
         <label for="password">Mật khẩu xác thực</label>
-        <input id="password" name="password" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="••••••••" required>
+        <div class="input-shell">
+          <span class="input-leading-ico" aria-hidden="true">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </span>
+          <input id="password" class="has-trailing" name="password" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="Nhập mật khẩu" required>
+          <button type="button" class="input-eye-btn" id="togglePasswordVis" aria-label="Hiện mật khẩu" aria-pressed="false">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
-      <button type="submit" id="login-submit-btn" class="login-submit">Đăng nhập Hệ thống Trung tâm</button>
+      <button type="submit" id="login-submit-btn" class="login-submit">
+        <span>Đăng nhập Hệ thống</span>
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+        </svg>
+      </button>
 
       <div class="login-aux-row">
-        <span style="font-size:12px;color:var(--text-muted);">🛡️ Không lưu mật khẩu trình duyệt</span>
+        <span class="security-note">
+          <svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+          <span>Không lưu mật khẩu trình duyệt</span>
+        </span>
         <button type="button" id="btnForgotPassword" class="link-btn">Quên mật khẩu?</button>
       </div>
 
-      <div id="err" class="err err-banner" role="alert" aria-live="polite"></div>
+      <div id="err" class="err err-banner" role="alert" aria-live="polite">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>
+        </svg>
+        <span class="banner-text" id="errText"></span>
+      </div>
     </form>
 
-    <!-- 2-Step Forgot & Reset Password Modal / Panel via ksp-pdfsign Mail Server -->
+    <!-- 2-Step Forgot & Reset Password Panel via ksp-pdfsign Mail Server -->
     <div id="forgotPasswordModal" class="forgot-panel" role="region" aria-label="Khôi phục mật khẩu qua OTP Email">
-      <div class="step-badge-row tabular-nums">
-        <span id="forgotStepIndicator">🔑 Bước 1/2: Nhận mã OTP qua Email (ksp-pdfsign)</span>
-        <button type="button" id="btnBackToLogin" class="link-btn" style="padding:0;font-size:12px;">← Quay lại đăng nhập</button>
+      <div class="step-header tabular-nums">
+        <div class="step-header-top">
+          <span class="step-indicator-label">
+            <svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>
+            </svg>
+            <span id="forgotStepIndicator">Bước 1/2 · Nhận mã OTP</span>
+          </span>
+          <button type="button" id="btnBackToLogin" class="link-btn step-back-btn">
+            <svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>
+            </svg>
+            <span>Đăng nhập</span>
+          </button>
+        </div>
+        <div class="step-progress" aria-hidden="true">
+          <div class="step-bar active" id="forgotStepBar1"></div>
+          <div class="step-bar" id="forgotStepBar2"></div>
+        </div>
       </div>
 
       <!-- Step 1: Request 6-digit OTP via ksp-pdfsign -->
       <form id="forgotPasswordForm" class="forgot-step active" autocomplete="off">
         <div class="login-field">
           <label for="forgotIdentifier">Tài khoản hoặc Email Quản trị</label>
-          <input id="forgotIdentifier" name="identifier" type="text" value="admin" placeholder="admin hoặc khanhnhn@inut.vn" autocomplete="off" required>
+          <div class="input-shell">
+            <span class="input-leading-ico" aria-hidden="true">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+              </svg>
+            </span>
+            <input id="forgotIdentifier" name="identifier" type="text" value="admin" placeholder="admin hoặc khanhnhn@inut.vn" autocomplete="off" required>
+          </div>
         </div>
-        <p style="margin:0 0 12px;font-size:12px;color:var(--text-secondary);">
+
+        <p class="forgot-helper">
           Hệ thống gửi mã OTP 6 chữ số (hiệu lực 15 phút) qua máy chủ <code>ksp-pdfsign</code> tới email quản trị mặc định (<code>khanhnhn@inut.vn</code>).
         </p>
-        <button type="submit" id="btnSendOTP" class="login-submit">Gửi mã OTP qua Email</button>
+
+        <button type="submit" id="btnSendOTP" class="login-submit">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>
+          </svg>
+          <span id="btnSendOTPLabel">Gửi mã OTP qua Email</span>
+        </button>
+
         <div class="login-aux-row" style="justify-content:flex-end;">
-          <button type="button" id="btnAlreadyHaveOTP" class="link-btn" style="font-size:12px;">Đã có mã OTP? Nhập ngay →</button>
+          <button type="button" id="btnAlreadyHaveOTP" class="link-btn" style="font-size:12px;">
+            <span>Đã có mã OTP? Nhập ngay</span>
+            <svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+            </svg>
+          </button>
         </div>
       </form>
 
       <!-- Step 2: Verify 6-digit OTP & Set New Password -->
       <form id="resetPasswordForm" class="forgot-step" autocomplete="off">
         <div id="forgotStatusBanner" class="ok-banner show" style="margin-top:0;margin-bottom:14px;" role="status" aria-live="polite">
-          Mã OTP 6 số đã gửi tới email quản trị (hiệu lực 15 phút).
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>
+          </svg>
+          <span class="banner-text" id="forgotStatusText">Mã OTP 6 số đã gửi tới email quản trị (hiệu lực 15 phút).</span>
         </div>
 
         <div class="login-field">
           <label for="resetOTPCode">Mã xác thực OTP (6 chữ số)</label>
-          <input id="resetOTPCode" name="otp_code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="123456" autocomplete="one-time-code" class="mono tabular-nums" required>
+          <input id="resetOTPCode" class="otp-input mono tabular-nums" name="otp_code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="000000" autocomplete="one-time-code" required>
         </div>
 
         <div class="login-field">
           <label for="resetNewPassword">Mật khẩu mới (tối thiểu 6 ký tự)</label>
-          <input id="resetNewPassword" name="new_password" type="password" minlength="6" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="••••••••" required>
+          <div class="input-shell">
+            <span class="input-leading-ico" aria-hidden="true">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </span>
+            <input id="resetNewPassword" name="new_password" type="password" minlength="6" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="Nhập mật khẩu mới" required>
+          </div>
         </div>
 
         <div class="login-field">
           <label for="resetConfirmPassword">Xác nhận mật khẩu mới</label>
-          <input id="resetConfirmPassword" name="confirm_password" type="password" minlength="6" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="••••••••" required>
+          <div class="input-shell">
+            <span class="input-leading-ico" aria-hidden="true">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>
+                <path d="m9 12 2 2 4-4"/>
+              </svg>
+            </span>
+            <input id="resetConfirmPassword" name="confirm_password" type="password" minlength="6" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="Nhập lại mật khẩu mới" required>
+          </div>
         </div>
 
-        <button type="submit" id="btnResetPassword" class="login-submit">Xác nhận OTP &amp; Đặt mật khẩu mới</button>
+        <button type="submit" id="btnResetPassword" class="login-submit">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 6 9 17l-5-5"/>
+          </svg>
+          <span id="btnResetPasswordLabel">Xác nhận OTP &amp; Đặt mật khẩu mới</span>
+        </button>
 
         <div class="login-aux-row">
-          <button type="button" id="btnBackToStep1" class="link-btn" style="font-size:12px;">← Gửi lại mã OTP</button>
+          <button type="button" id="btnBackToStep1" class="link-btn" style="font-size:12px;">
+            <svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>
+            </svg>
+            <span>Gửi lại mã OTP</span>
+          </button>
         </div>
       </form>
 
-      <div id="forgotErr" class="err err-banner" role="alert" aria-live="polite"></div>
+      <div id="forgotErr" class="err err-banner" role="alert" aria-live="polite">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>
+        </svg>
+        <span class="banner-text" id="forgotErrText"></span>
+      </div>
     </div>
 
-    <div class="login-footer tabular-nums">
-      <span>🟢 8-Step Golden Guard</span>
-      <span>Port :2090 · Pure Go</span>
-    </div>
-  </div>
+    <footer class="login-footer tabular-nums">
+      <span class="login-footer-status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>8-Step Golden Guard</span>
+      </span>
+      <span class="mono">Port :2090 · Pure Go</span>
+    </footer>
+  </main>
 
   <script>
     (function () {
+      'use strict';
+
+      var SUN_SVG = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>';
+      var MOON_SVG = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>';
+      var EYE_SVG = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>';
+      var EYE_OFF_SVG = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>';
+
+      function syncThemeButton() {
+        var isLight = document.documentElement.getAttribute('data-theme') === 'light';
+        var icoEl = document.getElementById('theme-toggle-icon');
+        var lblEl = document.getElementById('theme-toggle-label');
+        if (icoEl) icoEl.innerHTML = isLight ? MOON_SVG : SUN_SVG;
+        if (lblEl) lblEl.textContent = isLight ? 'Giao diện Tối' : 'Giao diện Sáng';
+      }
+      syncThemeButton();
+
       /* Zero-Password-Retention Guard: never store or retain passwords in DOM/Storage */
       function purgeStoredPasswords() {
         try {
@@ -297,12 +782,22 @@
           });
         } catch (_e) {}
       }
+
       function clearPasswordInputs() {
         ['password', 'resetNewPassword', 'resetConfirmPassword', 'resetOTPCode'].forEach(function (id) {
           var el = document.getElementById(id);
           if (el) el.value = '';
         });
+        var passEl = document.getElementById('password');
+        var eyeBtn = document.getElementById('togglePasswordVis');
+        if (passEl) passEl.type = 'password';
+        if (eyeBtn) {
+          eyeBtn.innerHTML = EYE_SVG;
+          eyeBtn.setAttribute('aria-pressed', 'false');
+          eyeBtn.setAttribute('aria-label', 'Hiện mật khẩu');
+        }
       }
+
       purgeStoredPasswords();
       clearPasswordInputs();
       window.addEventListener('pageshow', function () {
@@ -310,15 +805,30 @@
         clearPasswordInputs();
       });
 
+      var eyeBtn = document.getElementById('togglePasswordVis');
+      if (eyeBtn) {
+        eyeBtn.addEventListener('click', function () {
+          var passEl = document.getElementById('password');
+          if (!passEl) return;
+          var show = passEl.type === 'password';
+          passEl.type = show ? 'text' : 'password';
+          eyeBtn.innerHTML = show ? EYE_OFF_SVG : EYE_SVG;
+          eyeBtn.setAttribute('aria-pressed', show ? 'true' : 'false');
+          eyeBtn.setAttribute('aria-label', show ? 'Ẩn mật khẩu' : 'Hiện mật khẩu');
+          passEl.focus();
+        });
+      }
+
       var params = new URLSearchParams(window.location.search);
       var errType = params.get('err');
       var errEl = document.getElementById('err');
+      var errTextEl = document.getElementById('errText');
       if (errEl && errType) {
-        if (errType === 'locked') {
-          errEl.textContent = 'IP đã bị tạm khóa 30 phút do đăng nhập sai nhiều lần. Vui lòng thử lại sau.';
-        } else {
-          errEl.textContent = 'Sai tài khoản hoặc mật khẩu.';
-        }
+        var msg = (errType === 'locked')
+          ? 'IP đã bị tạm khóa 30 phút do đăng nhập sai nhiều lần. Vui lòng thử lại sau.'
+          : 'Sai tài khoản hoặc mật khẩu. Vui lòng kiểm tra lại.';
+        if (errTextEl) errTextEl.textContent = msg;
+        else errEl.textContent = msg;
         errEl.classList.add('show');
       }
 
@@ -330,6 +840,7 @@
           document.documentElement.setAttribute('data-theme', next);
           localStorage.setItem('bidahub-theme', next);
           localStorage.setItem('kspcam-theme', next);
+          syncThemeButton();
         });
       }
 
@@ -338,17 +849,22 @@
       var forgotForm = document.getElementById('forgotPasswordForm');
       var resetForm = document.getElementById('resetPasswordForm');
       var forgotStepIndicator = document.getElementById('forgotStepIndicator');
+      var forgotStepBar2 = document.getElementById('forgotStepBar2');
       var forgotStatusBanner = document.getElementById('forgotStatusBanner');
+      var forgotStatusText = document.getElementById('forgotStatusText');
       var forgotErr = document.getElementById('forgotErr');
+      var forgotErrText = document.getElementById('forgotErrText');
       var loginSuccessBanner = document.getElementById('loginSuccessBanner');
+      var loginSuccessText = document.getElementById('loginSuccessText');
 
       function showForgotError(msg) {
         if (!forgotErr) return;
         if (!msg) {
-          forgotErr.textContent = '';
+          if (forgotErrText) forgotErrText.textContent = '';
           forgotErr.classList.remove('show');
         } else {
-          forgotErr.textContent = msg;
+          if (forgotErrText) forgotErrText.textContent = msg;
+          else forgotErr.textContent = msg;
           forgotErr.classList.add('show');
         }
       }
@@ -359,16 +875,18 @@
           forgotForm.classList.remove('active');
           resetForm.classList.add('active');
           if (forgotStepIndicator) {
-            forgotStepIndicator.textContent = '🛡️ Bước 2/2: Xác thực OTP & Đặt mật khẩu mới';
+            forgotStepIndicator.textContent = 'Bước 2/2 · Đặt mật khẩu mới';
           }
+          if (forgotStepBar2) forgotStepBar2.classList.add('active');
           var otpEl = document.getElementById('resetOTPCode');
           if (otpEl) otpEl.focus();
         } else {
           resetForm.classList.remove('active');
           forgotForm.classList.add('active');
           if (forgotStepIndicator) {
-            forgotStepIndicator.textContent = '🔑 Bước 1/2: Nhận mã OTP qua Email (ksp-pdfsign)';
+            forgotStepIndicator.textContent = 'Bước 1/2 · Nhận mã OTP';
           }
+          if (forgotStepBar2) forgotStepBar2.classList.remove('active');
           var idEl = document.getElementById('forgotIdentifier');
           if (idEl) idEl.focus();
         }
@@ -425,7 +943,9 @@
           var idEl = document.getElementById('forgotIdentifier');
           var identifier = (idEl ? idEl.value : '').trim() || 'admin';
           var btnSend = document.getElementById('btnSendOTP');
+          var btnSendLbl = document.getElementById('btnSendOTPLabel');
           if (btnSend) btnSend.disabled = true;
+          if (btnSendLbl) btnSendLbl.textContent = 'Đang gửi mã OTP...';
 
           fetch('/api/auth/forgot-password', {
             method: 'POST',
@@ -444,17 +964,17 @@
           }).then(function (data) {
             var masked = (data && data.email_masked) ? data.email_masked : 'k***n@inut.vn';
             var ttl = (data && data.ttl_minutes) ? data.ttl_minutes : 15;
-            if (forgotStatusBanner) {
-              forgotStatusBanner.textContent = (data && data.message)
-                ? (data.message + ' (' + masked + ' · hiệu lực ' + ttl + ' phút)')
-                : ('Đã gửi mã OTP 6 chữ số tới ' + masked + ' (hiệu lực ' + ttl + ' phút).');
-              forgotStatusBanner.classList.add('show');
-            }
+            var statusMsg = (data && data.message)
+              ? (data.message + ' (' + masked + ' · hiệu lực ' + ttl + ' phút)')
+              : ('Đã gửi mã OTP 6 chữ số tới ' + masked + ' (hiệu lực ' + ttl + ' phút).');
+            if (forgotStatusText) forgotStatusText.textContent = statusMsg;
+            if (forgotStatusBanner) forgotStatusBanner.classList.add('show');
             switchForgotStep(2);
           }).catch(function (err) {
             showForgotError(err.message || 'Không thể gửi mã OTP lúc này.');
           }).finally(function () {
             if (btnSend) btnSend.disabled = false;
+            if (btnSendLbl) btnSendLbl.textContent = 'Gửi mã OTP qua Email';
           });
         });
       }
@@ -493,7 +1013,9 @@
           }
 
           var btnReset = document.getElementById('btnResetPassword');
+          var btnResetLbl = document.getElementById('btnResetPasswordLabel');
           if (btnReset) btnReset.disabled = true;
+          if (btnResetLbl) btnResetLbl.textContent = 'Đang xác thực OTP...';
 
           fetch('/api/auth/reset-password', {
             method: 'POST',
@@ -524,14 +1046,17 @@
               passEl.value = '';
               passEl.focus();
             }
+            if (loginSuccessText) {
+              loginSuccessText.textContent = 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới.';
+            }
             if (loginSuccessBanner) {
-              loginSuccessBanner.textContent = 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới.';
               loginSuccessBanner.classList.add('show');
             }
           }).catch(function (err) {
             showForgotError(err.message || 'Mã OTP không hợp lệ hoặc đã hết hạn.');
           }).finally(function () {
             if (btnReset) btnReset.disabled = false;
+            if (btnResetLbl) btnResetLbl.textContent = 'Xác nhận OTP & Đặt mật khẩu mới';
           });
         });
       }

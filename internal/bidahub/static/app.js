@@ -1,21 +1,60 @@
 /* ============================================================================
-   iNut Bida Fleet Hub (:2090) — SCADA Dual-Canvas SPA Controller (app.js)
+   iNut Bida Fleet Hub (:2090) — Impeccable Operate SPA Controller (app.js)
    Views: #fleet, #box/{box_id}, #hardening, #cameras, #redbida, #handover, #analytics
-   Zero external CDN dependencies; XSS-safe DOM rendering; Pure-JS SVG QR & Charts.
+   Zero external runtime dependencies; XSS-safe DOM rendering; Pure-JS SVG Icons, QR & Charts.
    ============================================================================ */
 (function () {
   'use strict';
 
   var GOLDEN_PILLAR_META = [
-    { id: 'zram_unbounded', step: 1, short: 'B1: ZRAM 0-Limit', name: 'ZRAM mem_limit=0 & swappiness=80' },
+    { id: 'zram_unbounded', step: 1, short: 'B1: ZRAM 0', name: 'ZRAM mem_limit=0 & swappiness=80' },
     { id: 'pm2_memory_guard', step: 2, short: 'B2: PM2 Guard', name: 'PM2 Memory Guard (280M/120M) + /dev/null logs' },
     { id: 'sysrq_disabled', step: 3, short: 'B3: Sysrq=0', name: 'kernel.sysrq=0 & gỡ sysrq-trigger suicide' },
-    { id: 'camera_watchdog', step: 4, short: 'B4: Watchdog 60s', name: 'shinobi-camera-watchdog.timer (60s pgrep ffmpeg)' },
-    { id: 'storage_guard', step: 5, short: 'B5: Storage 15m', name: 'shinobi-storage-guard (15m xả đĩa 90% -> 80%)' },
-    { id: 'udev_automount', step: 6, short: 'B6: udev Automount', name: 'udev automount noatime,users,errors=continue' },
-    { id: 'clean_fstab', step: 7, short: 'B7: Clean fstab', name: 'Clean /etc/fstab (CẤM /dev/mmcblk0p1 treo boot)' },
-    { id: 'shinobi_hardened', step: 8, short: 'B8: Shinobi ISO5', name: 'doSnapshot:false + monitor.js fix + frag_keyframe+empty_moov' }
+    { id: 'camera_watchdog', step: 4, short: 'B4: Watchdog', name: 'shinobi-camera-watchdog.timer (60s pgrep ffmpeg)' },
+    { id: 'storage_guard', step: 5, short: 'B5: Storage', name: 'shinobi-storage-guard (15m xả đĩa 90% -> 80%)' },
+    { id: 'udev_automount', step: 6, short: 'B6: udev', name: 'udev automount noatime,users,errors=continue' },
+    { id: 'clean_fstab', step: 7, short: 'B7: fstab', name: 'Clean /etc/fstab (CẤM /dev/mmcblk0p1 treo boot)' },
+    { id: 'shinobi_hardened', step: 8, short: 'B8: Shinobi', name: 'doSnapshot:false + monitor.js fix + frag_keyframe+empty_moov' }
   ];
+
+  /* Uniform inline SVG icon library (stroke-width 1.75, zero emoji tofu) */
+  var SVG_PATHS = {
+    server: '<rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><line x1="6" y1="6.5" x2="6.01" y2="6.5"/><line x1="6" y1="17.5" x2="6.01" y2="17.5"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
+    video: '<path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
+    sliders: '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="2" y1="14" x2="6" y2="14"/><line x1="10" y1="8" x2="14" y2="8"/><line x1="18" y1="16" x2="22" y2="16"/>',
+    qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M17 17h4v4h-4z"/>',
+    chart: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+    check: '<polyline points="20 6 9 17 4 12"/>',
+    warn: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    unlock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
+    zap: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+    external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
+    key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
+    phone: '<rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
+    monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+    tablet: '<rect x="4" y="2" width="16" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
+    globe: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+    cpu: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>',
+    pool: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/>',
+    pickle: '<circle cx="12" cy="12" r="9"/><circle cx="9.5" cy="9.5" r="0.9" fill="currentColor"/><circle cx="14.5" cy="9.5" r="0.9" fill="currentColor"/><circle cx="12" cy="14.5" r="0.9" fill="currentColor"/>',
+    carom: '<circle cx="9" cy="10" r="4"/><circle cx="16" cy="14" r="4"/>',
+    box: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+    flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+    moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+    trophy: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
+    info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+    building: '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/>'
+  };
+
+  function svgIcon(name, cls) {
+    var body = SVG_PATHS[name] || SVG_PATHS.info;
+    var className = cls ? ('ui-icon ' + cls) : 'ui-icon';
+    return '<svg class="' + className + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + body + '</svg>';
+  }
 
   var state = {
     activeView: 'fleet',
@@ -54,12 +93,13 @@
     analyticsCameras: [],
     analyticsReqSeq: 0,
     analyticsCamReqSeq: 0,
+    cmdSelectedIdx: 0,
     sseConnected: false,
     pollTimer: null
   };
 
   /* --------------------------------------------------------------------------
-     Utilities: Escaping, Toast, Fetch Wrapper, Pure-JS Inline SVG QR & Sparkline
+     Utilities: Escaping, Formatters, Toast, Fetch Wrapper & Pure-JS SVG QR
      -------------------------------------------------------------------------- */
   function esc(val) {
     if (val === null || val === undefined) return '';
@@ -130,7 +170,8 @@
     if (!stack) return;
     var el = document.createElement('div');
     el.className = 'toast-msg' + (isError ? ' error' : '');
-    el.textContent = msg;
+    el.innerHTML = svgIcon(isError ? 'warn' : 'check', isError ? 'text-crimson' : 'text-emerald') +
+      '<span>' + esc(msg) + '</span>';
     stack.appendChild(el);
     setTimeout(function () {
       if (el.parentNode) el.parentNode.removeChild(el);
@@ -158,26 +199,6 @@
         return data;
       });
     });
-  }
-
-  function renderSparklineSvg(points, online) {
-    var arr = Array.isArray(points) && points.length > 0 ? points : [18, 21, 19, 24, 20, 17, 19, 22];
-    if (!online) {
-      return '<svg class="sparkline-svg" viewBox="0 0 68 22" aria-label="Offline">' +
-        '<line x1="2" y1="11" x2="66" y2="11" stroke="var(--crimson)" stroke-width="1.5" stroke-dasharray="3 3"/></svg>';
-    }
-    var min = Math.min.apply(null, arr);
-    var max = Math.max.apply(null, arr);
-    var span = Math.max(max - min, 4);
-    var coords = arr.map(function (v, idx) {
-      var x = 2 + (idx / Math.max(arr.length - 1, 1)) * 64;
-      var y = 19 - ((v - min) / span) * 15;
-      return x.toFixed(1) + ',' + y.toFixed(1);
-    }).join(' ');
-    var strokeColor = max > 120 ? 'var(--amber)' : 'var(--emerald)';
-    return '<svg class="sparkline-svg" viewBox="0 0 68 22" aria-label="RTT Sparkline">' +
-      '<polyline fill="none" stroke="' + strokeColor + '" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" points="' + coords + '"/>' +
-      '</svg>';
   }
 
   /* Pure-JS deterministic SVG QR matrix fallback (zero external dependencies) */
@@ -249,7 +270,22 @@
   /* --------------------------------------------------------------------------
      Theme Management (#eef5f4 Light / #071a24 Dark)
      -------------------------------------------------------------------------- */
+  function syncThemeIcon() {
+    var icon = document.getElementById('theme-toggle-icon');
+    var btn = document.getElementById('theme-toggle');
+    var isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    if (icon) {
+      icon.innerHTML = isLight ? SVG_PATHS.moon : SVG_PATHS.sun;
+    }
+    if (btn) {
+      var label = isLight ? 'Chuyển sang giao diện Tối' : 'Chuyển sang giao diện Sáng';
+      btn.setAttribute('title', label);
+      btn.setAttribute('aria-label', label);
+    }
+  }
+
   function initTheme() {
+    syncThemeIcon();
     var toggleBtn = document.getElementById('theme-toggle');
     if (!toggleBtn) return;
     toggleBtn.addEventListener('click', function () {
@@ -258,6 +294,7 @@
       document.documentElement.setAttribute('data-theme', next);
       localStorage.setItem('bidahub-theme', next);
       localStorage.setItem('kspcam-theme', next);
+      syncThemeIcon();
     });
   }
 
@@ -307,19 +344,19 @@
     var navBadgeFleet = document.getElementById('nav-badge-fleet');
     if (navBadgeFleet) navBadgeFleet.textContent = boxesOnline + '/' + boxesTotal;
 
-    /* KPI 1: Clubs & Boxes (Online / Offline) */
+    /* KPI 1: Clubs & Boxes (Online / Offline — concise, zero pill clipping) */
     var kpi1Card = document.getElementById('kpi-clubs-boxes');
     var kpi1Val = document.getElementById('kpi-clubs-boxes-val');
     var kpi1Sub = document.getElementById('kpi-clubs-boxes-sub');
     if (kpi1Card) kpi1Card.classList.toggle('danger', boxesOffline > 0);
-    if (kpi1Val) kpi1Val.textContent = boxesOnline + ' / ' + boxesTotal + ' ONLINE (' + clubsTotal + ' CLB)';
+    if (kpi1Val) {
+      kpi1Val.innerHTML = esc(boxesOnline) + '<span class="kpi-val-sub">/ ' + esc(boxesTotal) + ' Online</span>';
+    }
     if (kpi1Sub) {
-      var offBadge = boxesOffline > 0
-        ? '<span class="badge badge-crimson crimson"><span class="led-dot led crimson"></span>' + boxesOffline + ' OFFLINE</span>'
-        : '<span class="badge badge-emerald emerald"><span class="led-dot led emerald"></span>0 OFFLINE</span>';
-      kpi1Sub.innerHTML =
-        '<span class="badge badge-emerald emerald"><span class="led-dot led emerald"></span>' + boxesOnline + ' / ' + boxesTotal + ' ONLINE</span>' +
-        offBadge;
+      var offStatus = boxesOffline > 0
+        ? '<span class="text-crimson" style="font-weight:700;">' + esc(boxesOffline) + ' Offline</span>'
+        : '<span class="text-emerald" style="font-weight:700;">0 Offline</span>';
+      kpi1Sub.innerHTML = '<span>' + esc(clubsTotal) + ' CLB</span>' + offStatus;
     }
 
     /* KPI 2: Cameras & FFmpeg */
@@ -328,41 +365,63 @@
     var ffExpTotal = kpi.ffmpeg_expected !== undefined ? kpi.ffmpeg_expected : boxes.reduce(function (acc, b) { return acc + (b.ffmpeg_expected || (b.cameras_count || 0) * 2); }, 0);
     var kpi2Val = document.getElementById('kpi-cameras-ffmpeg-val');
     var kpi2Sub = document.getElementById('kpi-cameras-ffmpeg-sub');
-    if (kpi2Val) kpi2Val.textContent = camsTotal + ' Cam · ' + ffActual + '/' + ffExpTotal;
-    if (kpi2Sub) kpi2Sub.innerHTML = '<span>FFmpeg thực chạy / kỳ vọng</span><span>Double: ' + (kpi.double_stream_count || 0) + '</span>';
+    if (kpi2Val) {
+      kpi2Val.innerHTML = esc(fmtInt(camsTotal)) + '<span class="kpi-val-sub">Cam</span>';
+    }
+    if (kpi2Sub) {
+      kpi2Sub.innerHTML = '<span>FFmpeg ' + esc(ffActual) + '/' + esc(ffExpTotal) + '</span><span>Kép: ' + esc(kpi.double_stream_count || 0) + '</span>';
+    }
+
+    var navBadgeCam = document.getElementById('nav-badge-cameras');
+    if (navBadgeCam && state.cameras.length === 0 && camsTotal > 0) {
+      navBadgeCam.textContent = String(camsTotal);
+    }
 
     /* KPI 3: SD Health */
     var sdWarns = kpi.sd_warning_count !== undefined ? kpi.sd_warning_count : boxes.filter(function (b) { return (b.sd_used_pct || 0) >= 85; }).length;
     var avgSd = boxes.length ? Math.round(boxes.reduce(function (s, b) { return s + (b.sd_used_pct || 42); }, 0) / boxes.length) : 0;
+    var kpi3Card = document.getElementById('kpi-sd-health');
     var kpi3Val = document.getElementById('kpi-sd-health-val');
     var kpi3Sub = document.getElementById('kpi-sd-health-sub');
-    if (kpi3Val) kpi3Val.textContent = sdWarns === 0 ? ('TB ' + avgSd + '% · 0 Đầy') : (sdWarns + ' Box >85%');
+    if (kpi3Card) kpi3Card.classList.toggle('warn', sdWarns > 0);
+    if (kpi3Val) {
+      kpi3Val.innerHTML = sdWarns === 0
+        ? ('TB ' + esc(avgSd) + '%<span class="kpi-val-sub">· 0 đầy</span>')
+        : ('<span class="text-amber">' + esc(sdWarns) + ' Box</span><span class="kpi-val-sub">&gt;85%</span>');
+    }
     if (kpi3Sub) kpi3Sub.innerHTML = '<span>f2fs / ext4</span><span>errors=continue</span>';
 
     /* KPI 4: Hardening 8-Step */
     var fullHardened = kpi.hardening_full !== undefined ? kpi.hardening_full : boxes.filter(function (b) { return (b.hardening_score || 0) >= 8; }).length;
+    var kpi4Card = document.getElementById('kpi-hardening');
     var kpi4Val = document.getElementById('kpi-hardening-val');
     var kpi4Sub = document.getElementById('kpi-hardening-sub');
-    if (kpi4Val) kpi4Val.textContent = fullHardened + '/' + boxesTotal + ' Đạt 8/8';
-    if (kpi4Sub) kpi4Sub.innerHTML = '<span>TB ' + (kpi.hardening_avg || '8.0') + '/8</span><span>0 Format Disk</span>';
+    if (kpi4Card) kpi4Card.classList.toggle('warn', boxesTotal > 0 && fullHardened < boxesTotal);
+    if (kpi4Val) kpi4Val.innerHTML = esc(fullHardened) + '/' + esc(boxesTotal) + '<span class="kpi-val-sub">8/8</span>';
+    if (kpi4Sub) kpi4Sub.innerHTML = '<span>TB ' + esc(kpi.hardening_avg || '8.0') + '/8</span><span>0 Format</span>';
     var navBadgeHardening = document.getElementById('nav-badge-hardening');
     if (navBadgeHardening) navBadgeHardening.textContent = fullHardened + '/' + boxesTotal;
 
     /* KPI 5: Domains HTTP 200 & FRPC */
     var domOk = kpi.domains_ok !== undefined ? kpi.domains_ok : boxes.filter(function (b) { return (b.store_http_code || 200) === 200; }).length;
     var domConflict = kpi.domains_conflict || 0;
+    var kpi5Card = document.getElementById('kpi-domains');
     var kpi5Val = document.getElementById('kpi-domains-val');
     var kpi5Sub = document.getElementById('kpi-domains-sub');
-    if (kpi5Val) kpi5Val.textContent = domOk + ' HTTP 200';
-    if (kpi5Sub) kpi5Sub.innerHTML = '<span>store-* / c-store-*</span><span>Xung đột: ' + domConflict + '</span>';
+    if (kpi5Card) kpi5Card.classList.toggle('danger', domConflict > 0);
+    if (kpi5Val) kpi5Val.innerHTML = esc(domOk) + '<span class="kpi-val-sub">HTTP 200</span>';
+    if (kpi5Sub) {
+      kpi5Sub.innerHTML = '<span>store-* / c-store-*</span><span class="' + (domConflict > 0 ? 'text-crimson' : 'text-emerald') + '">Xung đột: ' + esc(domConflict) + '</span>';
+    }
 
-    /* KPI 6: Average RTT */
+    /* KPI 6: Average RTT (clean instrument readout, no fake sparkline) */
     var onlineBoxes = boxes.filter(function (b) { return b.online && b.rtt_ms > 0; });
-    var avgRtt = onlineBoxes.length ? Math.round(onlineBoxes.reduce(function (s, b) { return s + (b.rtt_ms || 18); }, 0) / onlineBoxes.length) : 19;
+    var avgRtt = onlineBoxes.length ? Math.round(onlineBoxes.reduce(function (s, b) { return s + (b.rtt_ms || 18); }, 0) / onlineBoxes.length) : 0;
+    var maxRtt = onlineBoxes.length ? Math.round(onlineBoxes.reduce(function (m, b) { return Math.max(m, b.rtt_ms || 0); }, 0)) : 0;
     var kpi6Val = document.getElementById('kpi-rtt-val');
     var kpi6Sub = document.getElementById('kpi-rtt-sub');
-    if (kpi6Val) kpi6Val.textContent = avgRtt + ' ms';
-    if (kpi6Sub) kpi6Sub.innerHTML = '<span>Yamux + VPN 77.88.x.y</span>' + renderSparklineSvg([17, 19, avgRtt, 21, 18, avgRtt], true);
+    if (kpi6Val) kpi6Val.innerHTML = esc(avgRtt) + '<span class="kpi-val-sub">ms TB</span>';
+    if (kpi6Sub) kpi6Sub.innerHTML = '<span>Yamux · VPN 77.88.x</span><span>Max ' + esc(maxRtt) + 'ms</span>';
   }
 
   function renderFleetMatrix() {
@@ -370,7 +429,6 @@
     if (!container) return;
     var boxes = state.boxes || [];
 
-    /* Count boxes per club for multi-box club detection */
     var clubCounts = {};
     boxes.forEach(function (b) {
       var cid = b.club_id || b.club_name || 'default';
@@ -423,7 +481,11 @@
     });
 
     if (filtered.length === 0) {
-      container.innerHTML = '<div class="glass-panel" style="text-align:center;padding:32px;color:var(--text-secondary);">Không có Box nào khớp bộ lọc hiện tại.</div>';
+      container.innerHTML = '<div class="glass-panel"><div class="empty-state">' +
+        '<div class="empty-state-icon">' + svgIcon('search') + '</div>' +
+        '<div><strong>Không có Box nào khớp bộ lọc hiện tại.</strong></div>' +
+        '<div class="text-muted" style="font-size:12.5px;">Thử xóa từ khóa tìm kiếm hoặc chọn bộ lọc "Tất cả".</div>' +
+      '</div></div>';
       return;
     }
 
@@ -448,18 +510,18 @@
       container.innerHTML = groupOrder.map(function (grp) {
         var isPickle = String(grp.branding || '').toLowerCase() === 'pickleball' || grp.club_name.toLowerCase().indexOf('pickle') !== -1;
         var brandBadge = isPickle
-          ? '<span class="badge badge-amber">🏓 Pickleball</span>'
-          : '<span class="badge badge-cyan">🎱 Billiards</span>';
+          ? '<span class="badge badge-amber">' + svgIcon('pickle', 'ui-icon-sm') + '<span>Pickleball</span></span>'
+          : '<span class="badge badge-cyan">' + svgIcon('pool', 'ui-icon-sm') + '<span>Billiards</span></span>';
         var onlineInClub = grp.boxes.filter(function (x) { return x.online; }).length;
         var offlineInClub = grp.boxes.length - onlineInClub;
         var multiBadge = grp.boxes.length > 1
-          ? '<span class="badge badge-purple">' + grp.boxes.length + ' Box Song Song (' + onlineInClub + '/' + grp.boxes.length + ' Online)</span>'
+          ? '<span class="badge badge-purple">' + grp.boxes.length + ' Box (' + onlineInClub + '/' + grp.boxes.length + ' Online)</span>'
           : '<span class="badge ' + (onlineInClub > 0 ? 'badge-emerald' : 'badge-crimson') + '">' + (onlineInClub > 0 ? '1/1 Online' : '0/1 Offline') + '</span>';
         var clubOffBadge = offlineInClub > 0
           ? '<span class="badge badge-crimson">' + offlineInClub + ' Offline</span>'
           : '';
         var portalBtn = grp.portal_token
-          ? '<a href="/portal/' + encodeURIComponent(grp.portal_token) + '/" target="_blank" rel="noopener" class="btn btn-xs">🔑 Cổng Chủ Quán</a>'
+          ? '<a href="/portal/' + encodeURIComponent(grp.portal_token) + '/" target="_blank" rel="noopener" class="btn btn-xs">' + svgIcon('key', 'ui-icon-sm') + '<span>Cổng Chủ Quán</span></a>'
           : '';
 
         return '<div class="club-section" data-club-id="' + esc(grp.club_id) + '">' +
@@ -470,7 +532,7 @@
               multiBadge +
               clubOffBadge +
             '</div>' +
-            '<div style="display:flex;align-items:center;gap:8px;">' +
+            '<div class="toolbar-group">' +
               portalBtn +
             '</div>' +
           '</div>' +
@@ -482,18 +544,19 @@
     }
   }
 
+  /* 7-column consolidated Fleet table — fits 100% inside 1440px, zero clipped actions */
   function renderBoxesTableHtml(boxList) {
     var rows = boxList.map(function (b) {
       var boxId = b.id || b.box_id || '';
       var isOnline = !!b.online;
       var rowClass = 'clickable-row' + (isOnline ? '' : ' row-offline');
       var onlineBadge = isOnline
-        ? '<span class="badge badge-emerald emerald"><span class="led-dot led emerald"></span>ONLINE · ' + (b.rtt_ms || 0) + 'ms</span>'
+        ? '<span class="badge badge-emerald emerald"><span class="led-dot led emerald"></span>ONLINE · ' + esc(b.rtt_ms || 0) + 'ms</span>'
         : '<span class="badge badge-crimson crimson"><span class="led-dot led crimson"></span>OFFLINE</span>';
-      var uptimeSub = '<div class="cell-sub mono">' + escapeHtml(b.uptime_human || (isOnline ? '' : 'Mất kết nối')) + '</div>';
+      var uptimeSub = '<div class="cell-sub mono">' + escapeHtml(b.uptime_human || (isOnline ? '--' : 'Mất kết nối')) + '</div>';
 
       var cpuPctVal = Number(b.cpu_pct || 0);
-      var cpuBarClass = cpuPctVal >= 85 ? 'danger' : (cpuPctVal >= 65 ? 'warn' : '');
+      var cpuBarClass = cpuPctVal >= 85 ? 'danger' : (cpuPctVal >= 65 ? 'warn' : 'ok');
       var tempC = b.temp_c || 54;
       var cpuCores = b.cpu_cores || 4;
 
@@ -501,7 +564,7 @@
       var ramUsed = b.ram_used_mb || (b.ram_available_mb > 0 && ramTotal > b.ram_available_mb ? (ramTotal - b.ram_available_mb) : 0);
       var ramAvail = b.ram_available_mb || Math.max(0, ramTotal - ramUsed);
       var ramPct = b.ram_used_pct || b.ram_pct || (ramTotal > 0 ? Math.round((ramUsed * 100) / ramTotal) : 0);
-      var ramBarClass = ramPct >= 88 ? 'danger' : (ramPct >= 75 ? 'warn' : '');
+      var ramBarClass = ramPct >= 88 ? 'danger' : (ramPct >= 75 ? 'warn' : 'ok');
 
       var swapTotal = b.swap_total_mb || b.zram_total_mb || 0;
       var swapUsed = b.swap_used_mb !== undefined ? b.swap_used_mb : (b.zram_used_mb || 0);
@@ -510,62 +573,54 @@
 
       var sdPct = b.sd_used_pct || 38;
       var sdFs = b.sd_fs_type || 'f2fs';
-      var sdOpts = b.sd_mount_opts || 'errors=continue,noatime';
-      var sdBadgeClass = sdPct >= 88 ? 'danger' : (sdPct >= 75 ? 'warn' : '');
+      var sdTone = sdPct >= 88 ? 'text-crimson' : (sdPct >= 75 ? 'text-amber' : 'text-emerald');
 
       var ffAct = b.ffmpeg_count !== undefined ? b.ffmpeg_count : (b.cameras_count || 6) * 2;
       var ffExp = b.ffmpeg_expected !== undefined ? b.ffmpeg_expected : (b.cameras_count || 6) * 2;
       var ffBadge = (ffAct >= ffExp && ffExp > 0)
-        ? '<span class="badge badge-emerald">' + ffAct + ' / ' + ffExp + '</span>'
-        : '<span class="badge badge-amber">' + ffAct + ' / ' + ffExp + '</span>';
+        ? '<span class="badge badge-emerald">FF ' + esc(ffAct) + '/' + esc(ffExp) + '</span>'
+        : '<span class="badge badge-amber">FF ' + esc(ffAct) + '/' + esc(ffExp) + '</span>';
 
       var hScore = b.hardening_score !== undefined ? b.hardening_score : 8;
       var hMax = b.hardening_max || 8;
       var hBadge = hScore >= hMax
-        ? '<span class="badge badge-emerald">🛡️ ' + hScore + '/' + hMax + '</span>'
-        : '<span class="badge badge-amber">⚠️ ' + hScore + '/' + hMax + '</span>';
+        ? '<span class="badge badge-emerald">' + svgIcon('shield', 'ui-icon-sm') + '<span>' + esc(hScore) + '/' + esc(hMax) + '</span></span>'
+        : '<span class="badge badge-amber">' + svgIcon('warn', 'ui-icon-sm') + '<span>' + esc(hScore) + '/' + esc(hMax) + '</span></span>';
 
-      var rxMbps = b.rx_mbps !== undefined ? Number(b.rx_mbps).toFixed(1) : '18.4';
+      var rxMbps = b.rx_mbps !== undefined ? Number(b.rx_mbps).toFixed(1) : '0.0';
 
       return '<tr class="' + rowClass + '" data-open-box="' + esc(boxId) + '">' +
-        '<td>' +
-          '<div style="font-weight:700;" class="mono">' + esc(boxId) + '</div>' +
-          '<div style="font-size:12px;color:var(--text-secondary);">' + esc(b.name || b.club_name || '') + '</div>' +
+        '<td data-label="Trạm / CLB">' +
+          '<div class="cell-primary mono">' + esc(boxId) + '</div>' +
+          '<div class="cell-sub">' + esc(b.name || b.club_name || '') + '</div>' +
         '</td>' +
-        '<td>' +
-          '<div class="mono">' + esc(b.vpn_ip || '--') + '</div>' +
-          '<div style="font-size:11px;color:var(--text-muted);" class="mono">LAN: ' + esc(b.lan_ip || '192.168.1.x') + ' · grp: ' + esc(b.shinobi_group_key || '--') + '</div>' +
+        '<td data-label="Mạng (VPN / LAN)">' +
+          '<div class="mono cell-primary">' + esc(b.vpn_ip || '--') + '</div>' +
+          '<div class="cell-sub mono">LAN ' + esc(b.lan_ip || '--') + ' · grp ' + esc(b.shinobi_group_key || '--') + '</div>' +
         '</td>' +
-        '<td>' +
-          '<div style="display:flex;align-items:center;gap:8px;">' +
-            onlineBadge +
-            renderSparklineSvg(b.rtt_history, isOnline) +
-          '</div>' +
+        '<td data-label="Trạng Thái">' +
+          '<div>' + onlineBadge + '</div>' +
           uptimeSub +
         '</td>' +
-        '<td>' +
-          '<div class="mono"><strong>CPU ' + fmtNum(b.cpu_pct, 1) + '%</strong> · <span class="mono">' + fmtNum(tempC, 1) + '°C</span></div>' +
+        '<td data-label="CPU / Nhiệt">' +
+          '<div class="mono"><strong>' + fmtNum(b.cpu_pct, 1) + '%</strong> · ' + fmtNum(tempC, 1) + '°C</div>' +
           '<div class="mini-meter"><div class="mini-meter-fill ' + cpuBarClass + '" style="width:' + Math.min(100, Math.max(0, cpuPctVal)) + '%"></div></div>' +
           '<div class="cell-sub mono">Load ' + fmtNum(b.load_avg_1m, 2) + ' (' + esc(cpuCores) + 'C) · ' + esc(b.soc_model || 'ARM64') + '</div>' +
         '</td>' +
-        '<td>' +
-          '<div class="mono"><strong>RAM ' + esc(ramUsed) + '/' + esc(ramTotal) + 'M (' + esc(ramPct) + '%) · Avail ' + esc(ramAvail) + 'M</strong></div>' +
+        '<td data-label="RAM / Swap / SD">' +
+          '<div class="mono"><strong>RAM ' + esc(ramUsed) + '/' + esc(ramTotal) + 'M (' + esc(ramPct) + '%)</strong> · Avail ' + esc(ramAvail) + 'M</div>' +
           '<div class="mini-meter"><div class="mini-meter-fill ' + ramBarClass + '" style="width:' + Math.min(100, Math.max(0, ramPct)) + '%"></div></div>' +
-          '<div class="cell-sub mono">Heap ' + fmtNum(b.heap_alloc_mb, 1) + 'M · kspcam ' + fmtNum(b.kspcam_rss_mb, 0) + 'M · cam.js ' + fmtNum(b.camera_rss_mb, 0) + 'M</div>' +
-          '<div class="cell-sub mono">Swap ' + esc(swapUsed) + '/' + esc(swapTotal) + 'M (Free ' + esc(swapFree) + 'M · ' + esc(zramPct) + '%)</div>' +
+          '<div class="cell-sub mono">Heap ' + fmtNum(b.heap_alloc_mb, 1) + 'M · Swap ' + esc(swapUsed) + '/' + esc(swapTotal) + 'M (Free ' + esc(swapFree) + 'M · ' + esc(zramPct) + '%)</div>' +
+          '<div class="cell-sub mono">SD <span class="' + sdTone + '" style="font-weight:700;">' + esc(sdPct) + '%</span> (' + esc(b.sd_total_gb || 64) + 'G ' + esc(sdFs) + ') · ksp ' + fmtNum(b.kspcam_rss_mb, 0) + 'M · cam ' + fmtNum(b.camera_rss_mb, 0) + 'M</div>' +
         '</td>' +
-        '<td>' +
-          '<div><strong>' + esc(sdPct) + '%</strong> (' + esc(b.sd_total_gb || 64) + 'GB <code>' + esc(sdFs) + '</code>)</div>' +
-          '<div class="mini-meter"><div class="mini-meter-fill ' + sdBadgeClass + '" style="width:' + Math.min(100, sdPct) + '%"></div></div>' +
-          '<div style="font-size:11px;color:var(--text-muted);" class="mono">' + esc(sdOpts) + '</div>' +
+        '<td data-label="FFmpeg & Golden">' +
+          '<div class="badge-row">' + ffBadge + hBadge + '</div>' +
+          '<div class="cell-sub mono">RX ' + esc(rxMbps) + ' Mbps</div>' +
         '</td>' +
-        '<td>' + ffBadge + '</td>' +
-        '<td class="mono">' + esc(rxMbps) + ' Mbps</td>' +
-        '<td>' + hBadge + '</td>' +
-        '<td onclick="event.stopPropagation();">' +
-          '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">' +
-            '<button type="button" class="btn btn-xs" data-open-box="' + esc(boxId) + '">Chi tiết</button>' +
-            '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/kspcam/" target="_blank" rel="noopener" class="btn btn-xs btn-cyan">kspcam</a>' +
+        '<td data-label="Thao Tác">' +
+          '<div class="action-btn-row">' +
+            '<button type="button" class="btn btn-xs btn-cyan" data-open-box="' + esc(boxId) + '">Chi tiết</button>' +
+            '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/kspcam/" target="_blank" rel="noopener" class="btn btn-xs">kspcam</a>' +
             '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/shinobi/" target="_blank" rel="noopener" class="btn btn-xs">Shinobi</a>' +
             '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/nodered/" target="_blank" rel="noopener" class="btn btn-xs">Node-RED</a>' +
           '</div>' +
@@ -573,18 +628,15 @@
       '</tr>';
     }).join('');
 
-    return '<div class="table-scroll"><table class="scada-table tabular-nums">' +
+    return '<div class="table-scroll"><table class="scada-table fleet-table tabular-nums">' +
       '<thead><tr>' +
-        '<th>Box ID / Tên Trạm</th>' +
-        '<th>VPN IP / LAN / Group</th>' +
-        '<th>Kết Nối &amp; RTT Sparkline</th>' +
-        '<th>CPU / Load / Nhiệt độ</th>' +
-        '<th>RAM / Avail / Heap / Swap</th>' +
-        '<th>Thẻ Nhớ Video (SD)</th>' +
-        '<th>FFmpeg (Thực/Kỳ vọng)</th>' +
-        '<th>Lưu lượng RX</th>' +
-        '<th>Golden 8 Bước</th>' +
-        '<th>Điều Hành &amp; Reverse Proxy</th>' +
+        '<th>Trạm / CLB</th>' +
+        '<th>Mạng (VPN / LAN)</th>' +
+        '<th>Trạng Thái</th>' +
+        '<th>CPU / Nhiệt</th>' +
+        '<th>RAM / Swap / SD</th>' +
+        '<th>FFmpeg &amp; Golden</th>' +
+        '<th>Thao Tác</th>' +
       '</tr></thead>' +
       '<tbody>' + rows + '</tbody>' +
     '</table></div>';
@@ -643,7 +695,8 @@
     if (subEl) subEl.textContent = 'CLB: ' + (b.club_name || club.name || '--') + ' · VPN: ' + (b.vpn_ip || '--') + ' · LAN: ' + (b.lan_ip || '--') + ' · Group: ' + (b.shinobi_group_key || '--');
     if (statusBadge) {
       statusBadge.className = 'badge ' + (isOnline ? 'badge-emerald emerald' : 'badge-crimson crimson');
-      statusBadge.textContent = isOnline ? ('ONLINE · ' + (b.rtt_ms || 0) + 'ms') : 'OFFLINE';
+      statusBadge.innerHTML = '<span class="led-dot led ' + (isOnline ? 'emerald' : 'crimson') + '"></span>' +
+        (isOnline ? ('ONLINE · ' + esc(b.rtt_ms || 0) + 'ms') : 'OFFLINE');
     }
     if (socBadge) socBadge.textContent = (b.soc_model || 'ARM64') + ' · ' + (b.arch || 'aarch64');
 
@@ -652,19 +705,23 @@
     if (proxyEl) {
       var portalToken = b.portal_token || club.portal_token || '';
       proxyEl.innerHTML =
-        '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/kspcam/" target="_blank" rel="noopener" class="btn btn-primary">🎛️ Mở kspcam (:2028 SSO)</a>' +
-        '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/shinobi/" target="_blank" rel="noopener" class="btn btn-cyan">🎬 Mở Shinobi NVR (:8080)</a>' +
-        '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/nodered/" target="_blank" rel="noopener" class="btn">⚡ Mở Node-RED (:1880/:2023)</a>' +
-        (portalToken ? '<a href="/portal/' + encodeURIComponent(portalToken) + '/" target="_blank" rel="noopener" class="btn btn-amber">🔑 Cổng Chủ Quán</a>' : '');
+        '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/kspcam/" target="_blank" rel="noopener" class="btn btn-primary">' + svgIcon('sliders', 'ui-icon-sm') + '<span>Mở kspcam (:2028 SSO)</span></a>' +
+        '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/shinobi/" target="_blank" rel="noopener" class="btn btn-cyan">' + svgIcon('video', 'ui-icon-sm') + '<span>Mở Shinobi (:8080)</span></a>' +
+        '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/nodered/" target="_blank" rel="noopener" class="btn">' + svgIcon('zap', 'ui-icon-sm') + '<span>Mở Node-RED (:1880)</span></a>' +
+        (portalToken ? '<a href="/portal/' + encodeURIComponent(portalToken) + '/" target="_blank" rel="noopener" class="btn btn-amber">' + svgIcon('key', 'ui-icon-sm') + '<span>Cổng Chủ Quán</span></a>' : '');
     }
 
     /* Real-Time System Resources (On/Off · CPU · RAM · Heap · Avail · Swap) */
     var telEl = document.getElementById('drawer-telemetry');
     if (telEl) {
+      var cpuPctVal = Number(b.cpu_pct || 0);
+      var cpuBarClass = cpuPctVal >= 85 ? 'danger' : (cpuPctVal >= 65 ? 'warn' : 'ok');
+
       var ramTotal = b.ram_total_mb || 1945;
       var ramUsed = b.ram_used_mb || (b.ram_available_mb > 0 && ramTotal > b.ram_available_mb ? (ramTotal - b.ram_available_mb) : 0);
       var ramAvail = b.ram_available_mb || Math.max(0, ramTotal - ramUsed);
       var ramPct = b.ram_used_pct || b.ram_pct || (ramTotal > 0 ? Math.round((ramUsed * 100) / ramTotal) : 0);
+      var ramBarClass = ramPct >= 88 ? 'danger' : (ramPct >= 75 ? 'warn' : 'ok');
 
       var swapTotal = b.swap_total_mb || b.zram_total_mb || 0;
       var swapUsed = b.swap_used_mb !== undefined ? b.swap_used_mb : (b.zram_used_mb || 0);
@@ -672,42 +729,46 @@
       var zramPct = b.zram_pct || (swapTotal > 0 ? Math.round((swapUsed * 100) / swapTotal) : 0);
 
       var sdPct = b.sd_used_pct || 38;
+      var sdBarClass = sdPct >= 88 ? 'danger' : (sdPct >= 75 ? 'warn' : 'ok');
       var telSource = b.telemetry_source || 'live';
 
       telEl.innerHTML =
         '<div class="telemetry-item">' +
-          '<div style="font-size:12px;color:var(--text-secondary);">Trạng thái Kết nối, RTT &amp; Uptime</div>' +
-          '<div style="font-size:15px;font-weight:700;margin-top:2px;">' +
+          '<div class="telemetry-item-label">Kết nối, RTT &amp; Uptime</div>' +
+          '<div class="telemetry-item-val">' +
             (isOnline
-              ? '<span class="badge badge-emerald emerald"><span class="led-dot led emerald"></span>ONLINE</span> · RTT ' + esc(b.rtt_ms || 0) + ' ms'
-              : '<span class="badge badge-crimson crimson"><span class="led-dot led crimson"></span>OFFLINE</span> · Mất kết nối') +
+              ? '<span class="badge badge-emerald emerald"><span class="led-dot led emerald"></span>ONLINE</span> <span class="mono" style="margin-left:6px;">' + esc(b.rtt_ms || 0) + ' ms</span>'
+              : '<span class="badge badge-crimson crimson"><span class="led-dot led crimson"></span>OFFLINE</span> <span style="margin-left:6px;">Mất kết nối</span>') +
           '</div>' +
-          '<div class="mono" style="font-size:11px;color:var(--text-muted);margin-top:4px;">Uptime: ' + esc(b.uptime_human || '--') + ' · Nguồn: ' + esc(telSource) + '</div>' +
+          '<div class="mono telemetry-item-meta">Uptime: ' + esc(b.uptime_human || '--') + ' · Nguồn: ' + esc(telSource) + '</div>' +
         '</div>' +
         '<div class="telemetry-item">' +
-          '<div style="font-size:12px;color:var(--text-secondary);">CPU, Load Average &amp; Nhiệt độ SoC</div>' +
-          '<div style="font-size:15px;font-weight:700;margin-top:2px;" class="mono">CPU ' + fmtNum(b.cpu_pct, 1) + '% · Load ' + fmtNum(b.load_avg_1m, 2) + ' (' + esc(b.cpu_cores || 4) + ' nhân)</div>' +
-          '<div class="mono" style="font-size:11px;color:var(--text-muted);margin-top:4px;">Nhiệt độ SoC: ' + fmtNum(b.temp_c || 54, 1) + '°C · ' + esc(b.soc_model || 'Rockchip/Allwinner') + '</div>' +
+          '<div class="telemetry-item-label">CPU, Load Average &amp; Nhiệt độ SoC</div>' +
+          '<div class="telemetry-item-val mono">CPU ' + fmtNum(b.cpu_pct, 1) + '% · ' + fmtNum(b.temp_c || 54, 1) + '°C</div>' +
+          '<div class="mini-meter" style="max-width:100%;"><div class="mini-meter-fill ' + cpuBarClass + '" style="width:' + Math.min(100, Math.max(0, cpuPctVal)) + '%"></div></div>' +
+          '<div class="mono telemetry-item-meta">Load ' + fmtNum(b.load_avg_1m, 2) + ' (' + esc(b.cpu_cores || 4) + ' nhân) · ' + esc(b.soc_model || 'ARM64') + '</div>' +
         '</div>' +
         '<div class="telemetry-item">' +
-          '<div style="font-size:12px;color:var(--text-secondary);">Bộ nhớ RAM (Used / Total / Available)</div>' +
-          '<div style="font-size:15px;font-weight:700;margin-top:2px;" class="mono">RAM ' + esc(ramUsed) + ' MB / ' + esc(ramTotal) + ' MB — ' + esc(ramPct) + '%</div>' +
-          '<div class="mono" style="font-size:11px;color:var(--emerald);margin-top:4px;">RAM Available: ' + esc(ramAvail) + ' MB</div>' +
+          '<div class="telemetry-item-label">Bộ nhớ RAM (Used / Total / Available)</div>' +
+          '<div class="telemetry-item-val mono">' + esc(ramUsed) + ' / ' + esc(ramTotal) + ' MB (' + esc(ramPct) + '%)</div>' +
+          '<div class="mini-meter" style="max-width:100%;"><div class="mini-meter-fill ' + ramBarClass + '" style="width:' + Math.min(100, Math.max(0, ramPct)) + '%"></div></div>' +
+          '<div class="mono telemetry-item-meta text-emerald">RAM Available: ' + esc(ramAvail) + ' MB</div>' +
         '</div>' +
         '<div class="telemetry-item">' +
-          '<div style="font-size:12px;color:var(--text-secondary);">Go Runtime Heap &amp; Tiến trình (kspcam / camera.js)</div>' +
-          '<div style="font-size:15px;font-weight:700;margin-top:2px;" class="mono">Heap ' + fmtNum(b.heap_alloc_mb, 1) + ' MB / ' + fmtNum(b.heap_sys_mb, 1) + ' MB · ' + esc(b.goroutines || 0) + ' goroutines</div>' +
-          '<div class="mono" style="font-size:11px;color:var(--cyan);margin-top:4px;">kspcam RSS: ' + fmtNum(b.kspcam_rss_mb, 1) + ' MB · camera.js RSS: ' + fmtNum(b.camera_rss_mb, 1) + ' MB</div>' +
+          '<div class="telemetry-item-label">Go Runtime Heap &amp; Tiến trình</div>' +
+          '<div class="telemetry-item-val mono">Heap ' + fmtNum(b.heap_alloc_mb, 1) + ' / ' + fmtNum(b.heap_sys_mb, 1) + ' MB · ' + esc(b.goroutines || 0) + ' gr</div>' +
+          '<div class="mono telemetry-item-meta text-cyan">kspcam RSS: ' + fmtNum(b.kspcam_rss_mb, 1) + ' MB · camera.js: ' + fmtNum(b.camera_rss_mb, 1) + ' MB</div>' +
         '</div>' +
         '<div class="telemetry-item">' +
-          '<div style="font-size:12px;color:var(--text-secondary);">Swap / ZRAM (Used / Total / Free)</div>' +
-          '<div style="font-size:15px;font-weight:700;margin-top:2px;" class="mono">Swap ' + esc(swapUsed) + ' MB / ' + esc(swapTotal) + ' MB — ' + esc(zramPct) + '%</div>' +
-          '<div class="mono" style="font-size:11px;color:var(--emerald);margin-top:4px;">Swap Free: ' + esc(swapFree) + ' MB · ZRAM mem_limit=0</div>' +
+          '<div class="telemetry-item-label">Swap / ZRAM (Used / Total / Free)</div>' +
+          '<div class="telemetry-item-val mono">' + esc(swapUsed) + ' / ' + esc(swapTotal) + ' MB (' + esc(zramPct) + '%)</div>' +
+          '<div class="mono telemetry-item-meta text-emerald">Swap Free: ' + esc(swapFree) + ' MB · ZRAM mem_limit=0</div>' +
         '</div>' +
         '<div class="telemetry-item">' +
-          '<div style="font-size:12px;color:var(--text-secondary);">Thẻ Nhớ Video (' + esc(b.sd_fs_type || 'f2fs') + ') &amp; Lưu Lượng Mạng</div>' +
-          '<div style="font-size:15px;font-weight:700;margin-top:2px;" class="mono">SD ' + esc(sdPct) + '% (' + esc(b.sd_used_gb || 0) + '/' + esc(b.sd_total_gb || 64) + ' GB) · RX ' + fmtNum(b.rx_mbps || 18.2, 1) + ' Mbps</div>' +
-          '<div class="mono" style="font-size:11px;color:var(--cyan);margin-top:4px;">' + esc(b.sd_mount_opts || 'errors=continue,noatime') + ' · ' + esc(b.store_domain || '--') + ' (' + esc(b.store_http_code || 200) + ')</div>' +
+          '<div class="telemetry-item-label">Thẻ Nhớ Video (' + esc(b.sd_fs_type || 'f2fs') + ') &amp; Lưu Lượng</div>' +
+          '<div class="telemetry-item-val mono">SD ' + esc(sdPct) + '% (' + esc(b.sd_used_gb || 0) + '/' + esc(b.sd_total_gb || 64) + ' GB) · RX ' + fmtNum(b.rx_mbps || 0, 1) + ' Mbps</div>' +
+          '<div class="mini-meter" style="max-width:100%;"><div class="mini-meter-fill ' + sdBarClass + '" style="width:' + Math.min(100, Math.max(0, sdPct)) + '%"></div></div>' +
+          '<div class="mono telemetry-item-meta text-cyan">' + esc(b.sd_mount_opts || 'errors=continue,noatime') + ' · ' + esc(b.store_domain || '--') + ' (' + esc(b.store_http_code || 200) + ')</div>' +
         '</div>';
     }
 
@@ -721,7 +782,7 @@
     if (monEl) {
       var list = monitors.length ? monitors : cameras;
       if (!list.length) {
-        monEl.innerHTML = '<div style="font-size:12px;color:var(--text-secondary);">Đang ghi hình ổn định (' + ffAct + ' tiến trình ffmpeg).</div>';
+        monEl.innerHTML = '<div class="text-secondary" style="font-size:12.5px;">Đang ghi hình ổn định (' + esc(ffAct) + ' tiến trình ffmpeg).</div>';
       } else {
         monEl.innerHTML = '<div class="table-scroll"><table class="scada-table">' +
           '<thead><tr><th>Monitor / Bàn</th><th>Host / Kênh</th><th>Codec</th><th>Trạng thái</th></tr></thead>' +
@@ -731,7 +792,9 @@
               '<td><strong>' + esc(m.name || m.table_name || m.mid || 'Camera') + '</strong></td>' +
               '<td class="mono">' + esc(m.host || m.ip || '192.168.1.x') + ':' + esc(m.port || 37777) + '</td>' +
               '<td class="mono">' + esc(m.codec || 'H.265') + ' · frag_keyframe+empty_moov</td>' +
-              '<td>' + (rec ? '<span class="badge badge-emerald">● RECORDING</span>' : '<span class="badge badge-amber">STANDBY</span>') + '</td>' +
+              '<td>' + (rec
+                ? '<span class="badge badge-emerald"><span class="led-dot emerald"></span>RECORDING</span>'
+                : '<span class="badge badge-amber">STANDBY</span>') + '</td>' +
             '</tr>';
           }).join('') + '</tbody></table></div>';
       }
@@ -743,15 +806,17 @@
     });
     var hardEl = document.getElementById('drawer-hardening');
     if (hardEl) {
-      hardEl.innerHTML = '<div style="display:grid;grid-template-columns:1fr;gap:6px;">' +
+      hardEl.innerHTML = '<div class="pillar-list">' +
         pillars.map(function (p) {
           var ok = p.status === 'pass' || p.status === 'ok' || p.ok === true;
-          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-radius:7px;background:var(--surface);border:1px solid var(--border);">' +
-            '<div>' +
-              '<div style="font-weight:700;font-size:12px;">Bước ' + esc(p.step) + ': ' + esc(p.name) + '</div>' +
-              '<div style="font-size:11px;color:var(--text-secondary);" class="mono">' + esc(p.detail || p.command_preview || '') + '</div>' +
+          return '<div class="pillar-row">' +
+            '<div class="pillar-info">' +
+              '<div class="pillar-name">Bước ' + esc(p.step) + ': ' + esc(p.name) + '</div>' +
+              '<div class="pillar-detail mono">' + esc(p.detail || p.command_preview || '') + '</div>' +
             '</div>' +
-            (ok ? '<span class="badge badge-emerald">ĐẠT</span>' : '<span class="badge badge-amber">CẦN VÁ</span>') +
+            (ok
+              ? '<span class="badge badge-emerald">' + svgIcon('check', 'ui-icon-sm') + '<span>ĐẠT</span></span>'
+              : '<span class="badge badge-amber">' + svgIcon('warn', 'ui-icon-sm') + '<span>CẦN VÁ</span></span>') +
           '</div>';
         }).join('') +
       '</div>';
@@ -787,6 +852,14 @@
       return hay.indexOf(q) !== -1;
     });
 
+    if (!filtered.length) {
+      container.innerHTML = '<div class="empty-state">' +
+        '<div class="empty-state-icon">' + svgIcon('shield') + '</div>' +
+        '<div><strong>Không có Box nào phù hợp bộ lọc chuẩn hóa.</strong></div>' +
+      '</div>';
+      return;
+    }
+
     var rowsHtml = filtered.map(function (item) {
       var boxId = item.box_id || item.id || '';
       var pillars = Array.isArray(item.pillars) ? item.pillars : [];
@@ -798,8 +871,8 @@
         var ok = p.status === 'pass' || p.status === 'ok' || p.ok === true;
         return '<td title="' + esc(p.detail || meta.name) + '">' +
           (ok
-            ? '<span class="badge badge-emerald">✓ Đạt</span>'
-            : '<span class="badge badge-amber">⚠ Vá</span>') +
+            ? '<span class="badge badge-emerald">' + svgIcon('check', 'ui-icon-sm') + '<span>Đạt</span></span>'
+            : '<span class="badge badge-amber">' + svgIcon('warn', 'ui-icon-sm') + '<span>Vá</span></span>') +
         '</td>';
       }).join('');
 
@@ -808,19 +881,19 @@
 
       return '<tr>' +
         '<td>' +
-          '<div class="mono" style="font-weight:700;">' + esc(boxId) + '</div>' +
-          '<div style="font-size:12px;color:var(--text-secondary);">' + esc(item.club_name || item.box_name || '') + '</div>' +
+          '<div class="mono cell-primary">' + esc(boxId) + '</div>' +
+          '<div class="cell-sub">' + esc(item.club_name || item.box_name || '') + '</div>' +
         '</td>' +
         '<td>' +
           (score >= maxScore
-            ? '<span class="badge badge-emerald">' + score + '/' + maxScore + '</span>'
-            : '<span class="badge badge-amber">' + score + '/' + maxScore + '</span>') +
+            ? '<span class="badge badge-emerald">' + esc(score) + '/' + esc(maxScore) + '</span>'
+            : '<span class="badge badge-amber">' + esc(score) + '/' + esc(maxScore) + '</span>') +
         '</td>' +
         cells +
         '<td>' +
-          '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
-            '<button type="button" class="btn btn-xs btn-primary" data-remediate-box="' + esc(boxId) + '">🛠️ Vá 8 Bước</button>' +
-            '<button type="button" class="btn btn-xs" data-inspect-box="' + esc(boxId) + '">🔍 Kiểm tra</button>' +
+          '<div class="action-btn-row">' +
+            '<button type="button" class="btn btn-xs btn-primary" data-remediate-box="' + esc(boxId) + '">' + svgIcon('wrench', 'ui-icon-sm') + '<span>Vá 8 Bước</span></button>' +
+            '<button type="button" class="btn btn-xs" data-inspect-box="' + esc(boxId) + '">' + svgIcon('search', 'ui-icon-sm') + '<span>Kiểm tra</span></button>' +
           '</div>' +
         '</td>' +
       '</tr>';
@@ -942,16 +1015,21 @@
 
     if (sumBar) {
       sumBar.innerHTML =
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
-          '<span class="badge badge-cyan">Hiển thị: ' + filtered.length + ' / ' + state.cameras.length + ' Camera</span>' +
-          '<span class="badge badge-emerald">Chuẩn H.265: ' + h265Count + '</span>' +
+        '<div class="badge-row">' +
+          '<span class="badge badge-cyan">Hiển thị: ' + esc(filtered.length) + ' / ' + esc(state.cameras.length) + ' Camera</span>' +
+          '<span class="badge badge-emerald">Chuẩn H.265: ' + esc(h265Count) + '</span>' +
           (doubleCount > 0
-            ? '<span class="badge badge-amber">⚠️ Phát hiện Double-Streaming: ' + doubleCount + ' kênh (NVR + Direct trùng lặp)</span>'
-            : '<span class="badge badge-emerald">✓ 0 Double-Streaming</span>') +
+            ? '<span class="badge badge-amber">' + svgIcon('warn', 'ui-icon-sm') + '<span>Phát hiện Double-Streaming: ' + esc(doubleCount) + ' kênh</span></span>'
+            : '<span class="badge badge-emerald">' + svgIcon('check', 'ui-icon-sm') + '<span>0 Double-Streaming</span></span>') +
         '</div>' +
-        '<div style="font-size:12px;color:var(--text-secondary);" class="mono">' +
+        '<div class="mono text-secondary" style="font-size:12px;">' +
           'Chuẩn Bida Golden: H.265 · 30 FPS · 1536 Kbps CBR · GOP 50 · AAC' +
         '</div>';
+    }
+
+    if (!filtered.length) {
+      tbody.innerHTML = '<tr><td colspan="10" class="analytics-empty-cell">Không có camera nào khớp bộ lọc hiện tại.</td></tr>';
+      return;
     }
 
     tbody.innerHTML = filtered.map(function (c) {
@@ -960,18 +1038,18 @@
       var isH265 = String(c.codec || '').toUpperCase() === 'H.265';
       return '<tr>' +
         '<td><input type="checkbox" class="cam-row-check" data-cam-id="' + esc(cid) + '" ' + checked + '></td>' +
-        '<td class="mono" style="font-weight:700;">' + esc(cid) + '</td>' +
+        '<td class="mono cell-primary">' + esc(cid) + '</td>' +
         '<td>' +
           '<div>' + esc(c.club_name || '--') + '</div>' +
-          '<div class="mono" style="font-size:11px;color:var(--text-muted);">' + esc(c.box_id) + '</div>' +
+          '<div class="mono cell-sub">' + esc(c.box_id) + '</div>' +
         '</td>' +
         '<td><strong>' + esc(c.table_name || c.name || 'Bàn Bida') + '</strong></td>' +
         '<td><span class="badge badge-neutral">' + esc(c.vendor || 'Dahua') + '</span></td>' +
         '<td class="mono">' + (c.nvr_host ? (esc(c.nvr_host) + ' (CH' + esc(c.nvr_channel || 1) + ')') : 'Direct LAN') + '</td>' +
         '<td>' +
           (c.online !== false
-            ? '<span class="badge badge-emerald">ONLINE' + (c.recording !== false ? ' · REC' : '') + '</span>'
-            : '<span class="badge badge-crimson">OFFLINE</span>') +
+            ? '<span class="badge badge-emerald"><span class="led-dot emerald"></span>ONLINE' + (c.recording !== false ? ' · REC' : '') + '</span>'
+            : '<span class="badge badge-crimson"><span class="led-dot crimson"></span>OFFLINE</span>') +
         '</td>' +
         '<td class="mono">' +
           (isH265
@@ -982,8 +1060,8 @@
         '<td class="mono">' + esc(c.audio_codec || 'AAC') + '</td>' +
         '<td>' +
           (c.double_streaming
-            ? '<span class="badge badge-amber">⚠️ DOUBLE-STREAM</span>'
-            : '<span class="badge badge-emerald">✓ ĐƠN LUỒNG</span>') +
+            ? '<span class="badge badge-amber">' + svgIcon('warn', 'ui-icon-sm') + '<span>DOUBLE-STREAM</span></span>'
+            : '<span class="badge badge-emerald">' + svgIcon('check', 'ui-icon-sm') + '<span>ĐƠN LUỒNG</span></span>') +
         '</td>' +
       '</tr>';
     }).join('');
@@ -1048,41 +1126,97 @@
     var boxContainer = document.getElementById('redbida-boxes-container');
     var q = (state.redbidaSearch || '').trim().toLowerCase();
 
-    /* Render FRPC Subdomain Auditor */
+    /* Render FRPC Subdomain Auditor (1 row per box, merged from redbidaBoxes + FRPCSubdomainEntry domains) */
     if (domContainer) {
-      var domains = state.redbidaDomains.length ? state.redbidaDomains : state.redbidaBoxes.map(function (b) {
-        return {
-          box_id: b.box_id || b.id,
-          club_name: b.club_name || b.name,
-          store_domain: b.store_domain,
-          cstore_domain: b.cstore_domain,
-          store_http_code: b.store_http_code || 200,
-          cstore_http_code: b.cstore_http_code || 200,
-          conflict: !!b.domain_conflict
-        };
+      var byBoxMap = {};
+      var domList = [];
+
+      function ensureDomRow(boxId, clubName, branding) {
+        var key = boxId || clubName || 'unknown';
+        if (!byBoxMap[key]) {
+          byBoxMap[key] = {
+            box_id: boxId || '--',
+            club_name: clubName || '',
+            branding: String(branding || 'billiards').toLowerCase(),
+            store_domain: '',
+            cstore_domain: '',
+            store_http_code: 200,
+            cstore_http_code: 200,
+            conflict: false
+          };
+          domList.push(byBoxMap[key]);
+        }
+        return byBoxMap[key];
+      }
+
+      (state.redbidaBoxes || []).forEach(function (b) {
+        var row = ensureDomRow(b.box_id || b.id, b.club_name || b.name, b.branding);
+        if (b.store_domain) row.store_domain = b.store_domain;
+        if (b.cstore_domain) row.cstore_domain = b.cstore_domain;
+        if (b.store_http_code) row.store_http_code = b.store_http_code;
+        if (b.cstore_http_code) row.cstore_http_code = b.cstore_http_code;
+        if (b.domain_conflict) row.conflict = true;
       });
 
-      var domFiltered = domains.filter(function (d) {
+      (state.redbidaDomains || []).forEach(function (d) {
+        var row = ensureDomRow(d.box_id, d.club_name || d.box_name, d.branding);
+        var kind = String(d.kind || '').toLowerCase();
+        var cleanHost = function (entry) {
+          var raw = entry.full_url || entry.domain || entry.subdomain || '';
+          return String(raw).replace(/^https?:\/\//i, '');
+        };
+        if (d.store_domain) {
+          row.store_domain = d.store_domain;
+          if (d.store_http_code) row.store_http_code = d.store_http_code;
+        }
+        if (d.cstore_domain) {
+          row.cstore_domain = d.cstore_domain;
+          if (d.cstore_http_code) row.cstore_http_code = d.cstore_http_code;
+        }
+        if (kind === 'store') {
+          var sh = cleanHost(d);
+          if (sh && !row.store_domain) row.store_domain = sh;
+          if (d.http_code) row.store_http_code = d.http_code;
+        } else if (kind === 'c-store' || kind === 'cstore') {
+          var ch = cleanHost(d);
+          if (ch && !row.cstore_domain) row.cstore_domain = ch;
+          if (d.http_code) row.cstore_http_code = d.http_code;
+        }
+        if (d.conflict) row.conflict = true;
+      });
+
+      var domFiltered = domList.filter(function (d) {
+        if (state.redbidaBrandFilter === 'billiards' && d.branding !== 'billiards') return false;
+        if (state.redbidaBrandFilter === 'pickleball' && d.branding !== 'pickleball') return false;
         if (state.redbidaBrandFilter === 'conflict' && !d.conflict) return false;
         if (!q) return true;
         var hay = [d.box_id, d.club_name, d.store_domain, d.cstore_domain].join(' ').toLowerCase();
         return hay.indexOf(q) !== -1;
       });
 
-      domContainer.innerHTML = '<div class="table-scroll"><table class="scada-table tabular-nums">' +
-        '<thead><tr><th>Box ID / CLB</th><th>Subdomain Store (Điểm số)</th><th>HTTP</th><th>Subdomain C-Store (Camera)</th><th>HTTP</th><th>Kiểm Toán Xung Đột</th></tr></thead>' +
-        '<tbody>' + domFiltered.map(function (d) {
-          var sCode = d.store_http_code || 200;
-          var cCode = d.cstore_http_code || 200;
-          return '<tr>' +
-            '<td><strong class="mono">' + esc(d.box_id) + '</strong> · ' + esc(d.club_name || '') + '</td>' +
-            '<td class="mono">' + esc(d.store_domain || '--') + '</td>' +
-            '<td><span class="badge ' + (sCode === 200 ? 'badge-emerald' : 'badge-amber') + '">HTTP ' + esc(sCode) + '</span></td>' +
-            '<td class="mono">' + esc(d.cstore_domain || '--') + '</td>' +
-            '<td><span class="badge ' + (cCode === 200 ? 'badge-emerald' : 'badge-amber') + '">HTTP ' + esc(cCode) + '</span></td>' +
-            '<td>' + (d.conflict ? '<span class="badge badge-crimson">🚨 TRÙNG SUBDOMAIN</span>' : '<span class="badge badge-emerald">✓ DUY NHẤT</span>') + '</td>' +
-          '</tr>';
-        }).join('') + '</tbody></table></div>';
+      if (!domFiltered.length) {
+        domContainer.innerHTML = '<div class="empty-state">' +
+          '<div class="empty-state-icon">' + svgIcon('globe') + '</div>' +
+          '<div><strong>Không có tên miền FRPC nào khớp bộ lọc.</strong></div>' +
+        '</div>';
+      } else {
+        domContainer.innerHTML = '<div class="table-scroll"><table class="scada-table tabular-nums">' +
+          '<thead><tr><th>Box ID / CLB</th><th>Subdomain Store</th><th>HTTP</th><th>Subdomain C-Store</th><th>HTTP</th><th>Kiểm Toán</th></tr></thead>' +
+          '<tbody>' + domFiltered.map(function (d) {
+            var sCode = d.store_http_code || 200;
+            var cCode = d.cstore_http_code || 200;
+            return '<tr>' +
+              '<td><strong class="mono">' + esc(d.box_id) + '</strong> · ' + esc(d.club_name || '') + '</td>' +
+              '<td class="mono">' + esc(d.store_domain || '--') + '</td>' +
+              '<td><span class="badge ' + (sCode === 200 ? 'badge-emerald' : 'badge-amber') + '">HTTP ' + esc(sCode) + '</span></td>' +
+              '<td class="mono">' + esc(d.cstore_domain || '--') + '</td>' +
+              '<td><span class="badge ' + (cCode === 200 ? 'badge-emerald' : 'badge-amber') + '">HTTP ' + esc(cCode) + '</span></td>' +
+              '<td>' + (d.conflict
+                ? '<span class="badge badge-crimson">' + svgIcon('warn', 'ui-icon-sm') + '<span>TRÙNG SUBDOMAIN</span></span>'
+                : '<span class="badge badge-emerald">' + svgIcon('check', 'ui-icon-sm') + '<span>DUY NHẤT</span></span>') + '</td>' +
+            '</tr>';
+          }).join('') + '</tbody></table></div>';
+      }
     }
 
     /* Render 17-Rule Inspector & Branding Guard */
@@ -1097,48 +1231,55 @@
         return hay.indexOf(q) !== -1;
       });
 
-      boxContainer.innerHTML = '<div class="table-scroll"><table class="scada-table tabular-nums">' +
-        '<thead><tr>' +
-          '<th>Box ID / CLB</th>' +
-          '<th>Nhận Diện Thương Hiệu (Branding Guard)</th>' +
-          '<th>Điểm 17-Rule</th>' +
-          '<th>Khóa Mở Kiểm Soát (VIP / Group / GGCode / C01..C20)</th>' +
-          '<th>Thao Tác</th>' +
-        '</tr></thead>' +
-        '<tbody>' + rBoxes.map(function (b) {
-          var boxId = b.box_id || b.id || '';
-          var isPickle = String(b.branding || '').toLowerCase() === 'pickleball';
-          var score = b.score !== undefined ? b.score : (b.redbida_score || 17);
-          var maxScore = b.max_score || 17;
-          var keys = b.keys || {};
-          var vip = keys.eth0_virtual_ip || keys.end0_virtual_ip || b.virtual_ip || '192.168.1.250';
-          var grp = keys.shinobi_group_key || b.shinobi_group_key || '--';
-          var gg = keys.ggcode || b.ggcode || 'GG-BIDA';
+      if (!rBoxes.length) {
+        boxContainer.innerHTML = '<div class="empty-state">' +
+          '<div class="empty-state-icon">' + svgIcon('sliders') + '</div>' +
+          '<div><strong>Không có Box nào khớp bộ lọc RedBida.</strong></div>' +
+        '</div>';
+      } else {
+        boxContainer.innerHTML = '<div class="table-scroll"><table class="scada-table tabular-nums">' +
+          '<thead><tr>' +
+            '<th>Box ID / CLB</th>' +
+            '<th>Thương Hiệu (Branding Guard)</th>' +
+            '<th>Điểm 17-Rule</th>' +
+            '<th>Khóa Mở Kiểm Soát (VIP / Group / GGCode / C01..C20)</th>' +
+            '<th>Thao Tác</th>' +
+          '</tr></thead>' +
+          '<tbody>' + rBoxes.map(function (b) {
+            var boxId = b.box_id || b.id || '';
+            var isPickle = String(b.branding || '').toLowerCase() === 'pickleball';
+            var score = b.score !== undefined ? b.score : (b.redbida_score || 17);
+            var maxScore = b.max_score || 17;
+            var keys = b.keys || {};
+            var vip = keys.eth0_virtual_ip || keys.end0_virtual_ip || b.virtual_ip || '192.168.1.250';
+            var grp = keys.shinobi_group_key || b.shinobi_group_key || '--';
+            var gg = keys.ggcode || b.ggcode || 'GG-BIDA';
 
-          return '<tr>' +
-            '<td>' +
-              '<div class="mono" style="font-weight:700;">' + esc(boxId) + '</div>' +
-              '<div style="font-size:12px;color:var(--text-secondary);">' + esc(b.club_name || b.box_name || '') + '</div>' +
-            '</td>' +
-            '<td>' +
-              (isPickle
-                ? '<span class="badge badge-amber">🏓 Pickleball (Preserved)</span>'
-                : '<span class="badge badge-cyan">🎱 Billiards (RedBida)</span>') +
-            '</td>' +
-            '<td>' +
-              '<span class="badge ' + (score >= maxScore ? 'badge-emerald' : 'badge-amber') + '">' + esc(score) + '/' + esc(maxScore) + '</span>' +
-            '</td>' +
-            '<td class="mono" style="font-size:12px;">' +
-              'VIP: <code>' + esc(vip) + '</code> · Grp: <code>' + esc(grp) + '</code> · GG: <code>' + esc(gg) + '</code> · [C01..C20]' +
-            '</td>' +
-            '<td>' +
-              '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
-                '<button type="button" class="btn btn-xs btn-cyan" data-open-redbida-edit="' + esc(boxId) + '">🔓 Mở Khóa &amp; Sửa</button>' +
-                '<button type="button" class="btn btn-xs btn-primary" data-autofix-redbida="' + esc(boxId) + '">⚡ Auto-Fix 17 Rule</button>' +
-              '</div>' +
-            '</td>' +
-          '</tr>';
-        }).join('') + '</tbody></table></div>';
+            return '<tr>' +
+              '<td>' +
+                '<div class="mono cell-primary">' + esc(boxId) + '</div>' +
+                '<div class="cell-sub">' + esc(b.club_name || b.box_name || '') + '</div>' +
+              '</td>' +
+              '<td>' +
+                (isPickle
+                  ? '<span class="badge badge-amber">' + svgIcon('pickle', 'ui-icon-sm') + '<span>Pickleball (Preserved)</span></span>'
+                  : '<span class="badge badge-cyan">' + svgIcon('pool', 'ui-icon-sm') + '<span>Billiards (RedBida)</span></span>') +
+              '</td>' +
+              '<td>' +
+                '<span class="badge ' + (score >= maxScore ? 'badge-emerald' : 'badge-amber') + '">' + esc(score) + '/' + esc(maxScore) + '</span>' +
+              '</td>' +
+              '<td class="mono" style="font-size:12px;">' +
+                'VIP: <code>' + esc(vip) + '</code> · Grp: <code>' + esc(grp) + '</code> · GG: <code>' + esc(gg) + '</code> · [C01..C20]' +
+              '</td>' +
+              '<td>' +
+                '<div class="action-btn-row">' +
+                  '<button type="button" class="btn btn-xs btn-cyan" data-open-redbida-edit="' + esc(boxId) + '">' + svgIcon('unlock', 'ui-icon-sm') + '<span>Mở Khóa</span></button>' +
+                  '<button type="button" class="btn btn-xs btn-primary" data-autofix-redbida="' + esc(boxId) + '">' + svgIcon('zap', 'ui-icon-sm') + '<span>Auto-Fix 17</span></button>' +
+                '</div>' +
+              '</td>' +
+            '</tr>';
+          }).join('') + '</tbody></table></div>';
+      }
     }
   }
 
@@ -1225,14 +1366,14 @@
     var clipUrl = pack.clip_url || ('/clip/' + (pack.clip_token || ''));
 
     var templateText = pack.zalo_template || pack.template || [
-      '🎱 BÀN GIAO HỆ THỐNG CAMERA & ĐIỂM SỐ INUT BIDA — ' + (pack.club_name || 'CLB Bida'),
-      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      '1️⃣ Trang Xem Bàn & Điểm Số: ' + storeUrl,
-      '2️⃣ Trang Xem Camera & Tua Lại Video 72h: ' + cstoreUrl,
-      '3️⃣ Cổng Quản Lý Dành Riêng Cho Chủ Quán (Read-Only): ' + portalUrl,
-      '4️⃣ Link Tải Clip QR Bền Vững (HMAC): ' + clipUrl,
-      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      '🛡️ Hệ thống đã chuẩn hóa 8 bước Golden Hardening (H.265 30fps, Fragmented MP4 chống lỗi mất điện, tự động dọn thẻ nhớ 90%->80%).'
+      'BAN GIAO HE THONG CAMERA & DIEM SO INUT BIDA — ' + (pack.club_name || 'CLB Bida'),
+      '--------------------------------------------------',
+      '1. Trang Xem Ban & Diem So: ' + storeUrl,
+      '2. Trang Xem Camera & Tua Lai Video 72h: ' + cstoreUrl,
+      '3. Cong Quan Ly Danh Rieng Cho Chu Quan (Read-Only): ' + portalUrl,
+      '4. Link Tai Clip QR Ben Vung (HMAC): ' + clipUrl,
+      '--------------------------------------------------',
+      'He thong da chuan hoa 8 buoc Golden Hardening (H.265 30fps, Fragmented MP4 chong loi mat dien, tu dong don the nho 90%->80%).'
     ].join('\n');
 
     var txtEl = document.getElementById('handover-template-text');
@@ -1409,8 +1550,8 @@
     /* KPI 1: QR Views & Page Views */
     var qrVal = document.getElementById('akpi-qr-val');
     var qrSub = document.getElementById('akpi-qr-sub');
-    if (qrVal) qrVal.innerHTML = esc(fmtInt(qrViews)) + ' <span class="kpi-val-sub">/ ' + esc(fmtInt(pageViews)) + ' trang</span>';
-    if (qrSub) qrSub.innerHTML = '<span>🏢 ' + esc(fmtInt(activeClubs)) + ' CLB · ' + esc(fmtInt(activeBoxes)) + ' Box</span><span>Hoạt động</span>';
+    if (qrVal) qrVal.innerHTML = esc(fmtInt(qrViews)) + '<span class="kpi-val-sub">/ ' + esc(fmtInt(pageViews)) + ' trang</span>';
+    if (qrSub) qrSub.innerHTML = '<span>' + esc(fmtInt(activeClubs)) + ' CLB · ' + esc(fmtInt(activeBoxes)) + ' Box</span><span>Hoạt động</span>';
 
     /* KPI 2: Unique Visitors */
     var visVal = document.getElementById('akpi-visitors-val');
@@ -1427,7 +1568,7 @@
     /* KPI 4: AI Studio & Analysis */
     var aiVal = document.getElementById('akpi-ai-val');
     var aiSub = document.getElementById('akpi-ai-sub');
-    if (aiVal) aiVal.innerHTML = esc(fmtInt(aiAnalyzes)) + ' <span class="kpi-val-sub">/ ' + esc(fmtInt(aiOpens)) + ' mở</span>';
+    if (aiVal) aiVal.innerHTML = esc(fmtInt(aiAnalyzes)) + '<span class="kpi-val-sub">/ ' + esc(fmtInt(aiOpens)) + ' mở</span>';
     if (aiSub) aiSub.innerHTML = '<span>' + esc(fmtInt(aiShots)) + ' cú · ' + esc(fmtInt(aiPots)) + ' lỗ</span><span>iOS ' + esc(fmtInt(aiExportsIos)) + ' / PC ' + esc(fmtInt(aiExportsDesktop)) + '</span>';
 
     /* KPI 5: Bandwidth Out + Conversion % */
@@ -1455,7 +1596,7 @@
     }
     if (errSub) {
       var healthLabel = totalErrors === 0
-        ? '<span class="text-emerald" style="font-weight:700;">✓ 0% Lỗi</span>'
+        ? '<span class="text-emerald" style="font-weight:700;">0% Lỗi</span>'
         : '<span class="' + ((totalErrors >= 20 || errRate >= 3) ? 'text-crimson' : 'text-amber') + '" style="font-weight:700;">' + esc(errRate.toFixed(2)) + '%</span>';
       errSub.innerHTML = '<span>HTTP: ' + esc(fmtInt(httpErrors)) + ' · AI: ' + esc(fmtInt(aiErrors)) + '</span>' + healthLabel;
     }
@@ -1518,12 +1659,12 @@
       var lblVal = Math.round(yMax * frac);
       gridLines.push(
         '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="var(--border)" stroke-width="1" ' + (t > 0 ? 'stroke-dasharray="3 3"' : '') + '/>' +
-        '<text x="' + (padL - 6) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" font-size="10" fill="var(--text-muted)">' + esc(fmtCompact(lblVal)) + '</text>'
+        '<text x="' + (padL - 8) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" font-size="10" font-family="var(--font-mono)" fill="var(--text-muted)">' + esc(fmtCompact(lblVal)) + '</text>'
       );
     }
 
     var slotW = plotW / 24;
-    var barW = Math.max(6, slotW - 6);
+    var barW = Math.max(7, slotW - 6);
     var bars = [];
 
     hours.forEach(function (item, idx) {
@@ -1559,9 +1700,11 @@
         ? '<rect x="' + (xSlot + 1).toFixed(1) + '" y="' + padT + '" width="' + (slotW - 2).toFixed(1) + '" height="' + plotH + '" rx="4" fill="var(--amber-bg)" stroke="var(--amber-border)" stroke-width="1"/>'
         : '';
 
-      var showLbl = (idx % 2 === 0 || idx === 23 || isPeak);
+      /* Collision-free X-axis ticks: always show peak, suppress adjacent ticks within +/-1h */
+      var nearPeak = (peakHour >= 0 && peakVal > 0 && Math.abs(idx - peakHour) <= 1);
+      var showLbl = isPeak || (!nearPeak && (idx % 3 === 0 || idx === 23));
       var xLbl = showLbl
-        ? '<text x="' + (xSlot + slotW / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" font-weight="' + (isPeak ? '700' : '500') + '" fill="' + (isPeak ? 'var(--amber)' : 'var(--text-muted)') + '">' + item.hour + 'h</text>'
+        ? '<text x="' + (xSlot + slotW / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" font-family="var(--font-mono)" font-weight="' + (isPeak ? '700' : '400') + '" fill="' + (isPeak ? 'var(--brand-amber)' : 'var(--text-muted)') + '">' + item.hour + 'h</text>'
         : '';
 
       bars.push(
@@ -1569,9 +1712,9 @@
           '<title>' + esc(tip) + '</title>' +
           peakBg +
           '<rect class="svg-hover-bg" x="' + (xSlot + 1).toFixed(1) + '" y="' + padT + '" width="' + (slotW - 2).toFixed(1) + '" height="' + plotH + '" rx="3" fill="transparent"/>' +
-          (hQr > 0 ? '<rect x="' + xBar.toFixed(1) + '" y="' + yQr.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + hQr.toFixed(1) + '" rx="1.5" fill="var(--cyan)"/>' : '') +
-          (hDc > 0 ? '<rect x="' + xBar.toFixed(1) + '" y="' + yDc.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + hDc.toFixed(1) + '" rx="1.5" fill="var(--emerald)"/>' : '') +
-          (hAi > 0 ? '<rect x="' + xBar.toFixed(1) + '" y="' + yAi.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + hAi.toFixed(1) + '" rx="1.5" fill="var(--purple)"/>' : '') +
+          (hQr > 0 ? '<rect x="' + xBar.toFixed(1) + '" y="' + yQr.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + hQr.toFixed(1) + '" rx="2" fill="var(--cyan)"/>' : '') +
+          (hDc > 0 ? '<rect x="' + xBar.toFixed(1) + '" y="' + yDc.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + hDc.toFixed(1) + '" rx="2" fill="var(--emerald)"/>' : '') +
+          (hAi > 0 ? '<rect x="' + xBar.toFixed(1) + '" y="' + yAi.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + hAi.toFixed(1) + '" rx="2" fill="var(--purple)"/>' : '') +
           xLbl +
         '</g>'
       );
@@ -1602,10 +1745,10 @@
       if (res.peakHour >= 0 && res.peakVal > 0) {
         var hp = (res.peakHour < 10 ? '0' : '') + res.peakHour;
         badge.className = 'badge badge-amber';
-        badge.textContent = '🔥 Đỉnh: ' + hp + ':00 (' + fmtInt(res.peakVal) + ' lượt)';
+        badge.innerHTML = svgIcon('flame', 'ui-icon-sm') + '<span>Đỉnh: ' + esc(hp) + ':00 (' + esc(fmtInt(res.peakVal)) + ' lượt)</span>';
       } else {
         badge.className = 'badge badge-neutral';
-        badge.textContent = '🔥 Đỉnh: Chưa có dữ liệu';
+        badge.textContent = 'Đỉnh: Chưa có dữ liệu';
       }
     }
   }
@@ -1636,7 +1779,7 @@
       var y = padT + plotH * (1 - frac);
       gridLines.push(
         '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="var(--border)" stroke-width="1" ' + (t > 0 ? 'stroke-dasharray="3 3"' : '') + '/>' +
-        '<text x="' + (padL - 6) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" font-size="10" fill="var(--text-muted)">' + esc(fmtCompact(Math.round(yMax * frac))) + '</text>'
+        '<text x="' + (padL - 8) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" font-size="10" font-family="var(--font-mono)" fill="var(--text-muted)">' + esc(fmtCompact(Math.round(yMax * frac))) + '</text>'
       );
     }
 
@@ -1695,10 +1838,10 @@
           '<title>' + esc(tip) + '</title>' +
           '<rect class="svg-hover-bg" x="' + xSlot.toFixed(1) + '" y="' + padT + '" width="' + slotW.toFixed(1) + '" height="' + plotH + '" rx="3" fill="transparent"/>' +
           singleQrBar +
-          (hDc > 0 ? '<rect x="' + (cx - subBarW - 1).toFixed(1) + '" y="' + (yBase - hDc).toFixed(1) + '" width="' + subBarW.toFixed(1) + '" height="' + hDc.toFixed(1) + '" rx="1.5" fill="var(--emerald)" opacity="0.88"/>' : '') +
-          (hAi > 0 ? '<rect x="' + (cx + 1).toFixed(1) + '" y="' + (yBase - hAi).toFixed(1) + '" width="' + subBarW.toFixed(1) + '" height="' + hAi.toFixed(1) + '" rx="1.5" fill="var(--purple)" opacity="0.9"/>' : '') +
-          '<circle cx="' + cx.toFixed(1) + '" cy="' + yQr.toFixed(1) + '" r="' + (n > 31 ? '2.2' : '3.2') + '" fill="var(--cyan)" stroke="var(--surface)" stroke-width="1.2"/>' +
-          (showTick ? '<text x="' + cx.toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="var(--text-muted)">' + esc(shortDate) + '</text>' : '') +
+          (hDc > 0 ? '<rect x="' + (cx - subBarW - 1).toFixed(1) + '" y="' + (yBase - hDc).toFixed(1) + '" width="' + subBarW.toFixed(1) + '" height="' + hDc.toFixed(1) + '" rx="2" fill="var(--emerald)" opacity="0.9"/>' : '') +
+          (hAi > 0 ? '<rect x="' + (cx + 1).toFixed(1) + '" y="' + (yBase - hAi).toFixed(1) + '" width="' + subBarW.toFixed(1) + '" height="' + hAi.toFixed(1) + '" rx="2" fill="var(--purple)" opacity="0.9"/>' : '') +
+          '<circle cx="' + cx.toFixed(1) + '" cy="' + yQr.toFixed(1) + '" r="' + (n > 31 ? '2.2' : '3.2') + '" fill="var(--cyan)" stroke="var(--surface)" stroke-width="1.4"/>' +
+          (showTick ? '<text x="' + cx.toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--text-muted)">' + esc(shortDate) + '</text>' : '') +
         '</g>'
       );
     });
@@ -1710,7 +1853,7 @@
       var polyCoords = firstX + ',' + yBase + ' ' + areaPoints.join(' ') + ' ' + lastX + ',' + yBase;
       trendLineHtml =
         '<defs><linearGradient id="analytics-qr-grad" x1="0" y1="0" x2="0" y2="1">' +
-          '<stop offset="0%" stop-color="var(--cyan)" stop-opacity="0.28"/>' +
+          '<stop offset="0%" stop-color="var(--cyan)" stop-opacity="0.24"/>' +
           '<stop offset="100%" stop-color="var(--cyan)" stop-opacity="0.02"/>' +
         '</linearGradient></defs>' +
         '<polygon points="' + polyCoords + '" fill="url(#analytics-qr-grad)"/>' +
@@ -1724,13 +1867,15 @@
     '</svg>';
   }
 
-  function renderProgressRow(label, count, total, colorClass, extraText) {
+  function renderProgressRow(iconName, label, count, total, colorClass, extraText) {
     var pct = total > 0 ? ((count / total) * 100) : 0;
     var widthPct = count > 0 ? Math.max(2, Math.min(100, pct)) : 0;
     return '<div class="breakdown-row">' +
       '<div class="breakdown-row-head">' +
-        '<span style="font-weight:600;">' + esc(label) + (extraText ? ' <span class="mono" style="font-size:11px;color:var(--text-muted);">' + esc(extraText) + '</span>' : '') + '</span>' +
-        '<span class="mono"><strong>' + esc(fmtInt(count)) + '</strong> <span style="color:var(--text-muted);">(' + pct.toFixed(1) + '%)</span></span>' +
+        '<span class="breakdown-label">' + svgIcon(iconName, 'ui-icon-sm text-' + (colorClass === 'muted' ? 'muted' : colorClass)) +
+          '<span>' + esc(label) + (extraText ? ' <span class="mono text-muted" style="font-size:11px;">' + esc(extraText) + '</span>' : '') + '</span>' +
+        '</span>' +
+        '<span class="mono"><strong>' + esc(fmtInt(count)) + '</strong> <span class="text-muted">(' + pct.toFixed(1) + '%)</span></span>' +
       '</div>' +
       '<div class="breakdown-track"><div class="breakdown-fill ' + colorClass + '" style="width:' + widthPct.toFixed(1) + '%"></div></div>' +
     '</div>';
@@ -1753,11 +1898,11 @@
     var osEl = document.getElementById('analytics-os-breakdown');
     if (osEl) {
       osEl.innerHTML =
-        renderProgressRow('🍎 iOS (iPhone / iPad)', ios, osTotal, 'cyan') +
-        renderProgressRow('🤖 Android', android, osTotal, 'emerald') +
-        renderProgressRow('💻 Desktop (PC / Mac)', desktop, osTotal, 'purple') +
-        renderProgressRow('📺 App Kiosk / Tablet', app, osTotal, 'amber') +
-        renderProgressRow('🌐 Thiết bị khác', other, osTotal, 'muted');
+        renderProgressRow('phone', 'iOS (iPhone / iPad)', ios, osTotal, 'cyan') +
+        renderProgressRow('phone', 'Android', android, osTotal, 'emerald') +
+        renderProgressRow('monitor', 'Desktop (PC / Mac)', desktop, osTotal, 'purple') +
+        renderProgressRow('tablet', 'App Kiosk / Tablet', app, osTotal, 'amber') +
+        renderProgressRow('globe', 'Thiết bị khác', other, osTotal, 'muted');
     }
 
     var poolRuns = Number(kpi.ai_pool_runs) || 0;
@@ -1775,10 +1920,10 @@
     var aiEl = document.getElementById('analytics-ai-breakdown');
     if (aiEl) {
       aiEl.innerHTML =
-        renderProgressRow('🎱 AI Pool (8/9/10-Ball)', poolRuns, modeTotal, 'emerald') +
-        renderProgressRow('🔴 AI Carom (3C / Libre)', caromRuns, modeTotal, 'amber') +
-        renderProgressRow('📱 Xuất iPhone (iOS Relay)', expIos, expTotal, 'cyan', expRelay > 0 ? ('· Relay: ' + fmtInt(expRelay)) : '') +
-        renderProgressRow('💻 Xuất Desktop (Blob MP4)', expDesktop, expTotal, 'purple');
+        renderProgressRow('pool', 'AI Pool (8/9/10-Ball)', poolRuns, modeTotal, 'emerald') +
+        renderProgressRow('carom', 'AI Carom (3C / Libre)', caromRuns, modeTotal, 'amber') +
+        renderProgressRow('phone', 'Xuất iPhone (iOS Relay)', expIos, expTotal, 'cyan', expRelay > 0 ? ('· Relay: ' + fmtInt(expRelay)) : '') +
+        renderProgressRow('monitor', 'Xuất Desktop (Blob MP4)', expDesktop, expTotal, 'purple');
     }
 
     var pillsEl = document.getElementById('analytics-ai-pills');
@@ -1825,9 +1970,9 @@
       out.push('<span class="badge badge-neutral">--</span>');
     }
     if (item.ai_enabled) {
-      out.push('<span class="badge badge-purple">🤖 AI</span>');
+      out.push('<span class="badge badge-purple">' + svgIcon('cpu', 'ui-icon-sm') + '<span>AI</span></span>');
     }
-    return '<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">' + out.join('') + '</div>';
+    return '<div class="badge-row">' + out.join('') + '</div>';
   }
 
   function getAnalyticsSortValue(item, col, isClub) {
@@ -1850,9 +1995,9 @@
 
     var titleEl = document.getElementById('analytics-top-title');
     if (titleEl) {
-      titleEl.textContent = isClub
-        ? ('🏆 Top Quán / CLB (' + raw.length + ')')
-        : ('🏆 Top Thiết Bị Box (' + raw.length + ')');
+      titleEl.innerHTML = svgIcon('trophy', 'text-amber') + '<span>' +
+        (isClub ? ('Top Quán / CLB (' + esc(raw.length) + ')') : ('Top Thiết Bị Box (' + esc(raw.length) + ')')) +
+      '</span>';
     }
 
     var sorted = raw.slice().sort(function (a, b) {
@@ -1890,9 +2035,9 @@
           : ((item.box_name || item.box_id || '') + (item.club_name ? (' · ' + item.club_name) : ''));
 
         var nameCell = isClub
-          ? ('<td><div style="font-weight:700;">' + esc(item.club_name || item.club_id || '--') + '</div>' +
+          ? ('<td><div class="cell-primary">' + esc(item.club_name || item.club_id || '--') + '</div>' +
              '<div class="cell-sub mono">' + esc(item.club_id || '') + ' · ' + esc(fmtInt(item.boxes_count || 0)) + ' Box</div></td>')
-          : ('<td><div class="mono" style="font-weight:700;">' + esc(item.box_id || '--') + '</div>' +
+          : ('<td><div class="mono cell-primary">' + esc(item.box_id || '--') + '</div>' +
              '<div class="cell-sub">' + esc(item.box_name || '') + (item.club_name ? (' · ' + esc(item.club_name)) : '') + '</div></td>');
 
         return '<tr class="clickable-row' + (isSelected ? ' row-selected' : '') + '"' +
@@ -1903,7 +2048,7 @@
           '<td>' + renderSourceBadges(item, isClub) + '</td>' +
           '<td><strong class="text-cyan">' + esc(fmtInt(item.qr_views)) + '</strong></td>' +
           '<td>' + esc(fmtInt(item.unique_visitors)) + '</td>' +
-          '<td>' + esc(fmtInt(item.live_hls)) + ' <span style="color:var(--text-muted);">/</span> ' + esc(fmtInt(item.vod_plays)) + '</td>' +
+          '<td>' + esc(fmtInt(item.live_hls)) + ' <span class="text-muted">/</span> ' + esc(fmtInt(item.vod_plays)) + '</td>' +
           '<td>' +
             '<strong class="text-emerald">' + esc(fmtInt(dcTotal)) + '</strong>' +
             '<div class="cell-sub">Tải ' + esc(fmtInt(item.clip_downloads)) + ' · Cắt ' + esc(fmtInt(item.cut_clips)) + '</div>' +
@@ -1917,7 +2062,7 @@
             ? '<span class="badge badge-emerald">0</span>'
             : '<span class="badge ' + (errs >= 10 ? 'badge-crimson' : 'badge-amber') + '">' + esc(fmtInt(errs)) + '</span>') +
           '</td>' +
-          '<td class="mono" style="font-size:12px;color:var(--text-muted);">' + esc(fmtIngestTime(item.last_ingest_at)) + '</td>' +
+          '<td class="mono text-muted" style="font-size:12px;">' + esc(fmtIngestTime(item.last_ingest_at)) + '</td>' +
         '</tr>';
       }).join('');
     }
@@ -1953,9 +2098,9 @@
       rowsHtml = cams.map(function (c, idx) {
         var aiErr = Number(c.ai_errors) || 0;
         return '<tr>' +
-          '<td class="mono" style="color:var(--text-muted);font-weight:700;">#' + (idx + 1) + '</td>' +
+          '<td class="mono text-muted" style="font-weight:700;">#' + (idx + 1) + '</td>' +
           '<td>' +
-            '<div style="font-weight:700;">' + esc(c.table_name || c.camera_id || 'Camera') + '</div>' +
+            '<div class="cell-primary">' + esc(c.table_name || c.camera_id || 'Camera') + '</div>' +
             '<div class="cell-sub mono">' + esc(c.camera_id || '--') + '</div>' +
           '</td>' +
           '<td>' +
@@ -1964,7 +2109,7 @@
           '</td>' +
           '<td><strong class="text-cyan">' + esc(fmtInt(c.qr_views)) + '</strong></td>' +
           '<td>' + esc(fmtInt(c.unique_visitors)) + '</td>' +
-          '<td>' + esc(fmtInt(c.live_hls)) + ' <span style="color:var(--text-muted);">/</span> ' + esc(fmtInt(c.vod_plays)) + '</td>' +
+          '<td>' + esc(fmtInt(c.live_hls)) + ' <span class="text-muted">/</span> ' + esc(fmtInt(c.vod_plays)) + '</td>' +
           '<td><strong class="text-emerald">' + esc(fmtInt(c.clip_downloads)) + '</strong></td>' +
           '<td>' +
             '<strong>' + esc(fmtInt(c.cut_clips)) + '</strong>' +
@@ -2046,6 +2191,7 @@
 
     function openCmd() {
       if (!modal) return;
+      state.cmdSelectedIdx = 0;
       modal.classList.add('open');
       renderCmdResults('');
       if (input) {
@@ -2057,23 +2203,33 @@
       if (modal) modal.classList.remove('open');
     }
 
+    function selectCmdRow(row) {
+      if (!row) return;
+      var t = row.getAttribute('data-cmd-type');
+      var target = row.getAttribute('data-cmd-target');
+      closeCmd();
+      if (t === 'box') openBoxDrawer(target, true);
+      else switchView(target, true);
+    }
+
     function renderCmdResults(query) {
       if (!results) return;
       var q = (query || '').trim().toLowerCase();
       var items = [
-        { type: 'view', target: 'fleet', title: '📡 Mở Bảng Điều Khiển Đội Box (Fleet Matrix)', sub: '#fleet' },
-        { type: 'view', target: 'hardening', title: '🛡️ Mở Ma Trận Chuẩn Hóa 8 Bước (Golden Hardening)', sub: '#hardening' },
-        { type: 'view', target: 'cameras', title: '🎥 Mở Kho Camera & Áp Dụng Chuẩn Golden H.265', sub: '#cameras' },
-        { type: 'view', target: 'redbida', title: '🎛️ Mở RedBida 17-Rule & Kiểm Toán FRPC Subdomain', sub: '#redbida' },
-        { type: 'view', target: 'handover', title: '📦 Mở Gói Bàn Giao Zalo & Mã QR Cổng Chủ Quán', sub: '#handover' },
-        { type: 'view', target: 'analytics', title: '📊 Mở Thống Kê & Analytics (QR · CheckVAR · AI Studio)', sub: '#analytics' }
+        { type: 'view', icon: 'server', target: 'fleet', title: 'Đội Box (Fleet Matrix)', sub: '#fleet' },
+        { type: 'view', icon: 'shield', target: 'hardening', title: 'Chuẩn Hóa 8 Bước (Golden Hardening)', sub: '#hardening' },
+        { type: 'view', icon: 'video', target: 'cameras', title: 'Kho Camera & Chuẩn Golden H.265', sub: '#cameras' },
+        { type: 'view', icon: 'sliders', target: 'redbida', title: 'RedBida 17-Rule & Kiểm Toán FRPC', sub: '#redbida' },
+        { type: 'view', icon: 'qr', target: 'handover', title: 'Gói Bàn Giao Zalo & Mã QR Chủ Quán', sub: '#handover' },
+        { type: 'view', icon: 'chart', target: 'analytics', title: 'Thống Kê & Analytics (QR · CheckVAR · AI)', sub: '#analytics' }
       ];
       (state.boxes || []).forEach(function (b) {
         items.push({
           type: 'box',
+          icon: 'box',
           target: b.id,
-          title: '📦 ' + b.id + ' — ' + (b.club_name || b.name || ''),
-          sub: 'VPN: ' + (b.vpn_ip || '--') + ' · Group: ' + (b.shinobi_group_key || '--')
+          title: b.id + ' — ' + (b.club_name || b.name || ''),
+          sub: 'VPN: ' + (b.vpn_ip || '--') + ' · grp: ' + (b.shinobi_group_key || '--')
         });
       });
 
@@ -2082,10 +2238,18 @@
         return (it.title + ' ' + it.sub).toLowerCase().indexOf(q) !== -1;
       }).slice(0, 18);
 
-      results.innerHTML = matched.map(function (it) {
-        return '<div class="cmd-item" data-cmd-type="' + esc(it.type) + '" data-cmd-target="' + esc(it.target) + '">' +
-          '<div style="font-weight:600;">' + esc(it.title) + '</div>' +
-          '<div class="mono" style="font-size:12px;color:var(--text-muted);">' + esc(it.sub) + '</div>' +
+      if (!matched.length) {
+        results.innerHTML = '<div class="empty-state" style="padding:24px 12px;">Không tìm thấy kết quả phù hợp.</div>';
+        return;
+      }
+
+      if (state.cmdSelectedIdx >= matched.length) state.cmdSelectedIdx = 0;
+
+      results.innerHTML = matched.map(function (it, idx) {
+        var selClass = idx === state.cmdSelectedIdx ? ' selected' : '';
+        return '<div class="cmd-item' + selClass + '" data-cmd-type="' + esc(it.type) + '" data-cmd-target="' + esc(it.target) + '">' +
+          '<div class="cmd-item-main">' + svgIcon(it.icon, 'ui-icon-sm text-cyan') + '<span>' + esc(it.title) + '</span></div>' +
+          '<div class="mono cmd-item-sub">' + esc(it.sub) + '</div>' +
         '</div>';
       }).join('');
     }
@@ -2099,18 +2263,32 @@
     }
     if (input) {
       input.addEventListener('input', function () {
+        state.cmdSelectedIdx = 0;
         renderCmdResults(input.value);
+      });
+      input.addEventListener('keydown', function (e) {
+        var rows = results ? results.querySelectorAll('.cmd-item') : [];
+        if (!rows.length) return;
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          state.cmdSelectedIdx = (state.cmdSelectedIdx + 1) % rows.length;
+          rows.forEach(function (r, i) { r.classList.toggle('selected', i === state.cmdSelectedIdx); });
+          rows[state.cmdSelectedIdx].scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          state.cmdSelectedIdx = (state.cmdSelectedIdx - 1 + rows.length) % rows.length;
+          rows.forEach(function (r, i) { r.classList.toggle('selected', i === state.cmdSelectedIdx); });
+          rows[state.cmdSelectedIdx].scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          selectCmdRow(rows[state.cmdSelectedIdx] || rows[0]);
+        }
       });
     }
     if (results) {
       results.addEventListener('click', function (e) {
         var row = e.target.closest('.cmd-item');
-        if (!row) return;
-        var t = row.getAttribute('data-cmd-type');
-        var target = row.getAttribute('data-cmd-target');
-        closeCmd();
-        if (t === 'box') openBoxDrawer(target, true);
-        else switchView(target, true);
+        if (row) selectCmdRow(row);
       });
     }
 
@@ -2331,7 +2509,7 @@
       pollBtn.addEventListener('click', function () {
         pollBtn.disabled = true;
         apiFetch('/fleet/api/poll', { method: 'POST', body: {} }).then(function () {
-          showToast('Đã thăm dò tức thì toàn bộ 30+ Box Bida / Pickleball!');
+          showToast('Đã thăm dò tức thì toàn bộ đội Box Bida / Pickleball!');
           return loadFleetSummary();
         }).catch(function (err) {
           showToast('Lỗi Poll Now: ' + err.message, true);
@@ -2371,10 +2549,11 @@
       });
     }
 
-    /* Delegated click for opening Box Drawer */
+    /* Delegated click for opening Box Drawer — ignores proxy <a> links, works for both row & Chi tiết button */
     var matrixContainer = document.getElementById('fleet-matrix-container');
     if (matrixContainer) {
       matrixContainer.addEventListener('click', function (e) {
+        if (e.target.closest('a')) return;
         var trigger = e.target.closest('[data-open-box]');
         if (!trigger) return;
         openBoxDrawer(trigger.getAttribute('data-open-box'), true);
@@ -2515,10 +2694,16 @@
       });
     }
 
+    var rbModal = document.getElementById('redbida-editor-modal');
     var rbModalClose = document.getElementById('redbida-modal-close');
-    if (rbModalClose) {
+    if (rbModalClose && rbModal) {
       rbModalClose.addEventListener('click', function () {
-        document.getElementById('redbida-editor-modal').classList.remove('open');
+        rbModal.classList.remove('open');
+      });
+    }
+    if (rbModal) {
+      rbModal.addEventListener('click', function (e) {
+        if (e.target === rbModal) rbModal.classList.remove('open');
       });
     }
     var rbForm = document.getElementById('redbida-editor-form');
