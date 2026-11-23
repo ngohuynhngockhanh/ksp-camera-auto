@@ -300,9 +300,10 @@ type HeartbeatPayload struct {
 	HardeningScore           *int              `json:"hardening_score,omitempty"`
 	// Box identity read from the edge itself (not telemetry): LAN IP, CPU arch and the
 	// RedBida keys in /root/ota-mqtt/change_ok (secrets excluded, frpc tokens redacted).
-	LANIP       string            `json:"lan_ip,omitempty"`
-	Arch        string            `json:"arch,omitempty"`
-	RedBidaKeys map[string]string `json:"redbida_keys,omitempty"`
+	LANIP       string              `json:"lan_ip,omitempty"`
+	Arch        string              `json:"arch,omitempty"`
+	RedBidaKeys map[string]string   `json:"redbida_keys,omitempty"`
+	Realtime    *RealtimeBoxMetrics `json:"rt,omitempty"`
 }
 
 // FormatUptimeHuman formats uptime seconds as "Xd Yh", "Yh Zm", or "Zm".
@@ -544,6 +545,9 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 
+	now := time.Now()
+	s.recordBoxRealtime(boxID, payload.Realtime, now)
+
 	updated, _ := s.store.GetBox(boxID)
 	kpi := s.store.ComputeKPI()
 	s.broadcastSSE("heartbeat", map[string]any{
@@ -562,13 +566,17 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		"sd_used_pct":      updated.SDUsedPct,
 		"ffmpeg_count":     updated.FFmpegCount,
 		"rx_mbps":          updated.RXMbps,
-		"ts":               time.Now().UTC().Format(time.RFC3339),
+		"ts":               now.UTC().Format(time.RFC3339),
 	})
-	s.broadcastSSE("fleet_update", map[string]any{
+	fleetUpdate := map[string]any{
 		"type":   "heartbeat",
 		"box_id": boxID,
 		"kpi":    kpi,
-	})
+	}
+	if rtSum, changed := s.realtimeSummaryIfChanged(now); changed {
+		fleetUpdate["realtime_summary"] = rtSum
+	}
+	s.broadcastSSE("fleet_update", fleetUpdate)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":  true,
@@ -626,10 +634,14 @@ func (s *Server) handleHeartbeatBatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	now := time.Now()
 	for _, it := range items {
 		boxID := strings.TrimSpace(it.BoxID)
-		if boxID != "" && it.TunnelAddr != "" {
-			s.RegisterTunnelTarget(boxID, "*", it.TunnelAddr)
+		if boxID != "" {
+			if it.TunnelAddr != "" {
+				s.RegisterTunnelTarget(boxID, "*", it.TunnelAddr)
+			}
+			s.recordBoxRealtime(boxID, it.Realtime, now)
 		}
 	}
 
@@ -651,14 +663,18 @@ func (s *Server) handleHeartbeatBatch(w http.ResponseWriter, r *http.Request) {
 	})
 
 	kpi := s.store.ComputeKPI()
-	s.broadcastSSE("fleet_update", map[string]any{
+	batchUpdate := map[string]any{
 		"type":          "heartbeat_batch",
 		"updated":       updatedCount,
 		"boxes_online":  kpi.BoxesOnline,
 		"boxes_offline": kpi.BoxesOffline,
 		"kpi":           kpi,
-		"ts":            time.Now().UTC().Format(time.RFC3339),
-	})
+		"ts":            now.UTC().Format(time.RFC3339),
+	}
+	if rtSum, changed := s.realtimeSummaryIfChanged(now); changed {
+		batchUpdate["realtime_summary"] = rtSum
+	}
+	s.broadcastSSE("fleet_update", batchUpdate)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":            true,

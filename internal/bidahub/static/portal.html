@@ -1140,11 +1140,440 @@
     }
 
     /* Responsive Breakpoints */
+    .portal-analytics-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      max-width: 100%;
+    }
+
+    .portal-period-meta {
+      margin-top: 4px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .portal-compare-btn {
+      appearance: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: var(--radius-pill, 999px);
+      border: 1px solid var(--border);
+      background: var(--bg-subtle);
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background-color var(--dur-fast, 150ms) ease,
+                  border-color var(--dur-fast, 150ms) ease,
+                  color var(--dur-fast, 150ms) ease;
+    }
+
+    .portal-compare-btn:hover {
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+
+    .portal-compare-btn.active {
+      background: var(--cyan-bg);
+      border-color: var(--cyan-border);
+      color: var(--cyan);
+    }
+
+    .portal-compare-btn:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring, 0 0 0 3px rgba(39, 198, 237, 0.35));
+    }
+
+    .portal-compare-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      border: 1.5px solid currentColor;
+      background: transparent;
+      flex-shrink: 0;
+    }
+
+    .portal-compare-btn.active .portal-compare-dot {
+      background: currentColor;
+    }
+
+    /* Club Realtime Strip (Hairline-divided 3-col GA4 Realtime) */
+    .portal-rt-strip {
+      display: grid;
+      grid-template-columns: minmax(215px, 0.95fr) minmax(240px, 1.3fr) minmax(205px, 0.95fr);
+      align-items: stretch;
+      background: var(--bg-subtle);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .portal-rt-col {
+      padding: 14px 18px;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .portal-rt-col + .portal-rt-col {
+      border-left: 1px solid var(--border);
+    }
+
+    .portal-rt-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+    }
+
+    .portal-rt-head-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .portal-rt-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .portal-rt-dot.live {
+      background: var(--emerald);
+      animation: pa-live-breathe 2.2s ease-in-out infinite;
+    }
+
+    @keyframes pa-live-breathe {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.42; }
+    }
+
+    .portal-rt-hero-row {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 7px;
+      line-height: 1.15;
+    }
+
+    .portal-rt-hero {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      color: var(--text);
+    }
+
+    .portal-rt-hero-lbl {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .portal-rt-subrow {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .portal-rt-acts {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .portal-rt-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border-radius: var(--radius-sm, 6px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .portal-rt-chip strong {
+      color: var(--text);
+    }
+
+    .portal-rt-svg-wrap {
+      width: 100%;
+      min-height: 58px;
+    }
+
+    .portal-rt-svg-wrap svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .portal-rt-svg-wrap svg text {
+      font-family: var(--font-sans, "Be Vietnam Pro", system-ui, sans-serif);
+    }
+
+    .portal-rt-hot-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .portal-rt-hot-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text);
+      padding: 3px 0;
+      border-bottom: 1px solid var(--border);
+      min-width: 0;
+    }
+
+    .portal-rt-hot-item:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .portal-rt-hot-name {
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .portal-rt-hot-empty {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    /* KPI Delta Badges */
+    .portal-metric-val-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .pa-delta {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 7px;
+      border-radius: var(--radius-pill, 999px);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.25;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .pa-delta.up {
+      background: var(--emerald-bg);
+      border-color: var(--emerald-border);
+      color: var(--emerald);
+    }
+
+    .pa-delta.down {
+      background: var(--crimson-bg);
+      border-color: var(--crimson-border);
+      color: var(--crimson);
+    }
+
+    .pa-delta[hidden] {
+      display: none;
+    }
+
+    /* GA4 Funnel & 7x24 Heatmap Split */
+    .portal-ga-split {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr;
+      align-items: stretch;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .pa-funnel-list {
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+    }
+
+    .pa-funnel-step {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .pa-funnel-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12.5px;
+      min-width: 0;
+    }
+
+    .pa-funnel-label {
+      font-weight: 600;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .pa-funnel-nums {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      flex-shrink: 0;
+      font-size: 12px;
+    }
+
+    .pa-funnel-count {
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .pa-funnel-pct {
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .pa-funnel-track {
+      width: 100%;
+      height: 8px;
+      border-radius: var(--radius-pill, 999px);
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .pa-funnel-fill {
+      height: 100%;
+      border-radius: var(--radius-pill, 999px);
+    }
+
+    .pa-funnel-drop {
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 4px 8px;
+    }
+
+    .pa-acq-strip {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .pa-acq-title {
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+    }
+
+    .pa-acq-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .pa-heatmap-wrap {
+      width: 100%;
+      min-height: 148px;
+    }
+
+    .pa-heatmap-wrap svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .pa-heatmap-wrap svg text {
+      font-family: var(--font-sans, "Be Vietnam Pro", system-ui, sans-serif);
+    }
+
+    .pa-heatmap-foot {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    .pa-heatmap-scale {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .pa-hm-swatch {
+      width: 11px;
+      height: 11px;
+      border-radius: 3px;
+      display: inline-block;
+      border: 1px solid var(--border);
+    }
+
     @media (max-width: 900px) {
       .portal-quick-grid {
         grid-template-columns: 1fr;
       }
 
+      .portal-rt-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .portal-rt-col + .portal-rt-col {
+        border-left: none;
+        border-top: 1px solid var(--border);
+      }
+
+      .portal-ga-split,
       .portal-analytics-split {
         grid-template-columns: 1fr;
       }
@@ -1204,6 +1633,10 @@
         padding: 14px 16px;
       }
 
+      .portal-analytics-controls {
+        width: 100%;
+      }
+
       .portal-range-group {
         width: 100%;
         justify-content: space-between;
@@ -1214,6 +1647,19 @@
         text-align: center;
         padding: 6px 8px;
         font-size: 12px;
+      }
+
+      .portal-compare-btn {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .portal-rt-col {
+        padding: 12px 14px;
+      }
+
+      .portal-rt-hero {
+        font-size: 22px;
       }
 
       .portal-analytics-strip {
@@ -1234,7 +1680,7 @@
       }
 
       .portal-metric-val {
-        font-size: 19px;
+        font-size: 18px;
       }
 
       .portal-analytics-pane {
@@ -1426,48 +1872,115 @@
       </article>
     </section>
 
-    <!-- Band 3: Club-Isolated Usage Analytics Panel (Flat Hairline Split) -->
+    <!-- Band 3: Club-Isolated GA4 Usage Analytics Panel (Flat Hairline Split) -->
     <section class="portal-surface tabular-nums" id="portal-analytics-section" aria-label="Thống kê khách dùng tại quán">
       <div class="portal-surface-header">
-        <div>
+        <div style="min-width:0;flex:1 1 280px;">
           <h2 class="portal-section-title">
             <svg class="p-ico p-ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
             </svg>
             <span>Thống Kê Khách Dùng Tại Quán</span>
           </h2>
-          <p class="portal-section-desc">Lượt quét QR, tải clip CheckVAR, AI Studio &amp; giờ vàng riêng của quán (GMT+7).</p>
+          <p class="portal-section-desc">Realtime 30 phút, phễu chuyển đổi CheckVAR, AI Studio &amp; giờ vàng riêng của quán (GMT+7).</p>
+          <div id="pa-period-meta" class="portal-period-meta mono">Đang tải kỳ thống kê...</div>
         </div>
 
-        <div class="portal-range-group filter-chips" id="portal-analytics-range" role="group" aria-label="Khung thời gian thống kê tại quán">
-          <button type="button" class="portal-range-chip filter-chip" data-range="24h" aria-pressed="false">Hôm nay (24h)</button>
-          <button type="button" class="portal-range-chip filter-chip active" data-range="7d" aria-pressed="true">7 ngày</button>
-          <button type="button" class="portal-range-chip filter-chip" data-range="30d" aria-pressed="false">30 ngày</button>
+        <div class="portal-analytics-controls">
+          <div class="portal-range-group filter-chips" id="portal-analytics-range" role="group" aria-label="Khung thời gian thống kê tại quán">
+            <button type="button" class="portal-range-chip filter-chip" data-range="today" aria-pressed="false">Hôm nay</button>
+            <button type="button" class="portal-range-chip filter-chip active" data-range="7d" aria-pressed="true">7 ngày</button>
+            <button type="button" class="portal-range-chip filter-chip" data-range="30d" aria-pressed="false">30 ngày</button>
+          </div>
+          <button type="button" id="pa-compare-toggle" class="portal-compare-btn active" aria-pressed="true">
+            <span class="portal-compare-dot" aria-hidden="true"></span>
+            <span>So sánh kỳ trước</span>
+          </button>
         </div>
       </div>
 
-      <!-- 4 Hairline-Divided KPI Metric Cells -->
+      <!-- Club Realtime Strip (30-min GA4 Realtime, polls every 20s only while tab visible) -->
+      <div class="portal-rt-strip" id="pa-realtime-strip" aria-label="Khách đang xem trực tiếp tại quán">
+        <div class="portal-rt-col">
+          <div class="portal-rt-head">
+            <span class="portal-rt-head-left">
+              <span id="pa-rt-dot" class="portal-rt-dot" aria-hidden="true"></span>
+              <span>Đang Xem Trực Tiếp</span>
+            </span>
+            <span id="pa-rt-updated" class="mono">--:--</span>
+          </div>
+          <div class="portal-rt-hero-row">
+            <span id="pa-rt-a5" class="portal-rt-hero">0</span>
+            <span class="portal-rt-hero-lbl">người đang xem tại quán (5p)</span>
+          </div>
+          <div class="portal-rt-subrow">
+            <strong id="pa-rt-a30">0 người (30p)</strong>
+            <div id="pa-rt-acts" class="portal-rt-acts">
+              <span class="portal-rt-chip">Live <strong>0</strong></span>
+              <span class="portal-rt-chip">VOD <strong>0</strong></span>
+              <span class="portal-rt-chip">Cắt <strong>0</strong></span>
+              <span class="portal-rt-chip">AI <strong>0</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="portal-rt-col">
+          <div class="portal-rt-head">
+            <span class="portal-rt-head-left">
+              <svg class="p-ico p-ico-sm" style="color:var(--cyan);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>
+              </svg>
+              <span>30 Phút Gần Nhất (Mỗi Cột 1 Phút)</span>
+            </span>
+            <span id="pa-rt-peak" class="mono">Đỉnh: 0/p</span>
+          </div>
+          <div id="pa-rt-chart" class="portal-rt-svg-wrap"></div>
+        </div>
+
+        <div class="portal-rt-col">
+          <div class="portal-rt-head">
+            <span class="portal-rt-head-left">
+              <svg class="p-ico p-ico-sm" style="color:var(--amber);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+              </svg>
+              <span>Bàn Hot Tại Quán (5p)</span>
+            </span>
+            <span id="pa-rt-hot-count" class="p-badge">0 bàn</span>
+          </div>
+          <div id="pa-rt-hot-tables" class="portal-rt-hot-list">
+            <div class="portal-rt-hot-empty">Chưa có khách đang xem camera trong 5 phút qua.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4 Hairline-Divided GA4 KPI Metric Cells with % Delta -->
       <div class="portal-analytics-strip">
         <div class="portal-metric-cell">
           <div class="portal-metric-label">
-            <span>Lượt Quét QR</span>
+            <span>Khách Hoạt Động</span>
             <svg class="p-ico p-ico-sm" style="color:var(--cyan);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
             </svg>
           </div>
-          <div class="portal-metric-val" id="pa-kpi-qr">0</div>
-          <div class="portal-metric-sub" id="pa-kpi-qr-sub">0 lượt xem trang</div>
+          <div class="portal-metric-val-row">
+            <div class="portal-metric-val" id="pa-kpi-visitors">0</div>
+            <span class="pa-delta" id="pa-delta-visitors" hidden></span>
+          </div>
+          <div class="portal-metric-sub" id="pa-kpi-visitors-sub">Quay lại 0% · 0 quét QR</div>
         </div>
 
         <div class="portal-metric-cell">
           <div class="portal-metric-label">
-            <span>Khách Duy Nhất</span>
+            <span>Số Phiên</span>
             <svg class="p-ico p-ico-sm" style="color:var(--emerald);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
             </svg>
           </div>
-          <div class="portal-metric-val" id="pa-kpi-visitors">0</div>
-          <div class="portal-metric-sub" id="pa-kpi-visitors-sub">Live: 0 · VOD: 0</div>
+          <div class="portal-metric-val-row">
+            <div class="portal-metric-val" id="pa-kpi-sessions">0</div>
+            <span class="pa-delta" id="pa-delta-sessions" hidden></span>
+          </div>
+          <div class="portal-metric-sub" id="pa-kpi-sessions-sub">Tương tác 0% · Live 0 · VOD 0</div>
         </div>
 
         <div class="portal-metric-cell">
@@ -1477,8 +1990,11 @@
               <circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/>
             </svg>
           </div>
-          <div class="portal-metric-val" id="pa-kpi-clips">0</div>
-          <div class="portal-metric-sub" id="pa-kpi-clips-sub">Tải 0 · Cắt 0 (0 phút)</div>
+          <div class="portal-metric-val-row">
+            <div class="portal-metric-val" id="pa-kpi-clips">0</div>
+            <span class="pa-delta" id="pa-delta-clips" hidden></span>
+          </div>
+          <div class="portal-metric-sub" id="pa-kpi-clips-sub">Chuyển đổi 0% · Tải 0 · Cắt 0</div>
         </div>
 
         <div class="portal-metric-cell">
@@ -1488,7 +2004,10 @@
               <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
             </svg>
           </div>
-          <div class="portal-metric-val" id="pa-kpi-ai">0</div>
+          <div class="portal-metric-val-row">
+            <div class="portal-metric-val" id="pa-kpi-ai">0</div>
+            <span class="pa-delta" id="pa-delta-ai" hidden></span>
+          </div>
           <div class="portal-metric-sub" id="pa-kpi-ai-sub">0 cú · 0 bi lỗ · 0 xuất</div>
         </div>
       </div>
@@ -1497,7 +2016,56 @@
         <svg class="p-ico p-ico-sm" style="color:var(--cyan);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
         </svg>
-        <span>Chưa có dữ liệu thống kê trong khung thời gian này — thiết bị tại quán sẽ tự động đồng bộ mỗi 5 phút.</span>
+        <span>Chưa có dữ liệu thống kê trong khung thời gian này — thiết bị tại quán sẽ tự động đồng bộ khi có khách quét QR.</span>
+      </div>
+
+      <!-- GA4 Deep-Dive Split: Club Conversion Funnel + Compact 7x24 Heatmap -->
+      <div class="portal-ga-split">
+        <div class="portal-analytics-pane">
+          <div class="portal-pane-head">
+            <span class="portal-pane-title">
+              <svg class="p-ico p-ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+              </svg>
+              <span>Phễu Chuyển Đổi Tại Quán</span>
+            </span>
+            <span id="pa-funnel-badge" class="p-badge">Chuyển đổi: 0%</span>
+          </div>
+
+          <div id="pa-funnel-list" class="pa-funnel-list"></div>
+
+          <div class="pa-acq-strip">
+            <span class="pa-acq-title">Nguồn Truy Cập Của Khách</span>
+            <div id="pa-acq-pills" class="pa-acq-pills"></div>
+          </div>
+        </div>
+
+        <div class="portal-analytics-pane">
+          <div class="portal-pane-head">
+            <span class="portal-pane-title">
+              <svg class="p-ico p-ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/>
+              </svg>
+              <span>Bản Đồ Nhiệt 7 Ngày × 24 Giờ</span>
+            </span>
+            <span id="pa-heatmap-peak" class="p-badge">Cao điểm: --</span>
+          </div>
+
+          <div id="pa-heatmap-chart" class="pa-heatmap-wrap"></div>
+
+          <div class="pa-heatmap-foot">
+            <span>Thứ 2 → Chủ nhật · 0h–23h (GMT+7)</span>
+            <span class="pa-heatmap-scale" aria-label="Thang cường độ lưu lượng">
+              <span>Ít</span>
+              <span class="pa-hm-swatch" style="background:var(--bg-subtle);"></span>
+              <span class="pa-hm-swatch" style="background:var(--cyan);opacity:0.25;"></span>
+              <span class="pa-hm-swatch" style="background:var(--cyan);opacity:0.50;"></span>
+              <span class="pa-hm-swatch" style="background:var(--cyan);opacity:0.75;"></span>
+              <span class="pa-hm-swatch" style="background:var(--cyan);opacity:0.98;"></span>
+              <span>Nhiều</span>
+            </span>
+          </div>
+        </div>
       </div>
 
       <!-- 2-Column Split: Peak-Hour Chart + Top Tables -->
@@ -2499,7 +3067,346 @@
       });
 
       var portalAnalyticsRange = '7d';
+      var portalAnalyticsCompare = true;
       var portalAnalyticsReqSeq = 0;
+      var portalRealtimeReqSeq = 0;
+      var portalRealtimeTimer = null;
+      var portalRealtimeLastAt = 0;
+
+      var PA_DELTA_UP_SVG = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>';
+      var PA_DELTA_DOWN_SVG = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+
+      function fmtPct1(val) {
+        var n = Number(val);
+        if (!isFinite(n) || isNaN(n)) n = 0;
+        var rounded = Math.round(n * 10) / 10;
+        return (Math.abs(rounded - Math.round(rounded)) < 0.05 ? String(Math.round(rounded)) : rounded.toFixed(1)) + '%';
+      }
+
+      function fmtShortDate(isoDate) {
+        if (!isoDate) return '--';
+        var parts = String(isoDate).slice(0, 10).split('-');
+        if (parts.length !== 3) return String(isoDate);
+        return parts[2] + '/' + parts[1];
+      }
+
+      function fmtFullDate(isoDate) {
+        if (!isoDate) return '--';
+        var parts = String(isoDate).slice(0, 10).split('-');
+        if (parts.length !== 3) return String(isoDate);
+        return parts[2] + '/' + parts[1] + '/' + parts[0];
+      }
+
+      function fmtRtTime(isoStr) {
+        if (!isoStr) return '--:--';
+        var d = new Date(isoStr);
+        if (isNaN(d.getTime())) return '--:--';
+        var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+        return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+      }
+
+      function renderDeltaBadge(elId, deltaPct, prevVal, cmpObj) {
+        var el = document.getElementById(elId);
+        if (!el) return;
+        if (!portalAnalyticsCompare || !cmpObj) {
+          el.hidden = true;
+          el.innerHTML = '';
+          el.removeAttribute('title');
+          return;
+        }
+        var n = Number(deltaPct);
+        if (!isFinite(n) || isNaN(n)) n = 0;
+        el.hidden = false;
+        if (n > 0.05) {
+          el.className = 'pa-delta up';
+          el.innerHTML = PA_DELTA_UP_SVG + '<span>+' + esc(fmtPct1(n)) + '</span>';
+        } else if (n < -0.05) {
+          el.className = 'pa-delta down';
+          el.innerHTML = PA_DELTA_DOWN_SVG + '<span>-' + esc(fmtPct1(Math.abs(n))) + '</span>';
+        } else {
+          el.className = 'pa-delta';
+          el.textContent = '0%';
+        }
+        var periodLbl = fmtShortDate(cmpObj.from) + '–' + fmtShortDate(cmpObj.to);
+        el.setAttribute('title', 'Kỳ trước (' + periodLbl + '): ' + fmtInt(prevVal));
+      }
+
+      function renderPortalRealtime(data) {
+        var d = data || {};
+        var a5 = Number(d.active_5m) || 0;
+        var a30 = Number(d.active_30m) || 0;
+        var live = Number(d.live) || 0;
+        var vod = Number(d.vod) || 0;
+        var cut = Number(d.cut) || 0;
+        var ai = Number(d.ai) || 0;
+
+        var dotEl = document.getElementById('pa-rt-dot');
+        if (dotEl) dotEl.classList.toggle('live', a5 > 0);
+
+        var a5El = document.getElementById('pa-rt-a5');
+        if (a5El) a5El.textContent = fmtInt(a5);
+
+        var a30El = document.getElementById('pa-rt-a30');
+        if (a30El) a30El.textContent = fmtInt(a30) + ' người (30p)';
+
+        var updEl = document.getElementById('pa-rt-updated');
+        if (updEl) updEl.textContent = fmtRtTime(d.updated_at);
+
+        var actsEl = document.getElementById('pa-rt-acts');
+        if (actsEl) {
+          actsEl.innerHTML =
+            '<span class="portal-rt-chip">Live <strong>' + esc(fmtInt(live)) + '</strong></span>' +
+            '<span class="portal-rt-chip">VOD <strong>' + esc(fmtInt(vod)) + '</strong></span>' +
+            '<span class="portal-rt-chip">Cắt <strong>' + esc(fmtInt(cut)) + '</strong></span>' +
+            '<span class="portal-rt-chip">AI <strong>' + esc(fmtInt(ai)) + '</strong></span>';
+        }
+
+        /* Compact 30-bar minute SVG chart (-29m -> now) */
+        var rawBars = Array.isArray(d.minute_bars_30) ? d.minute_bars_30 : [];
+        var bars30 = [];
+        if (rawBars.length >= 30) {
+          bars30 = rawBars.slice(rawBars.length - 30);
+        } else {
+          for (var p = 0; p < 30 - rawBars.length; p++) bars30.push(0);
+          for (var q = 0; q < rawBars.length; q++) bars30.push(Number(rawBars[q]) || 0);
+        }
+        var maxBar = bars30.reduce(function (m, v) { return Math.max(m, Number(v) || 0); }, 0);
+        var peakLbl = document.getElementById('pa-rt-peak');
+        if (peakLbl) peakLbl.textContent = 'Đỉnh: ' + fmtInt(maxBar) + '/p';
+
+        var chartWrap = document.getElementById('pa-rt-chart');
+        if (chartWrap) {
+          var W = 300;
+          var H = 60;
+          var padT = 4;
+          var padB = 14;
+          var plotH = H - padT - padB;
+          var slotW = W / 30;
+          var barW = 6.5;
+          var yBase = padT + plotH;
+          var yScale = maxBar > 0 ? maxBar : 1;
+
+          var rects = bars30.map(function (val, idx) {
+            var n = Number(val) || 0;
+            var x = idx * slotW + (slotW - barW) / 2;
+            var h = n > 0 ? Math.max(4, (n / yScale) * plotH) : 2;
+            var y = yBase - h;
+            var fill = n > 0 ? (idx === 29 ? 'var(--emerald)' : 'var(--cyan)') : 'var(--border-strong)';
+            var minAgo = 29 - idx;
+            var label = minAgo === 0 ? 'Phút hiện tại' : ('-' + minAgo + ' phút');
+            return '<g>' +
+              '<title>' + esc(label + ': ' + fmtInt(n) + ' người đang xem') + '</title>' +
+              '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="1.5" fill="' + fill + '"/>' +
+            '</g>';
+          });
+
+          var axis =
+            '<line x1="0" y1="' + yBase + '" x2="' + W + '" y2="' + yBase + '" stroke="var(--border)" stroke-width="1"/>' +
+            '<text x="2" y="' + (H - 2) + '" text-anchor="start" font-size="8.5" fill="var(--text-muted)">-30p</text>' +
+            '<text x="' + (W / 2) + '" y="' + (H - 2) + '" text-anchor="middle" font-size="8.5" fill="var(--text-muted)">-15p</text>' +
+            '<text x="' + (W - 2) + '" y="' + (H - 2) + '" text-anchor="end" font-size="8.5" font-weight="600" fill="var(--text-secondary)">Bây giờ</text>';
+
+          chartWrap.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Biểu đồ 30 phút realtime tại quán">' +
+            rects.join('') + axis + '</svg>';
+        }
+
+        /* Hot tables at this club (last 5m) */
+        var hotList = Array.isArray(d.hot_tables) ? d.hot_tables : [];
+        var hotCountEl = document.getElementById('pa-rt-hot-count');
+        if (hotCountEl) {
+          hotCountEl.className = 'p-badge ' + (hotList.length > 0 ? 'p-badge-emerald' : '');
+          hotCountEl.textContent = fmtInt(hotList.length) + ' bàn';
+        }
+        var hotWrap = document.getElementById('pa-rt-hot-tables');
+        if (hotWrap) {
+          if (!hotList.length) {
+            hotWrap.innerHTML = '<div class="portal-rt-hot-empty">Chưa có khách đang xem camera trong 5 phút qua.</div>';
+          } else {
+            hotWrap.innerHTML = hotList.slice(0, 4).map(function (t) {
+              var label = t.table_name || t.camera_id || 'Bàn';
+              var activeCnt = Number(t.active) || 0;
+              return '<div class="portal-rt-hot-item">' +
+                '<span class="portal-rt-hot-name" title="' + esc(label) + '">' + esc(label) + '</span>' +
+                '<span class="p-badge p-badge-cyan mono">' + esc(fmtInt(activeCnt)) + ' xem</span>' +
+              '</div>';
+            }).join('');
+          }
+        }
+      }
+
+      function loadPortalRealtime() {
+        var token = getPortalToken();
+        if (!token) return Promise.resolve();
+        var seq = ++portalRealtimeReqSeq;
+        portalRealtimeLastAt = Date.now();
+        var url = '/portal/' + encodeURIComponent(token) + '/analytics/realtime';
+        return fetch(url, { headers: { 'Accept': 'application/json' } })
+          .then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+          })
+          .then(function (data) {
+            if (seq !== portalRealtimeReqSeq) return;
+            renderPortalRealtime(data || {});
+          })
+          .catch(function () {
+            if (seq !== portalRealtimeReqSeq) return;
+            renderPortalRealtime({});
+          });
+      }
+
+      function syncRealtimePolling() {
+        if (portalRealtimeTimer) {
+          clearInterval(portalRealtimeTimer);
+          portalRealtimeTimer = null;
+        }
+        if (document.visibilityState === 'hidden') return;
+        portalRealtimeTimer = setInterval(function () {
+          if (document.visibilityState === 'visible') {
+            loadPortalRealtime();
+          }
+        }, 20000);
+      }
+
+      function renderPortalFunnel(funnelSteps, acq) {
+        var wrap = document.getElementById('pa-funnel-list');
+        var badge = document.getElementById('pa-funnel-badge');
+        var defaultSteps = [
+          { step: 'qr_views', label: 'Quét QR / Mở trang', count: 0, pct_of_top: 0, drop_pct: 0 },
+          { step: 'watch_timeline', label: 'Xem Live / Timeline', count: 0, pct_of_top: 0, drop_pct: 0 },
+          { step: 'download_cut', label: 'Tải Clip / Cắt CheckVAR', count: 0, pct_of_top: 0, drop_pct: 0 },
+          { step: 'ai_studio', label: 'AI Studio / Xuất Video', count: 0, pct_of_top: 0, drop_pct: 0 }
+        ];
+        var steps = (Array.isArray(funnelSteps) && funnelSteps.length) ? funnelSteps : defaultSteps;
+        var colors = ['var(--cyan)', 'var(--emerald)', 'var(--amber)', 'var(--purple)'];
+
+        var topCount = Number(steps[0] && steps[0].count) || 0;
+        var clipStep = steps[2] || {};
+        var clipPct = Number(clipStep.pct_of_top) || 0;
+        if (badge) {
+          badge.className = 'p-badge ' + (clipPct > 0 ? 'p-badge-emerald' : '');
+          badge.textContent = 'Tải/Cắt: ' + fmtPct1(clipPct);
+        }
+
+        if (wrap) {
+          wrap.innerHTML = steps.slice(0, 4).map(function (st, idx) {
+            var count = Number(st.count) || 0;
+            var pctTop = Number(st.pct_of_top) || 0;
+            if (idx === 0 && topCount === 0) pctTop = 0;
+            var barW = count > 0 ? Math.max(4, Math.min(100, pctTop)) : 0;
+            var dropPct = Number(st.drop_pct) || 0;
+            var prevCount = idx > 0 ? (Number(steps[idx - 1].count) || 0) : count;
+            var retainPct = (idx > 0 && prevCount > 0) ? Math.max(0, Math.min(100, 100 - dropPct)) : 0;
+            var metaHtml = idx === 0
+              ? '<div class="pa-funnel-drop"><span>Bước đầu hành trình khách</span><span class="mono">100% chuẩn</span></div>'
+              : '<div class="pa-funnel-drop"><span>Giữ lại ' + esc(fmtPct1(retainPct)) + ' từ bước trước</span><span>Rơi ' + esc(fmtPct1(prevCount > 0 ? dropPct : 0)) + '</span></div>';
+
+            return '<div class="pa-funnel-step">' +
+              '<div class="pa-funnel-row">' +
+                '<span class="pa-funnel-label">' + esc((idx + 1) + '. ' + (st.label || st.step || '')) + '</span>' +
+                '<span class="pa-funnel-nums mono">' +
+                  '<span class="pa-funnel-count">' + esc(fmtInt(count)) + '</span>' +
+                  '<span class="pa-funnel-pct">(' + esc(fmtPct1(pctTop)) + ')</span>' +
+                '</span>' +
+              '</div>' +
+              '<div class="pa-funnel-track">' +
+                '<div class="pa-funnel-fill" style="width:' + barW.toFixed(1) + '%;background:' + colors[idx % colors.length] + ';"></div>' +
+              '</div>' +
+              metaHtml +
+            '</div>';
+          }).join('');
+        }
+
+        var acqWrap = document.getElementById('pa-acq-pills');
+        if (acqWrap) {
+          var a = acq || {};
+          var vQr = Number(a.qr) || 0;
+          var vShare = Number(a.share) || 0;
+          var vApp = Number(a.app) || 0;
+          var vDirect = Number(a.direct) || 0;
+          var aTot = vQr + vShare + vApp + vDirect;
+          var aPct = function (v) { return aTot > 0 ? Math.round((v / aTot) * 100) + '%' : '0%'; };
+          acqWrap.innerHTML =
+            '<span class="p-badge p-badge-cyan" title="QR tại bàn: ' + esc(fmtInt(vQr)) + '">QR Bàn ' + esc(aPct(vQr)) + '</span>' +
+            '<span class="p-badge p-badge-emerald" title="Link chia sẻ: ' + esc(fmtInt(vShare)) + '">Chia sẻ ' + esc(aPct(vShare)) + '</span>' +
+            '<span class="p-badge p-badge-amber" title="App / Kiosk: ' + esc(fmtInt(vApp)) + '">App/Kiosk ' + esc(aPct(vApp)) + '</span>' +
+            '<span class="p-badge" title="Trực tiếp: ' + esc(fmtInt(vDirect)) + '">Trực tiếp ' + esc(aPct(vDirect)) + '</span>';
+        }
+      }
+
+      function renderPortalHeatmap(hm) {
+        var wrap = document.getElementById('pa-heatmap-chart');
+        var badge = document.getElementById('pa-heatmap-peak');
+        var data = hm || {};
+        var days = (Array.isArray(data.days) && data.days.length === 7) ? data.days : ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+        var matrix = Array.isArray(data.matrix) ? data.matrix : [];
+        var maxCell = Number(data.max_cell) || 0;
+        var peak = data.peak_day_hour || {};
+
+        if (maxCell <= 0) {
+          for (var r0 = 0; r0 < 7; r0++) {
+            var row0 = Array.isArray(matrix[r0]) ? matrix[r0] : [];
+            for (var c0 = 0; c0 < 24; c0++) {
+              var v0 = Number(row0[c0]) || 0;
+              if (v0 > maxCell) maxCell = v0;
+            }
+          }
+        }
+
+        if (badge) {
+          var peakVal = Number(peak.value) || 0;
+          if (peakVal > 0) {
+            var ph = (Number(peak.hour) < 10 ? '0' : '') + (Number(peak.hour) || 0);
+            badge.className = 'p-badge p-badge-amber';
+            badge.innerHTML = ICONS.flame + '<span>Cao điểm: ' + esc(peak.day_label || days[peak.day_index] || 'T2') + ' · ' + esc(ph) + ':00 (' + esc(fmtInt(peakVal)) + ')</span>';
+          } else {
+            badge.className = 'p-badge';
+            badge.textContent = 'Cao điểm: --';
+          }
+        }
+
+        if (!wrap) return;
+        var W = 420;
+        var H = 144;
+        var padL = 28;
+        var padT = 16;
+        var cellW = 13;
+        var cellH = 13;
+        var stepX = 16;
+        var stepY = 17;
+
+        var parts = [];
+        [0, 3, 6, 9, 12, 15, 18, 21, 23].forEach(function (hr) {
+          var tx = padL + hr * stepX + cellW / 2;
+          parts.push('<text x="' + tx.toFixed(1) + '" y="11" text-anchor="middle" font-size="8.5" fill="var(--text-muted)">' + hr + 'h</text>');
+        });
+
+        for (var r = 0; r < 7; r++) {
+          var y = padT + r * stepY;
+          parts.push('<text x="22" y="' + (y + 10).toFixed(1) + '" text-anchor="end" font-size="9.5" font-weight="600" fill="var(--text-secondary)">' + esc(days[r]) + '</text>');
+          var row = Array.isArray(matrix[r]) ? matrix[r] : [];
+          for (var c = 0; c < 24; c++) {
+            var val = Number(row[c]) || 0;
+            var x = padL + c * stepX;
+            var isPeakCell = (val > 0 && Number(peak.value) > 0 && r === Number(peak.day_index) && c === Number(peak.hour));
+            var fillAttr = 'fill="var(--bg-subtle)"';
+            var opAttr = '';
+            var strokeAttr = 'stroke="var(--border)" stroke-width="0.6"';
+            if (val > 0 && maxCell > 0) {
+              var ratio = val / maxCell;
+              var op = ratio > 0.78 ? '0.96' : (ratio > 0.50 ? '0.72' : (ratio > 0.25 ? '0.46' : '0.24'));
+              fillAttr = 'fill="var(--cyan)"';
+              opAttr = ' fill-opacity="' + op + '"';
+              strokeAttr = isPeakCell ? 'stroke="var(--brand-amber, var(--amber))" stroke-width="1.6"' : 'stroke="none"';
+            }
+            var hhStr = (c < 10 ? '0' : '') + c;
+            var tip = days[r] + ' · ' + hhStr + ':00–' + hhStr + ':59 (GMT+7): ' + fmtInt(val) + ' hoạt động';
+            parts.push('<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + cellW + '" height="' + cellH + '" rx="2.5" ' + fillAttr + opAttr + ' ' + strokeAttr + '><title>' + esc(tip) + '</title></rect>');
+          }
+        }
+
+        wrap.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Bản đồ nhiệt 7 ngày nhân 24 giờ của quán">' + parts.join('') + '</svg>';
+      }
 
       function renderPortalMiniPeakChart(peakHours) {
         var wrap = document.getElementById('pa-peak-chart');
@@ -2614,45 +3521,84 @@
         var d = data || {};
         var kpi = d.kpi || {};
         var os = d.os_breakdown || {};
+        var cohorts = d.cohorts || {};
+        var cmp = d.comparison || null;
+        var deltas = (cmp && cmp.deltas_pct) ? cmp.deltas_pct : {};
+        var prevKpis = (cmp && cmp.kpis) ? cmp.kpis : {};
         var topCams = Array.isArray(d.top_cameras) ? d.top_cameras : [];
 
         var qr = Number(kpi.qr_views) || 0;
         var pv = Number(kpi.page_views) || 0;
         var uv = Number(kpi.unique_visitors) || 0;
+        var sessions = Number(cohorts.sessions !== undefined ? cohorts.sessions : kpi.sessions) || 0;
+        var returningPct = Number(cohorts.returning_pct) || 0;
+        var engPct = Number(cohorts.engagement_rate_pct !== undefined ? cohorts.engagement_rate_pct : kpi.engagement_rate_pct) || 0;
+        var viewsPerSess = Number(cohorts.views_per_session) || 0;
         var live = Number(kpi.live_hls) || 0;
         var vod = Number(kpi.vod_plays) || 0;
         var dl = Number(kpi.clip_downloads) || 0;
         var cuts = Number(kpi.cut_clips) || 0;
+        var clipsTotal = Number(kpi.clips_total !== undefined ? kpi.clips_total : (dl + cuts)) || 0;
         var cutSec = Number(kpi.cut_seconds) || 0;
         var aiRuns = Number(kpi.ai_analyzes) || 0;
         var aiShots = Number(kpi.ai_shots) || 0;
         var aiPots = Number(kpi.ai_pots) || 0;
-        var aiExp = (Number(kpi.ai_exports_ios) || 0) + (Number(kpi.ai_exports_desktop) || 0);
+        var aiPickle = Number(kpi.ai_pickleball_runs) || 0;
+        var aiExp = Number(kpi.ai_exports_total !== undefined ? kpi.ai_exports_total : ((Number(kpi.ai_exports_ios) || 0) + (Number(kpi.ai_exports_desktop) || 0))) || 0;
 
-        var elQr = document.getElementById('pa-kpi-qr');
-        var elQrSub = document.getElementById('pa-kpi-qr-sub');
-        if (elQr) elQr.textContent = fmtInt(qr);
-        if (elQrSub) elQrSub.textContent = fmtInt(pv) + ' lượt xem trang';
+        var metaEl = document.getElementById('pa-period-meta');
+        if (metaEl) {
+          var rangeTxt = (d.from_date && d.to_date) ? ('Kỳ: ' + fmtFullDate(d.from_date) + ' – ' + fmtFullDate(d.to_date)) : 'Kỳ thống kê GMT+7';
+          if (portalAnalyticsCompare && cmp && cmp.from && cmp.to) {
+            rangeTxt += ' · So với kỳ trước: ' + fmtShortDate(cmp.from) + ' – ' + fmtShortDate(cmp.to);
+          }
+          metaEl.textContent = rangeTxt;
+        }
 
+        /* KPI 1: Active Users + Returning % + QR scans */
         var elVis = document.getElementById('pa-kpi-visitors');
         var elVisSub = document.getElementById('pa-kpi-visitors-sub');
         if (elVis) elVis.textContent = fmtInt(uv);
-        if (elVisSub) elVisSub.textContent = 'Live: ' + fmtInt(live) + ' · VOD: ' + fmtInt(vod);
+        if (elVisSub) elVisSub.textContent = 'Quay lại ' + fmtPct1(returningPct) + ' · ' + fmtInt(qr) + ' quét QR';
+        renderDeltaBadge('pa-delta-visitors', deltas.unique_visitors, prevKpis.unique_visitors, cmp);
 
+        /* KPI 2: Sessions + Engagement % */
+        var elSess = document.getElementById('pa-kpi-sessions');
+        var elSessSub = document.getElementById('pa-kpi-sessions-sub');
+        if (elSess) elSess.textContent = fmtInt(sessions);
+        if (elSessSub) {
+          elSessSub.textContent = sessions > 0
+            ? ('Tương tác ' + fmtPct1(engPct) + ' · ' + fmtNum(viewsPerSess, 1).replace(/\.0$/, '') + ' xem/phiên')
+            : ('Tương tác ' + fmtPct1(engPct) + ' · Live ' + fmtInt(live) + ' · VOD ' + fmtInt(vod));
+        }
+        renderDeltaBadge('pa-delta-sessions', deltas.sessions, prevKpis.sessions, cmp);
+
+        /* KPI 3: Clips Total + Conversion % */
+        var convBase = sessions > 0 ? sessions : (uv > 0 ? uv : qr);
+        var convPct = convBase > 0 ? Math.min(100, (clipsTotal / convBase) * 100) : 0;
         var elClips = document.getElementById('pa-kpi-clips');
         var elClipsSub = document.getElementById('pa-kpi-clips-sub');
-        if (elClips) elClips.textContent = fmtInt(dl + cuts);
-        if (elClipsSub) elClipsSub.textContent = 'Tải ' + fmtInt(dl) + ' · Cắt ' + fmtInt(cuts) + ' (' + fmtCutMin(cutSec) + ')';
+        if (elClips) elClips.textContent = fmtInt(clipsTotal);
+        if (elClipsSub) {
+          elClipsSub.textContent = 'Chuyển đổi ' + fmtPct1(convPct) + ' · Tải ' + fmtInt(dl) + ' · Cắt ' + fmtInt(cuts) + (cutSec > 0 ? (' (' + fmtCutMin(cutSec) + ')') : '');
+        }
+        renderDeltaBadge('pa-delta-clips', deltas.clips_total, prevKpis.clips_total, cmp);
 
+        /* KPI 4: AI Studio */
         var elAi = document.getElementById('pa-kpi-ai');
         var elAiSub = document.getElementById('pa-kpi-ai-sub');
         if (elAi) elAi.textContent = fmtInt(aiRuns);
-        if (elAiSub) elAiSub.textContent = fmtInt(aiShots) + ' cú · ' + fmtInt(aiPots) + ' bi lỗ · ' + fmtInt(aiExp) + ' xuất';
+        if (elAiSub) {
+          elAiSub.textContent = fmtInt(aiShots) + ' cú · ' + fmtInt(aiPots) + ' bi lỗ · ' + fmtInt(aiExp) + ' xuất' + (aiPickle > 0 ? (' · PB ' + fmtInt(aiPickle)) : '');
+        }
+        renderDeltaBadge('pa-delta-ai', deltas.ai_analyzes, prevKpis.ai_analyzes, cmp);
 
-        var totalActivity = qr + pv + uv + live + vod + dl + cuts + aiRuns + topCams.length;
+        var totalActivity = qr + pv + uv + sessions + live + vod + clipsTotal + aiRuns + topCams.length;
         var notice = document.getElementById('pa-empty-notice');
         if (notice) notice.style.display = totalActivity === 0 ? 'flex' : 'none';
 
+        renderPortalFunnel(d.funnel, d.acquisition);
+        renderPortalHeatmap(d.heatmap_7x24);
         renderPortalMiniPeakChart(d.peak_hours || []);
 
         var osPills = document.getElementById('pa-os-pills');
@@ -2700,7 +3646,8 @@
         var token = getPortalToken();
         if (!token) return Promise.resolve();
         var seq = ++portalAnalyticsReqSeq;
-        var url = '/portal/' + encodeURIComponent(token) + '/api/analytics?range=' + encodeURIComponent(portalAnalyticsRange || '7d');
+        var url = '/portal/' + encodeURIComponent(token) + '/analytics?range=' + encodeURIComponent(portalAnalyticsRange || '7d') +
+          (portalAnalyticsCompare ? '&compare=1' : '');
         return fetch(url, { headers: { 'Accept': 'application/json' } })
           .then(function (res) {
             if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -2731,9 +3678,20 @@
         });
       }
 
+      var paCompareBtn = document.getElementById('pa-compare-toggle');
+      if (paCompareBtn) {
+        paCompareBtn.addEventListener('click', function () {
+          portalAnalyticsCompare = !portalAnalyticsCompare;
+          paCompareBtn.classList.toggle('active', portalAnalyticsCompare);
+          paCompareBtn.setAttribute('aria-pressed', portalAnalyticsCompare ? 'true' : 'false');
+          loadPortalAnalytics();
+        });
+      }
+
       document.getElementById('portal-refresh-btn').addEventListener('click', function () {
         loadPortalStatus();
         loadPortalAnalytics();
+        loadPortalRealtime();
       });
 
       document.getElementById('theme-toggle').addEventListener('click', function () {
@@ -2745,10 +3703,27 @@
         syncThemeButton();
       });
 
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') {
+          if (Date.now() - portalRealtimeLastAt >= 5000) {
+            loadPortalRealtime();
+          }
+          syncRealtimePolling();
+        } else {
+          syncRealtimePolling();
+        }
+      });
+
       loadPortalStatus();
       loadPortalAnalytics();
-      setInterval(loadPortalStatus, 20000);
-      setInterval(loadPortalAnalytics, 60000);
+      loadPortalRealtime();
+      syncRealtimePolling();
+      setInterval(function () {
+        if (document.visibilityState === 'visible') loadPortalStatus();
+      }, 20000);
+      setInterval(function () {
+        if (document.visibilityState === 'visible') loadPortalAnalytics();
+      }, 60000);
     })();
   </script>
 </body>

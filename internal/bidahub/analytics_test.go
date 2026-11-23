@@ -2,9 +2,11 @@ package bidahub
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/csv"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -684,5 +686,413 @@ func TestAnalyticsRetentionPruner(t *testing.T) {
 	}
 	if keptDailyQR != 7 {
 		t.Fatalf("expected keptDailyQR=7, got %d", keptDailyQR)
+	}
+}
+
+func TestAnalyticsMigration202611230001_GA4ColumnsIdempotent(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "hub.sqlite")
+	srv, err := NewServer(Config{
+		DataPath:     dbPath,
+		AdminUser:    testAdminUser,
+		AdminPass:    testAdminPass,
+		APIKey:       testAPIKey,
+		PollInterval: 0,
+	})
+	if err != nil {
+		t.Fatalf("NewServer failed: %v", err)
+	}
+	defer srv.Close()
+
+	db := srv.Store().SQLiteDB()
+	var migName string
+	if err := db.QueryRow("SELECT name FROM schema_migrations WHERE version = 202611230001").Scan(&migName); err != nil {
+		t.Fatalf("expected migration 202611230001 recorded: %v", err)
+	}
+	if migName != "add_ga4_analytics_columns_via_pragma" {
+		t.Fatalf("unexpected migration name: %q", migName)
+	}
+
+	cols := []string{"sessions", "engaged_sessions", "returning_visitors", "acq_qr", "acq_share", "acq_app", "acq_direct", "ai_pickleball_runs"}
+	for _, tbl := range []string{"usage_box_hourly", "usage_box_daily"} {
+		for _, col := range cols {
+			var cnt int
+			if err := db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('"+tbl+"') WHERE name = ?", col).Scan(&cnt); err != nil || cnt != 1 {
+				t.Fatalf("expected column %s.%s to exist (cnt=%d, err=%v)", tbl, col, cnt, err)
+			}
+		}
+	}
+
+	// Re-running migrations & addColumnIfMissing MUST be 100% idempotent
+	if err := runSQLiteMigrations(db); err != nil {
+		t.Fatalf("idempotent runSQLiteMigrations failed: %v", err)
+	}
+}
+
+func TestAnalyticsIngest_GzipDeltaAndWriteCoalescerSingleTx(t *testing.T) {
+	srv, err := NewServer(Config{
+		DataPath:                  ":memory:",
+		AdminUser:                 testAdminUser,
+		AdminPass:                 testAdminPass,
+		APIKey:                    testAPIKey,
+		PollInterval:              0,
+		AnalyticsCoalesceWindow:   2 * time.Second,
+		AnalyticsCoalesceMaxBatch: 32,
+	})
+	if err != nil {
+		t.Fatalf("NewServer failed: %v", err)
+	}
+	defer srv.Close()
+
+	boxes := srv.Store().Boxes()
+	if len(boxes) < 6 {
+		t.Fatalf("expected at least 6 seeded boxes")
+	}
+	nowLocal := time.Now().In(analyticsTZ)
+	today := nowLocal.Format("2006-01-02")
+	curHour := nowLocal.Format("2006-01-02 15:00")
+
+	// Fire 6 gzipped ingests rapidly — coalescer MUST batch all 6 into 1 single SQLite transaction!
+	for i := 0; i < 6; i++ {
+		p := AnalyticsIngestPayload{
+			BoxID:       boxes[i].ID,
+			Source:      "redbida-go",
+			SourceEpoch: "ep-coal-" + boxes[i].ID,
+			Rev:         1,
+			IsDelta:     false,
+			AIEnabled:   true,
+			BoxHourly: []AnalyticsBoxHourlyIn{
+				{
+					BucketHour: curHour,
+					AnalyticsBoxMetrics: AnalyticsBoxMetrics{
+						QRViews: 10, PageViews: 15, UniqueVisitors: 6,
+						Sessions: 7, EngagedSessions: 5, ReturningVisitors: 2,
+						AcqQR: 4, AcqShare: 1, AcqApp: 1, AcqDirect: 1,
+						AIPickleballRuns: 1,
+					},
+				},
+			},
+			BoxDaily: []AnalyticsBoxDailyIn{
+				{BucketDate: today, UniqueVisitors: 6, Sessions: 7, EngagedSessions: 5, ReturningVisitors: 2},
+			},
+		}
+		raw, _ := json.Marshal(p)
+		var gzBuf bytes.Buffer
+		gzw := gzip.NewWriter(&gzBuf)
+		_, _ = gzw.Write(raw)
+		_ = gzw.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/fleet/api/analytics/ingest", bytes.NewReader(gzBuf.Bytes()))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Encoding", "gzip")
+		req.Header.Set("X-Box-ID", boxes[i].ID)
+		req.Header.Set("X-Box-Secret", testAPIKey)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("gzip ingest #%d failed: %d %s", i, rec.Code, rec.Body.String())
+		}
+	}
+
+	if err := srv.FlushAnalytics(); err != nil {
+		t.Fatalf("FlushAnalytics failed: %v", err)
+	}
+	stats := srv.AnalyticsCoalescerStats()
+	if stats.BatchesCommitted != 6 || stats.TxCount != 1 {
+		t.Fatalf("expected coalescer to commit 6 batches in 1 tx, got %+v", stats)
+	}
+
+	ov, err := srv.queryAnalyticsOverview(analyticsQueryParams{Range: "today"}, time.Now())
+	if err != nil {
+		t.Fatalf("overview failed: %v", err)
+	}
+	if ov.KPI.QRViews != 60 || ov.KPI.Sessions != 42 || ov.KPI.EngagedSessions != 30 || ov.KPI.ReturningVisitors != 12 || ov.KPI.AIPickleballRuns != 6 {
+		t.Fatalf("unexpected coalesced KPI totals: %+v", ov.KPI)
+	}
+}
+
+func TestAnalyticsRealtime_InRAMAggregationFiltersAnd90sTTL(t *testing.T) {
+	srv, _ := newTestHubServer(t)
+
+	allBoxes := srv.Store().Boxes()
+	var bidaBox, pickBox *Box
+	for _, b := range allBoxes {
+		if bidaBox == nil && b.Branding != "pickleball" {
+			bidaBox = b
+		} else if pickBox == nil && b.Branding == "pickleball" {
+			pickBox = b
+		}
+	}
+	if bidaBox == nil {
+		t.Fatalf("expected a billiards box")
+	}
+	if pickBox == nil {
+		// Force a second club box to pickleball branding in memory for filter testing
+		for _, b := range allBoxes {
+			if b.ClubID != bidaBox.ClubID {
+				_ = srv.Store().UpdateBox(b.ID, func(x *Box) error {
+					x.Branding = "pickleball"
+					return nil
+				})
+				pickBox, _ = srv.Store().GetBox(b.ID)
+				break
+			}
+		}
+	}
+
+	m30A := make([]int, 30)
+	m30A[29] = 5
+	m30B := make([]int, 30)
+	m30B[29] = 3
+
+	// Push heartbeats with piggybacked rt
+	rec1, _ := doHubRequest(t, srv, http.MethodPost, "/fleet/api/heartbeat", HeartbeatPayload{
+		BoxID:  bidaBox.ID,
+		Secret: testAPIKey,
+		Realtime: &RealtimeBoxMetrics{
+			A5: 5, A30: 12, Live: 3, VOD: 1, Cut: 1, AI: 1,
+			M30: m30A,
+			Hot: []RealtimeHotTable{{Cam: "camera01", Table: "Bàn 01 Pool", N: 3}},
+		},
+	}, map[string]string{"NO_AUTH": "1"})
+	if rec1.Code != http.StatusOK {
+		t.Fatalf("heartbeat 1 failed: %d", rec1.Code)
+	}
+
+	rec2, _ := doHubRequest(t, srv, http.MethodPost, "/fleet/api/heartbeat", HeartbeatPayload{
+		BoxID:  pickBox.ID,
+		Secret: testAPIKey,
+		Realtime: &RealtimeBoxMetrics{
+			A5: 3, A30: 7, Live: 2, VOD: 0, Cut: 0, AI: 1,
+			M30: m30B,
+			Hot: []RealtimeHotTable{{Cam: "camera04", Table: "Sân 04 Pick", N: 2}},
+		},
+	}, map[string]string{"NO_AUTH": "1"})
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("heartbeat 2 failed: %d", rec2.Code)
+	}
+
+	// Global realtime aggregation via HTTP
+	recRT, _ := doHubRequest(t, srv, http.MethodGet, "/fleet/api/analytics/realtime", nil, nil)
+	if recRT.Code != http.StatusOK {
+		t.Fatalf("GET realtime failed: %d %s", recRT.Code, recRT.Body.String())
+	}
+	var rtAll AnalyticsRealtimeResponse
+	if err := json.Unmarshal(recRT.Body.Bytes(), &rtAll); err != nil {
+		t.Fatalf("decode realtime: %v", err)
+	}
+	if !rtAll.OK || rtAll.Active5m != 8 || rtAll.Active30m != 19 || rtAll.Live != 5 || rtAll.AI != 2 || rtAll.ActiveBoxes != 2 || rtAll.ActiveClubs != 2 {
+		t.Fatalf("unexpected aggregated realtime: %+v", rtAll)
+	}
+	if len(rtAll.MinuteBars30) != 30 || rtAll.MinuteBars30[29] != 8 {
+		t.Fatalf("unexpected minute_bars_30[29]: %v", rtAll.MinuteBars30)
+	}
+	if len(rtAll.HotClubs) != 2 || len(rtAll.HotTables) != 2 || rtAll.HotTables[0].Active != 3 {
+		t.Fatalf("unexpected hot clubs/tables: clubs=%+v tables=%+v", rtAll.HotClubs, rtAll.HotTables)
+	}
+
+	// Sport filter: pickleball only
+	recPick, _ := doHubRequest(t, srv, http.MethodGet, "/fleet/api/analytics/realtime?sport=pickleball", nil, nil)
+	var rtPick AnalyticsRealtimeResponse
+	_ = json.Unmarshal(recPick.Body.Bytes(), &rtPick)
+	if rtPick.Active5m != 3 || rtPick.Active30m != 7 || rtPick.ActiveBoxes != 1 {
+		t.Fatalf("expected sport=pickleball filter (a5=3, a30=7), got %+v", rtPick)
+	}
+
+	// 90s TTL auto-expiry
+	expired := srv.QueryAnalyticsRealtime(analyticsRealtimeFilter{}, time.Now().Add(95*time.Second))
+	if expired.Active5m != 0 || expired.Active30m != 0 || expired.ActiveBoxes != 0 {
+		t.Fatalf("expected realtime entries older than 90s to expire, got %+v", expired)
+	}
+}
+
+func TestAnalyticsGA4Overview_CompareDeltasFunnelHeatmapCohortsAcquisition(t *testing.T) {
+	srv, _ := newTestHubServer(t)
+
+	allBoxes := srv.Store().Boxes()
+	var bidaBox, pickBox, nrBox *Box
+	for _, b := range allBoxes {
+		if bidaBox == nil && b.Branding != "pickleball" {
+			bidaBox = b
+		} else if pickBox == nil && b.ClubID != bidaBox.ClubID {
+			_ = srv.Store().UpdateBox(b.ID, func(x *Box) error {
+				x.Branding = "pickleball"
+				return nil
+			})
+			pickBox, _ = srv.Store().GetBox(b.ID)
+		} else if nrBox == nil && b.Branding != "pickleball" && b.ClubID != bidaBox.ClubID && b.ClubID != pickBox.ClubID {
+			nrBox = b
+			break
+		}
+	}
+	if bidaBox == nil || pickBox == nil || nrBox == nil {
+		t.Fatalf("expected 3 distinct clubs for GA4 overview test")
+	}
+
+	now := time.Now().In(analyticsTZ)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, analyticsTZ)
+
+	// Seed previous 7d (days -13..-7) with lower baseline traffic AND current 7d (days -6..0) with higher traffic
+	var prevHourly, curHourly []AnalyticsBoxHourlyIn
+	var prevDaily, curDaily []AnalyticsBoxDailyIn
+	for offset := -13; offset <= 0; offset++ {
+		d := today.AddDate(0, 0, offset)
+		ds := d.Format("2006-01-02")
+		isCurrent := offset >= -6
+		mult := int64(1)
+		if isCurrent {
+			mult = 2 // +100% growth vs previous 7d!
+		}
+		hrStr := ds + " 20:00"
+		m := AnalyticsBoxMetrics{
+			QRViews: 20 * mult, PageViews: 25 * mult, UniqueVisitors: 10 * mult,
+			Sessions: 12 * mult, EngagedSessions: 9 * mult, ReturningVisitors: 4 * mult,
+			AcqQR: 10 * mult, AcqShare: 4 * mult, AcqApp: 3 * mult, AcqDirect: 3 * mult,
+			LiveHLS: 8 * mult, VODPlays: 6 * mult, TimelineOpens: 4 * mult,
+			ClipDownloads: 5 * mult, CutClips: 3 * mult,
+			AIStudioOpens: 4 * mult, AIAnalyzes: 3 * mult, AIExportsIOS: 2 * mult,
+			BytesOut: 10_000_000 * mult,
+			OSIOS: 6 * mult, OSAndroid: 4 * mult,
+		}
+		bd := AnalyticsBoxDailyIn{
+			BucketDate:        ds,
+			UniqueVisitors:    10 * mult,
+			Sessions:          12 * mult,
+			EngagedSessions:   9 * mult,
+			ReturningVisitors: 4 * mult,
+		}
+		if isCurrent {
+			curHourly = append(curHourly, AnalyticsBoxHourlyIn{BucketHour: hrStr, AnalyticsBoxMetrics: m})
+			curDaily = append(curDaily, bd)
+		} else {
+			prevHourly = append(prevHourly, AnalyticsBoxHourlyIn{BucketHour: hrStr, AnalyticsBoxMetrics: m})
+			prevDaily = append(prevDaily, bd)
+		}
+	}
+
+	_, err := srv.IngestAnalytics(AnalyticsIngestPayload{
+		BoxID:       bidaBox.ID,
+		Source:      "redbida-go",
+		SourceEpoch: "ep-ga4-bida",
+		AIEnabled:   true,
+		BoxHourly:   append(prevHourly, curHourly...),
+		BoxDaily:    append(prevDaily, curDaily...),
+	}, now)
+	if err != nil {
+		t.Fatalf("ingest bidaBox failed: %v", err)
+	}
+
+	// Seed pickleball box today
+	todayStr := today.Format("2006-01-02")
+	_, err = srv.IngestAnalytics(AnalyticsIngestPayload{
+		BoxID:       pickBox.ID,
+		Source:      "redbida-go",
+		SourceEpoch: "ep-ga4-pick",
+		AIEnabled:   true,
+		BoxHourly: []AnalyticsBoxHourlyIn{
+			{
+				BucketHour: todayStr + " 18:00",
+				AnalyticsBoxMetrics: AnalyticsBoxMetrics{
+					QRViews: 30, PageViews: 35, UniqueVisitors: 15, Sessions: 18, EngagedSessions: 12,
+					AIPickleballRuns: 5, AIAnalyzes: 5, AcqQR: 15,
+				},
+			},
+		},
+		BoxDaily: []AnalyticsBoxDailyIn{{BucketDate: todayStr, UniqueVisitors: 15, Sessions: 18, EngagedSessions: 12}},
+	}, now)
+	if err != nil {
+		t.Fatalf("ingest pickBox failed: %v", err)
+	}
+
+	// Seed legacy nodered box today
+	_, err = srv.IngestAnalytics(AnalyticsIngestPayload{
+		BoxID:   nrBox.ID,
+		Source:  "nodered",
+		BatchID: "nr-ga4-1",
+		BoxHourly: []AnalyticsBoxHourlyIn{
+			{BucketHour: todayStr + " 19:00", AnalyticsBoxMetrics: AnalyticsBoxMetrics{QRViews: 12, PageViews: 20}},
+		},
+	}, now)
+	if err != nil {
+		t.Fatalf("ingest nrBox failed: %v", err)
+	}
+
+	// 1. Compare=1 on bidaBox (7d): current is exact 2x previous -> +100% deltas!
+	recCmp, _ := doHubRequest(t, srv, http.MethodGet, "/fleet/api/analytics/overview?range=7d&compare=1&box_id="+bidaBox.ID, nil, nil)
+	if recCmp.Code != http.StatusOK {
+		t.Fatalf("overview compare failed: %d %s", recCmp.Code, recCmp.Body.String())
+	}
+	var ov AnalyticsOverviewResponse
+	if err := json.Unmarshal(recCmp.Body.Bytes(), &ov); err != nil {
+		t.Fatalf("decode overview: %v", err)
+	}
+	if ov.Comparison == nil {
+		t.Fatalf("expected non-nil comparison block when compare=1")
+	}
+	if ov.Comparison.DeltasPct.QRViews != 100.0 || ov.Comparison.DeltasPct.Sessions != 100.0 || ov.Comparison.DeltasPct.UniqueVisitors != 100.0 || ov.Comparison.DeltasPct.ClipsTotal != 100.0 || ov.Comparison.DeltasPct.AIAnalyzes != 100.0 {
+		t.Fatalf("expected +100%% deltas vs previous 7d, got %+v", ov.Comparison.DeltasPct)
+	}
+	if len(ov.Comparison.DailySeries) != 7 {
+		t.Fatalf("expected 7 previous daily_series entries, got %d", len(ov.Comparison.DailySeries))
+	}
+
+	// Verify Funnel (4 steps)
+	if len(ov.Funnel) != 4 || ov.Funnel[0].PctOfTop != 100.0 || ov.Funnel[0].Count != 350 || ov.Funnel[1].Count != 252 || ov.Funnel[2].Count != 112 || ov.Funnel[3].Count != 56 {
+		t.Fatalf("unexpected GA4 funnel: %+v", ov.Funnel)
+	}
+
+	// Verify 7x24 Heatmap (every weekday has traffic at hour 20!)
+	if len(ov.Heatmap7x24.Days) != 7 || len(ov.Heatmap7x24.Matrix) != 7 || len(ov.Heatmap7x24.Matrix[0]) != 24 {
+		t.Fatalf("unexpected 7x24 heatmap dimensions")
+	}
+	if ov.Heatmap7x24.MaxCell <= 0 || ov.Heatmap7x24.PeakDayHour.Hour != 20 {
+		t.Fatalf("expected peak hour 20 in heatmap, got %+v", ov.Heatmap7x24.PeakDayHour)
+	}
+
+	// Verify Acquisition
+	if ov.Acquisition.QR != 140 || ov.Acquisition.Share != 56 || ov.Acquisition.App != 42 || ov.Acquisition.Direct != 42 {
+		t.Fatalf("unexpected acquisition breakdown: %+v", ov.Acquisition)
+	}
+
+	// Verify Cohorts (140 unique, 56 returning -> 84 new, 40% returning; 168 sessions, 126 engaged -> 75% engagement)
+	if ov.Cohorts.ReturningVisitors != 56 || ov.Cohorts.NewVisitors != 84 || ov.Cohorts.ReturningPct != 40.0 || ov.Cohorts.EngagementRatePct != 75.0 {
+		t.Fatalf("unexpected cohorts: %+v", ov.Cohorts)
+	}
+
+	// 2. Presets today, yesterday, and custom from/to
+	recToday, _ := doHubRequest(t, srv, http.MethodGet, "/fleet/api/analytics/overview?range=today&box_id="+bidaBox.ID, nil, nil)
+	var ovToday AnalyticsOverviewResponse
+	_ = json.Unmarshal(recToday.Body.Bytes(), &ovToday)
+	if ovToday.Range != "today" || ovToday.KPI.QRViews != 40 || len(ovToday.DailySeries) != 1 {
+		t.Fatalf("unexpected today overview: range=%s qr=%d days=%d", ovToday.Range, ovToday.KPI.QRViews, len(ovToday.DailySeries))
+	}
+
+	recYest, _ := doHubRequest(t, srv, http.MethodGet, "/fleet/api/analytics/overview?range=yesterday&box_id="+bidaBox.ID, nil, nil)
+	var ovYest AnalyticsOverviewResponse
+	_ = json.Unmarshal(recYest.Body.Bytes(), &ovYest)
+	if ovYest.Range != "yesterday" || ovYest.KPI.QRViews != 40 {
+		t.Fatalf("unexpected yesterday overview: range=%s qr=%d", ovYest.Range, ovYest.KPI.QRViews)
+	}
+
+	customFrom := today.AddDate(0, 0, -2).Format("2006-01-02")
+	recCust, _ := doHubRequest(t, srv, http.MethodGet, "/fleet/api/analytics/overview?from="+customFrom+"&to="+todayStr+"&box_id="+bidaBox.ID, nil, nil)
+	var ovCust AnalyticsOverviewResponse
+	_ = json.Unmarshal(recCust.Body.Bytes(), &ovCust)
+	if ovCust.Range != "custom" || len(ovCust.DailySeries) != 3 || ovCust.KPI.QRViews != 120 {
+		t.Fatalf("unexpected custom range overview: range=%s days=%d qr=%d", ovCust.Range, len(ovCust.DailySeries), ovCust.KPI.QRViews)
+	}
+
+	// 3. Sport & Source filters
+	recPick, _ := doHubRequest(t, srv, http.MethodGet, "/fleet/api/analytics/overview?range=today&sport=pickleball", nil, nil)
+	var ovPick AnalyticsOverviewResponse
+	_ = json.Unmarshal(recPick.Body.Bytes(), &ovPick)
+	if ovPick.KPI.QRViews != 30 || ovPick.KPI.AIPickleballRuns != 5 || ovPick.KPI.ActiveBoxes != 1 {
+		t.Fatalf("unexpected sport=pickleball overview: %+v", ovPick.KPI)
+	}
+
+	recNR, _ := doHubRequest(t, srv, http.MethodGet, "/fleet/api/analytics/overview?range=today&source=nodered", nil, nil)
+	var ovNR AnalyticsOverviewResponse
+	_ = json.Unmarshal(recNR.Body.Bytes(), &ovNR)
+	if ovNR.KPI.QRViews != 12 || ovNR.KPI.ActiveBoxes != 1 {
+		t.Fatalf("unexpected source=nodered overview: %+v", ovNR.KPI)
 	}
 }

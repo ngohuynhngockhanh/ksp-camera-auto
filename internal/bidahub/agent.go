@@ -42,10 +42,12 @@ type AgentConfig struct {
 // EdgeAgent maintains a persistent outbound WebSocket + Yamux reverse tunnel to inut-bida-hub
 // and pushes periodic live system telemetry heartbeats without SSH or VPN dependencies.
 type EdgeAgent struct {
-	cfg                 AgentConfig
-	httpClient          *http.Client
-	analyticsHTTPClient *http.Client
-	analyticsMu         sync.Mutex
+	cfg                   AgentConfig
+	httpClient            *http.Client
+	analyticsHTTPClient   *http.Client
+	realtimeHTTPClient    *http.Client
+	analyticsMu           sync.Mutex
+	analyticsBackoffUntil time.Time
 
 	mu          sync.Mutex
 	prevCPUTot  uint64
@@ -97,6 +99,9 @@ func NewEdgeAgent(cfg AgentConfig) *EdgeAgent {
 		},
 		analyticsHTTPClient: &http.Client{
 			Timeout: 2 * time.Second,
+		},
+		realtimeHTTPClient: &http.Client{
+			Timeout: 400 * time.Millisecond,
 		},
 	}
 }
@@ -394,6 +399,7 @@ func (a *EdgeAgent) CollectTelemetry() HeartbeatPayload {
 		LANIP:          sampleLANIP(),
 		Arch:           machineArch(),
 		RedBidaKeys:    readRedBidaKeys(a.cfg.RedBidaKeyDir),
+		Realtime:       a.fetchLocalRealtime(context.Background()),
 	}
 
 	a.mu.Lock()

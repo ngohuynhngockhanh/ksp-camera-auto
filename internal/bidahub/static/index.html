@@ -587,122 +587,275 @@
     </section>
 
     <!-- ======================================================================
-         VIEW 7: #analytics — Fleet Usage, Peak Hours, AI Studio & Table Drill-Down
+         VIEW 7: #analytics — Flagship GA4 Analytics Console (Realtime, Compare, Funnel, 7x24 Heatmap & Drill-Down)
          ====================================================================== -->
     <section id="view-analytics" class="view-panel" data-view-panel="analytics">
-      <!-- Analytics Control Bar -->
-      <div class="toolbar-card">
-        <div class="toolbar-group">
-          <div class="filter-chips" id="analytics-range-chips" role="group" aria-label="Khung thời gian thống kê">
-            <button type="button" class="filter-chip" data-range="24h">24 giờ</button>
-            <button type="button" class="filter-chip active" data-range="7d">7 ngày</button>
-            <button type="button" class="filter-chip" data-range="30d">30 ngày</button>
-            <button type="button" class="filter-chip" data-range="90d">90 ngày</button>
+      <!-- GA4 Control Bar -->
+      <div class="toolbar-card command-dock ga-control-bar" id="ga-control-bar">
+        <div class="ga-control-row">
+          <div class="ga-time-cluster">
+            <div class="filter-chips filter-chips-scroll" id="analytics-range-chips" role="group" aria-label="Khung thời gian thống kê">
+              <button type="button" class="filter-chip" data-range="today">Hôm nay</button>
+              <button type="button" class="filter-chip" data-range="yesterday">Hôm qua</button>
+              <button type="button" class="filter-chip active" data-range="7d">7 ngày</button>
+              <button type="button" class="filter-chip" data-range="30d">30 ngày</button>
+              <button type="button" class="filter-chip" data-range="90d">90 ngày</button>
+            </div>
+            <div class="ga-date-range" aria-label="Chọn khoảng ngày tùy chỉnh">
+              <input type="date" id="analytics-date-from" class="input ga-date-input mono" aria-label="Từ ngày">
+              <span class="ga-date-sep" aria-hidden="true">→</span>
+              <input type="date" id="analytics-date-to" class="input ga-date-input mono" aria-label="Đến ngày">
+            </div>
           </div>
-          <span id="analytics-date-window" class="badge badge-neutral mono">--</span>
+
+          <div class="ga-compare-cluster">
+            <label class="ga-compare-toggle" for="analytics-compare-toggle">
+              <input type="checkbox" id="analytics-compare-toggle" checked>
+              <span class="ga-switch-track" aria-hidden="true"><span class="ga-switch-thumb"></span></span>
+              <span>So sánh kỳ trước</span>
+            </label>
+            <span id="analytics-date-window" class="badge badge-neutral mono ga-window-badge">--</span>
+          </div>
         </div>
 
-        <div class="toolbar-group">
-          <select id="analytics-club-filter" class="select" aria-label="Lọc theo CLB">
-            <option value="">Tất cả CLB</option>
-          </select>
-          <label class="check-label">
-            <input type="checkbox" id="analytics-ai-only">
-            <span>Chỉ đội AI Studio</span>
-          </label>
-          <button type="button" id="analytics-refresh-btn" class="btn" title="Tải lại dữ liệu thống kê">
-            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
-            <span>Làm mới</span>
-          </button>
-          <a id="analytics-export-csv" href="/fleet/api/analytics/export.csv?range=7d" class="btn btn-cyan" download>
-            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Xuất CSV</span>
-          </a>
+        <div class="ga-control-row ga-filter-row">
+          <div class="ga-filter-selects">
+            <select id="analytics-club-filter" class="select ga-filter-select" aria-label="Lọc theo CLB">
+              <option value="">Tất cả CLB</option>
+            </select>
+            <select id="analytics-sport-filter" class="select ga-filter-select-sm" aria-label="Lọc theo bộ môn">
+              <option value="all">Tất cả bộ môn</option>
+              <option value="billiards">Billiards</option>
+              <option value="pickleball">Pickleball</option>
+            </select>
+            <select id="analytics-source-filter" class="select ga-filter-select-sm" aria-label="Lọc theo nguồn dữ liệu">
+              <option value="all">Tất cả nguồn</option>
+              <option value="redbida-go">redbida-go</option>
+              <option value="nodered">Node-RED</option>
+            </select>
+            <label class="check-label ga-ai-check">
+              <input type="checkbox" id="analytics-ai-only">
+              <span>Chỉ đội AI</span>
+            </label>
+          </div>
+
+          <div class="ga-control-actions">
+            <button type="button" id="analytics-refresh-btn" class="btn" title="Tải lại dữ liệu thống kê">
+              <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+              <span>Làm mới</span>
+            </button>
+            <a id="analytics-export-csv" href="/fleet/api/analytics/export.csv?range=7d" class="btn btn-cyan" download>
+              <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Xuất CSV</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Drill-Down Breadcrumb Bar (visible whenever filtering by a Club or Box) -->
+        <div id="analytics-breadcrumb-bar" class="ga-breadcrumb-bar" hidden aria-label="Đường dẫn lọc chi tiết">
+          <div id="analytics-breadcrumb-trail" class="ga-breadcrumb-trail"></div>
+          <button type="button" id="analytics-breadcrumb-reset" class="btn btn-xs">Về toàn hệ thống</button>
         </div>
       </div>
 
-      <!-- 6 Analytics KPI Cards -->
-      <div class="kpi-grid tabular-nums">
-        <article class="kpi-card" id="akpi-qr-card">
-          <div class="kpi-label">
-            <span>Quét QR &amp; Xem Trang</span>
-            <span class="kpi-icon" aria-hidden="true">
-              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M17 17h4v4h-4z"/></svg>
-            </span>
+      <!-- GA4 Realtime Panel ("Đang Xem Ngay Lúc Này") -->
+      <section class="glass-panel ga-realtime-panel tabular-nums" id="ga-realtime-panel" aria-label="Thống kê người xem thời gian thực">
+        <div class="ga-rt-head">
+          <div class="ga-rt-title-group">
+            <span class="ga-live-dot" id="ga-rt-live-dot" aria-hidden="true"></span>
+            <h2 class="analytics-card-title">Đang Xem Ngay Lúc Này</h2>
+            <span id="ga-rt-scope-badge" class="badge badge-emerald">0 CLB · 0 Box</span>
           </div>
-          <div class="kpi-value" id="akpi-qr-val">0 <span class="kpi-val-sub">/ 0 trang</span></div>
-          <div class="kpi-sub" id="akpi-qr-sub">
-            <span>0 CLB · 0 Box hoạt động</span>
+          <div class="ga-rt-meta">
+            <span id="ga-rt-updated" class="mono text-muted">Cập nhật tự động 15s</span>
           </div>
-        </article>
+        </div>
 
-        <article class="kpi-card" id="akpi-visitors-card">
+        <div class="ga-rt-grid">
+          <!-- Col 1: Hero 5m/30m Counter + 4 Live Activities -->
+          <div class="ga-rt-hero-col">
+            <div class="ga-rt-hero-block">
+              <div class="ga-rt-hero-line">
+                <span class="ga-rt-hero-num" id="ga-rt-active5">0</span>
+                <span class="ga-rt-hero-unit">người đang xem <span class="mono">(5p)</span></span>
+              </div>
+              <div class="ga-rt-sub-line">
+                <span class="badge badge-cyan mono" id="ga-rt-active30-pill">0 người (30 phút)</span>
+                <span class="text-muted" id="ga-rt-active-status">Đang đồng bộ...</span>
+              </div>
+            </div>
+
+            <div class="ga-rt-activities">
+              <div class="ga-rt-act-item">
+                <span class="ga-rt-act-label">
+                  <svg class="ui-icon-sm text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
+                  <span>Live HLS</span>
+                </span>
+                <strong class="mono" id="ga-rt-live">0</strong>
+              </div>
+              <div class="ga-rt-act-item">
+                <span class="ga-rt-act-label">
+                  <svg class="ui-icon-sm text-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+                  <span>Xem VOD</span>
+                </span>
+                <strong class="mono" id="ga-rt-vod">0</strong>
+              </div>
+              <div class="ga-rt-act-item">
+                <span class="ga-rt-act-label">
+                  <svg class="ui-icon-sm text-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+                  <span>CheckVAR / Cắt</span>
+                </span>
+                <strong class="mono" id="ga-rt-cut">0</strong>
+              </div>
+              <div class="ga-rt-act-item">
+                <span class="ga-rt-act-label">
+                  <svg class="ui-icon-sm text-purple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+                  <span>AI Studio</span>
+                </span>
+                <strong class="mono" id="ga-rt-ai">0</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- Col 2: Pure Inline SVG 30-Bar Minute Chart (-30p -> Hiện tại) -->
+          <div class="ga-rt-chart-col">
+            <div class="ga-rt-col-head">
+              <span class="ga-rt-col-title">Người dùng từng phút (30 phút qua)</span>
+              <span class="mono text-muted" id="ga-rt-bar-peak">Đỉnh: 0/p</span>
+            </div>
+            <div id="ga-rt-minute-chart" class="ga-rt-svg-wrap"></div>
+          </div>
+
+          <!-- Col 3: Top 5 Quán / Bàn Đang Hot Nhất (click to drill down) -->
+          <div class="ga-rt-hot-col">
+            <div class="ga-rt-col-head">
+              <span class="ga-rt-col-title">Top 5 Đang Hot Nhất</span>
+              <div class="segmented-toggle ga-mini-seg" id="ga-rt-hot-tabs" role="group" aria-label="Chuyển danh sách hot">
+                <button type="button" class="segmented-btn active" data-rt-hot="clubs">Quán</button>
+                <button type="button" class="segmented-btn" data-rt-hot="tables">Bàn</button>
+              </div>
+            </div>
+            <div id="ga-rt-hot-list" class="ga-rt-hot-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6 GA4 KPI Cards (with % Delta Pills & Mini Inline SVG Sparklines) -->
+      <div class="kpi-grid ga-kpi-grid tabular-nums">
+        <article class="kpi-card ga-kpi-card" id="akpi-visitors-card">
           <div class="kpi-label">
-            <span>Khách Duy Nhất</span>
+            <span>Người Dùng</span>
             <span class="kpi-icon emerald" aria-hidden="true">
               <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             </span>
           </div>
-          <div class="kpi-value" id="akpi-visitors-val">0</div>
+          <div class="ga-kpi-mid">
+            <div class="ga-kpi-val-wrap">
+              <div class="kpi-value" id="akpi-visitors-val">0</div>
+              <span class="ga-delta-pill" id="akpi-visitors-delta" hidden></span>
+            </div>
+            <div class="ga-kpi-spark" id="akpi-visitors-spark" aria-hidden="true"></div>
+          </div>
           <div class="kpi-sub" id="akpi-visitors-sub">
-            <span>Live HLS: 0</span>
-            <span>VOD: 0</span>
+            <span>Mới 0% · Quay lại 0%</span>
           </div>
         </article>
 
-        <article class="kpi-card" id="akpi-clips-card">
+        <article class="kpi-card ga-kpi-card" id="akpi-sessions-card">
           <div class="kpi-label">
-            <span>Tải Clip &amp; CheckVAR</span>
-            <span class="kpi-icon emerald" aria-hidden="true">
-              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
-            </span>
-          </div>
-          <div class="kpi-value" id="akpi-clips-val">0</div>
-          <div class="kpi-sub" id="akpi-clips-sub">
-            <span>Tải 0 · Cắt 0</span>
-            <span>0 phút cắt</span>
-          </div>
-        </article>
-
-        <article class="kpi-card" id="akpi-ai-card">
-          <div class="kpi-label">
-            <span>AI Studio &amp; Phân Tích</span>
-            <span class="kpi-icon purple" aria-hidden="true">
-              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
-            </span>
-          </div>
-          <div class="kpi-value" id="akpi-ai-val">0 <span class="kpi-val-sub">/ 0 mở</span></div>
-          <div class="kpi-sub" id="akpi-ai-sub">
-            <span>0 cú · 0 bi lỗ</span>
-            <span>Xuất 0/0</span>
-          </div>
-        </article>
-
-        <article class="kpi-card" id="akpi-bw-card">
-          <div class="kpi-label">
-            <span>Băng Thông Xuất</span>
+            <span>Số Phiên</span>
             <span class="kpi-icon" aria-hidden="true">
               <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
             </span>
           </div>
-          <div class="kpi-value" id="akpi-bw-val">0 B</div>
-          <div class="kpi-sub" id="akpi-bw-sub">
-            <span>Chuyển đổi Tải+Cắt/QR</span>
-            <span>0.0%</span>
+          <div class="ga-kpi-mid">
+            <div class="ga-kpi-val-wrap">
+              <div class="kpi-value" id="akpi-sessions-val">0</div>
+              <span class="ga-delta-pill" id="akpi-sessions-delta" hidden></span>
+            </div>
+            <div class="ga-kpi-spark" id="akpi-sessions-spark" aria-hidden="true"></div>
+          </div>
+          <div class="kpi-sub" id="akpi-sessions-sub">
+            <span>Tương tác 0% · 0.0 trang/phiên</span>
           </div>
         </article>
 
-        <article class="kpi-card" id="akpi-err-card">
+        <article class="kpi-card ga-kpi-card" id="akpi-qr-card">
           <div class="kpi-label">
-            <span>Sức Khỏe &amp; Lỗi</span>
+            <span>Quét QR &amp; Xem</span>
+            <span class="kpi-icon" aria-hidden="true">
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M17 17h4v4h-4z"/></svg>
+            </span>
+          </div>
+          <div class="ga-kpi-mid">
+            <div class="ga-kpi-val-wrap">
+              <div class="kpi-value" id="akpi-qr-val">0</div>
+              <span class="ga-delta-pill" id="akpi-qr-delta" hidden></span>
+            </div>
+            <div class="ga-kpi-spark" id="akpi-qr-spark" aria-hidden="true"></div>
+          </div>
+          <div class="kpi-sub" id="akpi-qr-sub">
+            <span>0 trang · 0 CLB · 0 Box</span>
+          </div>
+        </article>
+
+        <article class="kpi-card ga-kpi-card" id="akpi-clips-card">
+          <div class="kpi-label">
+            <span>Clip &amp; CheckVAR</span>
             <span class="kpi-icon emerald" aria-hidden="true">
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+            </span>
+          </div>
+          <div class="ga-kpi-mid">
+            <div class="ga-kpi-val-wrap">
+              <div class="kpi-value" id="akpi-clips-val">0</div>
+              <span class="ga-delta-pill" id="akpi-clips-delta" hidden></span>
+            </div>
+            <div class="ga-kpi-spark" id="akpi-clips-spark" aria-hidden="true"></div>
+          </div>
+          <div class="kpi-sub" id="akpi-clips-sub">
+            <span>Tải 0 · Cắt 0</span>
+            <span>0.0% CĐ</span>
+          </div>
+        </article>
+
+        <article class="kpi-card ga-kpi-card" id="akpi-ai-card">
+          <div class="kpi-label">
+            <span>AI Studio</span>
+            <span class="kpi-icon purple" aria-hidden="true">
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+            </span>
+          </div>
+          <div class="ga-kpi-mid">
+            <div class="ga-kpi-val-wrap">
+              <div class="kpi-value" id="akpi-ai-val">0</div>
+              <span class="ga-delta-pill" id="akpi-ai-delta" hidden></span>
+            </div>
+            <div class="ga-kpi-spark" id="akpi-ai-spark" aria-hidden="true"></div>
+          </div>
+          <div class="kpi-sub" id="akpi-ai-sub">
+            <span>Pool 0 · Carom 0 · Pick 0</span>
+            <span>Xuất 0</span>
+          </div>
+        </article>
+
+        <article class="kpi-card ga-kpi-card" id="akpi-bw-card">
+          <div class="kpi-label">
+            <span>Băng Thông &amp; Lỗi</span>
+            <span class="kpi-icon emerald" id="akpi-bw-icon" aria-hidden="true">
               <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             </span>
           </div>
-          <div class="kpi-value" id="akpi-err-val">0</div>
-          <div class="kpi-sub" id="akpi-err-sub">
-            <span>HTTP: 0 · AI: 0</span>
-            <span>Ổn định</span>
+          <div class="ga-kpi-mid">
+            <div class="ga-kpi-val-wrap">
+              <div class="kpi-value" id="akpi-bw-val">0 B</div>
+              <span class="ga-delta-pill" id="akpi-bw-delta" hidden></span>
+            </div>
+            <div class="ga-kpi-spark" id="akpi-bw-spark" aria-hidden="true"></div>
+          </div>
+          <div class="kpi-sub" id="akpi-bw-sub">
+            <span>Lỗi HTTP/AI: 0</span>
+            <span>0.00%</span>
           </div>
         </article>
       </div>
@@ -711,93 +864,154 @@
       <div id="analytics-empty-banner" class="analytics-empty-banner" style="display:none;" role="status">
         <span class="safety-banner-text">
           <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          <span>Chưa có dữ liệu trong khung thời gian này — box sẽ tự động đẩy rollup mỗi 5 phút.</span>
+          <span>Chưa có dữ liệu trong khung thời gian này. Các box sẽ tự đồng bộ delta gzip khi phát sinh lượt khách.</span>
         </span>
-        <span class="mono" style="font-size:12px;">GMT+7 · 5m Rollup Sync</span>
+        <span class="mono" style="font-size:12px;">GMT+7 · Anti-Spam Delta Sync</span>
       </div>
 
-      <!-- Pure Inline SVG Charts Row: Peak Hours (0h-23h) + Daily Trend -->
-      <div class="analytics-charts-grid tabular-nums">
-        <div class="glass-panel">
-          <div class="analytics-card-head">
-            <div>
-              <h2 class="analytics-card-title">
-                <svg class="ui-icon text-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                <span>Biểu Đồ Khung Giờ Vàng (0h–23h GMT+7)</span>
-              </h2>
-              <p class="analytics-card-sub">Phân bổ lưu lượng theo khung giờ thực tế toàn hệ thống</p>
-            </div>
-            <div class="toolbar-group">
-              <span id="analytics-peak-badge" class="badge badge-amber">Đỉnh: --</span>
-              <div class="analytics-legend">
-                <span class="analytics-legend-item"><span class="analytics-legend-dot" style="background:var(--cyan);"></span>QR Views</span>
-                <span class="analytics-legend-item"><span class="analytics-legend-dot" style="background:var(--emerald);"></span>Tải &amp; Cắt</span>
-                <span class="analytics-legend-item"><span class="analytics-legend-dot" style="background:var(--purple);"></span>AI Runs</span>
-              </div>
-            </div>
-          </div>
-          <div id="analytics-peak-chart" class="analytics-svg-wrap"></div>
-        </div>
-
-        <div class="glass-panel">
+      <!-- Deep-Dive Row 1: GA4 Metric Switcher Trend Chart + Conversion Funnel -->
+      <div class="ga-visuals-row ga-visuals-row-top tabular-nums">
+        <div class="glass-panel" id="ga-trend-panel">
           <div class="analytics-card-head">
             <div>
               <h2 class="analytics-card-title">
                 <svg class="ui-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-                <span>Xu Hướng Theo Ngày</span>
+                <span>Xu Hướng Chỉ Số GA4</span>
               </h2>
-              <p class="analytics-card-sub" id="analytics-daily-sub">Biến động lượt quét QR, tải/cắt clip &amp; phân tích AI</p>
+              <p class="analytics-card-sub" id="analytics-daily-sub">Chuyển nhanh chỉ số &amp; đối chiếu đường nét đứt kỳ trước</p>
             </div>
-            <div class="analytics-legend">
-              <span class="analytics-legend-item"><span class="analytics-legend-dot" style="background:var(--cyan);"></span>QR Views</span>
-              <span class="analytics-legend-item"><span class="analytics-legend-dot" style="background:var(--emerald);"></span>Tải &amp; Cắt</span>
-              <span class="analytics-legend-item"><span class="analytics-legend-dot" style="background:var(--purple);"></span>AI Phân Tích</span>
+            <div class="analytics-legend" id="ga-trend-legend">
+              <span class="analytics-legend-item"><span class="ga-legend-line solid"></span><span id="ga-trend-cur-label">Kỳ hiện tại</span></span>
+              <span class="analytics-legend-item" id="ga-trend-prev-legend" hidden><span class="ga-legend-line dashed"></span><span id="ga-trend-prev-label">Kỳ trước</span></span>
             </div>
           </div>
-          <div id="analytics-daily-chart" class="analytics-svg-wrap"></div>
+          <div class="ga-metric-tabs filter-chips-scroll" id="ga-trend-metric-tabs" role="tablist" aria-label="Chọn chỉ số biểu đồ xu hướng">
+            <button type="button" class="ga-metric-tab active" role="tab" aria-selected="true" data-trend-metric="unique_visitors">
+              <span class="ga-metric-tab-label">Người dùng</span>
+              <strong class="mono" id="ga-tab-val-unique_visitors">0</strong>
+            </button>
+            <button type="button" class="ga-metric-tab" role="tab" aria-selected="false" data-trend-metric="sessions">
+              <span class="ga-metric-tab-label">Số phiên</span>
+              <strong class="mono" id="ga-tab-val-sessions">0</strong>
+            </button>
+            <button type="button" class="ga-metric-tab" role="tab" aria-selected="false" data-trend-metric="qr_views">
+              <span class="ga-metric-tab-label">Quét QR</span>
+              <strong class="mono" id="ga-tab-val-qr_views">0</strong>
+            </button>
+            <button type="button" class="ga-metric-tab" role="tab" aria-selected="false" data-trend-metric="downloads_cuts">
+              <span class="ga-metric-tab-label">Tải &amp; Cắt</span>
+              <strong class="mono" id="ga-tab-val-downloads_cuts">0</strong>
+            </button>
+            <button type="button" class="ga-metric-tab" role="tab" aria-selected="false" data-trend-metric="ai_analyzes">
+              <span class="ga-metric-tab-label">AI Studio</span>
+              <strong class="mono" id="ga-tab-val-ai_analyzes">0</strong>
+            </button>
+          </div>
+          <div id="analytics-daily-chart" class="analytics-svg-wrap ga-trend-svg-wrap"></div>
+        </div>
+
+        <div class="glass-panel" id="ga-funnel-panel">
+          <div class="analytics-card-head">
+            <div>
+              <h2 class="analytics-card-title">
+                <svg class="ui-icon text-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                <span>Phễu Hành Trình Khách</span>
+              </h2>
+              <p class="analytics-card-sub">Tỷ lệ giữ chân &amp; rơi rụng qua 4 bước tương tác tại bàn</p>
+            </div>
+            <span id="ga-funnel-e2e-badge" class="badge badge-emerald mono">0.0% CĐ</span>
+          </div>
+          <div id="ga-funnel-chart" class="ga-funnel-wrap"></div>
         </div>
       </div>
 
-      <!-- Device OS Breakdown + AI Studio Breakdown -->
-      <div class="analytics-breakdown-grid tabular-nums">
-        <div class="glass-panel">
+      <!-- Deep-Dive Row 2: 7x24 Heatmap (+ 24h Peak View) & Acquisition + OS/Device + AI -->
+      <div class="ga-visuals-row ga-visuals-row-bottom tabular-nums">
+        <div class="glass-panel" id="ga-heatmap-panel">
           <div class="analytics-card-head">
             <div>
               <h2 class="analytics-card-title">
-                <svg class="ui-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
-                <span>Phân Bổ Thiết Bị (iOS / Android / Desktop / Kiosk)</span>
+                <svg class="ui-icon text-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+                <span>Heatmap Giờ Vàng (7×24 GMT+7)</span>
               </h2>
-              <p class="analytics-card-sub">Nhận diện tự động từ User-Agent &amp; tham số App Kiosk</p>
+              <p class="analytics-card-sub">Mật độ khách theo Thứ 2 → CN và khung 0h → 23h</p>
+            </div>
+            <div class="toolbar-group">
+              <span id="analytics-peak-badge" class="badge badge-amber">Đỉnh: --</span>
+              <div class="segmented-toggle ga-mini-seg" id="ga-heat-mode-tabs" role="group" aria-label="Chế độ xem khung giờ">
+                <button type="button" class="segmented-btn active" data-heat-mode="heatmap">7×24</button>
+                <button type="button" class="segmented-btn" data-heat-mode="bars">24h Cột</button>
+              </div>
+            </div>
+          </div>
+          <div id="ga-heatmap-view">
+            <div id="ga-heatmap-grid" class="ga-heatmap-wrap"></div>
+            <div class="ga-heatmap-foot">
+              <span id="ga-heatmap-readout" class="text-secondary">Di chuột hoặc chạm vào ô để xem chi tiết khung giờ</span>
+              <div class="ga-heat-scale" aria-hidden="true">
+                <span>Thấp</span>
+                <span class="ga-heat-swatch lv-0"></span>
+                <span class="ga-heat-swatch lv-1"></span>
+                <span class="ga-heat-swatch lv-2"></span>
+                <span class="ga-heat-swatch lv-3"></span>
+                <span class="ga-heat-swatch lv-4"></span>
+                <span>Cao</span>
+              </div>
+            </div>
+          </div>
+          <div id="analytics-peak-chart" class="analytics-svg-wrap" hidden></div>
+        </div>
+
+        <div class="glass-panel" id="ga-acq-os-panel">
+          <div class="analytics-card-head">
+            <div>
+              <h2 class="analytics-card-title">
+                <svg class="ui-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+                <span>Kênh Truy Cập &amp; Thiết Bị</span>
+              </h2>
+              <p class="analytics-card-sub">Nguồn quét QR / Chia sẻ / Kiosk &amp; phân bổ iOS / Android / Desktop</p>
             </div>
             <span id="analytics-os-total" class="badge badge-cyan">0 lượt</span>
           </div>
-          <div id="analytics-os-breakdown" class="breakdown-list"></div>
-        </div>
 
-        <div class="glass-panel">
-          <div class="analytics-card-head">
-            <div>
-              <h2 class="analytics-card-title">
-                <svg class="ui-icon text-purple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
-                <span>Chi Tiết AI Studio (Pool vs Carom · Xuất Video)</span>
-              </h2>
-              <p class="analytics-card-sub">Theo dõi tỷ lệ bộ môn AI &amp; kênh xuất video (iPhone Relay vs Desktop Blob)</p>
+          <div class="ga-acq-os-split">
+            <div class="ga-subblock">
+              <div class="ga-subblock-head">
+                <span class="ga-subblock-title">Kênh Truy Cập</span>
+                <span id="ga-acq-total" class="mono text-muted ga-subblock-meta">0</span>
+              </div>
+              <div id="ga-acquisition-breakdown" class="breakdown-list"></div>
             </div>
-            <span id="analytics-ai-boxes-badge" class="badge badge-purple">0 Box AI</span>
+            <div class="ga-subblock">
+              <div class="ga-subblock-head">
+                <span class="ga-subblock-title">Thiết Bị &amp; OS</span>
+                <span id="analytics-ai-boxes-badge" class="badge badge-purple ga-subblock-meta">0 Box AI</span>
+              </div>
+              <div id="analytics-os-breakdown" class="breakdown-list"></div>
+            </div>
           </div>
-          <div id="analytics-ai-breakdown" class="breakdown-list"></div>
+
           <div id="analytics-ai-pills" class="analytics-pill-row"></div>
         </div>
       </div>
 
-      <!-- Top Clubs / Top Boxes Table (Sortable + Click Row to Drill Down) -->
-      <div class="glass-panel tabular-nums">
+      <!-- Searchable, Paginated Drill-Down Table 1: Top Clubs / Top Boxes -->
+      <div class="glass-panel tabular-nums" id="analytics-top-panel">
         <div class="analytics-card-head">
           <div>
-            <h2 class="analytics-card-title" id="analytics-top-title">Xếp Hạng Sử Dụng Theo Quán / Box</h2>
-            <p class="analytics-card-sub">Bấm vào tiêu đề cột để sắp xếp · Bấm vào một dòng để lọc chi tiết bảng Top Từng Bàn / Camera bên dưới</p>
+            <h2 class="analytics-card-title" id="analytics-top-title">Top Quán / CLB (0)</h2>
+            <p class="analytics-card-sub">Bấm vào dòng quán để lọc sâu toàn bộ chỉ số GA4 · Sắp xếp theo mọi cột</p>
           </div>
-          <div class="toolbar-group">
+          <div class="toolbar-group ga-table-controls">
+            <div class="search-box search-box-md">
+              <svg class="ui-icon search-lead-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <input type="search" id="analytics-top-search" class="input search-field" placeholder="Tìm nhanh không dấu CLB, Box ID..." autocomplete="off" aria-label="Tìm nhanh quán hoặc box">
+              <span class="search-match-pill tabular-nums" id="analytics-top-match-count">0/0</span>
+              <span class="search-kbd-hint" aria-hidden="true">/</span>
+              <button type="button" class="search-clear-btn" data-clear-search="analytics-top-search" aria-label="Xóa tìm kiếm" hidden>
+                <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
             <div class="segmented-toggle" id="analytics-group-toggle" role="group" aria-label="Chế độ xem xếp hạng">
               <button type="button" class="segmented-btn active" data-group="clubs">Theo Quán</button>
               <button type="button" class="segmented-btn" data-group="boxes">Theo Box</button>
@@ -807,17 +1021,25 @@
         <div id="analytics-top-table-wrap"></div>
       </div>
 
-      <!-- Top Tables / Cameras Table (camera01..28) -->
-      <div class="glass-panel tabular-nums">
+      <!-- Searchable, Paginated Drill-Down Table 2: Top Tables / Cameras -->
+      <div class="glass-panel tabular-nums" id="analytics-cameras-panel">
         <div class="analytics-card-head">
           <div>
             <h2 class="analytics-card-title">
               <svg class="ui-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
               <span>Top Từng Bàn / Camera (<code>camera01..28</code>)</span>
             </h2>
-            <p class="analytics-card-sub">Chi tiết tương tác QR, Live/VOD, Tải Clip, CheckVAR &amp; AI Studio từng bàn</p>
+            <p class="analytics-card-sub">Chi tiết QR, Khách, Live/VOD, Tải Clip, CheckVAR &amp; AI Studio từng bàn</p>
           </div>
-          <div class="toolbar-group">
+          <div class="toolbar-group ga-table-controls">
+            <div class="search-box search-box-md">
+              <svg class="ui-icon search-lead-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <input type="search" id="analytics-cameras-search" class="input search-field" placeholder="Tìm nhanh bàn, camera01, CLB..." autocomplete="off" aria-label="Tìm nhanh bàn hoặc camera">
+              <span class="search-match-pill tabular-nums" id="analytics-cameras-match-count">0/0</span>
+              <button type="button" class="search-clear-btn" data-clear-search="analytics-cameras-search" aria-label="Xóa tìm kiếm" hidden>
+                <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
             <span id="analytics-drill-indicator" style="display:none;align-items:center;gap:6px;">
               <span class="badge badge-cyan" id="analytics-drill-label">Đang lọc</span>
               <button type="button" class="btn btn-xs" id="analytics-clear-drill-btn">Bỏ lọc</button>
@@ -827,6 +1049,9 @@
         </div>
         <div id="analytics-cameras-table-wrap"></div>
       </div>
+
+      <!-- Shared Floating Tooltip for Pure Inline SVG Charts & 7x24 Heatmap -->
+      <div id="ga-float-tooltip" class="ga-float-tooltip tabular-nums" role="tooltip" hidden></div>
     </section>
 
   </main>

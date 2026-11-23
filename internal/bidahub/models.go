@@ -387,5 +387,25 @@ type StoreData struct {
 	AIEvents    []*AIEvent                    `json:"ai_events,omitempty"`
 }
 
+// RealtimeHotTable represents an actively viewed camera/table in the last 5 minutes.
+type RealtimeHotTable struct {
+	Cam   string `json:"cam"`
+	Table string `json:"table,omitempty"`
+	N     int    `json:"n"`
+}
+
+// RealtimeBoxMetrics is the compact realtime viewer snapshot piggybacked on heartbeats.
+// Omitted entirely (nil) when A30 == 0 so idle boxes send 0 extra bytes.
+type RealtimeBoxMetrics struct {
+	A5   int                `json:"a5"`
+	A30  int                `json:"a30"`
+	Live int                `json:"live"`
+	VOD  int                `json:"vod"`
+	Cut  int                `json:"cut"`
+	AI   int                `json:"ai"`
+	M30  []int              `json:"m30,omitempty"`
+	Hot  []RealtimeHotTable `json:"hot,omitempty"`
+}
+
 // ServerConfig is a type alias for Config.
 type ServerConfig = Config

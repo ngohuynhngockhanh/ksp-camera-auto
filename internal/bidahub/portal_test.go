@@ -1,6 +1,7 @@
 package bidahub
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -649,5 +650,152 @@ func TestTier5_F5_PortalCloudP2PCrossClubIsolation(t *testing.T) {
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("expected 403 Forbidden when club %s accesses foreign box %s on %s, got %d", clubA.ID, foreignBoxID, sub, rec.Code)
 		}
+	}
+}
+
+// Test 22 (GA4 Portal Analytics + Realtime): Owner Portal exposes GA4 comparison/funnel/heatmap/acquisition/cohorts
+// and club-scoped realtime on both /portal/{token}/analytics* and /portal/{token}/api/analytics* with zero cross-club leaks.
+func TestTier5_F5_PortalGA4AnalyticsAndRealtimeStrictClubIsolation(t *testing.T) {
+	srv, _ := newTestHubServer(t)
+	clubs := storeListClubs(srv)
+	if len(clubs) < 2 {
+		t.Fatalf("expected >= 2 clubs")
+	}
+	clubA := clubs[0]
+	clubB := clubs[1]
+	boxA := clubA.BoxIDs[0]
+	boxB := clubB.BoxIDs[0]
+
+	now := time.Now().In(analyticsTZ)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, analyticsTZ)
+	prevDay := today.AddDate(0, 0, -8).Format("2006-01-02")
+	curDay := today.Format("2006-01-02")
+
+	// Seed Club A (previous + current period)
+	_, err := srv.IngestAnalytics(AnalyticsIngestPayload{
+		BoxID:       boxA,
+		Source:      "redbida-go",
+		SourceEpoch: "ep-portal-a",
+		AIEnabled:   true,
+		BoxHourly: []AnalyticsBoxHourlyIn{
+			{
+				BucketHour: prevDay + " 19:00",
+				AnalyticsBoxMetrics: AnalyticsBoxMetrics{
+					QRViews: 20, PageViews: 25, UniqueVisitors: 10, Sessions: 12, EngagedSessions: 8,
+					ClipDownloads: 4, CutClips: 2, AIStudioOpens: 3, AIAnalyzes: 2, AcqQR: 10,
+				},
+			},
+			{
+				BucketHour: curDay + " 21:00",
+				AnalyticsBoxMetrics: AnalyticsBoxMetrics{
+					QRViews: 50, PageViews: 60, UniqueVisitors: 25, Sessions: 30, EngagedSessions: 21, ReturningVisitors: 10,
+					LiveHLS: 15, VODPlays: 10, TimelineOpens: 5, ClipDownloads: 10, CutClips: 5,
+					AIStudioOpens: 8, AIAnalyzes: 6, AIExportsIOS: 4, AcqQR: 20, AcqShare: 5, AcqApp: 3, AcqDirect: 2,
+				},
+			},
+		},
+		BoxDaily: []AnalyticsBoxDailyIn{
+			{BucketDate: prevDay, UniqueVisitors: 10, Sessions: 12, EngagedSessions: 8},
+			{BucketDate: curDay, UniqueVisitors: 25, Sessions: 30, EngagedSessions: 21, ReturningVisitors: 10},
+		},
+		CameraDaily: []AnalyticsCamDailyIn{
+			{BucketDate: curDay, CameraID: "camera01", TableName: "Bàn 01 Club A", AnalyticsCamMetrics: AnalyticsCamMetrics{QRViews: 50}},
+		},
+	}, now)
+	if err != nil {
+		t.Fatalf("ingest clubA failed: %v", err)
+	}
+
+	// Seed Club B (must NEVER appear in Club A portal!)
+	_, err = srv.IngestAnalytics(AnalyticsIngestPayload{
+		BoxID:       boxB,
+		Source:      "redbida-go",
+		SourceEpoch: "ep-portal-b",
+		BoxHourly: []AnalyticsBoxHourlyIn{
+			{BucketHour: curDay + " 21:00", AnalyticsBoxMetrics: AnalyticsBoxMetrics{QRViews: 999, Sessions: 500}},
+		},
+		CameraDaily: []AnalyticsCamDailyIn{
+			{BucketDate: curDay, CameraID: "camera09", TableName: "Bàn 09 SECRET B", AnalyticsCamMetrics: AnalyticsCamMetrics{QRViews: 999}},
+		},
+	}, now)
+	if err != nil {
+		t.Fatalf("ingest clubB failed: %v", err)
+	}
+
+	// Push live heartbeats with rt for both clubs
+	m30A := make([]int, 30)
+	m30A[29] = 4
+	m30B := make([]int, 30)
+	m30B[29] = 17
+	doHubRequest(t, srv, http.MethodPost, "/fleet/api/heartbeat", HeartbeatPayload{
+		BoxID: boxA, Secret: testAPIKey,
+		Realtime: &RealtimeBoxMetrics{A5: 4, A30: 9, Live: 3, VOD: 1, Cut: 0, AI: 1, M30: m30A, Hot: []RealtimeHotTable{{Cam: "camera01", Table: "Bàn 01 Club A", N: 3}}},
+	}, map[string]string{"NO_AUTH": "1"})
+	doHubRequest(t, srv, http.MethodPost, "/fleet/api/heartbeat", HeartbeatPayload{
+		BoxID: boxB, Secret: testAPIKey,
+		Realtime: &RealtimeBoxMetrics{A5: 17, A30: 40, Live: 12, M30: m30B, Hot: []RealtimeHotTable{{Cam: "camera09", Table: "Bàn 09 SECRET B", N: 9}}},
+	}, map[string]string{"NO_AUTH": "1"})
+
+	// Test BOTH /analytics and /api/analytics routes with compare=1 and cross-club attack params
+	for _, route := range []string{"/analytics", "/api/analytics"} {
+		path := "/portal/" + clubA.PortalToken + route + "?range=7d&compare=1&club_id=" + clubB.ID + "&box_id=" + boxB
+		rec, _ := doHubRequest(t, srv, http.MethodGet, path, nil, map[string]string{"NO_AUTH": "1"})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s failed: %d %s", path, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), "SECRET B") || strings.Contains(rec.Body.String(), boxB) {
+			t.Fatalf("CRITICAL: clubB data leaked on %s", path)
+		}
+		var out struct {
+			OK          bool                  `json:"ok"`
+			ClubID      string                `json:"club_id"`
+			KPI         AnalyticsKPI          `json:"kpi"`
+			Comparison  *AnalyticsComparison  `json:"comparison"`
+			Funnel      []AnalyticsFunnelStep `json:"funnel"`
+			Heatmap7x24 AnalyticsHeatmap7x24  `json:"heatmap_7x24"`
+			Acquisition AnalyticsAcquisition  `json:"acquisition"`
+			Cohorts     AnalyticsCohorts      `json:"cohorts"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode %s: %v", path, err)
+		}
+		if !out.OK || out.ClubID != clubA.ID || out.KPI.QRViews != 50 || out.Comparison == nil || out.Comparison.DeltasPct.QRViews != 150.0 {
+			t.Fatalf("unexpected portal GA4 analytics on %s: kpi=%+v cmp=%+v", route, out.KPI, out.Comparison)
+		}
+		if len(out.Funnel) != 4 || out.Heatmap7x24.PeakDayHour.Hour != 21 || out.Acquisition.QR != 20 || out.Cohorts.ReturningVisitors != 10 {
+			t.Fatalf("unexpected GA4 blocks on %s: funnel=%+v hm=%+v acq=%+v coh=%+v", route, out.Funnel, out.Heatmap7x24.PeakDayHour, out.Acquisition, out.Cohorts)
+		}
+	}
+
+	// Test BOTH /analytics/realtime and /api/analytics/realtime routes with strict club isolation
+	for _, route := range []string{"/analytics/realtime", "/api/analytics/realtime"} {
+		path := "/portal/" + clubA.PortalToken + route + "?club_id=" + clubB.ID + "&box_id=" + boxB
+		rec, _ := doHubRequest(t, srv, http.MethodGet, path, nil, map[string]string{"NO_AUTH": "1"})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s failed: %d %s", path, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), "SECRET B") || strings.Contains(rec.Body.String(), boxB) {
+			t.Fatalf("CRITICAL: clubB realtime data leaked on %s", path)
+		}
+		var rt AnalyticsRealtimeResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &rt); err != nil {
+			t.Fatalf("decode %s: %v", path, err)
+		}
+		if !rt.OK || rt.ClubID != clubA.ID || rt.Active5m != 4 || rt.Active30m != 9 || len(rt.MinuteBars30) != 30 || rt.MinuteBars30[29] != 4 {
+			t.Fatalf("unexpected portal realtime on %s: %+v", route, rt)
+		}
+		if len(rt.HotTables) != 1 || rt.HotTables[0].TableName != "Bàn 01 Club A" {
+			t.Fatalf("unexpected portal hot_tables on %s: %+v", route, rt.HotTables)
+		}
+	}
+
+	// Non-GET rejected with 405, unknown token rejected with 404
+	recPost, _ := doHubRequest(t, srv, http.MethodPost, "/portal/"+clubA.PortalToken+"/analytics/realtime", nil, map[string]string{"NO_AUTH": "1"})
+	if recPost.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 on POST portal realtime, got %d", recPost.Code)
+	}
+	rec404, _ := doHubRequest(t, srv, http.MethodGet, "/portal/deadbeefdeadbeefdeadbeefdeadbeef/analytics/realtime", nil, map[string]string{"NO_AUTH": "1"})
+	if rec404.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 on invalid portal token realtime, got %d", rec404.Code)
 	}
 }

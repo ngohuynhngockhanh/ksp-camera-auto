@@ -30,29 +30,38 @@ type Config struct {
 	StaffSecret   string
 	MailAPIURL    string
 	MailAPIKey    string
-	PollInterval  time.Duration
-	DialTimeout   time.Duration
-	MQTTBroker    string
-	MQTTUser      string
-	MQTTPass      string
-	MQTTTopic     string
+	PollInterval              time.Duration
+	DialTimeout               time.Duration
+	MQTTBroker                string
+	MQTTUser                  string
+	MQTTPass                  string
+	MQTTTopic                 string
+	AnalyticsCoalesceWindow   time.Duration
+	AnalyticsCoalesceMaxBatch int
 }
 
 // Server is the Central Fleet Management Hub HTTP server for inut-bida-hub (:2090).
 type Server struct {
-	cfg           Config
-	store         *Store
-	mailer        *Mailer
-	forgotMu      sync.Mutex
-	forgotHits    map[string][]time.Time
-	tunnelMu      sync.RWMutex
-	tunnelTargets map[string]map[string]string
-	yamuxSessions map[string]*yamux.Session
-	sseMu         sync.RWMutex
-	sseClients    map[chan string]struct{}
-	mqttSub       *hubMQTTSubscriber
-	stopOnce      sync.Once
-	stopCh        chan struct{}
+	cfg                  Config
+	store                *Store
+	mailer               *Mailer
+	forgotMu             sync.Mutex
+	forgotHits           map[string][]time.Time
+	tunnelMu             sync.RWMutex
+	tunnelTargets        map[string]map[string]string
+	yamuxSessions        map[string]*yamux.Session
+	sseMu                sync.RWMutex
+	sseClients           map[chan string]struct{}
+	mqttSub              *hubMQTTSubscriber
+	rtMu                 sync.RWMutex
+	rtByBox              map[string]realtimeBoxEntry
+	lastRTSumA5          int
+	lastRTSumA30         int
+	analyticsEpochsMu    sync.RWMutex
+	analyticsKnownEpochs map[string]string
+	coalescer            *analyticsCoalescer
+	stopOnce             sync.Once
+	stopCh               chan struct{}
 }
 
 // NewServer initializes a new inut-bida-hub Server and seeds/loads its persistent Store.
@@ -145,14 +154,16 @@ func NewServer(cfg Config) (*Server, error) {
 	cfg.ViewerPass = ""
 
 	s := &Server{
-		cfg:           cfg,
-		store:         store,
-		mailer:        NewMailer(cfg.MailAPIURL, cfg.MailAPIKey),
-		forgotHits:    make(map[string][]time.Time),
-		tunnelTargets: make(map[string]map[string]string),
-		yamuxSessions: make(map[string]*yamux.Session),
-		sseClients:    make(map[chan string]struct{}),
-		stopCh:        make(chan struct{}),
+		cfg:                  cfg,
+		store:                store,
+		mailer:               NewMailer(cfg.MailAPIURL, cfg.MailAPIKey),
+		forgotHits:           make(map[string][]time.Time),
+		tunnelTargets:        make(map[string]map[string]string),
+		yamuxSessions:        make(map[string]*yamux.Session),
+		sseClients:           make(map[chan string]struct{}),
+		rtByBox:              make(map[string]realtimeBoxEntry),
+		analyticsKnownEpochs: make(map[string]string),
+		stopCh:               make(chan struct{}),
 	}
 
 	if cfg.PollInterval > 0 {
@@ -162,6 +173,7 @@ func NewServer(cfg Config) (*Server, error) {
 		s.StartMQTTSubscriber(cfg.MQTTBroker, cfg.MQTTUser, cfg.MQTTPass, cfg.MQTTTopic)
 	}
 	if s.store.SQLiteDB() != nil {
+		s.coalescer = newAnalyticsCoalescer(s, cfg.AnalyticsCoalesceWindow, cfg.AnalyticsCoalesceMaxBatch)
 		go s.analyticsPrunerLoop()
 	}
 
@@ -198,10 +210,11 @@ func (s *Server) Handler() http.Handler {
 	return s
 }
 
-// Close stops background polling and persists state to SQLite WAL.
+// Close stops background polling, flushes pending analytics writes, and persists state to SQLite WAL.
 func (s *Server) Close() error {
 	s.stopOnce.Do(func() {
 		close(s.stopCh)
+		s.stopAnalyticsCoalescer()
 		s.closeAllYamuxSessions()
 		s.stopMQTTSubscriber()
 	})
@@ -413,6 +426,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if path == "/fleet/api/remote-config" || path == "/api/remote-config" {
 		s.handleFleetRemoteConfig(w, r)
+		return
+	}
+	if path == "/fleet/api/analytics/realtime" || path == "/api/analytics/realtime" {
+		s.handleAnalyticsRealtime(w, r)
 		return
 	}
 	if path == "/fleet/api/analytics/overview" || path == "/api/analytics/overview" {

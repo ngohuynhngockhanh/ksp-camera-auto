@@ -93,8 +93,11 @@ func (s *Server) handlePortalRequest(w http.ResponseWriter, r *http.Request) {
 	case "api/status", "status":
 		s.handlePortalStatus(w, r, club)
 		return
-	case "api/analytics":
+	case "api/analytics", "analytics":
 		s.handlePortalAnalytics(w, r, club)
+		return
+	case "api/analytics/realtime", "analytics/realtime":
+		s.handlePortalAnalyticsRealtime(w, r, club)
 		return
 	case "api/p2p/devices":
 		s.handlePortalP2PDevices(w, r, club, "/api/cameras")
@@ -348,13 +351,18 @@ func (s *Server) handlePortalStatus(w http.ResponseWriter, _ *http.Request, club
 }
 
 func (s *Server) handlePortalAnalytics(w http.ResponseWriter, r *http.Request, club *Club) {
-	// Strictly scoped ONLY to club.ID — ignore any club_id / box_id query params!
-	rng := normalizePortalAnalyticsRange(r.URL.Query().Get("range"))
+	// Strictly scoped ONLY to club.ID — ignore any club_id / box_id / sport query params!
+	q := r.URL.Query()
+	rng := normalizePortalAnalyticsRange(q.Get("range"))
+	compare := parseAnalyticsCompareParam(q.Get("compare"))
 	now := time.Now()
 
 	ov, err := s.queryAnalyticsOverview(analyticsQueryParams{
-		Range:  rng,
-		ClubID: club.ID,
+		Range:   rng,
+		From:    q.Get("from"),
+		To:      q.Get("to"),
+		ClubID:  club.ID,
+		Compare: compare,
 	}, now)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
@@ -366,6 +374,8 @@ func (s *Server) handlePortalAnalytics(w http.ResponseWriter, r *http.Request, c
 
 	cams, err := s.queryAnalyticsCameras(analyticsCameraQueryParams{
 		Range:  rng,
+		From:   q.Get("from"),
+		To:     q.Get("to"),
 		ClubID: club.ID,
 		Limit:  30,
 	}, now)
@@ -377,10 +387,11 @@ func (s *Server) handlePortalAnalytics(w http.ResponseWriter, r *http.Request, c
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	payload := map[string]any{
 		"ok":           true,
 		"club_id":      club.ID,
 		"club_name":    club.Name,
+		"branding":     club.Branding,
 		"range":        ov.Range,
 		"from_date":    ov.FromDate,
 		"to_date":      ov.ToDate,
@@ -388,6 +399,24 @@ func (s *Server) handlePortalAnalytics(w http.ResponseWriter, r *http.Request, c
 		"os_breakdown": ov.OSBreakdown,
 		"peak_hours":   ov.PeakHours,
 		"daily_series": ov.DailySeries,
+		"funnel":       ov.Funnel,
+		"heatmap_7x24": ov.Heatmap7x24,
+		"acquisition":  ov.Acquisition,
+		"cohorts":      ov.Cohorts,
 		"top_cameras":  cams,
-	})
+	}
+	if ov.Comparison != nil {
+		payload["comparison"] = ov.Comparison
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func (s *Server) handlePortalAnalyticsRealtime(w http.ResponseWriter, _ *http.Request, club *Club) {
+	// Strictly scoped ONLY to club.ID — ignore any foreign query params!
+	resp := s.QueryAnalyticsRealtime(analyticsRealtimeFilter{
+		ClubID: club.ID,
+	}, time.Now())
+	resp.ClubID = club.ID
+	resp.ClubName = club.Name
+	writeJSON(w, http.StatusOK, resp)
 }

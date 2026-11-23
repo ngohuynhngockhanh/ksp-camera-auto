@@ -2,6 +2,7 @@ package bidahub
 
 import (
 	"bytes"
+	"compress/gzip"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
@@ -9,10 +10,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -20,41 +23,56 @@ import (
 var analyticsTZ = time.FixedZone("Asia/Ho_Chi_Minh", 7*3600)
 
 const (
-	analyticsMaxIngestBytes = 2 << 20 // 2 MiB
-	analyticsHourlyKeepDays = 90
-	analyticsDailyKeepDays  = 730 // 2 years
-	analyticsBatchKeepDays  = 14
+	analyticsMaxIngestBytes          = 2 << 20 // 2 MiB
+	analyticsHourlyKeepDays          = 90
+	analyticsDailyKeepDays           = 730 // 2 years
+	analyticsBatchKeepDays           = 14
+	realtimeEntryTTL                 = 90 * time.Second
+	defaultAnalyticsCoalesceWindow   = 2 * time.Second
+	defaultAnalyticsCoalesceMaxBatch = 32
+	analyticsCoalesceQueueCap        = 512
+	analyticsCustomMaxDays           = 366
 )
 
-// AnalyticsBoxMetrics holds the 27 box-level usage counters shared by hourly/daily rollups and base_json.
+var vietnameseWeekdays = []string{"T2", "T3", "T4", "T5", "T6", "T7", "CN"}
+
+// AnalyticsBoxMetrics holds the 35 box-level usage counters shared by hourly/daily rollups and base_json.
 type AnalyticsBoxMetrics struct {
-	QRViews          int64 `json:"qr_views"`
-	PageViews        int64 `json:"page_views"`
-	UniqueVisitors   int64 `json:"unique_visitors"`
-	LiveHLS          int64 `json:"live_hls"`
-	VODPlays         int64 `json:"vod_plays"`
-	ClipDownloads    int64 `json:"clip_downloads"`
-	TimelineOpens    int64 `json:"timeline_opens"`
-	CutClips         int64 `json:"cut_clips"`
-	CutSeconds       int64 `json:"cut_seconds"`
-	AIStudioOpens    int64 `json:"ai_studio_opens"`
-	AIVideosLoads    int64 `json:"ai_videos_loads"`
-	AIAnalyzes       int64 `json:"ai_analyzes"`
-	AIShots          int64 `json:"ai_shots"`
-	AIPots           int64 `json:"ai_pots"`
-	AIPoolRuns       int64 `json:"ai_pool_runs"`
-	AICaromRuns      int64 `json:"ai_carom_runs"`
-	AIExportsIOS     int64 `json:"ai_exports_ios"`
-	AIExportsDesktop int64 `json:"ai_exports_desktop"`
-	AIExportRelay    int64 `json:"ai_export_relay"`
-	AIErrors         int64 `json:"ai_errors"`
-	HTTPErrors       int64 `json:"http_errors"`
-	BytesOut         int64 `json:"bytes_out"`
-	OSIOS            int64 `json:"os_ios"`
-	OSAndroid        int64 `json:"os_android"`
-	OSDesktop        int64 `json:"os_desktop"`
-	OSApp            int64 `json:"os_app"`
-	OSOther          int64 `json:"os_other"`
+	QRViews           int64 `json:"qr_views"`
+	PageViews         int64 `json:"page_views"`
+	UniqueVisitors    int64 `json:"unique_visitors"`
+	LiveHLS           int64 `json:"live_hls"`
+	VODPlays          int64 `json:"vod_plays"`
+	ClipDownloads     int64 `json:"clip_downloads"`
+	TimelineOpens     int64 `json:"timeline_opens"`
+	CutClips          int64 `json:"cut_clips"`
+	CutSeconds        int64 `json:"cut_seconds"`
+	AIStudioOpens     int64 `json:"ai_studio_opens"`
+	AIVideosLoads     int64 `json:"ai_videos_loads"`
+	AIAnalyzes        int64 `json:"ai_analyzes"`
+	AIShots           int64 `json:"ai_shots"`
+	AIPots            int64 `json:"ai_pots"`
+	AIPoolRuns        int64 `json:"ai_pool_runs"`
+	AICaromRuns       int64 `json:"ai_carom_runs"`
+	AIPickleballRuns  int64 `json:"ai_pickleball_runs,omitempty"`
+	AIExportsIOS      int64 `json:"ai_exports_ios"`
+	AIExportsDesktop  int64 `json:"ai_exports_desktop"`
+	AIExportRelay     int64 `json:"ai_export_relay"`
+	AIErrors          int64 `json:"ai_errors"`
+	HTTPErrors        int64 `json:"http_errors"`
+	BytesOut          int64 `json:"bytes_out"`
+	OSIOS             int64 `json:"os_ios"`
+	OSAndroid         int64 `json:"os_android"`
+	OSDesktop         int64 `json:"os_desktop"`
+	OSApp             int64 `json:"os_app"`
+	OSOther           int64 `json:"os_other"`
+	Sessions          int64 `json:"sessions,omitempty"`
+	EngagedSessions   int64 `json:"engaged_sessions,omitempty"`
+	ReturningVisitors int64 `json:"returning_visitors,omitempty"`
+	AcqQR             int64 `json:"acq_qr,omitempty"`
+	AcqShare          int64 `json:"acq_share,omitempty"`
+	AcqApp            int64 `json:"acq_app,omitempty"`
+	AcqDirect         int64 `json:"acq_direct,omitempty"`
 }
 
 func (m *AnalyticsBoxMetrics) sanitize() {
@@ -74,6 +92,7 @@ func (m *AnalyticsBoxMetrics) sanitize() {
 	m.AIPots = clampNonNeg64(m.AIPots)
 	m.AIPoolRuns = clampNonNeg64(m.AIPoolRuns)
 	m.AICaromRuns = clampNonNeg64(m.AICaromRuns)
+	m.AIPickleballRuns = clampNonNeg64(m.AIPickleballRuns)
 	m.AIExportsIOS = clampNonNeg64(m.AIExportsIOS)
 	m.AIExportsDesktop = clampNonNeg64(m.AIExportsDesktop)
 	m.AIExportRelay = clampNonNeg64(m.AIExportRelay)
@@ -85,69 +104,92 @@ func (m *AnalyticsBoxMetrics) sanitize() {
 	m.OSDesktop = clampNonNeg64(m.OSDesktop)
 	m.OSApp = clampNonNeg64(m.OSApp)
 	m.OSOther = clampNonNeg64(m.OSOther)
+	m.Sessions = clampNonNeg64(m.Sessions)
+	m.EngagedSessions = clampNonNeg64(m.EngagedSessions)
+	m.ReturningVisitors = clampNonNeg64(m.ReturningVisitors)
+	m.AcqQR = clampNonNeg64(m.AcqQR)
+	m.AcqShare = clampNonNeg64(m.AcqShare)
+	m.AcqApp = clampNonNeg64(m.AcqApp)
+	m.AcqDirect = clampNonNeg64(m.AcqDirect)
 }
 
 func (m AnalyticsBoxMetrics) add(o AnalyticsBoxMetrics) AnalyticsBoxMetrics {
 	return AnalyticsBoxMetrics{
-		QRViews:          m.QRViews + o.QRViews,
-		PageViews:        m.PageViews + o.PageViews,
-		UniqueVisitors:   m.UniqueVisitors + o.UniqueVisitors,
-		LiveHLS:          m.LiveHLS + o.LiveHLS,
-		VODPlays:         m.VODPlays + o.VODPlays,
-		ClipDownloads:    m.ClipDownloads + o.ClipDownloads,
-		TimelineOpens:    m.TimelineOpens + o.TimelineOpens,
-		CutClips:         m.CutClips + o.CutClips,
-		CutSeconds:       m.CutSeconds + o.CutSeconds,
-		AIStudioOpens:    m.AIStudioOpens + o.AIStudioOpens,
-		AIVideosLoads:    m.AIVideosLoads + o.AIVideosLoads,
-		AIAnalyzes:       m.AIAnalyzes + o.AIAnalyzes,
-		AIShots:          m.AIShots + o.AIShots,
-		AIPots:           m.AIPots + o.AIPots,
-		AIPoolRuns:       m.AIPoolRuns + o.AIPoolRuns,
-		AICaromRuns:      m.AICaromRuns + o.AICaromRuns,
-		AIExportsIOS:     m.AIExportsIOS + o.AIExportsIOS,
-		AIExportsDesktop: m.AIExportsDesktop + o.AIExportsDesktop,
-		AIExportRelay:    m.AIExportRelay + o.AIExportRelay,
-		AIErrors:         m.AIErrors + o.AIErrors,
-		HTTPErrors:       m.HTTPErrors + o.HTTPErrors,
-		BytesOut:         m.BytesOut + o.BytesOut,
-		OSIOS:            m.OSIOS + o.OSIOS,
-		OSAndroid:        m.OSAndroid + o.OSAndroid,
-		OSDesktop:        m.OSDesktop + o.OSDesktop,
-		OSApp:            m.OSApp + o.OSApp,
-		OSOther:          m.OSOther + o.OSOther,
+		QRViews:           m.QRViews + o.QRViews,
+		PageViews:         m.PageViews + o.PageViews,
+		UniqueVisitors:    m.UniqueVisitors + o.UniqueVisitors,
+		LiveHLS:           m.LiveHLS + o.LiveHLS,
+		VODPlays:          m.VODPlays + o.VODPlays,
+		ClipDownloads:     m.ClipDownloads + o.ClipDownloads,
+		TimelineOpens:     m.TimelineOpens + o.TimelineOpens,
+		CutClips:          m.CutClips + o.CutClips,
+		CutSeconds:        m.CutSeconds + o.CutSeconds,
+		AIStudioOpens:     m.AIStudioOpens + o.AIStudioOpens,
+		AIVideosLoads:     m.AIVideosLoads + o.AIVideosLoads,
+		AIAnalyzes:        m.AIAnalyzes + o.AIAnalyzes,
+		AIShots:           m.AIShots + o.AIShots,
+		AIPots:            m.AIPots + o.AIPots,
+		AIPoolRuns:        m.AIPoolRuns + o.AIPoolRuns,
+		AICaromRuns:       m.AICaromRuns + o.AICaromRuns,
+		AIPickleballRuns:  m.AIPickleballRuns + o.AIPickleballRuns,
+		AIExportsIOS:      m.AIExportsIOS + o.AIExportsIOS,
+		AIExportsDesktop:  m.AIExportsDesktop + o.AIExportsDesktop,
+		AIExportRelay:     m.AIExportRelay + o.AIExportRelay,
+		AIErrors:          m.AIErrors + o.AIErrors,
+		HTTPErrors:        m.HTTPErrors + o.HTTPErrors,
+		BytesOut:          m.BytesOut + o.BytesOut,
+		OSIOS:             m.OSIOS + o.OSIOS,
+		OSAndroid:         m.OSAndroid + o.OSAndroid,
+		OSDesktop:         m.OSDesktop + o.OSDesktop,
+		OSApp:             m.OSApp + o.OSApp,
+		OSOther:           m.OSOther + o.OSOther,
+		Sessions:          m.Sessions + o.Sessions,
+		EngagedSessions:   m.EngagedSessions + o.EngagedSessions,
+		ReturningVisitors: m.ReturningVisitors + o.ReturningVisitors,
+		AcqQR:             m.AcqQR + o.AcqQR,
+		AcqShare:          m.AcqShare + o.AcqShare,
+		AcqApp:            m.AcqApp + o.AcqApp,
+		AcqDirect:         m.AcqDirect + o.AcqDirect,
 	}
 }
 
 func (m AnalyticsBoxMetrics) maxWith(o AnalyticsBoxMetrics) AnalyticsBoxMetrics {
 	return AnalyticsBoxMetrics{
-		QRViews:          max64(m.QRViews, o.QRViews),
-		PageViews:        max64(m.PageViews, o.PageViews),
-		UniqueVisitors:   max64(m.UniqueVisitors, o.UniqueVisitors),
-		LiveHLS:          max64(m.LiveHLS, o.LiveHLS),
-		VODPlays:         max64(m.VODPlays, o.VODPlays),
-		ClipDownloads:    max64(m.ClipDownloads, o.ClipDownloads),
-		TimelineOpens:    max64(m.TimelineOpens, o.TimelineOpens),
-		CutClips:         max64(m.CutClips, o.CutClips),
-		CutSeconds:       max64(m.CutSeconds, o.CutSeconds),
-		AIStudioOpens:    max64(m.AIStudioOpens, o.AIStudioOpens),
-		AIVideosLoads:    max64(m.AIVideosLoads, o.AIVideosLoads),
-		AIAnalyzes:       max64(m.AIAnalyzes, o.AIAnalyzes),
-		AIShots:          max64(m.AIShots, o.AIShots),
-		AIPots:           max64(m.AIPots, o.AIPots),
-		AIPoolRuns:       max64(m.AIPoolRuns, o.AIPoolRuns),
-		AICaromRuns:      max64(m.AICaromRuns, o.AICaromRuns),
-		AIExportsIOS:     max64(m.AIExportsIOS, o.AIExportsIOS),
-		AIExportsDesktop: max64(m.AIExportsDesktop, o.AIExportsDesktop),
-		AIExportRelay:    max64(m.AIExportRelay, o.AIExportRelay),
-		AIErrors:         max64(m.AIErrors, o.AIErrors),
-		HTTPErrors:       max64(m.HTTPErrors, o.HTTPErrors),
-		BytesOut:         max64(m.BytesOut, o.BytesOut),
-		OSIOS:            max64(m.OSIOS, o.OSIOS),
-		OSAndroid:        max64(m.OSAndroid, o.OSAndroid),
-		OSDesktop:        max64(m.OSDesktop, o.OSDesktop),
-		OSApp:            max64(m.OSApp, o.OSApp),
-		OSOther:          max64(m.OSOther, o.OSOther),
+		QRViews:           max64(m.QRViews, o.QRViews),
+		PageViews:         max64(m.PageViews, o.PageViews),
+		UniqueVisitors:    max64(m.UniqueVisitors, o.UniqueVisitors),
+		LiveHLS:           max64(m.LiveHLS, o.LiveHLS),
+		VODPlays:          max64(m.VODPlays, o.VODPlays),
+		ClipDownloads:     max64(m.ClipDownloads, o.ClipDownloads),
+		TimelineOpens:     max64(m.TimelineOpens, o.TimelineOpens),
+		CutClips:          max64(m.CutClips, o.CutClips),
+		CutSeconds:        max64(m.CutSeconds, o.CutSeconds),
+		AIStudioOpens:     max64(m.AIStudioOpens, o.AIStudioOpens),
+		AIVideosLoads:     max64(m.AIVideosLoads, o.AIVideosLoads),
+		AIAnalyzes:        max64(m.AIAnalyzes, o.AIAnalyzes),
+		AIShots:           max64(m.AIShots, o.AIShots),
+		AIPots:            max64(m.AIPots, o.AIPots),
+		AIPoolRuns:        max64(m.AIPoolRuns, o.AIPoolRuns),
+		AICaromRuns:       max64(m.AICaromRuns, o.AICaromRuns),
+		AIPickleballRuns:  max64(m.AIPickleballRuns, o.AIPickleballRuns),
+		AIExportsIOS:      max64(m.AIExportsIOS, o.AIExportsIOS),
+		AIExportsDesktop:  max64(m.AIExportsDesktop, o.AIExportsDesktop),
+		AIExportRelay:     max64(m.AIExportRelay, o.AIExportRelay),
+		AIErrors:          max64(m.AIErrors, o.AIErrors),
+		HTTPErrors:        max64(m.HTTPErrors, o.HTTPErrors),
+		BytesOut:          max64(m.BytesOut, o.BytesOut),
+		OSIOS:             max64(m.OSIOS, o.OSIOS),
+		OSAndroid:         max64(m.OSAndroid, o.OSAndroid),
+		OSDesktop:         max64(m.OSDesktop, o.OSDesktop),
+		OSApp:             max64(m.OSApp, o.OSApp),
+		OSOther:           max64(m.OSOther, o.OSOther),
+		Sessions:          max64(m.Sessions, o.Sessions),
+		EngagedSessions:   max64(m.EngagedSessions, o.EngagedSessions),
+		ReturningVisitors: max64(m.ReturningVisitors, o.ReturningVisitors),
+		AcqQR:             max64(m.AcqQR, o.AcqQR),
+		AcqShare:          max64(m.AcqShare, o.AcqShare),
+		AcqApp:            max64(m.AcqApp, o.AcqApp),
+		AcqDirect:         max64(m.AcqDirect, o.AcqDirect),
 	}
 }
 
@@ -156,7 +198,8 @@ func (m AnalyticsBoxMetrics) aiExportsTotal() int64 {
 }
 
 func (m AnalyticsBoxMetrics) hasAIActivity() bool {
-	return m.AIStudioOpens > 0 || m.AIVideosLoads > 0 || m.AIAnalyzes > 0 || m.AIShots > 0 || m.aiExportsTotal() > 0
+	return m.AIStudioOpens > 0 || m.AIVideosLoads > 0 || m.AIAnalyzes > 0 || m.AIShots > 0 ||
+		m.AIPoolRuns > 0 || m.AICaromRuns > 0 || m.AIPickleballRuns > 0 || m.aiExportsTotal() > 0
 }
 
 // AnalyticsCamMetrics holds the 15 per-camera daily usage counters.
@@ -242,10 +285,13 @@ type AnalyticsBoxHourlyIn struct {
 	AnalyticsBoxMetrics
 }
 
-// AnalyticsBoxDailyIn carries exact box-level daily unique visitor counts.
+// AnalyticsBoxDailyIn carries exact box-level daily visitor/session/cohort counts.
 type AnalyticsBoxDailyIn struct {
-	BucketDate     string `json:"bucket_date"` // "YYYY-MM-DD" GMT+7
-	UniqueVisitors int64  `json:"unique_visitors"`
+	BucketDate        string `json:"bucket_date"` // "YYYY-MM-DD" GMT+7
+	UniqueVisitors    int64  `json:"unique_visitors"`
+	Sessions          int64  `json:"sessions,omitempty"`
+	EngagedSessions   int64  `json:"engaged_sessions,omitempty"`
+	ReturningVisitors int64  `json:"returning_visitors,omitempty"`
 }
 
 // AnalyticsCamDailyIn represents one per-camera daily bucket in an ingest payload.
@@ -257,56 +303,69 @@ type AnalyticsCamDailyIn struct {
 }
 
 // AnalyticsIngestPayload is accepted by POST /fleet/api/analytics/ingest from both
-// redbida-go (cumulative snapshot with source_epoch) and legacy Node-RED (delta with batch_id).
+// redbida-go (cumulative snapshot / dirty-bucket delta with source_epoch & rev) and legacy Node-RED (delta with batch_id).
 type AnalyticsIngestPayload struct {
 	BoxID       string                 `json:"box_id"`
 	Secret      string                 `json:"secret,omitempty"`
 	Source      string                 `json:"source"`                 // "redbida-go" | "nodered"
 	SourceEpoch string                 `json:"source_epoch,omitempty"` // persistent epoch ID for Mode A
 	BatchID     string                 `json:"batch_id,omitempty"`     // idempotency key for Mode B
+	Rev         uint64                 `json:"rev,omitempty"`          // monotonic edge collector revision
+	IsDelta     bool                   `json:"is_delta,omitempty"`     // true for dirty-bucket delta
 	GeneratedAt string                 `json:"generated_at,omitempty"`
 	AIEnabled   bool                   `json:"ai_enabled"`
+	Realtime    *RealtimeBoxMetrics    `json:"realtime,omitempty"`
 	BoxHourly   []AnalyticsBoxHourlyIn `json:"box_hourly"`
 	BoxDaily    []AnalyticsBoxDailyIn  `json:"box_daily,omitempty"`
 	CameraDaily []AnalyticsCamDailyIn  `json:"camera_daily,omitempty"`
 }
 
-// AnalyticsIngestResult summarizes a completed analytics ingest transaction.
+// AnalyticsIngestResult summarizes a completed or queued analytics ingest request.
 type AnalyticsIngestResult struct {
 	OK             bool `json:"ok"`
 	Deduped        bool `json:"deduped,omitempty"`
+	Queued         bool `json:"queued,omitempty"`
+	NeedFullSync   bool `json:"need_full_sync,omitempty"`
 	HourlyUpserted int  `json:"hourly_upserted,omitempty"`
 	DailyUpdated   int  `json:"daily_updated,omitempty"`
 	CamerasUpdated int  `json:"cameras_updated,omitempty"`
 }
 
-// AnalyticsKPI holds the fleet/club overview KPI totals.
+// AnalyticsKPI holds the fleet/club overview KPI totals (GA4-enriched).
 type AnalyticsKPI struct {
-	QRViews          int64 `json:"qr_views"`
-	PageViews        int64 `json:"page_views"`
-	UniqueVisitors   int64 `json:"unique_visitors"`
-	LiveHLS          int64 `json:"live_hls"`
-	VODPlays         int64 `json:"vod_plays"`
-	ClipDownloads    int64 `json:"clip_downloads"`
-	TimelineOpens    int64 `json:"timeline_opens"`
-	CutClips         int64 `json:"cut_clips"`
-	CutSeconds       int64 `json:"cut_seconds"`
-	AIStudioOpens    int64 `json:"ai_studio_opens"`
-	AIVideosLoads    int64 `json:"ai_videos_loads"`
-	AIAnalyzes       int64 `json:"ai_analyzes"`
-	AIShots          int64 `json:"ai_shots"`
-	AIPots           int64 `json:"ai_pots"`
-	AIPoolRuns       int64 `json:"ai_pool_runs"`
-	AICaromRuns      int64 `json:"ai_carom_runs"`
-	AIExportsIOS     int64 `json:"ai_exports_ios"`
-	AIExportsDesktop int64 `json:"ai_exports_desktop"`
-	AIExportRelay    int64 `json:"ai_export_relay"`
-	AIErrors         int64 `json:"ai_errors"`
-	HTTPErrors       int64 `json:"http_errors"`
-	BytesOut         int64 `json:"bytes_out"`
-	ActiveBoxes      int   `json:"active_boxes"`
-	ActiveClubs      int   `json:"active_clubs"`
-	AIActiveBoxes    int   `json:"ai_active_boxes"`
+	QRViews           int64   `json:"qr_views"`
+	PageViews         int64   `json:"page_views"`
+	UniqueVisitors    int64   `json:"unique_visitors"`
+	Sessions          int64   `json:"sessions"`
+	EngagedSessions   int64   `json:"engaged_sessions"`
+	ReturningVisitors int64   `json:"returning_visitors"`
+	EngagementRatePct float64 `json:"engagement_rate_pct"`
+	ErrorRatePct      float64 `json:"error_rate_pct"`
+	LiveHLS           int64   `json:"live_hls"`
+	VODPlays          int64   `json:"vod_plays"`
+	ClipDownloads     int64   `json:"clip_downloads"`
+	TimelineOpens     int64   `json:"timeline_opens"`
+	CutClips          int64   `json:"cut_clips"`
+	ClipsTotal        int64   `json:"clips_total"`
+	CutSeconds        int64   `json:"cut_seconds"`
+	AIStudioOpens     int64   `json:"ai_studio_opens"`
+	AIVideosLoads     int64   `json:"ai_videos_loads"`
+	AIAnalyzes        int64   `json:"ai_analyzes"`
+	AIShots           int64   `json:"ai_shots"`
+	AIPots            int64   `json:"ai_pots"`
+	AIPoolRuns        int64   `json:"ai_pool_runs"`
+	AICaromRuns       int64   `json:"ai_carom_runs"`
+	AIPickleballRuns  int64   `json:"ai_pickleball_runs"`
+	AIExportsIOS      int64   `json:"ai_exports_ios"`
+	AIExportsDesktop  int64   `json:"ai_exports_desktop"`
+	AIExportRelay     int64   `json:"ai_export_relay"`
+	AIExportsTotal    int64   `json:"ai_exports_total"`
+	AIErrors          int64   `json:"ai_errors"`
+	HTTPErrors        int64   `json:"http_errors"`
+	BytesOut          int64   `json:"bytes_out"`
+	ActiveBoxes       int     `json:"active_boxes"`
+	ActiveClubs       int     `json:"active_clubs"`
+	AIActiveBoxes     int     `json:"ai_active_boxes"`
 }
 
 // AnalyticsOSBreakdown holds aggregated OS/device counts.
@@ -333,57 +392,132 @@ type AnalyticsDailyPoint struct {
 	Date           string `json:"date"`
 	QRViews        int64  `json:"qr_views"`
 	UniqueVisitors int64  `json:"unique_visitors"`
+	Sessions       int64  `json:"sessions"`
 	DownloadsCuts  int64  `json:"downloads_cuts"`
 	AIAnalyzes     int64  `json:"ai_analyzes"`
 	AIExports      int64  `json:"ai_exports"`
 	BytesOut       int64  `json:"bytes_out"`
 }
 
+// AnalyticsComparisonDeltas holds % deltas vs previous equal-length period.
+type AnalyticsComparisonDeltas struct {
+	UniqueVisitors float64 `json:"unique_visitors"`
+	Sessions       float64 `json:"sessions"`
+	QRViews        float64 `json:"qr_views"`
+	ClipsTotal     float64 `json:"clips_total"`
+	AIAnalyzes     float64 `json:"ai_analyzes"`
+	BytesOut       float64 `json:"bytes_out"`
+	EngagementRate float64 `json:"engagement_rate"`
+}
+
+// AnalyticsComparison carries previous-period KPIs, % deltas, and aligned daily series.
+type AnalyticsComparison struct {
+	From        string                    `json:"from"`
+	To          string                    `json:"to"`
+	KPIs        AnalyticsKPI              `json:"kpis"`
+	DeltasPct   AnalyticsComparisonDeltas `json:"deltas_pct"`
+	DailySeries []AnalyticsDailyPoint     `json:"daily_series"`
+}
+
+// AnalyticsFunnelStep represents one step of the 4-step visitor conversion funnel.
+type AnalyticsFunnelStep struct {
+	Step     string  `json:"step"`
+	Label    string  `json:"label"`
+	Count    int64   `json:"count"`
+	PctOfTop float64 `json:"pct_of_top"`
+	DropPct  float64 `json:"drop_pct"`
+}
+
+// AnalyticsHeatmapPeak identifies the single hottest weekday x hour slot (GMT+7).
+type AnalyticsHeatmapPeak struct {
+	DayIndex int    `json:"day_index"` // 0=Mon .. 6=Sun
+	DayLabel string `json:"day_label"` // "T2".."CN"
+	Hour     int    `json:"hour"`      // 0..23
+	Value    int64  `json:"value"`
+}
+
+// AnalyticsHeatmap7x24 holds the 7x24 Mon..Sun x 0..23h GMT+7 traffic intensity matrix.
+type AnalyticsHeatmap7x24 struct {
+	Days        []string             `json:"days"`
+	Matrix      [][]int64            `json:"matrix"`
+	MaxCell     int64                `json:"max_cell"`
+	PeakDayHour AnalyticsHeatmapPeak `json:"peak_day_hour"`
+}
+
+// AnalyticsAcquisition holds GA4 acquisition channel counts.
+type AnalyticsAcquisition struct {
+	QR     int64 `json:"qr"`
+	Share  int64 `json:"share"`
+	App    int64 `json:"app"`
+	Direct int64 `json:"direct"`
+}
+
+// AnalyticsCohorts holds GA4 new/returning visitor and session engagement metrics.
+type AnalyticsCohorts struct {
+	NewVisitors       int64   `json:"new_visitors"`
+	ReturningVisitors int64   `json:"returning_visitors"`
+	ReturningPct      float64 `json:"returning_pct"`
+	Sessions          int64   `json:"sessions"`
+	EngagedSessions   int64   `json:"engaged_sessions"`
+	EngagementRatePct float64 `json:"engagement_rate_pct"`
+	ViewsPerSession   float64 `json:"views_per_session"`
+}
+
 // AnalyticsTopClub holds aggregated analytics for one club.
 type AnalyticsTopClub struct {
-	ClubID         string   `json:"club_id"`
-	ClubName       string   `json:"club_name"`
-	BoxesCount     int      `json:"boxes_count"`
-	Sources        []string `json:"sources"`
-	AIEnabled      bool     `json:"ai_enabled"`
-	QRViews        int64    `json:"qr_views"`
-	UniqueVisitors int64    `json:"unique_visitors"`
-	LiveHLS        int64    `json:"live_hls"`
-	VODPlays       int64    `json:"vod_plays"`
-	ClipDownloads  int64    `json:"clip_downloads"`
-	CutClips       int64    `json:"cut_clips"`
-	AIStudioOpens  int64    `json:"ai_studio_opens"`
-	AIAnalyzes     int64    `json:"ai_analyzes"`
-	AIShots        int64    `json:"ai_shots"`
-	AIExports      int64    `json:"ai_exports"`
-	AIErrors       int64    `json:"ai_errors"`
-	HTTPErrors     int64    `json:"http_errors"`
-	BytesOut       int64    `json:"bytes_out"`
-	LastIngestAt   string   `json:"last_ingest_at"`
+	ClubID            string   `json:"club_id"`
+	ClubName          string   `json:"club_name"`
+	Branding          string   `json:"branding,omitempty"`
+	BoxesCount        int      `json:"boxes_count"`
+	Sources           []string `json:"sources"`
+	AIEnabled         bool     `json:"ai_enabled"`
+	QRViews           int64    `json:"qr_views"`
+	UniqueVisitors    int64    `json:"unique_visitors"`
+	Sessions          int64    `json:"sessions"`
+	EngagedSessions   int64    `json:"engaged_sessions"`
+	ReturningVisitors int64    `json:"returning_visitors"`
+	LiveHLS           int64    `json:"live_hls"`
+	VODPlays          int64    `json:"vod_plays"`
+	ClipDownloads     int64    `json:"clip_downloads"`
+	CutClips          int64    `json:"cut_clips"`
+	AIStudioOpens     int64    `json:"ai_studio_opens"`
+	AIAnalyzes        int64    `json:"ai_analyzes"`
+	AIShots           int64    `json:"ai_shots"`
+	AIPickleballRuns  int64    `json:"ai_pickleball_runs"`
+	AIExports         int64    `json:"ai_exports"`
+	AIErrors          int64    `json:"ai_errors"`
+	HTTPErrors        int64    `json:"http_errors"`
+	BytesOut          int64    `json:"bytes_out"`
+	LastIngestAt      string   `json:"last_ingest_at"`
 }
 
 // AnalyticsTopBox holds aggregated analytics for one box.
 type AnalyticsTopBox struct {
-	BoxID          string `json:"box_id"`
-	BoxName        string `json:"box_name"`
-	ClubID         string `json:"club_id"`
-	ClubName       string `json:"club_name"`
-	Source         string `json:"source"`
-	AIEnabled      bool   `json:"ai_enabled"`
-	QRViews        int64  `json:"qr_views"`
-	UniqueVisitors int64  `json:"unique_visitors"`
-	LiveHLS        int64  `json:"live_hls"`
-	VODPlays       int64  `json:"vod_plays"`
-	ClipDownloads  int64  `json:"clip_downloads"`
-	CutClips       int64  `json:"cut_clips"`
-	AIStudioOpens  int64  `json:"ai_studio_opens"`
-	AIAnalyzes     int64  `json:"ai_analyzes"`
-	AIShots        int64  `json:"ai_shots"`
-	AIExports      int64  `json:"ai_exports"`
-	AIErrors       int64  `json:"ai_errors"`
-	HTTPErrors     int64  `json:"http_errors"`
-	BytesOut       int64  `json:"bytes_out"`
-	LastIngestAt   string `json:"last_ingest_at"`
+	BoxID             string `json:"box_id"`
+	BoxName           string `json:"box_name"`
+	ClubID            string `json:"club_id"`
+	ClubName          string `json:"club_name"`
+	Branding          string `json:"branding,omitempty"`
+	Source            string `json:"source"`
+	AIEnabled         bool   `json:"ai_enabled"`
+	QRViews           int64  `json:"qr_views"`
+	UniqueVisitors    int64  `json:"unique_visitors"`
+	Sessions          int64  `json:"sessions"`
+	EngagedSessions   int64  `json:"engaged_sessions"`
+	ReturningVisitors int64  `json:"returning_visitors"`
+	LiveHLS           int64  `json:"live_hls"`
+	VODPlays          int64  `json:"vod_plays"`
+	ClipDownloads     int64  `json:"clip_downloads"`
+	CutClips          int64  `json:"cut_clips"`
+	AIStudioOpens     int64  `json:"ai_studio_opens"`
+	AIAnalyzes        int64  `json:"ai_analyzes"`
+	AIShots           int64  `json:"ai_shots"`
+	AIPickleballRuns  int64  `json:"ai_pickleball_runs"`
+	AIExports         int64  `json:"ai_exports"`
+	AIErrors          int64  `json:"ai_errors"`
+	HTTPErrors        int64  `json:"http_errors"`
+	BytesOut          int64  `json:"bytes_out"`
+	LastIngestAt      string `json:"last_ingest_at"`
 }
 
 // AnalyticsOverviewResponse is the JSON contract for GET /fleet/api/analytics/overview.
@@ -396,8 +530,57 @@ type AnalyticsOverviewResponse struct {
 	OSBreakdown AnalyticsOSBreakdown  `json:"os_breakdown"`
 	PeakHours   []AnalyticsPeakHour   `json:"peak_hours"`
 	DailySeries []AnalyticsDailyPoint `json:"daily_series"`
+	Comparison  *AnalyticsComparison  `json:"comparison,omitempty"`
+	Funnel      []AnalyticsFunnelStep `json:"funnel"`
+	Heatmap7x24 AnalyticsHeatmap7x24  `json:"heatmap_7x24"`
+	Acquisition AnalyticsAcquisition  `json:"acquisition"`
+	Cohorts     AnalyticsCohorts      `json:"cohorts"`
 	TopClubs    []AnalyticsTopClub    `json:"top_clubs"`
 	TopBoxes    []AnalyticsTopBox     `json:"top_boxes"`
+}
+
+// AnalyticsRealtimeHotClub is one actively viewed club in GA4 Realtime.
+type AnalyticsRealtimeHotClub struct {
+	ClubID   string `json:"club_id"`
+	ClubName string `json:"club_name"`
+	Branding string `json:"branding,omitempty"`
+	A5       int    `json:"a5"`
+	A30      int    `json:"a30"`
+	Live     int    `json:"live"`
+	VOD      int    `json:"vod"`
+	Cut      int    `json:"cut"`
+	AI       int    `json:"ai"`
+}
+
+// AnalyticsRealtimeHotTable is one actively viewed camera/table in GA4 Realtime.
+type AnalyticsRealtimeHotTable struct {
+	BoxID     string `json:"box_id"`
+	BoxName   string `json:"box_name"`
+	ClubID    string `json:"club_id"`
+	ClubName  string `json:"club_name"`
+	CameraID  string `json:"camera_id"`
+	TableName string `json:"table_name"`
+	Active    int    `json:"active"`
+}
+
+// AnalyticsRealtimeResponse is the JSON contract for GET /fleet/api/analytics/realtime
+// and GET /portal/{token}/analytics/realtime.
+type AnalyticsRealtimeResponse struct {
+	OK           bool                        `json:"ok"`
+	ClubID       string                      `json:"club_id,omitempty"`
+	ClubName     string                      `json:"club_name,omitempty"`
+	Active5m     int                         `json:"active_5m"`
+	Active30m    int                         `json:"active_30m"`
+	Live         int                         `json:"live"`
+	VOD          int                         `json:"vod"`
+	Cut          int                         `json:"cut"`
+	AI           int                         `json:"ai"`
+	MinuteBars30 []int                       `json:"minute_bars_30"`
+	ActiveBoxes  int                         `json:"active_boxes"`
+	ActiveClubs  int                         `json:"active_clubs"`
+	HotClubs     []AnalyticsRealtimeHotClub  `json:"hot_clubs"`
+	HotTables    []AnalyticsRealtimeHotTable `json:"hot_tables"`
+	UpdatedAt    string                      `json:"updated_at"`
 }
 
 // AnalyticsCameraRow is one per-camera/table usage row.
@@ -440,21 +623,236 @@ type AnalyticsPruneStats struct {
 	BatchesDeleted int64
 }
 
+// AnalyticsCoalescerStats exposes write coalescer metrics for observability and testing.
+type AnalyticsCoalescerStats struct {
+	TxCount          int64
+	BatchesCommitted int64
+}
+
 type analyticsQueryParams struct {
-	Range  string
-	ClubID string
-	BoxID  string
-	AIOnly bool
+	Range   string
+	From    string
+	To      string
+	ClubID  string
+	BoxID   string
+	Sport   string // "all" | "billiards" | "pickleball"
+	Source  string // "all" | "redbida-go" | "nodered"
+	AIOnly  bool
+	Compare bool
 }
 
 type analyticsCameraQueryParams struct {
 	Range  string
+	From   string
+	To     string
 	ClubID string
 	BoxID  string
+	Sport  string
 	Limit  int
 }
 
+type analyticsRealtimeFilter struct {
+	ClubID string
+	BoxID  string
+	Sport  string
+}
+
+type realtimeBoxEntry struct {
+	Metrics   RealtimeBoxMetrics
+	UpdatedAt time.Time
+}
+
+type analyticsCoalesceItem struct {
+	payload AnalyticsIngestPayload
+	now     time.Time
+}
+
+// analyticsCoalescer batches bursts of incoming analytics ingest payloads within a short
+// flush window (default 2s or 32 batches) into a single SQLite WAL transaction.
+type analyticsCoalescer struct {
+	srv      *Server
+	window   time.Duration
+	maxBatch int
+	inCh     chan analyticsCoalesceItem
+	flushCh  chan chan error
+	stopCh   chan struct{}
+	doneCh   chan struct{}
+	stopOnce sync.Once
+
+	statsMu          sync.Mutex
+	txCount          int64
+	batchesCommitted int64
+}
+
+func newAnalyticsCoalescer(srv *Server, window time.Duration, maxBatch int) *analyticsCoalescer {
+	if window <= 0 {
+		window = defaultAnalyticsCoalesceWindow
+	}
+	if maxBatch <= 0 {
+		maxBatch = defaultAnalyticsCoalesceMaxBatch
+	}
+	c := &analyticsCoalescer{
+		srv:      srv,
+		window:   window,
+		maxBatch: maxBatch,
+		inCh:     make(chan analyticsCoalesceItem, analyticsCoalesceQueueCap),
+		flushCh:  make(chan chan error),
+		stopCh:   make(chan struct{}),
+		doneCh:   make(chan struct{}),
+	}
+	go c.run()
+	return c
+}
+
+func (c *analyticsCoalescer) Enqueue(payload AnalyticsIngestPayload, now time.Time) bool {
+	select {
+	case <-c.stopCh:
+		return false
+	default:
+	}
+	select {
+	case c.inCh <- analyticsCoalesceItem{payload: payload, now: now}:
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *analyticsCoalescer) Flush() error {
+	ack := make(chan error, 1)
+	select {
+	case <-c.doneCh:
+		return nil
+	case c.flushCh <- ack:
+	}
+	select {
+	case err := <-ack:
+		return err
+	case <-c.doneCh:
+		return nil
+	}
+}
+
+func (c *analyticsCoalescer) Stop() {
+	c.stopOnce.Do(func() {
+		close(c.stopCh)
+	})
+	<-c.doneCh
+}
+
+func (c *analyticsCoalescer) Stats() AnalyticsCoalescerStats {
+	c.statsMu.Lock()
+	defer c.statsMu.Unlock()
+	return AnalyticsCoalescerStats{
+		TxCount:          c.txCount,
+		BatchesCommitted: c.batchesCommitted,
+	}
+}
+
+func (c *analyticsCoalescer) run() {
+	defer close(c.doneCh)
+	pending := make([]analyticsCoalesceItem, 0, c.maxBatch)
+	var timer *time.Timer
+	var timerC <-chan time.Time
+
+	stopTimer := func() {
+		if timer != nil {
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			timer = nil
+			timerC = nil
+		}
+	}
+
+	commitPending := func() error {
+		stopTimer()
+		if len(pending) == 0 {
+			return nil
+		}
+		batch := pending
+		pending = make([]analyticsCoalesceItem, 0, c.maxBatch)
+		err := c.srv.IngestAnalyticsBatch(batch)
+		if err != nil {
+			log.Printf("[bidahub-analytics] coalescer batch commit failed (%d items): %v", len(batch), err)
+			return err
+		}
+		c.statsMu.Lock()
+		c.txCount++
+		c.batchesCommitted += int64(len(batch))
+		c.statsMu.Unlock()
+		return nil
+	}
+
+	drainBuffered := func() {
+		for {
+			select {
+			case item := <-c.inCh:
+				pending = append(pending, item)
+			default:
+				return
+			}
+		}
+	}
+
+	for {
+		select {
+		case item := <-c.inCh:
+			pending = append(pending, item)
+			if len(pending) >= c.maxBatch {
+				_ = commitPending()
+			} else if len(pending) == 1 {
+				timer = time.NewTimer(c.window)
+				timerC = timer.C
+			}
+		case <-timerC:
+			drainBuffered()
+			_ = commitPending()
+		case ack := <-c.flushCh:
+			drainBuffered()
+			ack <- commitPending()
+		case <-c.stopCh:
+			drainBuffered()
+			_ = commitPending()
+			return
+		}
+	}
+}
+
+// FlushAnalytics forces any buffered analytics ingest batches in the write coalescer
+// to commit immediately to SQLite WAL. Safe to call concurrently and in tests.
+func (s *Server) FlushAnalytics() error {
+	if s.coalescer == nil {
+		return nil
+	}
+	return s.coalescer.Flush()
+}
+
+// AnalyticsCoalescerStats returns write coalescer transaction and batch counters.
+func (s *Server) AnalyticsCoalescerStats() AnalyticsCoalescerStats {
+	if s.coalescer == nil {
+		return AnalyticsCoalescerStats{}
+	}
+	return s.coalescer.Stats()
+}
+
+func (s *Server) stopAnalyticsCoalescer() {
+	if s.coalescer != nil {
+		s.coalescer.Stop()
+	}
+}
+
 func clampNonNeg64(v int64) int64 {
+	if v < 0 {
+		return 0
+	}
+	return v
+}
+
+func clampNonNegInt(v int) int {
 	if v < 0 {
 		return 0
 	}
@@ -468,6 +866,17 @@ func max64(a, b int64) int64 {
 	return b
 }
 
+func min64(a, b int64) int64 {
+	if a <= b {
+		return a
+	}
+	return b
+}
+
+func round1(v float64) float64 {
+	return math.Round(v*10) / 10
+}
+
 func boolToInt(b bool) int {
 	if b {
 		return 1
@@ -477,6 +886,10 @@ func boolToInt(b bool) int {
 
 func normalizeAnalyticsRange(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "today":
+		return "today"
+	case "yesterday":
+		return "yesterday"
 	case "24h":
 		return "24h"
 	case "7d":
@@ -492,6 +905,10 @@ func normalizeAnalyticsRange(raw string) string {
 
 func normalizePortalAnalyticsRange(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "today":
+		return "today"
+	case "yesterday":
+		return "yesterday"
 	case "24h":
 		return "24h"
 	case "7d":
@@ -500,6 +917,37 @@ func normalizePortalAnalyticsRange(raw string) string {
 		return "30d"
 	default:
 		return "7d"
+	}
+}
+
+func normalizeAnalyticsSport(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "billiards", "bida":
+		return "billiards"
+	case "pickleball":
+		return "pickleball"
+	default:
+		return "all"
+	}
+}
+
+func normalizeAnalyticsSource(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "redbida-go", "go":
+		return "redbida-go"
+	case "nodered", "node-red":
+		return "nodered"
+	default:
+		return "all"
+	}
+}
+
+func parseAnalyticsCompareParam(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "prev", "previous", "yes":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -539,6 +987,326 @@ func extractIngestSecret(r *http.Request, payloadSecret string) string {
 	return ""
 }
 
+// =============================================================================
+// IN-RAM REALTIME VIEWER STORE (0 SQLite writes, 90s auto-expiry)
+// =============================================================================
+
+func sanitizeRealtimeBoxMetrics(rt RealtimeBoxMetrics) RealtimeBoxMetrics {
+	out := RealtimeBoxMetrics{
+		A5:   clampNonNegInt(rt.A5),
+		A30:  clampNonNegInt(rt.A30),
+		Live: clampNonNegInt(rt.Live),
+		VOD:  clampNonNegInt(rt.VOD),
+		Cut:  clampNonNegInt(rt.Cut),
+		AI:   clampNonNegInt(rt.AI),
+	}
+	if out.A30 < out.A5 {
+		out.A30 = out.A5
+	}
+	if len(rt.M30) > 0 {
+		src := rt.M30
+		if len(src) > 30 {
+			src = src[len(src)-30:]
+		}
+		out.M30 = make([]int, len(src))
+		for i, v := range src {
+			out.M30[i] = clampNonNegInt(v)
+		}
+	}
+	if len(rt.Hot) > 0 {
+		hot := make([]RealtimeHotTable, 0, len(rt.Hot))
+		for _, h := range rt.Hot {
+			cam := strings.TrimSpace(h.Cam)
+			if cam == "" || h.N <= 0 {
+				continue
+			}
+			hot = append(hot, RealtimeHotTable{
+				Cam:   cam,
+				Table: strings.TrimSpace(h.Table),
+				N:     h.N,
+			})
+			if len(hot) >= 5 {
+				break
+			}
+		}
+		if len(hot) > 0 {
+			out.Hot = hot
+		}
+	}
+	return out
+}
+
+func (s *Server) recordBoxRealtime(boxID string, rt *RealtimeBoxMetrics, now time.Time) {
+	boxID = strings.TrimSpace(boxID)
+	if boxID == "" {
+		return
+	}
+	s.rtMu.Lock()
+	defer s.rtMu.Unlock()
+	if s.rtByBox == nil {
+		s.rtByBox = make(map[string]realtimeBoxEntry)
+	}
+	if rt == nil {
+		delete(s.rtByBox, boxID)
+	} else {
+		clean := sanitizeRealtimeBoxMetrics(*rt)
+		if clean.A30 <= 0 {
+			delete(s.rtByBox, boxID)
+		} else {
+			s.rtByBox[boxID] = realtimeBoxEntry{
+				Metrics:   clean,
+				UpdatedAt: now,
+			}
+		}
+	}
+	// Opportunistic expiry of stale boxes (>90s)
+	for id, ent := range s.rtByBox {
+		if now.Sub(ent.UpdatedAt) > realtimeEntryTTL {
+			delete(s.rtByBox, id)
+		}
+	}
+}
+
+func (s *Server) realtimeSummaryIfChanged(now time.Time) (map[string]int, bool) {
+	s.rtMu.Lock()
+	defer s.rtMu.Unlock()
+	a5, a30 := 0, 0
+	for id, ent := range s.rtByBox {
+		if now.Sub(ent.UpdatedAt) > realtimeEntryTTL {
+			delete(s.rtByBox, id)
+			continue
+		}
+		a5 += ent.Metrics.A5
+		a30 += ent.Metrics.A30
+	}
+	if a5 == s.lastRTSumA5 && a30 == s.lastRTSumA30 {
+		return nil, false
+	}
+	s.lastRTSumA5 = a5
+	s.lastRTSumA30 = a30
+	return map[string]int{
+		"active_5m":  a5,
+		"active_30m": a30,
+	}, true
+}
+
+// QueryAnalyticsRealtime aggregates active viewers across non-expired edge boxes in RAM (0 SQLite queries).
+func (s *Server) QueryAnalyticsRealtime(filter analyticsRealtimeFilter, now time.Time) AnalyticsRealtimeResponse {
+	meta := s.snapshotAnalyticsMetadata()
+
+	// Snapshot active non-expired box entries under lock.
+	s.rtMu.Lock()
+	active := make(map[string]RealtimeBoxMetrics, len(s.rtByBox))
+	for id, ent := range s.rtByBox {
+		if now.Sub(ent.UpdatedAt) > realtimeEntryTTL {
+			delete(s.rtByBox, id)
+			continue
+		}
+		if ent.Metrics.A30 > 0 {
+			active[id] = ent.Metrics
+		}
+	}
+	s.rtMu.Unlock()
+
+	filterClub := strings.TrimSpace(filter.ClubID)
+	filterBox := strings.TrimSpace(filter.BoxID)
+	filterSport := normalizeAnalyticsSport(filter.Sport)
+
+	resp := AnalyticsRealtimeResponse{
+		OK:           true,
+		MinuteBars30: make([]int, 30),
+		HotClubs:     make([]AnalyticsRealtimeHotClub, 0),
+		HotTables:    make([]AnalyticsRealtimeHotTable, 0),
+		UpdatedAt:    now.UTC().Format(time.RFC3339),
+	}
+
+	clubAggs := make(map[string]*AnalyticsRealtimeHotClub)
+	activeClubsSet := make(map[string]struct{})
+
+	for boxID, rt := range active {
+		if filterBox != "" && boxID != filterBox {
+			continue
+		}
+		boxName, clubID, clubName := meta.resolveNames(boxID, "")
+		if filterClub != "" && clubID != filterClub {
+			continue
+		}
+		branding := meta.resolveBranding(boxID, clubID)
+		if filterSport != "all" && branding != filterSport {
+			continue
+		}
+
+		resp.Active5m += rt.A5
+		resp.Active30m += rt.A30
+		resp.Live += rt.Live
+		resp.VOD += rt.VOD
+		resp.Cut += rt.Cut
+		resp.AI += rt.AI
+		resp.ActiveBoxes++
+
+		// Right-align M30 bars into the 30-element minute_bars_30 slice [oldest(-29m)...now].
+		if len(rt.M30) > 0 {
+			src := rt.M30
+			if len(src) > 30 {
+				src = src[len(src)-30:]
+			}
+			offset := 30 - len(src)
+			for i, v := range src {
+				if v > 0 {
+					resp.MinuteBars30[offset+i] += v
+				}
+			}
+		}
+
+		clubKey := clubID
+		if clubKey == "" {
+			clubKey = boxID
+		}
+		activeClubsSet[clubKey] = struct{}{}
+
+		ca, ok := clubAggs[clubKey]
+		if !ok {
+			ca = &AnalyticsRealtimeHotClub{
+				ClubID:   clubID,
+				ClubName: clubName,
+				Branding: branding,
+			}
+			clubAggs[clubKey] = ca
+		}
+		ca.A5 += rt.A5
+		ca.A30 += rt.A30
+		ca.Live += rt.Live
+		ca.VOD += rt.VOD
+		ca.Cut += rt.Cut
+		ca.AI += rt.AI
+
+		for _, ht := range rt.Hot {
+			if ht.N <= 0 || ht.Cam == "" {
+				continue
+			}
+			tName := meta.resolveTableName(boxID, ht.Cam, ht.Table)
+			if tName == "" {
+				tName = ht.Cam
+			}
+			resp.HotTables = append(resp.HotTables, AnalyticsRealtimeHotTable{
+				BoxID:     boxID,
+				BoxName:   boxName,
+				ClubID:    clubID,
+				ClubName:  clubName,
+				CameraID:  ht.Cam,
+				TableName: tName,
+				Active:    ht.N,
+			})
+		}
+	}
+
+	resp.ActiveClubs = len(activeClubsSet)
+
+	for _, ca := range clubAggs {
+		resp.HotClubs = append(resp.HotClubs, *ca)
+	}
+	sort.Slice(resp.HotClubs, func(i, j int) bool {
+		if resp.HotClubs[i].A5 != resp.HotClubs[j].A5 {
+			return resp.HotClubs[i].A5 > resp.HotClubs[j].A5
+		}
+		if resp.HotClubs[i].A30 != resp.HotClubs[j].A30 {
+			return resp.HotClubs[i].A30 > resp.HotClubs[j].A30
+		}
+		return resp.HotClubs[i].ClubName < resp.HotClubs[j].ClubName
+	})
+	if len(resp.HotClubs) > 10 {
+		resp.HotClubs = resp.HotClubs[:10]
+	}
+
+	sort.Slice(resp.HotTables, func(i, j int) bool {
+		if resp.HotTables[i].Active != resp.HotTables[j].Active {
+			return resp.HotTables[i].Active > resp.HotTables[j].Active
+		}
+		if resp.HotTables[i].ClubName != resp.HotTables[j].ClubName {
+			return resp.HotTables[i].ClubName < resp.HotTables[j].ClubName
+		}
+		return resp.HotTables[i].CameraID < resp.HotTables[j].CameraID
+	})
+	if len(resp.HotTables) > 10 {
+		resp.HotTables = resp.HotTables[:10]
+	}
+
+	return resp
+}
+
+// handleAnalyticsRealtime handles GET /fleet/api/analytics/realtime and GET /api/analytics/realtime.
+func (s *Server) handleAnalyticsRealtime(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method_not_allowed"})
+		return
+	}
+	q := r.URL.Query()
+	resp := s.QueryAnalyticsRealtime(analyticsRealtimeFilter{
+		ClubID: q.Get("club_id"),
+		BoxID:  q.Get("box_id"),
+		Sport:  q.Get("sport"),
+	}, time.Now())
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// =============================================================================
+// INGEST ENDPOINT (GZIP + NEED_FULL_SYNC + WRITE COALESCER)
+// =============================================================================
+
+func (s *Server) markKnownEpoch(boxID, epoch string) {
+	boxID = strings.TrimSpace(boxID)
+	epoch = strings.TrimSpace(epoch)
+	if boxID == "" || epoch == "" {
+		return
+	}
+	s.analyticsEpochsMu.Lock()
+	if s.analyticsKnownEpochs == nil {
+		s.analyticsKnownEpochs = make(map[string]string)
+	}
+	s.analyticsKnownEpochs[boxID] = epoch
+	s.analyticsEpochsMu.Unlock()
+}
+
+func (s *Server) checkNeedFullSync(boxID string, payload AnalyticsIngestPayload) bool {
+	if payload.Source != "redbida-go" {
+		return false
+	}
+	epoch := strings.TrimSpace(payload.SourceEpoch)
+	if epoch == "" {
+		return false
+	}
+	if !payload.IsDelta {
+		s.markKnownEpoch(boxID, epoch)
+		return false
+	}
+
+	s.analyticsEpochsMu.RLock()
+	known, ok := s.analyticsKnownEpochs[boxID]
+	s.analyticsEpochsMu.RUnlock()
+	if ok && known == epoch {
+		return false
+	}
+
+	// Check SQLite (handles Hub restarts without forcing unnecessary full resyncs).
+	existsInDB := false
+	_ = s.store.WithSQLiteDB(func(db *sql.DB) error {
+		var dummy int
+		err := db.QueryRow(
+			"SELECT 1 FROM usage_box_hourly WHERE box_id = ? AND source_epoch = ? LIMIT 1",
+			boxID, epoch,
+		).Scan(&dummy)
+		if err == nil {
+			existsInDB = true
+		}
+		return nil
+	})
+	if existsInDB {
+		s.markKnownEpoch(boxID, epoch)
+		return false
+	}
+	return true
+}
+
 // handleAnalyticsIngest handles POST /fleet/api/analytics/ingest and POST /api/analytics/ingest.
 func (s *Server) handleAnalyticsIngest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -550,7 +1318,18 @@ func (s *Server) handleAnalyticsIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	raw, err := io.ReadAll(io.LimitReader(r.Body, analyticsMaxIngestBytes+1))
+	var bodyReader io.Reader = r.Body
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get("Content-Encoding")), "gzip") {
+		gz, err := gzip.NewReader(r.Body)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_gzip"})
+			return
+		}
+		defer gz.Close()
+		bodyReader = gz
+	}
+
+	raw, err := io.ReadAll(io.LimitReader(bodyReader, analyticsMaxIngestBytes+1))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "read_body_failed"})
 		return
@@ -627,7 +1406,37 @@ func (s *Server) handleAnalyticsIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := s.IngestAnalytics(payload, time.Now())
+	if s.store.SQLiteDB() == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "sqlite_unavailable"})
+		return
+	}
+
+	now := time.Now()
+	if payload.Realtime != nil && payload.Realtime.A30 > 0 {
+		s.recordBoxRealtime(boxID, payload.Realtime, now)
+	}
+
+	needFullSync := s.checkNeedFullSync(boxID, payload)
+	syncMode := r.URL.Query().Get("sync") == "1"
+
+	if s.coalescer != nil && !syncMode {
+		if !s.coalescer.Enqueue(payload, now) {
+			w.Header().Set("Retry-After", "30")
+			writeJSON(w, http.StatusTooManyRequests, map[string]any{
+				"ok":    false,
+				"error": "ingest_queue_full",
+			})
+			return
+		}
+		writeJSON(w, http.StatusOK, AnalyticsIngestResult{
+			OK:           true,
+			Queued:       true,
+			NeedFullSync: needFullSync,
+		})
+		return
+	}
+
+	res, err := s.IngestAnalytics(payload, now)
 	if err != nil {
 		if errors.Is(err, errNoSQLiteDB) {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "sqlite_unavailable"})
@@ -636,11 +1445,89 @@ func (s *Server) handleAnalyticsIngest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "ingest_failed", "detail": err.Error()})
 		return
 	}
-
+	res.NeedFullSync = needFullSync
 	writeJSON(w, http.StatusOK, res)
 }
 
-// IngestAnalytics persists an analytics payload (Mode A redbida-go snapshot or Mode B nodered delta)
+type boxIngestMeta struct {
+	clubID        string
+	camTableNames map[string]string
+}
+
+func (s *Server) snapshotBoxIngestMeta(boxID string) boxIngestMeta {
+	bm := boxIngestMeta{
+		camTableNames: make(map[string]string),
+	}
+	if box, ok := s.store.GetBox(boxID); ok && box != nil {
+		bm.clubID = box.ClubID
+		for _, cam := range box.Cameras {
+			if cam != nil && cam.Name != "" && cam.TableName != "" {
+				bm.camTableNames[strings.ToLower(cam.Name)] = cam.TableName
+			}
+		}
+		for k, v := range box.RedBidaTabs {
+			if strings.TrimSpace(v) != "" {
+				lk := strings.ToLower(strings.TrimSpace(k))
+				if _, exists := bm.camTableNames[lk]; !exists {
+					bm.camTableNames[lk] = strings.TrimSpace(v)
+				}
+			}
+		}
+	}
+	return bm
+}
+
+// IngestAnalyticsBatch commits multiple analytics payloads inside ONE SQLite WAL transaction.
+func (s *Server) IngestAnalyticsBatch(items []analyticsCoalesceItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+	// Snapshot all box metadata BEFORE acquiring SQLite lock (enforces s.mu -> s.dbMu ordering).
+	metaByBox := make(map[string]boxIngestMeta, len(items))
+	for _, it := range items {
+		boxID := strings.TrimSpace(it.payload.BoxID)
+		if boxID == "" {
+			continue
+		}
+		if _, exists := metaByBox[boxID]; !exists {
+			metaByBox[boxID] = s.snapshotBoxIngestMeta(boxID)
+		}
+	}
+
+	err := s.store.WithSQLiteTx(func(tx *sql.Tx) error {
+		for _, it := range items {
+			boxID := strings.TrimSpace(it.payload.BoxID)
+			if boxID == "" {
+				continue
+			}
+			bm := metaByBox[boxID]
+			nowStr := it.now.UTC().Format(time.RFC3339)
+			var res AnalyticsIngestResult
+			res.OK = true
+			if it.payload.Source == "nodered" {
+				if err := ingestNodeRedDeltaTx(tx, boxID, bm.clubID, it.payload, bm.camTableNames, nowStr, &res); err != nil {
+					return err
+				}
+			} else {
+				if err := ingestRedBidaSnapshotTx(tx, boxID, bm.clubID, it.payload, bm.camTableNames, nowStr, &res); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, it := range items {
+		if it.payload.Source == "redbida-go" && !it.payload.IsDelta && strings.TrimSpace(it.payload.SourceEpoch) != "" {
+			s.markKnownEpoch(it.payload.BoxID, it.payload.SourceEpoch)
+		}
+	}
+	return nil
+}
+
+// IngestAnalytics persists an analytics payload (Mode A redbida-go snapshot/delta or Mode B nodered delta)
 // atomically inside a single SQLite transaction with strict idempotency and zero double-counting.
 func (s *Server) IngestAnalytics(payload AnalyticsIngestPayload, now time.Time) (AnalyticsIngestResult, error) {
 	boxID := strings.TrimSpace(payload.BoxID)
@@ -649,24 +1536,7 @@ func (s *Server) IngestAnalytics(payload AnalyticsIngestPayload, now time.Time) 
 	}
 
 	// Snapshot box metadata BEFORE acquiring SQLite lock (enforces s.mu -> s.dbMu ordering).
-	var clubID string
-	camTableNames := make(map[string]string)
-	if box, ok := s.store.GetBox(boxID); ok && box != nil {
-		clubID = box.ClubID
-		for _, cam := range box.Cameras {
-			if cam != nil && cam.Name != "" && cam.TableName != "" {
-				camTableNames[strings.ToLower(cam.Name)] = cam.TableName
-			}
-		}
-		for k, v := range box.RedBidaTabs {
-			if strings.TrimSpace(v) != "" {
-				lk := strings.ToLower(strings.TrimSpace(k))
-				if _, exists := camTableNames[lk]; !exists {
-					camTableNames[lk] = strings.TrimSpace(v)
-				}
-			}
-		}
-	}
+	bm := s.snapshotBoxIngestMeta(boxID)
 
 	nowStr := now.UTC().Format(time.RFC3339)
 	var result AnalyticsIngestResult
@@ -674,12 +1544,15 @@ func (s *Server) IngestAnalytics(payload AnalyticsIngestPayload, now time.Time) 
 
 	err := s.store.WithSQLiteTx(func(tx *sql.Tx) error {
 		if payload.Source == "nodered" {
-			return ingestNodeRedDeltaTx(tx, boxID, clubID, payload, camTableNames, nowStr, &result)
+			return ingestNodeRedDeltaTx(tx, boxID, bm.clubID, payload, bm.camTableNames, nowStr, &result)
 		}
-		return ingestRedBidaSnapshotTx(tx, boxID, clubID, payload, camTableNames, nowStr, &result)
+		return ingestRedBidaSnapshotTx(tx, boxID, bm.clubID, payload, bm.camTableNames, nowStr, &result)
 	})
 	if err != nil {
 		return AnalyticsIngestResult{}, err
+	}
+	if payload.Source == "redbida-go" && !payload.IsDelta && strings.TrimSpace(payload.SourceEpoch) != "" {
+		s.markKnownEpoch(boxID, payload.SourceEpoch)
 	}
 	return result, nil
 }
@@ -698,15 +1571,25 @@ func ingestRedBidaSnapshotTx(
 	}
 
 	affectedDates := make(map[string]struct{})
-	exactDailyUniques := make(map[string]int64)
+	exactDailyByDate := make(map[string]AnalyticsBoxDailyIn)
 	for _, bd := range payload.BoxDaily {
 		dateStr, ok := parseBucketDate(bd.BucketDate)
 		if !ok {
 			continue
 		}
-		u := clampNonNeg64(bd.UniqueVisitors)
-		if cur, exists := exactDailyUniques[dateStr]; !exists || u > cur {
-			exactDailyUniques[dateStr] = u
+		bd.BucketDate = dateStr
+		bd.UniqueVisitors = clampNonNeg64(bd.UniqueVisitors)
+		bd.Sessions = clampNonNeg64(bd.Sessions)
+		bd.EngagedSessions = clampNonNeg64(bd.EngagedSessions)
+		bd.ReturningVisitors = clampNonNeg64(bd.ReturningVisitors)
+		if cur, exists := exactDailyByDate[dateStr]; exists {
+			cur.UniqueVisitors = max64(cur.UniqueVisitors, bd.UniqueVisitors)
+			cur.Sessions = max64(cur.Sessions, bd.Sessions)
+			cur.EngagedSessions = max64(cur.EngagedSessions, bd.EngagedSessions)
+			cur.ReturningVisitors = max64(cur.ReturningVisitors, bd.ReturningVisitors)
+			exactDailyByDate[dateStr] = cur
+		} else {
+			exactDailyByDate[dateStr] = bd
 		}
 		affectedDates[dateStr] = struct{}{}
 	}
@@ -730,9 +1613,12 @@ func ingestRedBidaSnapshotTx(
 				qr_views, page_views, unique_visitors, live_hls, vod_plays, clip_downloads,
 				timeline_opens, cut_clips, cut_seconds,
 				ai_studio_opens, ai_videos_loads, ai_analyzes, ai_shots, ai_pots,
-				ai_pool_runs, ai_carom_runs, ai_exports_ios, ai_exports_desktop, ai_export_relay,
+				ai_pool_runs, ai_carom_runs, ai_pickleball_runs,
+				ai_exports_ios, ai_exports_desktop, ai_export_relay,
 				ai_errors, http_errors, bytes_out,
 				os_ios, os_android, os_desktop, os_app, os_other,
+				sessions, engaged_sessions, returning_visitors,
+				acq_qr, acq_share, acq_app, acq_direct,
 				base_json
 			FROM usage_box_hourly
 			WHERE box_id = ? AND bucket_hour = ?
@@ -741,9 +1627,12 @@ func ingestRedBidaSnapshotTx(
 			&existing.QRViews, &existing.PageViews, &existing.UniqueVisitors, &existing.LiveHLS, &existing.VODPlays, &existing.ClipDownloads,
 			&existing.TimelineOpens, &existing.CutClips, &existing.CutSeconds,
 			&existing.AIStudioOpens, &existing.AIVideosLoads, &existing.AIAnalyzes, &existing.AIShots, &existing.AIPots,
-			&existing.AIPoolRuns, &existing.AICaromRuns, &existing.AIExportsIOS, &existing.AIExportsDesktop, &existing.AIExportRelay,
+			&existing.AIPoolRuns, &existing.AICaromRuns, &existing.AIPickleballRuns,
+			&existing.AIExportsIOS, &existing.AIExportsDesktop, &existing.AIExportRelay,
 			&existing.AIErrors, &existing.HTTPErrors, &existing.BytesOut,
 			&existing.OSIOS, &existing.OSAndroid, &existing.OSDesktop, &existing.OSApp, &existing.OSOther,
+			&existing.Sessions, &existing.EngagedSessions, &existing.ReturningVisitors,
+			&existing.AcqQR, &existing.AcqShare, &existing.AcqApp, &existing.AcqDirect,
 			&existingBaseJSON,
 		)
 
@@ -790,11 +1679,11 @@ func ingestRedBidaSnapshotTx(
 		result.HourlyUpserted++
 	}
 
-	// 2. Recompute/upsert affected usage_box_daily rows from usage_box_hourly + exact box_daily uniques.
+	// 2. Recompute/upsert affected usage_box_daily rows from usage_box_hourly + exact box_daily counts.
 	dates := sortedKeys(affectedDates)
 	for _, dateStr := range dates {
-		exactUnique, hasExact := exactDailyUniques[dateStr]
-		updated, err := rollupBoxDailyTx(tx, boxID, clubID, "redbida-go", boolToInt(payload.AIEnabled), epoch, dateStr, hasExact, exactUnique, nowStr)
+		exactDaily, hasExact := exactDailyByDate[dateStr]
+		updated, err := rollupBoxDailyTx(tx, boxID, clubID, "redbida-go", boolToInt(payload.AIEnabled), epoch, dateStr, hasExact, exactDaily, nowStr)
 		if err != nil {
 			return err
 		}
@@ -925,9 +1814,12 @@ func ingestNodeRedDeltaTx(
 				qr_views, page_views, unique_visitors, live_hls, vod_plays, clip_downloads,
 				timeline_opens, cut_clips, cut_seconds,
 				ai_studio_opens, ai_videos_loads, ai_analyzes, ai_shots, ai_pots,
-				ai_pool_runs, ai_carom_runs, ai_exports_ios, ai_exports_desktop, ai_export_relay,
+				ai_pool_runs, ai_carom_runs, ai_pickleball_runs,
+				ai_exports_ios, ai_exports_desktop, ai_export_relay,
 				ai_errors, http_errors, bytes_out,
 				os_ios, os_android, os_desktop, os_app, os_other,
+				sessions, engaged_sessions, returning_visitors,
+				acq_qr, acq_share, acq_app, acq_direct,
 				base_json
 			FROM usage_box_hourly
 			WHERE box_id = ? AND bucket_hour = ?
@@ -936,9 +1828,12 @@ func ingestNodeRedDeltaTx(
 			&existing.QRViews, &existing.PageViews, &existing.UniqueVisitors, &existing.LiveHLS, &existing.VODPlays, &existing.ClipDownloads,
 			&existing.TimelineOpens, &existing.CutClips, &existing.CutSeconds,
 			&existing.AIStudioOpens, &existing.AIVideosLoads, &existing.AIAnalyzes, &existing.AIShots, &existing.AIPots,
-			&existing.AIPoolRuns, &existing.AICaromRuns, &existing.AIExportsIOS, &existing.AIExportsDesktop, &existing.AIExportRelay,
+			&existing.AIPoolRuns, &existing.AICaromRuns, &existing.AIPickleballRuns,
+			&existing.AIExportsIOS, &existing.AIExportsDesktop, &existing.AIExportRelay,
 			&existing.AIErrors, &existing.HTTPErrors, &existing.BytesOut,
 			&existing.OSIOS, &existing.OSAndroid, &existing.OSDesktop, &existing.OSApp, &existing.OSOther,
+			&existing.Sessions, &existing.EngagedSessions, &existing.ReturningVisitors,
+			&existing.AcqQR, &existing.AcqShare, &existing.AcqApp, &existing.AcqDirect,
 			&existingBaseJSON,
 		)
 
@@ -1035,7 +1930,7 @@ func ingestNodeRedDeltaTx(
 
 	dates := sortedKeys(affectedDates)
 	for _, dateStr := range dates {
-		updated, err := rollupBoxDailyTx(tx, boxID, clubID, "nodered", 0, "", dateStr, false, 0, nowStr)
+		updated, err := rollupBoxDailyTx(tx, boxID, clubID, "nodered", 0, "", dateStr, false, AnalyticsBoxDailyIn{}, nowStr)
 		if err != nil {
 			return err
 		}
@@ -1052,8 +1947,8 @@ func rollupBoxDailyTx(
 	incomingAI int,
 	incomingEpoch string,
 	dateStr string,
-	hasExactUnique bool,
-	exactUnique int64,
+	hasExactDaily bool,
+	exactDaily AnalyticsBoxDailyIn,
 	nowStr string,
 ) (bool, error) {
 	// Sum all hourly buckets for (boxID, dateStr).
@@ -1080,6 +1975,7 @@ func rollupBoxDailyTx(
 			COALESCE(SUM(ai_pots), 0),
 			COALESCE(SUM(ai_pool_runs), 0),
 			COALESCE(SUM(ai_carom_runs), 0),
+			COALESCE(SUM(ai_pickleball_runs), 0),
 			COALESCE(SUM(ai_exports_ios), 0),
 			COALESCE(SUM(ai_exports_desktop), 0),
 			COALESCE(SUM(ai_export_relay), 0),
@@ -1090,7 +1986,14 @@ func rollupBoxDailyTx(
 			COALESCE(SUM(os_android), 0),
 			COALESCE(SUM(os_desktop), 0),
 			COALESCE(SUM(os_app), 0),
-			COALESCE(SUM(os_other), 0)
+			COALESCE(SUM(os_other), 0),
+			COALESCE(SUM(sessions), 0),
+			COALESCE(SUM(engaged_sessions), 0),
+			COALESCE(SUM(returning_visitors), 0),
+			COALESCE(SUM(acq_qr), 0),
+			COALESCE(SUM(acq_share), 0),
+			COALESCE(SUM(acq_app), 0),
+			COALESCE(SUM(acq_direct), 0)
 		FROM usage_box_hourly
 		WHERE box_id = ? AND bucket_hour >= ? AND bucket_hour <= ?
 	`, boxID, dateStr+" 00:00", dateStr+" 23:59").Scan(
@@ -1098,9 +2001,12 @@ func rollupBoxDailyTx(
 		&hourlySum.QRViews, &hourlySum.PageViews, &hourlySum.UniqueVisitors, &hourlySum.LiveHLS, &hourlySum.VODPlays, &hourlySum.ClipDownloads,
 		&hourlySum.TimelineOpens, &hourlySum.CutClips, &hourlySum.CutSeconds,
 		&hourlySum.AIStudioOpens, &hourlySum.AIVideosLoads, &hourlySum.AIAnalyzes, &hourlySum.AIShots, &hourlySum.AIPots,
-		&hourlySum.AIPoolRuns, &hourlySum.AICaromRuns, &hourlySum.AIExportsIOS, &hourlySum.AIExportsDesktop, &hourlySum.AIExportRelay,
+		&hourlySum.AIPoolRuns, &hourlySum.AICaromRuns, &hourlySum.AIPickleballRuns,
+		&hourlySum.AIExportsIOS, &hourlySum.AIExportsDesktop, &hourlySum.AIExportRelay,
 		&hourlySum.AIErrors, &hourlySum.HTTPErrors, &hourlySum.BytesOut,
 		&hourlySum.OSIOS, &hourlySum.OSAndroid, &hourlySum.OSDesktop, &hourlySum.OSApp, &hourlySum.OSOther,
+		&hourlySum.Sessions, &hourlySum.EngagedSessions, &hourlySum.ReturningVisitors,
+		&hourlySum.AcqQR, &hourlySum.AcqShare, &hourlySum.AcqApp, &hourlySum.AcqDirect,
 	)
 	if err != nil {
 		return false, fmt.Errorf("rollup hourly sum: %w", err)
@@ -1115,9 +2021,12 @@ func rollupBoxDailyTx(
 			qr_views, page_views, unique_visitors, live_hls, vod_plays, clip_downloads,
 			timeline_opens, cut_clips, cut_seconds,
 			ai_studio_opens, ai_videos_loads, ai_analyzes, ai_shots, ai_pots,
-			ai_pool_runs, ai_carom_runs, ai_exports_ios, ai_exports_desktop, ai_export_relay,
+			ai_pool_runs, ai_carom_runs, ai_pickleball_runs,
+			ai_exports_ios, ai_exports_desktop, ai_export_relay,
 			ai_errors, http_errors, bytes_out,
 			os_ios, os_android, os_desktop, os_app, os_other,
+			sessions, engaged_sessions, returning_visitors,
+			acq_qr, acq_share, acq_app, acq_direct,
 			base_json
 		FROM usage_box_daily
 		WHERE box_id = ? AND bucket_date = ?
@@ -1126,9 +2035,12 @@ func rollupBoxDailyTx(
 		&existing.QRViews, &existing.PageViews, &existing.UniqueVisitors, &existing.LiveHLS, &existing.VODPlays, &existing.ClipDownloads,
 		&existing.TimelineOpens, &existing.CutClips, &existing.CutSeconds,
 		&existing.AIStudioOpens, &existing.AIVideosLoads, &existing.AIAnalyzes, &existing.AIShots, &existing.AIPots,
-		&existing.AIPoolRuns, &existing.AICaromRuns, &existing.AIExportsIOS, &existing.AIExportsDesktop, &existing.AIExportRelay,
+		&existing.AIPoolRuns, &existing.AICaromRuns, &existing.AIPickleballRuns,
+		&existing.AIExportsIOS, &existing.AIExportsDesktop, &existing.AIExportRelay,
 		&existing.AIErrors, &existing.HTTPErrors, &existing.BytesOut,
 		&existing.OSIOS, &existing.OSAndroid, &existing.OSDesktop, &existing.OSApp, &existing.OSOther,
+		&existing.Sessions, &existing.EngagedSessions, &existing.ReturningVisitors,
+		&existing.AcqQR, &existing.AcqShare, &existing.AcqApp, &existing.AcqDirect,
 		&existingBaseJSON,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1138,7 +2050,8 @@ func rollupBoxDailyTx(
 	}
 
 	// Avoid inserting empty phantom daily rows for old box_daily entries with zero traffic.
-	if hourlyCount == 0 && !existingFound && (!hasExactUnique || exactUnique == 0) {
+	if hourlyCount == 0 && !existingFound &&
+		(!hasExactDaily || (exactDaily.UniqueVisitors == 0 && exactDaily.Sessions == 0 && exactDaily.EngagedSessions == 0 && exactDaily.ReturningVisitors == 0)) {
 		return false, nil
 	}
 
@@ -1165,25 +2078,58 @@ func rollupBoxDailyTx(
 		newBaseJSON = "{}"
 	}
 
-	if hasExactUnique {
-		// Exact box-level daily unique visitors with epoch-safe base_json freezing.
+	if hasExactDaily {
+		// Exact box-level daily visitor/session/cohort totals with epoch-safe base_json freezing.
 		var dailyBase struct {
-			UniqueVisitors int64 `json:"unique_visitors"`
+			UniqueVisitors    int64 `json:"unique_visitors"`
+			Sessions          int64 `json:"sessions,omitempty"`
+			EngagedSessions   int64 `json:"engaged_sessions,omitempty"`
+			ReturningVisitors int64 `json:"returning_visitors,omitempty"`
 		}
 		if existingFound {
 			_ = json.Unmarshal([]byte(existingBaseJSON), &dailyBase)
 			if existingEpoch == incomingEpoch {
-				merged.UniqueVisitors = max64(existing.UniqueVisitors, dailyBase.UniqueVisitors+exactUnique)
+				merged.UniqueVisitors = max64(existing.UniqueVisitors, dailyBase.UniqueVisitors+exactDaily.UniqueVisitors)
+				if exactDaily.Sessions > 0 {
+					merged.Sessions = max64(existing.Sessions, dailyBase.Sessions+exactDaily.Sessions)
+				}
+				if exactDaily.EngagedSessions > 0 {
+					merged.EngagedSessions = max64(existing.EngagedSessions, dailyBase.EngagedSessions+exactDaily.EngagedSessions)
+				}
+				if exactDaily.ReturningVisitors > 0 {
+					merged.ReturningVisitors = max64(existing.ReturningVisitors, dailyBase.ReturningVisitors+exactDaily.ReturningVisitors)
+				}
 			} else {
 				dailyBase.UniqueVisitors = existing.UniqueVisitors
+				dailyBase.Sessions = existing.Sessions
+				dailyBase.EngagedSessions = existing.EngagedSessions
+				dailyBase.ReturningVisitors = existing.ReturningVisitors
 				if bRaw, mErr := json.Marshal(dailyBase); mErr == nil {
 					newBaseJSON = string(bRaw)
 				}
-				merged.UniqueVisitors = dailyBase.UniqueVisitors + exactUnique
+				merged.UniqueVisitors = dailyBase.UniqueVisitors + exactDaily.UniqueVisitors
+				if exactDaily.Sessions > 0 {
+					merged.Sessions = dailyBase.Sessions + exactDaily.Sessions
+				}
+				if exactDaily.EngagedSessions > 0 {
+					merged.EngagedSessions = dailyBase.EngagedSessions + exactDaily.EngagedSessions
+				}
+				if exactDaily.ReturningVisitors > 0 {
+					merged.ReturningVisitors = dailyBase.ReturningVisitors + exactDaily.ReturningVisitors
+				}
 				effEpoch = incomingEpoch
 			}
 		} else {
-			merged.UniqueVisitors = exactUnique
+			merged.UniqueVisitors = exactDaily.UniqueVisitors
+			if exactDaily.Sessions > 0 {
+				merged.Sessions = exactDaily.Sessions
+			}
+			if exactDaily.EngagedSessions > 0 {
+				merged.EngagedSessions = exactDaily.EngagedSessions
+			}
+			if exactDaily.ReturningVisitors > 0 {
+				merged.ReturningVisitors = exactDaily.ReturningVisitors
+			}
 			effEpoch = incomingEpoch
 			newBaseJSON = "{}"
 		}
@@ -1214,11 +2160,26 @@ func upsertBoxHourlyRowTx(
 			qr_views, page_views, unique_visitors, live_hls, vod_plays, clip_downloads,
 			timeline_opens, cut_clips, cut_seconds,
 			ai_studio_opens, ai_videos_loads, ai_analyzes, ai_shots, ai_pots,
-			ai_pool_runs, ai_carom_runs, ai_exports_ios, ai_exports_desktop, ai_export_relay,
+			ai_pool_runs, ai_carom_runs, ai_pickleball_runs,
+			ai_exports_ios, ai_exports_desktop, ai_export_relay,
 			ai_errors, http_errors, bytes_out,
 			os_ios, os_android, os_desktop, os_app, os_other,
+			sessions, engaged_sessions, returning_visitors,
+			acq_qr, acq_share, acq_app, acq_direct,
 			base_json, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (
+			?, ?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?, ?,
+			?, ?, ?,
+			?, ?, ?, ?, ?,
+			?, ?, ?,
+			?, ?, ?,
+			?, ?, ?,
+			?, ?, ?, ?, ?,
+			?, ?, ?,
+			?, ?, ?, ?,
+			?, ?
+		)
 		ON CONFLICT(box_id, bucket_hour) DO UPDATE SET
 			club_id = excluded.club_id,
 			source = excluded.source,
@@ -1240,6 +2201,7 @@ func upsertBoxHourlyRowTx(
 			ai_pots = excluded.ai_pots,
 			ai_pool_runs = excluded.ai_pool_runs,
 			ai_carom_runs = excluded.ai_carom_runs,
+			ai_pickleball_runs = excluded.ai_pickleball_runs,
 			ai_exports_ios = excluded.ai_exports_ios,
 			ai_exports_desktop = excluded.ai_exports_desktop,
 			ai_export_relay = excluded.ai_export_relay,
@@ -1251,15 +2213,25 @@ func upsertBoxHourlyRowTx(
 			os_desktop = excluded.os_desktop,
 			os_app = excluded.os_app,
 			os_other = excluded.os_other,
+			sessions = excluded.sessions,
+			engaged_sessions = excluded.engaged_sessions,
+			returning_visitors = excluded.returning_visitors,
+			acq_qr = excluded.acq_qr,
+			acq_share = excluded.acq_share,
+			acq_app = excluded.acq_app,
+			acq_direct = excluded.acq_direct,
 			base_json = excluded.base_json,
 			updated_at = excluded.updated_at
 	`, boxID, clubID, source, aiEnabled, sourceEpoch, bucketHour,
 		m.QRViews, m.PageViews, m.UniqueVisitors, m.LiveHLS, m.VODPlays, m.ClipDownloads,
 		m.TimelineOpens, m.CutClips, m.CutSeconds,
 		m.AIStudioOpens, m.AIVideosLoads, m.AIAnalyzes, m.AIShots, m.AIPots,
-		m.AIPoolRuns, m.AICaromRuns, m.AIExportsIOS, m.AIExportsDesktop, m.AIExportRelay,
+		m.AIPoolRuns, m.AICaromRuns, m.AIPickleballRuns,
+		m.AIExportsIOS, m.AIExportsDesktop, m.AIExportRelay,
 		m.AIErrors, m.HTTPErrors, m.BytesOut,
 		m.OSIOS, m.OSAndroid, m.OSDesktop, m.OSApp, m.OSOther,
+		m.Sessions, m.EngagedSessions, m.ReturningVisitors,
+		m.AcqQR, m.AcqShare, m.AcqApp, m.AcqDirect,
 		baseJSON, updatedAt)
 	return err
 }
@@ -1278,11 +2250,26 @@ func upsertBoxDailyRowTx(
 			qr_views, page_views, unique_visitors, live_hls, vod_plays, clip_downloads,
 			timeline_opens, cut_clips, cut_seconds,
 			ai_studio_opens, ai_videos_loads, ai_analyzes, ai_shots, ai_pots,
-			ai_pool_runs, ai_carom_runs, ai_exports_ios, ai_exports_desktop, ai_export_relay,
+			ai_pool_runs, ai_carom_runs, ai_pickleball_runs,
+			ai_exports_ios, ai_exports_desktop, ai_export_relay,
 			ai_errors, http_errors, bytes_out,
 			os_ios, os_android, os_desktop, os_app, os_other,
+			sessions, engaged_sessions, returning_visitors,
+			acq_qr, acq_share, acq_app, acq_direct,
 			base_json, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (
+			?, ?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?, ?,
+			?, ?, ?,
+			?, ?, ?, ?, ?,
+			?, ?, ?,
+			?, ?, ?,
+			?, ?, ?,
+			?, ?, ?, ?, ?,
+			?, ?, ?,
+			?, ?, ?, ?,
+			?, ?
+		)
 		ON CONFLICT(box_id, bucket_date) DO UPDATE SET
 			club_id = excluded.club_id,
 			source = excluded.source,
@@ -1304,6 +2291,7 @@ func upsertBoxDailyRowTx(
 			ai_pots = excluded.ai_pots,
 			ai_pool_runs = excluded.ai_pool_runs,
 			ai_carom_runs = excluded.ai_carom_runs,
+			ai_pickleball_runs = excluded.ai_pickleball_runs,
 			ai_exports_ios = excluded.ai_exports_ios,
 			ai_exports_desktop = excluded.ai_exports_desktop,
 			ai_export_relay = excluded.ai_export_relay,
@@ -1315,15 +2303,25 @@ func upsertBoxDailyRowTx(
 			os_desktop = excluded.os_desktop,
 			os_app = excluded.os_app,
 			os_other = excluded.os_other,
+			sessions = excluded.sessions,
+			engaged_sessions = excluded.engaged_sessions,
+			returning_visitors = excluded.returning_visitors,
+			acq_qr = excluded.acq_qr,
+			acq_share = excluded.acq_share,
+			acq_app = excluded.acq_app,
+			acq_direct = excluded.acq_direct,
 			base_json = excluded.base_json,
 			updated_at = excluded.updated_at
 	`, boxID, clubID, source, aiEnabled, sourceEpoch, bucketDate,
 		m.QRViews, m.PageViews, m.UniqueVisitors, m.LiveHLS, m.VODPlays, m.ClipDownloads,
 		m.TimelineOpens, m.CutClips, m.CutSeconds,
 		m.AIStudioOpens, m.AIVideosLoads, m.AIAnalyzes, m.AIShots, m.AIPots,
-		m.AIPoolRuns, m.AICaromRuns, m.AIExportsIOS, m.AIExportsDesktop, m.AIExportRelay,
+		m.AIPoolRuns, m.AICaromRuns, m.AIPickleballRuns,
+		m.AIExportsIOS, m.AIExportsDesktop, m.AIExportRelay,
 		m.AIErrors, m.HTTPErrors, m.BytesOut,
 		m.OSIOS, m.OSAndroid, m.OSDesktop, m.OSApp, m.OSOther,
+		m.Sessions, m.EngagedSessions, m.ReturningVisitors,
+		m.AcqQR, m.AcqShare, m.AcqApp, m.AcqDirect,
 		baseJSON, updatedAt)
 	return err
 }
@@ -1492,6 +2490,24 @@ func (m analyticsMetadataSnapshot) resolveNames(boxID, storedClubID string) (box
 	return boxName, clubID, clubName
 }
 
+func (m analyticsMetadataSnapshot) resolveBranding(boxID, clubID string) string {
+	if b, ok := m.boxes[boxID]; ok && b != nil && strings.TrimSpace(b.Branding) != "" {
+		if strings.EqualFold(strings.TrimSpace(b.Branding), "pickleball") {
+			return "pickleball"
+		}
+		return "billiards"
+	}
+	if clubID != "" {
+		if c, ok := m.clubs[clubID]; ok && c != nil && strings.TrimSpace(c.Branding) != "" {
+			if strings.EqualFold(strings.TrimSpace(c.Branding), "pickleball") {
+				return "pickleball"
+			}
+			return "billiards"
+		}
+	}
+	return "billiards"
+}
+
 func (m analyticsMetadataSnapshot) resolveTableName(boxID, cameraID, storedTableName string) string {
 	if strings.TrimSpace(storedTableName) != "" {
 		return strings.TrimSpace(storedTableName)
@@ -1513,6 +2529,10 @@ func (m analyticsMetadataSnapshot) resolveTableName(boxID, cameraID, storedTable
 	return ""
 }
 
+// =============================================================================
+// GA4 WINDOWING, COMPARISON, FUNNEL, HEATMAP, ACQUISITION & COHORTS
+// =============================================================================
+
 type analyticsRangeWindow struct {
 	Range       string
 	FromDate    string
@@ -1523,9 +2543,42 @@ type analyticsRangeWindow struct {
 	UseHourly24 bool
 }
 
-func computeAnalyticsWindow(rng string, now time.Time) analyticsRangeWindow {
-	rng = normalizeAnalyticsRange(rng)
+func buildDateSlice(fromDay, toDay time.Time) []string {
+	dates := make([]string, 0, 16)
+	for d := fromDay; !d.After(toDay); d = d.AddDate(0, 0, 1) {
+		dates = append(dates, d.Format("2006-01-02"))
+	}
+	return dates
+}
+
+func computeAnalyticsWindow(rng, fromParam, toParam string, now time.Time) analyticsRangeWindow {
 	nowLocal := now.In(analyticsTZ)
+	today := time.Date(nowLocal.Year(), nowLocal.Month(), nowLocal.Day(), 0, 0, 0, 0, analyticsTZ)
+
+	// Custom from/to override when both are valid YYYY-MM-DD dates with from <= to.
+	if fStr, fOK := parseBucketDate(fromParam); fOK {
+		if tStr, tOK := parseBucketDate(toParam); tOK {
+			fDay, _ := time.ParseInLocation("2006-01-02", fStr, analyticsTZ)
+			tDay, _ := time.ParseInLocation("2006-01-02", tStr, analyticsTZ)
+			if !fDay.After(tDay) {
+				if tDay.Sub(fDay) > time.Duration(analyticsCustomMaxDays-1)*24*time.Hour {
+					fDay = tDay.AddDate(0, 0, -(analyticsCustomMaxDays - 1))
+					fStr = fDay.Format("2006-01-02")
+				}
+				return analyticsRangeWindow{
+					Range:       "custom",
+					FromDate:    fStr,
+					ToDate:      tStr,
+					FromHour:    fStr + " 00:00",
+					ToHour:      tStr + " 23:00",
+					Dates:       buildDateSlice(fDay, tDay),
+					UseHourly24: false,
+				}
+			}
+		}
+	}
+
+	rng = normalizeAnalyticsRange(rng)
 
 	if rng == "24h" {
 		endHour := nowLocal.Truncate(time.Hour)
@@ -1547,6 +2600,32 @@ func computeAnalyticsWindow(rng string, now time.Time) analyticsRangeWindow {
 		}
 	}
 
+	if rng == "today" {
+		d := today.Format("2006-01-02")
+		return analyticsRangeWindow{
+			Range:       "today",
+			FromDate:    d,
+			ToDate:      d,
+			FromHour:    d + " 00:00",
+			ToHour:      d + " 23:00",
+			Dates:       []string{d},
+			UseHourly24: false,
+		}
+	}
+
+	if rng == "yesterday" {
+		y := today.AddDate(0, 0, -1).Format("2006-01-02")
+		return analyticsRangeWindow{
+			Range:       "yesterday",
+			FromDate:    y,
+			ToDate:      y,
+			FromHour:    y + " 00:00",
+			ToHour:      y + " 23:00",
+			Dates:       []string{y},
+			UseHourly24: false,
+		}
+	}
+
 	days := 7
 	switch rng {
 	case "30d":
@@ -1554,39 +2633,212 @@ func computeAnalyticsWindow(rng string, now time.Time) analyticsRangeWindow {
 	case "90d":
 		days = 90
 	}
-	toDay := time.Date(nowLocal.Year(), nowLocal.Month(), nowLocal.Day(), 0, 0, 0, 0, analyticsTZ)
-	fromDay := toDay.AddDate(0, 0, -(days - 1))
-	dates := make([]string, 0, days)
-	for d := fromDay; !d.After(toDay); d = d.AddDate(0, 0, 1) {
-		dates = append(dates, d.Format("2006-01-02"))
-	}
+	fromDay := today.AddDate(0, 0, -(days - 1))
 	fromDate := fromDay.Format("2006-01-02")
-	toDate := toDay.Format("2006-01-02")
+	toDate := today.Format("2006-01-02")
 	return analyticsRangeWindow{
 		Range:       rng,
 		FromDate:    fromDate,
 		ToDate:      toDate,
 		FromHour:    fromDate + " 00:00",
 		ToHour:      toDate + " 23:00",
-		Dates:       dates,
+		Dates:       buildDateSlice(fromDay, today),
 		UseHourly24: false,
 	}
 }
 
-type boxUsageRow struct {
-	BoxID      string
-	ClubID     string
-	Source     string
-	AIEnabled  bool
-	BucketKey  string // bucket_hour or bucket_date
-	UpdatedAt  string
-	Metrics    AnalyticsBoxMetrics
+func computePreviousAnalyticsWindow(win analyticsRangeWindow) analyticsRangeWindow {
+	if win.UseHourly24 {
+		startHour, err := time.ParseInLocation("2006-01-02 15:00", win.FromHour, analyticsTZ)
+		if err != nil {
+			return win
+		}
+		prevEnd := startHour.Add(-1 * time.Hour)
+		prevStart := prevEnd.Add(-23 * time.Hour)
+		fromDate := prevStart.Format("2006-01-02")
+		toDate := prevEnd.Format("2006-01-02")
+		dates := []string{fromDate}
+		if toDate != fromDate {
+			dates = append(dates, toDate)
+		}
+		return analyticsRangeWindow{
+			Range:       win.Range,
+			FromDate:    fromDate,
+			ToDate:      toDate,
+			FromHour:    prevStart.Format("2006-01-02 15:00"),
+			ToHour:      prevEnd.Format("2006-01-02 15:00"),
+			Dates:       dates,
+			UseHourly24: true,
+		}
+	}
+
+	fromDay, err := time.ParseInLocation("2006-01-02", win.FromDate, analyticsTZ)
+	if err != nil {
+		return win
+	}
+	span := len(win.Dates)
+	if span <= 0 {
+		span = 1
+	}
+	prevTo := fromDay.AddDate(0, 0, -1)
+	prevFrom := prevTo.AddDate(0, 0, -(span - 1))
+	pFromStr := prevFrom.Format("2006-01-02")
+	pToStr := prevTo.Format("2006-01-02")
+	return analyticsRangeWindow{
+		Range:       win.Range,
+		FromDate:    pFromStr,
+		ToDate:      pToStr,
+		FromHour:    pFromStr + " 00:00",
+		ToHour:      pToStr + " 23:00",
+		Dates:       buildDateSlice(prevFrom, prevTo),
+		UseHourly24: false,
+	}
 }
 
-func (s *Server) queryAnalyticsOverview(q analyticsQueryParams, now time.Time) (AnalyticsOverviewResponse, error) {
-	win := computeAnalyticsWindow(q.Range, now)
-	meta := s.snapshotAnalyticsMetadata()
+func computeDeltaPct(cur, prev float64) float64 {
+	if prev > 0 {
+		return round1(((cur - prev) / prev) * 100.0)
+	}
+	if cur > 0 {
+		return 100.0
+	}
+	return 0.0
+}
 
+func computeComparisonDeltas(cur, prev AnalyticsKPI) AnalyticsComparisonDeltas {
+	return AnalyticsComparisonDeltas{
+		UniqueVisitors: computeDeltaPct(float64(cur.UniqueVisitors), float64(prev.UniqueVisitors)),
+		Sessions:       computeDeltaPct(float64(cur.Sessions), float64(prev.Sessions)),
+		QRViews:        computeDeltaPct(float64(cur.QRViews), float64(prev.QRViews)),
+		ClipsTotal:     computeDeltaPct(float64(cur.ClipsTotal), float64(prev.ClipsTotal)),
+		AIAnalyzes:     computeDeltaPct(float64(cur.AIAnalyzes), float64(prev.AIAnalyzes)),
+		BytesOut:       computeDeltaPct(float64(cur.BytesOut), float64(prev.BytesOut)),
+		EngagementRate: computeDeltaPct(cur.EngagementRatePct, prev.EngagementRatePct),
+	}
+}
+
+func buildAnalyticsFunnel(kpi AnalyticsKPI) []AnalyticsFunnelStep {
+	s1 := max64(kpi.QRViews, kpi.PageViews)
+	s2 := kpi.LiveHLS + kpi.VODPlays + kpi.TimelineOpens
+	s3 := kpi.ClipDownloads + kpi.CutClips
+	s4 := max64(kpi.AIStudioOpens, max64(kpi.AIAnalyzes, kpi.AIExportsTotal))
+
+	raw := []struct {
+		step  string
+		label string
+		count int64
+	}{
+		{step: "qr_views", label: "Quét QR / Mở trang", count: s1},
+		{step: "watch_timeline", label: "Xem Live / Timeline", count: s2},
+		{step: "download_cut", label: "Tải Clip / Cắt CheckVAR", count: s3},
+		{step: "ai_studio", label: "AI Studio / Xuất Video", count: s4},
+	}
+
+	steps := make([]AnalyticsFunnelStep, len(raw))
+	for i, r := range raw {
+		pctTop := 0.0
+		dropPct := 0.0
+		if s1 > 0 {
+			if i == 0 {
+				pctTop = 100.0
+			} else {
+				pct := float64(r.count) * 100.0 / float64(s1)
+				if pct > 100.0 {
+					pct = 100.0
+				}
+				pctTop = round1(pct)
+			}
+		}
+		if i > 0 && raw[i-1].count > 0 {
+			if r.count < raw[i-1].count {
+				dropPct = round1(float64(raw[i-1].count-r.count) * 100.0 / float64(raw[i-1].count))
+			}
+		}
+		steps[i] = AnalyticsFunnelStep{
+			Step:     r.step,
+			Label:    r.label,
+			Count:    r.count,
+			PctOfTop: pctTop,
+			DropPct:  dropPct,
+		}
+	}
+	return steps
+}
+
+func buildAnalyticsCohorts(kpi AnalyticsKPI) AnalyticsCohorts {
+	ret := kpi.ReturningVisitors
+	if kpi.UniqueVisitors > 0 && ret > kpi.UniqueVisitors {
+		ret = kpi.UniqueVisitors
+	}
+	newVis := max64(0, kpi.UniqueVisitors-ret)
+	retPct := 0.0
+	if kpi.UniqueVisitors > 0 {
+		retPct = round1(float64(ret) * 100.0 / float64(kpi.UniqueVisitors))
+	}
+
+	engaged := kpi.EngagedSessions
+	if kpi.Sessions > 0 && engaged > kpi.Sessions {
+		engaged = kpi.Sessions
+	}
+	engPct := 0.0
+	viewsPerSess := 0.0
+	if kpi.Sessions > 0 {
+		engPct = round1(float64(engaged) * 100.0 / float64(kpi.Sessions))
+		viewsPerSess = round1(float64(max64(kpi.PageViews, kpi.QRViews)) / float64(kpi.Sessions))
+	}
+
+	return AnalyticsCohorts{
+		NewVisitors:       newVis,
+		ReturningVisitors: ret,
+		ReturningPct:      retPct,
+		Sessions:          kpi.Sessions,
+		EngagedSessions:   engaged,
+		EngagementRatePct: engPct,
+		ViewsPerSession:   viewsPerSess,
+	}
+}
+
+func newEmptyHeatmap7x24() AnalyticsHeatmap7x24 {
+	matrix := make([][]int64, 7)
+	for d := 0; d < 7; d++ {
+		matrix[d] = make([]int64, 24)
+	}
+	return AnalyticsHeatmap7x24{
+		Days:   append([]string(nil), vietnameseWeekdays...),
+		Matrix: matrix,
+		PeakDayHour: AnalyticsHeatmapPeak{
+			DayIndex: 0,
+			DayLabel: vietnameseWeekdays[0],
+			Hour:     0,
+			Value:    0,
+		},
+	}
+}
+
+type boxUsageRow struct {
+	BoxID     string
+	ClubID    string
+	Source    string
+	AIEnabled bool
+	BucketKey string // bucket_hour or bucket_date
+	UpdatedAt string
+	Metrics   AnalyticsBoxMetrics
+}
+
+type analyticsAggResult struct {
+	KPI         AnalyticsKPI
+	OSBreakdown AnalyticsOSBreakdown
+	PeakHours   []AnalyticsPeakHour
+	DailySeries []AnalyticsDailyPoint
+	Funnel      []AnalyticsFunnelStep
+	Heatmap7x24 AnalyticsHeatmap7x24
+	Acquisition AnalyticsAcquisition
+	Cohorts     AnalyticsCohorts
+	TopClubs    []AnalyticsTopClub
+	TopBoxes    []AnalyticsTopBox
+}
+
+func (s *Server) aggregateAnalyticsWindow(win analyticsRangeWindow, q analyticsQueryParams, meta analyticsMetadataSnapshot, includeBreakdowns bool) (analyticsAggResult, error) {
 	peakHours := make([]AnalyticsPeakHour, 24)
 	for h := 0; h < 24; h++ {
 		peakHours[h] = AnalyticsPeakHour{Hour: h}
@@ -1597,14 +2849,12 @@ func (s *Server) queryAnalyticsOverview(q analyticsQueryParams, now time.Time) (
 		dailySeries[i] = AnalyticsDailyPoint{Date: d}
 		dailyIndex[d] = i
 	}
+	heatmap := newEmptyHeatmap7x24()
 
-	resp := AnalyticsOverviewResponse{
-		OK:          true,
-		Range:       win.Range,
-		FromDate:    win.FromDate,
-		ToDate:      win.ToDate,
+	out := analyticsAggResult{
 		PeakHours:   peakHours,
 		DailySeries: dailySeries,
+		Heatmap7x24: heatmap,
 		TopClubs:    make([]AnalyticsTopClub, 0),
 		TopBoxes:    make([]AnalyticsTopBox, 0),
 	}
@@ -1625,55 +2875,97 @@ func (s *Server) queryAnalyticsOverview(q analyticsQueryParams, now time.Time) (
 			if err != nil {
 				return err
 			}
-			hourlyRows, err = queryBoxHourlyRows(db, win.FromHour, win.ToHour, q.BoxID)
-			if err != nil {
-				return err
+			if includeBreakdowns {
+				hourlyRows, err = queryBoxHourlyRows(db, win.FromHour, win.ToHour, q.BoxID)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		return nil
 	})
 	if err != nil {
 		if errors.Is(err, errNoSQLiteDB) {
-			return resp, nil
+			out.Funnel = buildAnalyticsFunnel(out.KPI)
+			out.Cohorts = buildAnalyticsCohorts(out.KPI)
+			return out, nil
 		}
-		return resp, err
+		return out, err
 	}
 
 	filterClub := strings.TrimSpace(q.ClubID)
 	filterBox := strings.TrimSpace(q.BoxID)
+	filterSport := normalizeAnalyticsSport(q.Sport)
+	filterSource := normalizeAnalyticsSource(q.Source)
 
-	matchesFilters := func(row boxUsageRow) (boxName, clubID, clubName string, ok bool) {
+	matchesFilters := func(row boxUsageRow) (boxName, clubID, clubName, branding string, ok bool) {
 		if filterBox != "" && row.BoxID != filterBox {
-			return "", "", "", false
+			return "", "", "", "", false
 		}
 		boxName, clubID, clubName = meta.resolveNames(row.BoxID, row.ClubID)
 		if filterClub != "" && clubID != filterClub {
-			return "", "", "", false
+			return "", "", "", "", false
+		}
+		branding = meta.resolveBranding(row.BoxID, clubID)
+		if filterSport != "all" {
+			if filterSport == "pickleball" {
+				if branding != "pickleball" && row.Metrics.AIPickleballRuns == 0 {
+					return "", "", "", "", false
+				}
+			} else if branding != filterSport {
+				return "", "", "", "", false
+			}
+		}
+		if filterSource != "all" && !strings.EqualFold(strings.TrimSpace(row.Source), filterSource) {
+			return "", "", "", "", false
 		}
 		if q.AIOnly && !row.AIEnabled && !row.Metrics.hasAIActivity() {
-			return "", "", "", false
+			return "", "", "", "", false
 		}
-		return boxName, clubID, clubName, true
+		return boxName, clubID, clubName, branding, true
 	}
 
-	// Aggregate Peak Hours (always from hourlyRows, GMT+7 0..23).
-	for _, row := range hourlyRows {
-		if _, _, _, ok := matchesFilters(row); !ok {
-			continue
+	// Aggregate Peak Hours & 7x24 Heatmap (from hourlyRows, GMT+7).
+	if includeBreakdowns {
+		for _, row := range hourlyRows {
+			if _, _, _, _, ok := matchesFilters(row); !ok {
+				continue
+			}
+			normHour, _, hr, valid := parseBucketHour(row.BucketKey)
+			if !valid || hr < 0 || hr > 23 {
+				continue
+			}
+			ph := &out.PeakHours[hr]
+			ph.QRViews += row.Metrics.QRViews
+			ph.DownloadsCuts += row.Metrics.ClipDownloads + row.Metrics.CutClips
+			ph.AIRuns += max64(row.Metrics.AIAnalyzes, row.Metrics.AIPoolRuns+row.Metrics.AICaromRuns+row.Metrics.AIPickleballRuns)
+			ph.UniqueVisitors += row.Metrics.UniqueVisitors
+			ph.BytesOut += row.Metrics.BytesOut
+
+			if t, err := time.ParseInLocation("2006-01-02 15:00", normHour, analyticsTZ); err == nil {
+				dayIdx := (int(t.Weekday()) + 6) % 7 // Mon=0 .. Sun=6
+				cellVal := max64(row.Metrics.QRViews, row.Metrics.PageViews) +
+					row.Metrics.ClipDownloads + row.Metrics.CutClips + row.Metrics.AIAnalyzes
+				out.Heatmap7x24.Matrix[dayIdx][hr] += cellVal
+			}
 		}
-		_, _, hr, valid := parseBucketHour(row.BucketKey)
-		if !valid || hr < 0 || hr > 23 {
-			continue
+		for d := 0; d < 7; d++ {
+			for h := 0; h < 24; h++ {
+				v := out.Heatmap7x24.Matrix[d][h]
+				if v > out.Heatmap7x24.MaxCell {
+					out.Heatmap7x24.MaxCell = v
+					out.Heatmap7x24.PeakDayHour = AnalyticsHeatmapPeak{
+						DayIndex: d,
+						DayLabel: vietnameseWeekdays[d],
+						Hour:     h,
+						Value:    v,
+					}
+				}
+			}
 		}
-		ph := &resp.PeakHours[hr]
-		ph.QRViews += row.Metrics.QRViews
-		ph.DownloadsCuts += row.Metrics.ClipDownloads + row.Metrics.CutClips
-		ph.AIRuns += max64(row.Metrics.AIAnalyzes, row.Metrics.AIPoolRuns+row.Metrics.AICaromRuns)
-		ph.UniqueVisitors += row.Metrics.UniqueVisitors
-		ph.BytesOut += row.Metrics.BytesOut
 	}
 
-	// Aggregate KPI, OS breakdown, Daily Series, Top Clubs, Top Boxes from mainRows.
+	// Aggregate KPI, OS breakdown, Acquisition, Daily Series, Top Clubs, Top Boxes from mainRows.
 	activeBoxes := make(map[string]struct{})
 	activeClubs := make(map[string]struct{})
 	aiActiveBoxes := make(map[string]struct{})
@@ -1683,6 +2975,7 @@ func (s *Server) queryAnalyticsOverview(q analyticsQueryParams, now time.Time) (
 		boxName      string
 		clubID       string
 		clubName     string
+		branding     string
 		source       string
 		aiEnabled    bool
 		metrics      AnalyticsBoxMetrics
@@ -1691,6 +2984,7 @@ func (s *Server) queryAnalyticsOverview(q analyticsQueryParams, now time.Time) (
 	type clubAgg struct {
 		clubID       string
 		clubName     string
+		branding     string
 		boxes        map[string]struct{}
 		sources      map[string]struct{}
 		aiEnabled    bool
@@ -1702,41 +2996,51 @@ func (s *Server) queryAnalyticsOverview(q analyticsQueryParams, now time.Time) (
 	clubAggs := make(map[string]*clubAgg)
 
 	for _, row := range mainRows {
-		boxName, clubID, clubName, ok := matchesFilters(row)
+		boxName, clubID, clubName, branding, ok := matchesFilters(row)
 		if !ok {
 			continue
 		}
 		m := row.Metrics
 		aiFlag := row.AIEnabled || m.hasAIActivity()
 
-		resp.KPI.QRViews += m.QRViews
-		resp.KPI.PageViews += m.PageViews
-		resp.KPI.UniqueVisitors += m.UniqueVisitors
-		resp.KPI.LiveHLS += m.LiveHLS
-		resp.KPI.VODPlays += m.VODPlays
-		resp.KPI.ClipDownloads += m.ClipDownloads
-		resp.KPI.TimelineOpens += m.TimelineOpens
-		resp.KPI.CutClips += m.CutClips
-		resp.KPI.CutSeconds += m.CutSeconds
-		resp.KPI.AIStudioOpens += m.AIStudioOpens
-		resp.KPI.AIVideosLoads += m.AIVideosLoads
-		resp.KPI.AIAnalyzes += m.AIAnalyzes
-		resp.KPI.AIShots += m.AIShots
-		resp.KPI.AIPots += m.AIPots
-		resp.KPI.AIPoolRuns += m.AIPoolRuns
-		resp.KPI.AICaromRuns += m.AICaromRuns
-		resp.KPI.AIExportsIOS += m.AIExportsIOS
-		resp.KPI.AIExportsDesktop += m.AIExportsDesktop
-		resp.KPI.AIExportRelay += m.AIExportRelay
-		resp.KPI.AIErrors += m.AIErrors
-		resp.KPI.HTTPErrors += m.HTTPErrors
-		resp.KPI.BytesOut += m.BytesOut
+		out.KPI.QRViews += m.QRViews
+		out.KPI.PageViews += m.PageViews
+		out.KPI.UniqueVisitors += m.UniqueVisitors
+		out.KPI.Sessions += m.Sessions
+		out.KPI.EngagedSessions += m.EngagedSessions
+		out.KPI.ReturningVisitors += m.ReturningVisitors
+		out.KPI.LiveHLS += m.LiveHLS
+		out.KPI.VODPlays += m.VODPlays
+		out.KPI.ClipDownloads += m.ClipDownloads
+		out.KPI.TimelineOpens += m.TimelineOpens
+		out.KPI.CutClips += m.CutClips
+		out.KPI.CutSeconds += m.CutSeconds
+		out.KPI.AIStudioOpens += m.AIStudioOpens
+		out.KPI.AIVideosLoads += m.AIVideosLoads
+		out.KPI.AIAnalyzes += m.AIAnalyzes
+		out.KPI.AIShots += m.AIShots
+		out.KPI.AIPots += m.AIPots
+		out.KPI.AIPoolRuns += m.AIPoolRuns
+		out.KPI.AICaromRuns += m.AICaromRuns
+		out.KPI.AIPickleballRuns += m.AIPickleballRuns
+		out.KPI.AIExportsIOS += m.AIExportsIOS
+		out.KPI.AIExportsDesktop += m.AIExportsDesktop
+		out.KPI.AIExportRelay += m.AIExportRelay
+		out.KPI.AIExportsTotal += m.aiExportsTotal()
+		out.KPI.AIErrors += m.AIErrors
+		out.KPI.HTTPErrors += m.HTTPErrors
+		out.KPI.BytesOut += m.BytesOut
 
-		resp.OSBreakdown.IOS += m.OSIOS
-		resp.OSBreakdown.Android += m.OSAndroid
-		resp.OSBreakdown.Desktop += m.OSDesktop
-		resp.OSBreakdown.App += m.OSApp
-		resp.OSBreakdown.Other += m.OSOther
+		out.OSBreakdown.IOS += m.OSIOS
+		out.OSBreakdown.Android += m.OSAndroid
+		out.OSBreakdown.Desktop += m.OSDesktop
+		out.OSBreakdown.App += m.OSApp
+		out.OSBreakdown.Other += m.OSOther
+
+		out.Acquisition.QR += m.AcqQR
+		out.Acquisition.Share += m.AcqShare
+		out.Acquisition.App += m.AcqApp
+		out.Acquisition.Direct += m.AcqDirect
 
 		activeBoxes[row.BoxID] = struct{}{}
 		if aiFlag {
@@ -1754,13 +3058,18 @@ func (s *Server) queryAnalyticsOverview(q analyticsQueryParams, now time.Time) (
 			dateKey = dateKey[:10]
 		}
 		if idx, exists := dailyIndex[dateKey]; exists {
-			dp := &resp.DailySeries[idx]
+			dp := &out.DailySeries[idx]
 			dp.QRViews += m.QRViews
 			dp.UniqueVisitors += m.UniqueVisitors
+			dp.Sessions += m.Sessions
 			dp.DownloadsCuts += m.ClipDownloads + m.CutClips
 			dp.AIAnalyzes += m.AIAnalyzes
 			dp.AIExports += m.aiExportsTotal()
 			dp.BytesOut += m.BytesOut
+		}
+
+		if !includeBreakdowns {
+			continue
 		}
 
 		// Per-box aggregation
@@ -1771,6 +3080,7 @@ func (s *Server) queryAnalyticsOverview(q analyticsQueryParams, now time.Time) (
 				boxName:  boxName,
 				clubID:   clubID,
 				clubName: clubName,
+				branding: branding,
 				source:   row.Source,
 			}
 			boxAggs[row.BoxID] = ba
@@ -1792,6 +3102,7 @@ func (s *Server) queryAnalyticsOverview(q analyticsQueryParams, now time.Time) (
 			ca = &clubAgg{
 				clubID:   clubID,
 				clubName: clubName,
+				branding: branding,
 				boxes:    make(map[string]struct{}),
 				sources:  make(map[string]struct{}),
 			}
@@ -1810,81 +3121,157 @@ func (s *Server) queryAnalyticsOverview(q analyticsQueryParams, now time.Time) (
 		}
 	}
 
-	resp.KPI.ActiveBoxes = len(activeBoxes)
-	resp.KPI.ActiveClubs = len(activeClubs)
-	resp.KPI.AIActiveBoxes = len(aiActiveBoxes)
+	out.KPI.ClipsTotal = out.KPI.ClipDownloads + out.KPI.CutClips
+	out.KPI.ActiveBoxes = len(activeBoxes)
+	out.KPI.ActiveClubs = len(activeClubs)
+	out.KPI.AIActiveBoxes = len(aiActiveBoxes)
+
+	out.Cohorts = buildAnalyticsCohorts(out.KPI)
+	out.KPI.EngagementRatePct = out.Cohorts.EngagementRatePct
+
+	totalReqs := max64(out.KPI.PageViews, out.KPI.QRViews) + out.KPI.LiveHLS + out.KPI.VODPlays + out.KPI.ClipsTotal + out.KPI.AIAnalyzes
+	if totalReqs > 0 {
+		errPct := float64(out.KPI.HTTPErrors+out.KPI.AIErrors) * 100.0 / float64(totalReqs)
+		if errPct > 100.0 {
+			errPct = 100.0
+		}
+		out.KPI.ErrorRatePct = round1(errPct)
+	}
+
+	out.Funnel = buildAnalyticsFunnel(out.KPI)
+
+	if !includeBreakdowns {
+		return out, nil
+	}
 
 	for _, ca := range clubAggs {
 		srcs := sortedKeys(ca.sources)
-		resp.TopClubs = append(resp.TopClubs, AnalyticsTopClub{
-			ClubID:         ca.clubID,
-			ClubName:       ca.clubName,
-			BoxesCount:     len(ca.boxes),
-			Sources:        srcs,
-			AIEnabled:      ca.aiEnabled,
-			QRViews:        ca.metrics.QRViews,
-			UniqueVisitors: ca.metrics.UniqueVisitors,
-			LiveHLS:        ca.metrics.LiveHLS,
-			VODPlays:       ca.metrics.VODPlays,
-			ClipDownloads:  ca.metrics.ClipDownloads,
-			CutClips:       ca.metrics.CutClips,
-			AIStudioOpens:  ca.metrics.AIStudioOpens,
-			AIAnalyzes:     ca.metrics.AIAnalyzes,
-			AIShots:        ca.metrics.AIShots,
-			AIExports:      ca.metrics.aiExportsTotal(),
-			AIErrors:       ca.metrics.AIErrors,
-			HTTPErrors:     ca.metrics.HTTPErrors,
-			BytesOut:       ca.metrics.BytesOut,
-			LastIngestAt:   ca.lastIngestAt,
+		out.TopClubs = append(out.TopClubs, AnalyticsTopClub{
+			ClubID:            ca.clubID,
+			ClubName:          ca.clubName,
+			Branding:          ca.branding,
+			BoxesCount:        len(ca.boxes),
+			Sources:           srcs,
+			AIEnabled:         ca.aiEnabled,
+			QRViews:           ca.metrics.QRViews,
+			UniqueVisitors:    ca.metrics.UniqueVisitors,
+			Sessions:          ca.metrics.Sessions,
+			EngagedSessions:   ca.metrics.EngagedSessions,
+			ReturningVisitors: ca.metrics.ReturningVisitors,
+			LiveHLS:           ca.metrics.LiveHLS,
+			VODPlays:          ca.metrics.VODPlays,
+			ClipDownloads:     ca.metrics.ClipDownloads,
+			CutClips:          ca.metrics.CutClips,
+			AIStudioOpens:     ca.metrics.AIStudioOpens,
+			AIAnalyzes:        ca.metrics.AIAnalyzes,
+			AIShots:           ca.metrics.AIShots,
+			AIPickleballRuns:  ca.metrics.AIPickleballRuns,
+			AIExports:         ca.metrics.aiExportsTotal(),
+			AIErrors:          ca.metrics.AIErrors,
+			HTTPErrors:        ca.metrics.HTTPErrors,
+			BytesOut:          ca.metrics.BytesOut,
+			LastIngestAt:      ca.lastIngestAt,
 		})
 	}
-	sort.Slice(resp.TopClubs, func(i, j int) bool {
-		if resp.TopClubs[i].QRViews != resp.TopClubs[j].QRViews {
-			return resp.TopClubs[i].QRViews > resp.TopClubs[j].QRViews
+	sort.Slice(out.TopClubs, func(i, j int) bool {
+		if out.TopClubs[i].QRViews != out.TopClubs[j].QRViews {
+			return out.TopClubs[i].QRViews > out.TopClubs[j].QRViews
 		}
-		di := resp.TopClubs[i].ClipDownloads + resp.TopClubs[i].CutClips + resp.TopClubs[i].AIAnalyzes
-		dj := resp.TopClubs[j].ClipDownloads + resp.TopClubs[j].CutClips + resp.TopClubs[j].AIAnalyzes
+		di := out.TopClubs[i].ClipDownloads + out.TopClubs[i].CutClips + out.TopClubs[i].AIAnalyzes
+		dj := out.TopClubs[j].ClipDownloads + out.TopClubs[j].CutClips + out.TopClubs[j].AIAnalyzes
 		if di != dj {
 			return di > dj
 		}
-		return resp.TopClubs[i].ClubName < resp.TopClubs[j].ClubName
+		return out.TopClubs[i].ClubName < out.TopClubs[j].ClubName
 	})
 
 	for _, ba := range boxAggs {
-		resp.TopBoxes = append(resp.TopBoxes, AnalyticsTopBox{
-			BoxID:          ba.boxID,
-			BoxName:        ba.boxName,
-			ClubID:         ba.clubID,
-			ClubName:       ba.clubName,
-			Source:         ba.source,
-			AIEnabled:      ba.aiEnabled,
-			QRViews:        ba.metrics.QRViews,
-			UniqueVisitors: ba.metrics.UniqueVisitors,
-			LiveHLS:        ba.metrics.LiveHLS,
-			VODPlays:       ba.metrics.VODPlays,
-			ClipDownloads:  ba.metrics.ClipDownloads,
-			CutClips:       ba.metrics.CutClips,
-			AIStudioOpens:  ba.metrics.AIStudioOpens,
-			AIAnalyzes:     ba.metrics.AIAnalyzes,
-			AIShots:        ba.metrics.AIShots,
-			AIExports:      ba.metrics.aiExportsTotal(),
-			AIErrors:       ba.metrics.AIErrors,
-			HTTPErrors:     ba.metrics.HTTPErrors,
-			BytesOut:       ba.metrics.BytesOut,
-			LastIngestAt:   ba.lastIngestAt,
+		out.TopBoxes = append(out.TopBoxes, AnalyticsTopBox{
+			BoxID:             ba.boxID,
+			BoxName:           ba.boxName,
+			ClubID:            ba.clubID,
+			ClubName:          ba.clubName,
+			Branding:          ba.branding,
+			Source:            ba.source,
+			AIEnabled:         ba.aiEnabled,
+			QRViews:           ba.metrics.QRViews,
+			UniqueVisitors:    ba.metrics.UniqueVisitors,
+			Sessions:          ba.metrics.Sessions,
+			EngagedSessions:   ba.metrics.EngagedSessions,
+			ReturningVisitors: ba.metrics.ReturningVisitors,
+			LiveHLS:           ba.metrics.LiveHLS,
+			VODPlays:          ba.metrics.VODPlays,
+			ClipDownloads:     ba.metrics.ClipDownloads,
+			CutClips:          ba.metrics.CutClips,
+			AIStudioOpens:     ba.metrics.AIStudioOpens,
+			AIAnalyzes:        ba.metrics.AIAnalyzes,
+			AIShots:           ba.metrics.AIShots,
+			AIPickleballRuns:  ba.metrics.AIPickleballRuns,
+			AIExports:         ba.metrics.aiExportsTotal(),
+			AIErrors:          ba.metrics.AIErrors,
+			HTTPErrors:        ba.metrics.HTTPErrors,
+			BytesOut:          ba.metrics.BytesOut,
+			LastIngestAt:      ba.lastIngestAt,
 		})
 	}
-	sort.Slice(resp.TopBoxes, func(i, j int) bool {
-		if resp.TopBoxes[i].QRViews != resp.TopBoxes[j].QRViews {
-			return resp.TopBoxes[i].QRViews > resp.TopBoxes[j].QRViews
+	sort.Slice(out.TopBoxes, func(i, j int) bool {
+		if out.TopBoxes[i].QRViews != out.TopBoxes[j].QRViews {
+			return out.TopBoxes[i].QRViews > out.TopBoxes[j].QRViews
 		}
-		di := resp.TopBoxes[i].ClipDownloads + resp.TopBoxes[i].CutClips + resp.TopBoxes[i].AIAnalyzes
-		dj := resp.TopBoxes[j].ClipDownloads + resp.TopBoxes[j].CutClips + resp.TopBoxes[j].AIAnalyzes
+		di := out.TopBoxes[i].ClipDownloads + out.TopBoxes[i].CutClips + out.TopBoxes[i].AIAnalyzes
+		dj := out.TopBoxes[j].ClipDownloads + out.TopBoxes[j].CutClips + out.TopBoxes[j].AIAnalyzes
 		if di != dj {
 			return di > dj
 		}
-		return resp.TopBoxes[i].BoxID < resp.TopBoxes[j].BoxID
+		return out.TopBoxes[i].BoxID < out.TopBoxes[j].BoxID
 	})
+
+	return out, nil
+}
+
+func (s *Server) queryAnalyticsOverview(q analyticsQueryParams, now time.Time) (AnalyticsOverviewResponse, error) {
+	// Ensure any coalesced ingests are committed before reading (read-your-own-writes guarantee).
+	_ = s.FlushAnalytics()
+
+	win := computeAnalyticsWindow(q.Range, q.From, q.To, now)
+	meta := s.snapshotAnalyticsMetadata()
+
+	cur, err := s.aggregateAnalyticsWindow(win, q, meta, true)
+	if err != nil {
+		return AnalyticsOverviewResponse{}, err
+	}
+
+	resp := AnalyticsOverviewResponse{
+		OK:          true,
+		Range:       win.Range,
+		FromDate:    win.FromDate,
+		ToDate:      win.ToDate,
+		KPI:         cur.KPI,
+		OSBreakdown: cur.OSBreakdown,
+		PeakHours:   cur.PeakHours,
+		DailySeries: cur.DailySeries,
+		Funnel:      cur.Funnel,
+		Heatmap7x24: cur.Heatmap7x24,
+		Acquisition: cur.Acquisition,
+		Cohorts:     cur.Cohorts,
+		TopClubs:    cur.TopClubs,
+		TopBoxes:    cur.TopBoxes,
+	}
+
+	if q.Compare {
+		prevWin := computePreviousAnalyticsWindow(win)
+		prev, err := s.aggregateAnalyticsWindow(prevWin, q, meta, false)
+		if err != nil {
+			return AnalyticsOverviewResponse{}, err
+		}
+		resp.Comparison = &AnalyticsComparison{
+			From:        prevWin.FromDate,
+			To:          prevWin.ToDate,
+			KPIs:        prev.KPI,
+			DeltasPct:   computeComparisonDeltas(cur.KPI, prev.KPI),
+			DailySeries: prev.DailySeries,
+		}
+	}
 
 	return resp, nil
 }
@@ -1895,9 +3282,12 @@ func queryBoxHourlyRows(db *sql.DB, fromHour, toHour, boxID string) ([]boxUsageR
 			qr_views, page_views, unique_visitors, live_hls, vod_plays, clip_downloads,
 			timeline_opens, cut_clips, cut_seconds,
 			ai_studio_opens, ai_videos_loads, ai_analyzes, ai_shots, ai_pots,
-			ai_pool_runs, ai_carom_runs, ai_exports_ios, ai_exports_desktop, ai_export_relay,
+			ai_pool_runs, ai_carom_runs, ai_pickleball_runs,
+			ai_exports_ios, ai_exports_desktop, ai_export_relay,
 			ai_errors, http_errors, bytes_out,
-			os_ios, os_android, os_desktop, os_app, os_other
+			os_ios, os_android, os_desktop, os_app, os_other,
+			sessions, engaged_sessions, returning_visitors,
+			acq_qr, acq_share, acq_app, acq_direct
 		FROM usage_box_hourly
 		WHERE bucket_hour >= ? AND bucket_hour <= ?
 	`
@@ -1922,9 +3312,12 @@ func queryBoxHourlyRows(db *sql.DB, fromHour, toHour, boxID string) ([]boxUsageR
 			&r.Metrics.QRViews, &r.Metrics.PageViews, &r.Metrics.UniqueVisitors, &r.Metrics.LiveHLS, &r.Metrics.VODPlays, &r.Metrics.ClipDownloads,
 			&r.Metrics.TimelineOpens, &r.Metrics.CutClips, &r.Metrics.CutSeconds,
 			&r.Metrics.AIStudioOpens, &r.Metrics.AIVideosLoads, &r.Metrics.AIAnalyzes, &r.Metrics.AIShots, &r.Metrics.AIPots,
-			&r.Metrics.AIPoolRuns, &r.Metrics.AICaromRuns, &r.Metrics.AIExportsIOS, &r.Metrics.AIExportsDesktop, &r.Metrics.AIExportRelay,
+			&r.Metrics.AIPoolRuns, &r.Metrics.AICaromRuns, &r.Metrics.AIPickleballRuns,
+			&r.Metrics.AIExportsIOS, &r.Metrics.AIExportsDesktop, &r.Metrics.AIExportRelay,
 			&r.Metrics.AIErrors, &r.Metrics.HTTPErrors, &r.Metrics.BytesOut,
 			&r.Metrics.OSIOS, &r.Metrics.OSAndroid, &r.Metrics.OSDesktop, &r.Metrics.OSApp, &r.Metrics.OSOther,
+			&r.Metrics.Sessions, &r.Metrics.EngagedSessions, &r.Metrics.ReturningVisitors,
+			&r.Metrics.AcqQR, &r.Metrics.AcqShare, &r.Metrics.AcqApp, &r.Metrics.AcqDirect,
 		); err != nil {
 			return nil, err
 		}
@@ -1941,9 +3334,12 @@ func queryBoxDailyRows(db *sql.DB, fromDate, toDate, boxID string) ([]boxUsageRo
 			qr_views, page_views, unique_visitors, live_hls, vod_plays, clip_downloads,
 			timeline_opens, cut_clips, cut_seconds,
 			ai_studio_opens, ai_videos_loads, ai_analyzes, ai_shots, ai_pots,
-			ai_pool_runs, ai_carom_runs, ai_exports_ios, ai_exports_desktop, ai_export_relay,
+			ai_pool_runs, ai_carom_runs, ai_pickleball_runs,
+			ai_exports_ios, ai_exports_desktop, ai_export_relay,
 			ai_errors, http_errors, bytes_out,
-			os_ios, os_android, os_desktop, os_app, os_other
+			os_ios, os_android, os_desktop, os_app, os_other,
+			sessions, engaged_sessions, returning_visitors,
+			acq_qr, acq_share, acq_app, acq_direct
 		FROM usage_box_daily
 		WHERE bucket_date >= ? AND bucket_date <= ?
 	`
@@ -1968,9 +3364,12 @@ func queryBoxDailyRows(db *sql.DB, fromDate, toDate, boxID string) ([]boxUsageRo
 			&r.Metrics.QRViews, &r.Metrics.PageViews, &r.Metrics.UniqueVisitors, &r.Metrics.LiveHLS, &r.Metrics.VODPlays, &r.Metrics.ClipDownloads,
 			&r.Metrics.TimelineOpens, &r.Metrics.CutClips, &r.Metrics.CutSeconds,
 			&r.Metrics.AIStudioOpens, &r.Metrics.AIVideosLoads, &r.Metrics.AIAnalyzes, &r.Metrics.AIShots, &r.Metrics.AIPots,
-			&r.Metrics.AIPoolRuns, &r.Metrics.AICaromRuns, &r.Metrics.AIExportsIOS, &r.Metrics.AIExportsDesktop, &r.Metrics.AIExportRelay,
+			&r.Metrics.AIPoolRuns, &r.Metrics.AICaromRuns, &r.Metrics.AIPickleballRuns,
+			&r.Metrics.AIExportsIOS, &r.Metrics.AIExportsDesktop, &r.Metrics.AIExportRelay,
 			&r.Metrics.AIErrors, &r.Metrics.HTTPErrors, &r.Metrics.BytesOut,
 			&r.Metrics.OSIOS, &r.Metrics.OSAndroid, &r.Metrics.OSDesktop, &r.Metrics.OSApp, &r.Metrics.OSOther,
+			&r.Metrics.Sessions, &r.Metrics.EngagedSessions, &r.Metrics.ReturningVisitors,
+			&r.Metrics.AcqQR, &r.Metrics.AcqShare, &r.Metrics.AcqApp, &r.Metrics.AcqDirect,
 		); err != nil {
 			return nil, err
 		}
@@ -1982,7 +3381,9 @@ func queryBoxDailyRows(db *sql.DB, fromDate, toDate, boxID string) ([]boxUsageRo
 }
 
 func (s *Server) queryAnalyticsCameras(q analyticsCameraQueryParams, now time.Time) ([]AnalyticsCameraRow, error) {
-	win := computeAnalyticsWindow(q.Range, now)
+	_ = s.FlushAnalytics()
+
+	win := computeAnalyticsWindow(q.Range, q.From, q.To, now)
 	meta := s.snapshotAnalyticsMetadata()
 
 	limit := q.Limit
@@ -2059,6 +3460,7 @@ func (s *Server) queryAnalyticsCameras(q analyticsCameraQueryParams, now time.Ti
 
 	filterClub := strings.TrimSpace(q.ClubID)
 	filterBox := strings.TrimSpace(q.BoxID)
+	filterSport := normalizeAnalyticsSport(q.Sport)
 
 	out := make([]AnalyticsCameraRow, 0, len(rawRows))
 	for _, r := range rawRows {
@@ -2067,6 +3469,9 @@ func (s *Server) queryAnalyticsCameras(q analyticsCameraQueryParams, now time.Ti
 		}
 		boxName, clubID, clubName := meta.resolveNames(r.boxID, r.clubID)
 		if filterClub != "" && clubID != filterClub {
+			continue
+		}
+		if filterSport != "all" && meta.resolveBranding(r.boxID, clubID) != filterSport {
 			continue
 		}
 		tableName := meta.resolveTableName(r.boxID, r.cameraID, r.tableName)
@@ -2130,10 +3535,15 @@ func (s *Server) handleAnalyticsOverview(w http.ResponseWriter, r *http.Request)
 	aiOnly := aiOnlyRaw == "1" || aiOnlyRaw == "true"
 
 	resp, err := s.queryAnalyticsOverview(analyticsQueryParams{
-		Range:  q.Get("range"),
-		ClubID: q.Get("club_id"),
-		BoxID:  q.Get("box_id"),
-		AIOnly: aiOnly,
+		Range:   q.Get("range"),
+		From:    q.Get("from"),
+		To:      q.Get("to"),
+		ClubID:  q.Get("club_id"),
+		BoxID:   q.Get("box_id"),
+		Sport:   q.Get("sport"),
+		Source:  q.Get("source"),
+		AIOnly:  aiOnly,
+		Compare: parseAnalyticsCompareParam(q.Get("compare")),
 	}, time.Now())
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "analytics_query_failed", "detail": err.Error()})
@@ -2149,21 +3559,25 @@ func (s *Server) handleAnalyticsCameras(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	q := r.URL.Query()
-	rng := normalizeAnalyticsRange(q.Get("range"))
+	now := time.Now()
+	win := computeAnalyticsWindow(q.Get("range"), q.Get("from"), q.Get("to"), now)
 	limit, _ := strconv.Atoi(strings.TrimSpace(q.Get("limit")))
 	cams, err := s.queryAnalyticsCameras(analyticsCameraQueryParams{
-		Range:  rng,
+		Range:  q.Get("range"),
+		From:   q.Get("from"),
+		To:     q.Get("to"),
 		ClubID: q.Get("club_id"),
 		BoxID:  q.Get("box_id"),
+		Sport:  q.Get("sport"),
 		Limit:  limit,
-	}, time.Now())
+	}, now)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "analytics_cameras_failed", "detail": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, AnalyticsCamerasResponse{
 		OK:      true,
-		Range:   rng,
+		Range:   win.Range,
 		Cameras: cams,
 	})
 }
@@ -2180,8 +3594,12 @@ func (s *Server) handleAnalyticsExportCSV(w http.ResponseWriter, r *http.Request
 
 	ov, err := s.queryAnalyticsOverview(analyticsQueryParams{
 		Range:  q.Get("range"),
+		From:   q.Get("from"),
+		To:     q.Get("to"),
 		ClubID: q.Get("club_id"),
 		BoxID:  q.Get("box_id"),
+		Sport:  q.Get("sport"),
+		Source: q.Get("source"),
 		AIOnly: aiOnly,
 	}, time.Now())
 	if err != nil {
@@ -2196,7 +3614,8 @@ func (s *Server) handleAnalyticsExportCSV(w http.ResponseWriter, r *http.Request
 	cw := csv.NewWriter(&buf)
 	_ = cw.Write([]string{
 		"club_id", "club_name", "box_id", "box_name", "source", "ai_enabled",
-		"qr_views", "unique_visitors", "live_hls", "vod_plays",
+		"qr_views", "unique_visitors", "sessions", "engaged_sessions", "returning_visitors",
+		"live_hls", "vod_plays",
 		"clip_downloads", "cut_clips", "ai_studio_opens", "ai_analyzes",
 		"ai_shots", "ai_exports", "ai_errors", "http_errors",
 		"bytes_out", "last_ingest_at",
@@ -2215,6 +3634,9 @@ func (s *Server) handleAnalyticsExportCSV(w http.ResponseWriter, r *http.Request
 			aiStr,
 			strconv.FormatInt(b.QRViews, 10),
 			strconv.FormatInt(b.UniqueVisitors, 10),
+			strconv.FormatInt(b.Sessions, 10),
+			strconv.FormatInt(b.EngagedSessions, 10),
+			strconv.FormatInt(b.ReturningVisitors, 10),
 			strconv.FormatInt(b.LiveHLS, 10),
 			strconv.FormatInt(b.VODPlays, 10),
 			strconv.FormatInt(b.ClipDownloads, 10),

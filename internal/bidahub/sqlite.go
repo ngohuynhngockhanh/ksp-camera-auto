@@ -277,6 +277,32 @@ var bidahubSQLiteMigrations = []sqliteMigration{
 			return nil
 		},
 	},
+	{
+		Version: 202611230001,
+		Name:    "add_ga4_analytics_columns_via_pragma",
+		Source:  "ALTER TABLE usage_box_hourly, usage_box_daily ADD sessions, engaged_sessions, returning_visitors, acq_qr, acq_share, acq_app, acq_direct, ai_pickleball_runs;",
+		Up: func(tx *sql.Tx) error {
+			cols := []string{
+				"sessions",
+				"engaged_sessions",
+				"returning_visitors",
+				"acq_qr",
+				"acq_share",
+				"acq_app",
+				"acq_direct",
+				"ai_pickleball_runs",
+			}
+			for _, tbl := range []string{"usage_box_hourly", "usage_box_daily"} {
+				for _, col := range cols {
+					ddl := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s INTEGER NOT NULL DEFAULT 0", tbl, col)
+					if err := addColumnIfMissing(tx, tbl, col, ddl); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		},
+	},
 }
 
 func resolveSQLiteAndJSONPaths(dataPath string) (sqlitePath, legacyJSONPath, mirrorJSONPath string) {

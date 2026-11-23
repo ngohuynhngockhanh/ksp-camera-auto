@@ -52,7 +52,13 @@
     chevronDown: '<polyline points="6 9 12 15 18 9"/>',
     chevronRight: '<polyline points="9 18 15 12 9 6"/>',
     chevronLeft: '<polyline points="15 18 9 12 15 6"/>',
-    more: '<circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="19" cy="12" r="1.2" fill="currentColor"/><circle cx="5" cy="12" r="1.2" fill="currentColor"/>'
+    more: '<circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="19" cy="12" r="1.2" fill="currentColor"/><circle cx="5" cy="12" r="1.2" fill="currentColor"/>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    scissors: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>',
+    share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>',
+    compass: '<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>',
+    funnel: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
+    play: '<circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>'
   };
 
   function svgIcon(name, cls) {
@@ -108,8 +114,13 @@
     handoverSearch: '',
     activeHandoverPack: null,
     analyticsRange: '7d',
+    analyticsFrom: '',
+    analyticsTo: '',
+    analyticsCompare: true,
     analyticsClubId: '',
     analyticsBoxId: '',
+    analyticsSport: 'all',
+    analyticsSource: 'all',
     analyticsAiOnly: false,
     analyticsGroupMode: 'clubs',
     analyticsSortCol: 'qr_views',
@@ -117,6 +128,16 @@
     analyticsDrillClubId: '',
     analyticsDrillBoxId: '',
     analyticsDrillLabel: '',
+    analyticsTrendMetric: 'unique_visitors',
+    analyticsHeatMode: 'heatmap',
+    analyticsRtHotTab: 'clubs',
+    analyticsRtData: null,
+    analyticsRtTimer: null,
+    analyticsRtReqSeq: 0,
+    analyticsTopSearch: '',
+    analyticsCamerasSearch: '',
+    expandedAnalyticsTopIds: {},
+    expandedAnalyticsCamIds: {},
     analyticsOverview: null,
     analyticsCameras: [],
     analyticsReqSeq: 0,
@@ -132,8 +153,8 @@
       redbidaDomains: { page: 1, pageSize: defaultListPageSize },
       redbidaBoxes: { page: 1, pageSize: defaultListPageSize },
       handoverClubs: { page: 1, pageSize: 10 },
-      analyticsTop: { page: 1, pageSize: 20 },
-      analyticsCameras: { page: 1, pageSize: 20 }
+      analyticsTop: { page: 1, pageSize: 10 },
+      analyticsCameras: { page: 1, pageSize: 10 }
     }
   };
 
@@ -2369,8 +2390,16 @@
   }
 
   /* --------------------------------------------------------------------------
-     View 7: #analytics — Fleet Usage, Peak Hours, AI Studio & Table Drill-Down
+     View 7: #analytics — Flagship GA4 Analytics Console (Realtime, Compare, Funnel, 7x24 Heatmap & Drill-Down)
      -------------------------------------------------------------------------- */
+  var GA_TREND_METRICS = {
+    unique_visitors: { label: 'Người dùng', color: 'var(--emerald)', deltaKey: 'unique_visitors' },
+    sessions:        { label: 'Số phiên',   color: 'var(--cyan)',    deltaKey: 'sessions' },
+    qr_views:        { label: 'Quét QR',    color: 'var(--cyan)',    deltaKey: 'qr_views' },
+    downloads_cuts:  { label: 'Tải & Cắt',  color: 'var(--brand-amber)', deltaKey: 'clips_total' },
+    ai_analyzes:     { label: 'AI Studio',  color: 'var(--purple)',  deltaKey: 'ai_analyzes' }
+  };
+
   function populateAnalyticsClubFilter(extraClubs) {
     var sel = document.getElementById('analytics-club-filter');
     if (!sel) return;
@@ -2400,6 +2429,7 @@
 
     var sig = list.map(function (c) { return c.id + ':' + c.name; }).join('|');
     if (sig === state.lastAnalyticsClubSig && sel.options.length > 1) {
+      if (sel.value !== curVal) sel.value = curVal;
       return;
     }
     state.lastAnalyticsClubSig = sig;
@@ -2411,27 +2441,397 @@
     sel.value = curVal;
   }
 
+  function resolveAnalyticsClubName(clubId) {
+    if (!clubId) return '';
+    var ov = state.analyticsOverview || {};
+    var topClubs = Array.isArray(ov.top_clubs) ? ov.top_clubs : [];
+    for (var i = 0; i < topClubs.length; i++) {
+      if (topClubs[i].club_id === clubId) return topClubs[i].club_name || clubId;
+    }
+    var clubs = state.clubs || [];
+    for (var j = 0; j < clubs.length; j++) {
+      if ((clubs[j].id || clubs[j].club_id) === clubId) return clubs[j].name || clubs[j].club_name || clubId;
+    }
+    var boxes = state.boxes || [];
+    for (var k = 0; k < boxes.length; k++) {
+      if (boxes[k].club_id === clubId && boxes[k].club_name) return boxes[k].club_name;
+    }
+    return clubId;
+  }
+
+  function buildAnalyticsQueryParams(opts) {
+    var cfg = opts || {};
+    var parts = [];
+    if (cfg.includeRange !== false) {
+      if (state.analyticsRange === 'custom' && state.analyticsFrom && state.analyticsTo) {
+        parts.push('from=' + encodeURIComponent(state.analyticsFrom));
+        parts.push('to=' + encodeURIComponent(state.analyticsTo));
+      } else {
+        parts.push('range=' + encodeURIComponent(state.analyticsRange || '7d'));
+      }
+    }
+    var effClub = cfg.clubId !== undefined ? cfg.clubId : (state.analyticsClubId || '');
+    var effBox = cfg.boxId !== undefined ? cfg.boxId : (state.analyticsBoxId || '');
+    if (effClub) parts.push('club_id=' + encodeURIComponent(effClub));
+    if (effBox) parts.push('box_id=' + encodeURIComponent(effBox));
+    if (state.analyticsSport && state.analyticsSport !== 'all') {
+      parts.push('sport=' + encodeURIComponent(state.analyticsSport));
+    }
+    if (cfg.includeSource !== false && state.analyticsSource && state.analyticsSource !== 'all') {
+      parts.push('source=' + encodeURIComponent(state.analyticsSource));
+    }
+    if (cfg.includeAi !== false && state.analyticsAiOnly) {
+      parts.push('ai_only=1');
+    }
+    if (cfg.includeCompare && state.analyticsCompare) {
+      parts.push('compare=1');
+    }
+    if (cfg.limit) {
+      parts.push('limit=' + encodeURIComponent(String(cfg.limit)));
+    }
+    return parts.join('&');
+  }
+
   function updateAnalyticsExportLink() {
     var link = document.getElementById('analytics-export-csv');
     if (!link) return;
     var effClub = state.analyticsDrillClubId || state.analyticsClubId || '';
     var effBox = state.analyticsDrillBoxId || state.analyticsBoxId || '';
-    var qs = 'range=' + encodeURIComponent(state.analyticsRange || '7d') +
-      '&club_id=' + encodeURIComponent(effClub) +
-      '&box_id=' + encodeURIComponent(effBox);
-    if (state.analyticsAiOnly) qs += '&ai_only=1';
+    var qs = buildAnalyticsQueryParams({ clubId: effClub, boxId: effBox, includeCompare: false });
     link.href = '/fleet/api/analytics/export.csv?' + qs;
   }
 
+  function syncAnalyticsBreadcrumb() {
+    var bar = document.getElementById('analytics-breadcrumb-bar');
+    var trail = document.getElementById('analytics-breadcrumb-trail');
+    var drillInd = document.getElementById('analytics-drill-indicator');
+    var drillLbl = document.getElementById('analytics-drill-label');
+
+    var activeClub = state.analyticsClubId || state.analyticsDrillClubId || '';
+    var activeBox = state.analyticsBoxId || state.analyticsDrillBoxId || '';
+    var clubLabel = state.analyticsDrillLabel || resolveAnalyticsClubName(activeClub);
+
+    if (bar && trail) {
+      if (activeClub || activeBox) {
+        var html = '<button type="button" class="ga-crumb-btn" data-ga-crumb="all">Toàn hệ thống</button>';
+        if (activeClub) {
+          html += '<span class="ga-crumb-sep" aria-hidden="true">›</span>';
+          if (activeBox) {
+            html += '<button type="button" class="ga-crumb-btn" data-ga-crumb="club" data-crumb-club="' + esc(activeClub) + '">' + esc(resolveAnalyticsClubName(activeClub)) + '</button>';
+          } else {
+            html += '<span class="ga-crumb-current">' + esc(clubLabel || activeClub) + '</span>';
+          }
+        }
+        if (activeBox) {
+          html += '<span class="ga-crumb-sep" aria-hidden="true">›</span><span class="ga-crumb-current mono">' + esc(activeBox) + '</span>';
+        }
+        trail.innerHTML = html;
+        bar.hidden = false;
+      } else {
+        bar.hidden = true;
+        trail.innerHTML = '';
+      }
+    }
+
+    if (drillInd && drillLbl) {
+      if (activeClub || activeBox) {
+        drillLbl.textContent = 'Đang lọc: ' + (activeBox || clubLabel || activeClub);
+        drillInd.style.display = 'inline-flex';
+      } else {
+        drillInd.style.display = 'none';
+      }
+    }
+  }
+
+  function drillDownAnalytics(clubId, boxId, label) {
+    state.analyticsClubId = clubId || '';
+    state.analyticsBoxId = boxId || '';
+    state.analyticsDrillClubId = clubId || '';
+    state.analyticsDrillBoxId = boxId || '';
+    state.analyticsDrillLabel = label || resolveAnalyticsClubName(clubId) || boxId || '';
+
+    var clubSel = document.getElementById('analytics-club-filter');
+    if (clubSel) clubSel.value = state.analyticsClubId;
+
+    if (clubId && !boxId) {
+      state.analyticsRtHotTab = 'tables';
+      syncRtHotTabsUi();
+    }
+    resetTabPage('analyticsTop');
+    resetTabPage('analyticsCameras');
+    syncAnalyticsBreadcrumb();
+    loadAnalyticsView();
+  }
+
+  function clearAnalyticsDrillDown() {
+    state.analyticsClubId = '';
+    state.analyticsBoxId = '';
+    state.analyticsDrillClubId = '';
+    state.analyticsDrillBoxId = '';
+    state.analyticsDrillLabel = '';
+    state.analyticsRtHotTab = 'clubs';
+    syncRtHotTabsUi();
+
+    var clubSel = document.getElementById('analytics-club-filter');
+    if (clubSel) clubSel.value = '';
+
+    resetTabPage('analyticsTop');
+    resetTabPage('analyticsCameras');
+    syncAnalyticsBreadcrumb();
+    loadAnalyticsView();
+  }
+
+  function syncRtHotTabsUi() {
+    var tabs = document.getElementById('ga-rt-hot-tabs');
+    if (!tabs) return;
+    tabs.querySelectorAll('.segmented-btn[data-rt-hot]').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-rt-hot') === state.analyticsRtHotTab);
+    });
+  }
+
+  function fmtShortDateVN(iso) {
+    var s = String(iso || '');
+    if (s.length >= 10) return s.slice(8, 10) + '/' + s.slice(5, 7);
+    return s;
+  }
+
+  function fmtTimeNowHM(iso) {
+    if (!iso) {
+      var now = new Date();
+      var pad0 = function (n) { return (n < 10 ? '0' : '') + n; };
+      return pad0(now.getHours()) + ':' + pad0(now.getMinutes()) + ':' + pad0(now.getSeconds());
+    }
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return String(iso).slice(11, 19) || '--';
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+
+  /* --------------------------------------------------------------------------
+     GA4 Realtime Poller (ONLY active when #view-analytics is active & visible)
+     -------------------------------------------------------------------------- */
+  function stopAnalyticsRealtimePolling() {
+    if (state.analyticsRtTimer) {
+      clearInterval(state.analyticsRtTimer);
+      state.analyticsRtTimer = null;
+    }
+  }
+
+  function startAnalyticsRealtimePolling(fetchImmediately) {
+    stopAnalyticsRealtimePolling();
+    if (state.activeView !== 'analytics' || document.hidden) return;
+    if (fetchImmediately !== false) loadAnalyticsRealtime();
+    state.analyticsRtTimer = setInterval(function () {
+      if (state.activeView !== 'analytics' || document.hidden) {
+        stopAnalyticsRealtimePolling();
+        return;
+      }
+      loadAnalyticsRealtime();
+    }, 15000);
+  }
+
+  function loadAnalyticsRealtime() {
+    if (state.activeView !== 'analytics') return Promise.resolve();
+    var seq = ++state.analyticsRtReqSeq;
+    var qs = buildAnalyticsQueryParams({ includeRange: false, includeSource: false, includeAi: false, includeCompare: false });
+    return apiFetch('/fleet/api/analytics/realtime' + (qs ? ('?' + qs) : '')).then(function (data) {
+      if (seq !== state.analyticsRtReqSeq) return;
+      state.analyticsRtData = data || {};
+      renderAnalyticsRealtime();
+    }).catch(function () {
+      if (seq !== state.analyticsRtReqSeq) return;
+      var upd = document.getElementById('ga-rt-updated');
+      if (upd) upd.textContent = 'Mất kết nối tạm thời · thử lại sau 15s';
+    });
+  }
+
+  function renderAnalyticsRealtime() {
+    var rt = state.analyticsRtData || {};
+    var a5 = Number(rt.active_5m) || 0;
+    var a30 = Number(rt.active_30m) || 0;
+    var live = Number(rt.live) || 0;
+    var vod = Number(rt.vod) || 0;
+    var cut = Number(rt.cut) || 0;
+    var ai = Number(rt.ai) || 0;
+    var activeClubs = Number(rt.active_clubs) || 0;
+    var activeBoxes = Number(rt.active_boxes) || 0;
+
+    var dot = document.getElementById('ga-rt-live-dot');
+    if (dot) dot.classList.toggle('idle', a5 === 0 && a30 === 0);
+
+    var scopeBadge = document.getElementById('ga-rt-scope-badge');
+    if (scopeBadge) {
+      scopeBadge.className = 'badge ' + (activeBoxes > 0 ? 'badge-emerald' : 'badge-neutral');
+      scopeBadge.textContent = fmtInt(activeClubs) + ' CLB · ' + fmtInt(activeBoxes) + ' Box';
+    }
+
+    var updEl = document.getElementById('ga-rt-updated');
+    if (updEl) {
+      updEl.textContent = 'Cập nhật ' + fmtTimeNowHM(rt.updated_at) + ' · 15s';
+    }
+
+    var elA5 = document.getElementById('ga-rt-active5');
+    var elA30 = document.getElementById('ga-rt-active30-pill');
+    var elStatus = document.getElementById('ga-rt-active-status');
+    if (elA5) elA5.textContent = fmtInt(a5);
+    if (elA30) elA30.textContent = fmtInt(a30) + ' người (30 phút)';
+    if (elStatus) {
+      elStatus.textContent = a5 > 0
+        ? 'Đang có khách tương tác trực tiếp'
+        : (a30 > 0 ? 'Có khách trong 30 phút gần nhất' : 'Chưa có khách trong 5 phút qua');
+    }
+
+    var elLive = document.getElementById('ga-rt-live');
+    var elVod = document.getElementById('ga-rt-vod');
+    var elCut = document.getElementById('ga-rt-cut');
+    var elAi = document.getElementById('ga-rt-ai');
+    if (elLive) elLive.textContent = fmtInt(live);
+    if (elVod) elVod.textContent = fmtInt(vod);
+    if (elCut) elCut.textContent = fmtInt(cut);
+    if (elAi) elAi.textContent = fmtInt(ai);
+
+    var navBadge = document.getElementById('nav-badge-analytics');
+    if (navBadge && a5 > 0) {
+      navBadge.textContent = fmtCompact(a5) + ' LIVE';
+    }
+
+    /* Pure Inline SVG 30-Bar Minute Chart (-30p -> Hiện tại) */
+    var rawBars = Array.isArray(rt.minute_bars_30) ? rt.minute_bars_30 : [];
+    var bars30 = [];
+    for (var i = 0; i < 30; i++) {
+      var srcIdx = i - (30 - rawBars.length);
+      bars30.push(srcIdx >= 0 ? (Number(rawBars[srcIdx]) || 0) : 0);
+    }
+    var maxBar = 0;
+    bars30.forEach(function (v) { if (v > maxBar) maxBar = v; });
+
+    var peakEl = document.getElementById('ga-rt-bar-peak');
+    if (peakEl) peakEl.textContent = 'Đỉnh: ' + fmtInt(maxBar) + '/p';
+
+    var chartWrap = document.getElementById('ga-rt-minute-chart');
+    if (chartWrap) {
+      var W = 420;
+      var H = 192;
+      var padL = 28;
+      var padR = 8;
+      var padT = 12;
+      var padB = 22;
+      var plotW = W - padL - padR;
+      var plotH = H - padT - padB;
+      var yMax = maxBar > 0 ? Math.max(2, Math.ceil(maxBar * 1.15)) : 4;
+      var slotW = plotW / 30;
+      var barW = Math.max(5.5, slotW - 3.2);
+      var yBase = padT + plotH;
+
+      var gridHtml = '';
+      [0, 0.33, 0.66, 1].forEach(function (frac, gi) {
+        var y = yBase - plotH * frac;
+        var val = Math.round(yMax * frac);
+        gridHtml += '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="var(--border)" stroke-width="1"' + (gi > 0 ? ' stroke-dasharray="3 3"' : '') + '/>' +
+          '<text x="' + (padL - 5) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" font-size="9.5" font-family="var(--font-mono)" fill="var(--text-muted)">' + esc(fmtCompact(val)) + '</text>';
+      });
+
+      var barsHtml = bars30.map(function (val, idx) {
+        var minsAgo = 29 - idx;
+        var minLabel = minsAgo === 0 ? 'Phút hiện tại' : ('-' + minsAgo + ' phút trước');
+        var xSlot = padL + idx * slotW;
+        var xBar = xSlot + (slotW - barW) / 2;
+        var hBar = val > 0 ? Math.max(4, (val / yMax) * plotH) : 2;
+        var yBar = yBase - hBar;
+        var isCurrent = idx === 29;
+        var isPeak = val > 0 && val === maxBar;
+        var fill = val === 0
+          ? 'var(--border)'
+          : (isCurrent ? 'var(--emerald)' : (isPeak ? 'var(--brand-amber)' : 'var(--cyan)'));
+        var tipBody = 'Hoạt động: ' + fmtInt(val) + ' người';
+
+        return '<g class="svg-bar-group" tabindex="0" data-ga-tip-title="' + esc(minLabel) + '" data-ga-tip-body="' + esc(tipBody) + '">' +
+          '<title>' + esc(minLabel + ': ' + fmtInt(val) + ' người') + '</title>' +
+          '<rect class="svg-hover-bg" x="' + xSlot.toFixed(1) + '" y="' + padT + '" width="' + slotW.toFixed(1) + '" height="' + plotH + '" rx="2" fill="transparent"/>' +
+          '<rect x="' + xBar.toFixed(1) + '" y="' + yBar.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + hBar.toFixed(1) + '" rx="2" fill="' + fill + '"/>' +
+        '</g>';
+      }).join('');
+
+      var axisTicks = [
+        { idx: 0, label: '-30p', anchor: 'start' },
+        { idx: 10, label: '-20p', anchor: 'middle' },
+        { idx: 20, label: '-10p', anchor: 'middle' },
+        { idx: 29, label: 'Bây giờ', anchor: 'end' }
+      ].map(function (tk) {
+        var x = tk.idx === 0 ? padL : (tk.idx === 29 ? (W - padR) : (padL + (tk.idx + 0.5) * slotW));
+        return '<text x="' + x.toFixed(1) + '" y="' + (H - 5) + '" text-anchor="' + tk.anchor + '" font-size="9.5" font-family="var(--font-mono)" fill="' + (tk.idx === 29 ? 'var(--emerald)' : 'var(--text-muted)') + '" font-weight="' + (tk.idx === 29 ? '700' : '400') + '">' + tk.label + '</text>';
+      }).join('');
+
+      chartWrap.innerHTML = '<svg class="analytics-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Biểu đồ 30 cột từng phút người đang xem">' +
+        gridHtml + barsHtml + axisTicks +
+      '</svg>';
+    }
+
+    /* Top 5 Hot Clubs / Tables */
+    var hotListEl = document.getElementById('ga-rt-hot-list');
+    if (hotListEl) {
+      var hotClubs = Array.isArray(rt.hot_clubs) ? rt.hot_clubs.slice(0, 5) : [];
+      var hotTables = Array.isArray(rt.hot_tables) ? rt.hot_tables.slice(0, 5) : [];
+
+      var tabMode = state.analyticsRtHotTab;
+      if (tabMode === 'clubs' && !hotClubs.length && hotTables.length) tabMode = 'tables';
+      if (tabMode === 'tables' && !hotTables.length && hotClubs.length) tabMode = 'clubs';
+
+      if (tabMode === 'tables') {
+        if (!hotTables.length) {
+          hotListEl.innerHTML = '<div class="ga-rt-hot-empty">Chưa có bàn nào có khách trong 5 phút qua.</div>';
+        } else {
+          var maxT = Math.max(1, Number(hotTables[0].active) || 1);
+          hotListEl.innerHTML = hotTables.map(function (t) {
+            var n = Number(t.active) || 0;
+            var pct = Math.max(8, Math.round((n / maxT) * 100));
+            return '<button type="button" class="ga-rt-hot-item" data-ga-drill-club="' + esc(t.club_id || '') + '" data-ga-drill-box="' + esc(t.box_id || '') + '" data-ga-drill-label="' + esc(t.club_name || t.box_name || t.box_id || '') + '">' +
+              '<div class="ga-rt-hot-top">' +
+                '<span class="ga-rt-hot-name">' + esc(t.table_name || t.camera_id || 'Bàn') + '</span>' +
+                '<span class="badge badge-emerald mono">' + esc(fmtInt(n)) + ' xem</span>' +
+              '</div>' +
+              '<div class="ga-rt-hot-sub">' + esc(t.club_name || t.club_id || '--') + ' · <span class="mono">' + esc(t.camera_id || '') + '</span></div>' +
+              '<div class="ga-rt-hot-bar"><div class="ga-rt-hot-bar-fill" style="width:' + pct + '%"></div></div>' +
+            '</button>';
+          }).join('');
+        }
+      } else {
+        if (!hotClubs.length) {
+          hotListEl.innerHTML = '<div class="ga-rt-hot-empty">Chưa có quán nào có khách trong 5 phút qua.</div>';
+        } else {
+          var maxC = Math.max(1, Number(hotClubs[0].a5) || Number(hotClubs[0].a30) || 1);
+          hotListEl.innerHTML = hotClubs.map(function (c) {
+            var n5 = Number(c.a5) || 0;
+            var n30 = Number(c.a30) || 0;
+            var pct = Math.max(8, Math.round(((n5 || n30) / maxC) * 100));
+            var subBits = ['30p: ' + fmtInt(n30)];
+            if (Number(c.live) > 0) subBits.push('Live ' + fmtInt(c.live));
+            if (Number(c.cut) > 0) subBits.push('Cắt ' + fmtInt(c.cut));
+            if (Number(c.ai) > 0) subBits.push('AI ' + fmtInt(c.ai));
+            return '<button type="button" class="ga-rt-hot-item" data-ga-drill-club="' + esc(c.club_id || '') + '" data-ga-drill-box="" data-ga-drill-label="' + esc(c.club_name || c.club_id || '') + '">' +
+              '<div class="ga-rt-hot-top">' +
+                '<span class="ga-rt-hot-name">' + esc(c.club_name || c.club_id || '--') + '</span>' +
+                '<span class="badge badge-emerald mono">' + esc(fmtInt(n5)) + ' xem</span>' +
+              '</div>' +
+              '<div class="ga-rt-hot-sub mono">' + esc(subBits.join(' · ')) + '</div>' +
+              '<div class="ga-rt-hot-bar"><div class="ga-rt-hot-bar-fill" style="width:' + pct + '%"></div></div>' +
+            '</button>';
+          }).join('');
+        }
+      }
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+     GA4 Overview & Cameras Fetchers
+     -------------------------------------------------------------------------- */
   function loadAnalyticsView() {
     populateAnalyticsClubFilter();
     updateAnalyticsExportLink();
+    syncAnalyticsBreadcrumb();
 
     var seq = ++state.analyticsReqSeq;
-    var qs = 'range=' + encodeURIComponent(state.analyticsRange || '7d') +
-      '&club_id=' + encodeURIComponent(state.analyticsClubId || '') +
-      '&box_id=' + encodeURIComponent(state.analyticsBoxId || '') +
-      '&ai_only=' + (state.analyticsAiOnly ? '1' : '0');
+    var qs = buildAnalyticsQueryParams({ includeCompare: true });
 
     var pOverview = apiFetch('/fleet/api/analytics/overview?' + qs).then(function (data) {
       if (seq !== state.analyticsReqSeq) return;
@@ -2446,7 +2846,8 @@
     });
 
     var pCameras = loadAnalyticsCameras();
-    return Promise.all([pOverview, pCameras]);
+    var pRt = state.activeView === 'analytics' ? loadAnalyticsRealtime() : Promise.resolve();
+    return Promise.all([pOverview, pCameras, pRt]);
   }
 
   function loadAnalyticsCameras() {
@@ -2455,25 +2856,22 @@
     var effClub = state.analyticsDrillClubId || state.analyticsClubId || '';
     var effBox = state.analyticsDrillBoxId || state.analyticsBoxId || '';
 
-    var drillInd = document.getElementById('analytics-drill-indicator');
-    var drillLbl = document.getElementById('analytics-drill-label');
-    if (drillInd && drillLbl) {
-      if (state.analyticsDrillClubId || state.analyticsDrillBoxId) {
-        drillLbl.textContent = 'Đang lọc: ' + (state.analyticsDrillLabel || effBox || effClub);
-        drillInd.style.display = 'inline-flex';
-      } else {
-        drillInd.style.display = 'none';
-      }
-    }
-
-    var qs = 'range=' + encodeURIComponent(state.analyticsRange || '7d') +
-      '&club_id=' + encodeURIComponent(effClub) +
-      '&box_id=' + encodeURIComponent(effBox) +
-      '&limit=50';
+    var qs = buildAnalyticsQueryParams({
+      clubId: effClub,
+      boxId: effBox,
+      includeSource: false,
+      includeAi: false,
+      includeCompare: false,
+      limit: 200
+    });
 
     return apiFetch('/fleet/api/analytics/cameras?' + qs).then(function (data) {
       if (seq !== state.analyticsCamReqSeq) return;
-      state.analyticsCameras = Array.isArray(data && data.cameras) ? data.cameras : [];
+      var list = Array.isArray(data && data.cameras) ? data.cameras : [];
+      list.forEach(function (c) {
+        indexItemSearch(c, [c.table_name, c.camera_id, c.club_name, c.club_id, c.box_name, c.box_id]);
+      });
+      state.analyticsCameras = list;
       renderAnalyticsCamerasTable();
     }).catch(function (err) {
       if (seq !== state.analyticsCamReqSeq) return;
@@ -2483,14 +2881,91 @@
     });
   }
 
+  /* --------------------------------------------------------------------------
+     GA4 KPI Cards (Delta % Pills + Mini Inline SVG Sparklines)
+     -------------------------------------------------------------------------- */
+  function renderDeltaPill(elId, deltaVal, show) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+    if (!show || deltaVal === null || deltaVal === undefined || isNaN(Number(deltaVal))) {
+      el.hidden = true;
+      el.textContent = '';
+      el.className = 'ga-delta-pill';
+      return;
+    }
+    var v = Number(deltaVal);
+    var cls = 'flat';
+    var txt = '0.0%';
+    if (v > 0.05) {
+      cls = 'up';
+      txt = '+' + v.toFixed(1) + '% ↑';
+    } else if (v < -0.05) {
+      cls = 'down';
+      txt = v.toFixed(1) + '% ↓';
+    }
+    el.className = 'ga-delta-pill ' + cls;
+    el.textContent = txt;
+    el.hidden = false;
+  }
+
+  function renderMiniSparkline(elId, values, colorVar) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+    var arr = Array.isArray(values) ? values.map(function (v) { return Number(v) || 0; }) : [];
+    if (!arr.length) {
+      el.innerHTML = '';
+      return;
+    }
+    var W = 66;
+    var H = 24;
+    var pad = 2;
+    var maxV = 0;
+    var minV = Infinity;
+    arr.forEach(function (v) {
+      if (v > maxV) maxV = v;
+      if (v < minV) minV = v;
+    });
+    if (arr.length === 1) {
+      var ySingle = maxV > 0 ? (H / 2) : (H - 3);
+      el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '"><line x1="2" y1="' + ySingle + '" x2="' + (W - 2) + '" y2="' + ySingle + '" stroke="' + colorVar + '" stroke-width="1.8" stroke-linecap="round"/><circle cx="' + (W - 3) + '" cy="' + ySingle + '" r="2.2" fill="' + colorVar + '"/></svg>';
+      return;
+    }
+    var span = maxV - minV;
+    var pts = arr.map(function (v, idx) {
+      var x = pad + (idx / (arr.length - 1)) * (W - pad * 2);
+      var y = maxV === 0
+        ? (H - 3)
+        : (span === 0 ? (H / 2) : (H - pad - ((v - minV) / span) * (H - pad * 2 - 2)));
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    });
+    var lastPt = pts[pts.length - 1].split(',');
+    el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '">' +
+      '<polyline fill="none" stroke="' + colorVar + '" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" points="' + pts.join(' ') + '"/>' +
+      '<circle cx="' + lastPt[0] + '" cy="' + lastPt[1] + '" r="2.1" fill="' + colorVar + '"/>' +
+    '</svg>';
+  }
+
   function renderAnalyticsOverview() {
     var data = state.analyticsOverview || {};
     var kpi = data.kpi || {};
+    var cohorts = data.cohorts || {};
+    var comp = (state.analyticsCompare && data.comparison) ? data.comparison : null;
+    var deltas = (comp && comp.deltas_pct) ? comp.deltas_pct : {};
+    var series = Array.isArray(data.daily_series) ? data.daily_series : [];
+
+    var fromInp = document.getElementById('analytics-date-from');
+    var toInp = document.getElementById('analytics-date-to');
+    if (fromInp && data.from_date && document.activeElement !== fromInp) fromInp.value = data.from_date;
+    if (toInp && data.to_date && document.activeElement !== toInp) toInp.value = data.to_date;
 
     var winEl = document.getElementById('analytics-date-window');
     if (winEl) {
       if (data.from_date && data.to_date) {
-        winEl.textContent = data.from_date + ' → ' + data.to_date + ' (GMT+7)';
+        var winStr = fmtShortDateVN(data.from_date) + ' → ' + fmtShortDateVN(data.to_date);
+        if (comp && comp.from && comp.to) {
+          winStr += ' vs ' + fmtShortDateVN(comp.from) + ' → ' + fmtShortDateVN(comp.to);
+        }
+        winEl.textContent = winStr + ' (GMT+7)';
       } else {
         winEl.textContent = 'Khung: ' + (state.analyticsRange || '7d').toUpperCase() + ' (GMT+7)';
       }
@@ -2499,95 +2974,434 @@
     var qrViews = Number(kpi.qr_views) || 0;
     var pageViews = Number(kpi.page_views) || 0;
     var uniqueVisitors = Number(kpi.unique_visitors) || 0;
-    var liveHls = Number(kpi.live_hls) || 0;
-    var vodPlays = Number(kpi.vod_plays) || 0;
+    var sessions = Number(kpi.sessions || cohorts.sessions) || 0;
+    var engRate = Number(cohorts.engagement_rate_pct !== undefined ? cohorts.engagement_rate_pct : kpi.engagement_rate_pct) || 0;
+    var viewsPerSess = Number(cohorts.views_per_session) || (sessions > 0 ? ((pageViews || qrViews) / sessions) : 0);
+    var retPct = Number(cohorts.returning_pct) || 0;
+    var newPct = uniqueVisitors > 0 ? Math.max(0, 100 - retPct) : 0;
+
     var clipDownloads = Number(kpi.clip_downloads) || 0;
     var cutClips = Number(kpi.cut_clips) || 0;
+    var clipsTotal = Number(kpi.clips_total) || (clipDownloads + cutClips);
     var cutSeconds = Number(kpi.cut_seconds) || 0;
+
     var aiOpens = Number(kpi.ai_studio_opens) || 0;
     var aiAnalyzes = Number(kpi.ai_analyzes) || 0;
-    var aiShots = Number(kpi.ai_shots) || 0;
-    var aiPots = Number(kpi.ai_pots) || 0;
-    var aiExportsIos = Number(kpi.ai_exports_ios) || 0;
-    var aiExportsDesktop = Number(kpi.ai_exports_desktop) || 0;
+    var aiPool = Number(kpi.ai_pool_runs) || 0;
+    var aiCarom = Number(kpi.ai_carom_runs) || 0;
+    var aiPick = Number(kpi.ai_pickleball_runs) || 0;
+    var aiExportsTotal = Number(kpi.ai_exports_total) || ((Number(kpi.ai_exports_ios) || 0) + (Number(kpi.ai_exports_desktop) || 0));
+
     var aiErrors = Number(kpi.ai_errors) || 0;
     var httpErrors = Number(kpi.http_errors) || 0;
+    var totalErrors = httpErrors + aiErrors;
+    var errRate = Number(kpi.error_rate_pct) || 0;
     var bytesOut = Number(kpi.bytes_out) || 0;
     var activeClubs = Number(kpi.active_clubs) || 0;
     var activeBoxes = Number(kpi.active_boxes) || 0;
 
-    var totalDownloadsCuts = clipDownloads + cutClips;
-    var totalErrors = httpErrors + aiErrors;
-    var totalActivity = qrViews + pageViews + uniqueVisitors + liveHls + vodPlays + totalDownloadsCuts + aiOpens + aiAnalyzes + bytesOut;
+    var totalActivity = qrViews + pageViews + uniqueVisitors + sessions + clipsTotal + aiOpens + aiAnalyzes + bytesOut;
 
     var navBadge = document.getElementById('nav-badge-analytics');
     if (navBadge) {
-      navBadge.textContent = qrViews > 0 ? fmtCompact(qrViews) : 'LIVE';
+      var rtA5 = Number(state.analyticsRtData && state.analyticsRtData.active_5m) || 0;
+      if (rtA5 > 0) navBadge.textContent = fmtCompact(rtA5) + ' LIVE';
+      else navBadge.textContent = qrViews > 0 ? fmtCompact(qrViews) : 'LIVE';
     }
 
-    /* KPI 1: QR Views & Page Views */
-    var qrVal = document.getElementById('akpi-qr-val');
-    var qrSub = document.getElementById('akpi-qr-sub');
-    if (qrVal) qrVal.innerHTML = esc(fmtInt(qrViews)) + '<span class="kpi-val-sub">/ ' + esc(fmtInt(pageViews)) + ' trang</span>';
-    if (qrSub) qrSub.innerHTML = '<span>' + esc(fmtInt(activeClubs)) + ' CLB · ' + esc(fmtInt(activeBoxes)) + ' Box</span><span>Hoạt động</span>';
+    var showDelta = !!comp;
 
-    /* KPI 2: Unique Visitors */
+    /* KPI 1: Active Users (Mới X% · Quay lại Y%) */
     var visVal = document.getElementById('akpi-visitors-val');
     var visSub = document.getElementById('akpi-visitors-sub');
     if (visVal) visVal.textContent = fmtInt(uniqueVisitors);
-    if (visSub) visSub.innerHTML = '<span>Live HLS: ' + esc(fmtInt(liveHls)) + '</span><span>VOD: ' + esc(fmtInt(vodPlays)) + '</span>';
+    if (visSub) {
+      visSub.innerHTML = '<span>Mới <strong>' + esc(newPct.toFixed(0)) + '%</strong></span><span>Quay lại <strong class="text-emerald">' + esc(retPct.toFixed(0)) + '%</strong></span>';
+    }
+    renderDeltaPill('akpi-visitors-delta', deltas.unique_visitors, showDelta);
+    renderMiniSparkline('akpi-visitors-spark', series.map(function (d) { return d.unique_visitors; }), 'var(--emerald)');
 
-    /* KPI 3: Downloads & CheckVAR Cuts */
+    /* KPI 2: Sessions (Tỷ lệ tương tác % · TB trang/phiên) */
+    var sessVal = document.getElementById('akpi-sessions-val');
+    var sessSub = document.getElementById('akpi-sessions-sub');
+    if (sessVal) sessVal.textContent = fmtInt(sessions);
+    if (sessSub) {
+      sessSub.innerHTML = '<span>Tương tác <strong class="text-cyan">' + esc(engRate.toFixed(1)) + '%</strong></span><span>' + esc(viewsPerSess.toFixed(1)) + ' trang/phiên</span>';
+    }
+    renderDeltaPill('akpi-sessions-delta', deltas.sessions, showDelta);
+    renderMiniSparkline('akpi-sessions-spark', series.map(function (d) { return d.sessions; }), 'var(--cyan)');
+
+    /* KPI 3: QR & Page Views */
+    var qrVal = document.getElementById('akpi-qr-val');
+    var qrSub = document.getElementById('akpi-qr-sub');
+    if (qrVal) qrVal.innerHTML = esc(fmtInt(qrViews)) + '<span class="kpi-val-sub">' + esc(fmtInt(pageViews)) + ' lượt xem trang</span>';
+    if (qrSub) qrSub.innerHTML = '<span>' + esc(fmtInt(activeClubs)) + ' CLB · ' + esc(fmtInt(activeBoxes)) + ' Box</span><span>Live ' + esc(fmtInt(kpi.live_hls || 0)) + '</span>';
+    renderDeltaPill('akpi-qr-delta', deltas.qr_views, showDelta);
+    renderMiniSparkline('akpi-qr-spark', series.map(function (d) { return d.qr_views; }), 'var(--cyan)');
+
+    /* KPI 4: Clip & CheckVAR Conversions */
+    var convBase = Math.max(sessions, qrViews, pageViews);
+    var convPct = convBase > 0 ? ((clipsTotal / convBase) * 100).toFixed(1) : '0.0';
     var clipVal = document.getElementById('akpi-clips-val');
     var clipSub = document.getElementById('akpi-clips-sub');
-    if (clipVal) clipVal.textContent = fmtInt(totalDownloadsCuts);
-    if (clipSub) clipSub.innerHTML = '<span>Tải ' + esc(fmtInt(clipDownloads)) + ' · Cắt ' + esc(fmtInt(cutClips)) + '</span><span>' + esc(fmtCutMinutes(cutSeconds)) + ' cắt</span>';
+    if (clipVal) clipVal.textContent = fmtInt(clipsTotal);
+    if (clipSub) {
+      clipSub.innerHTML = '<span title="' + esc(fmtCutMinutes(cutSeconds)) + ' cắt">Tải ' + esc(fmtInt(clipDownloads)) + ' · Cắt ' + esc(fmtInt(cutClips)) + '</span><span class="text-emerald" style="font-weight:700;">' + esc(convPct) + '% CĐ</span>';
+    }
+    renderDeltaPill('akpi-clips-delta', deltas.clips_total, showDelta);
+    renderMiniSparkline('akpi-clips-spark', series.map(function (d) { return d.downloads_cuts; }), 'var(--brand-amber)');
 
-    /* KPI 4: AI Studio & Analysis */
+    /* KPI 5: AI Studio & Trọng Tài (Pool / Carom / Pickleball · Xuất) */
     var aiVal = document.getElementById('akpi-ai-val');
     var aiSub = document.getElementById('akpi-ai-sub');
-    if (aiVal) aiVal.innerHTML = esc(fmtInt(aiAnalyzes)) + '<span class="kpi-val-sub">/ ' + esc(fmtInt(aiOpens)) + ' mở</span>';
-    if (aiSub) aiSub.innerHTML = '<span>' + esc(fmtInt(aiShots)) + ' cú · ' + esc(fmtInt(aiPots)) + ' lỗ</span><span>iOS ' + esc(fmtInt(aiExportsIos)) + ' / PC ' + esc(fmtInt(aiExportsDesktop)) + '</span>';
+    if (aiVal) aiVal.innerHTML = esc(fmtInt(aiAnalyzes)) + '<span class="kpi-val-sub">' + esc(fmtInt(aiOpens)) + ' lượt mở AI</span>';
+    if (aiSub) {
+      aiSub.innerHTML = '<span>P ' + esc(fmtCompact(aiPool)) + ' · C ' + esc(fmtCompact(aiCarom)) + ' · Pk ' + esc(fmtCompact(aiPick)) + '</span><span>Xuất ' + esc(fmtInt(aiExportsTotal)) + '</span>';
+    }
+    renderDeltaPill('akpi-ai-delta', deltas.ai_analyzes, showDelta);
+    renderMiniSparkline('akpi-ai-spark', series.map(function (d) { return d.ai_analyzes; }), 'var(--purple)');
 
-    /* KPI 5: Bandwidth Out + Conversion % */
-    var convBase = Math.max(qrViews, pageViews);
-    var convPct = convBase > 0 ? ((totalDownloadsCuts / convBase) * 100).toFixed(1) : '0.0';
+    /* KPI 6: Bandwidth & Stability (GB · % lỗi) */
+    var bwCard = document.getElementById('akpi-bw-card');
+    var bwIcon = document.getElementById('akpi-bw-icon');
     var bwVal = document.getElementById('akpi-bw-val');
     var bwSub = document.getElementById('akpi-bw-sub');
+    var isErrDanger = totalErrors >= 20 || errRate >= 3;
+    var isErrWarn = !isErrDanger && totalErrors > 0;
+    if (bwCard) {
+      bwCard.classList.toggle('danger', isErrDanger);
+      bwCard.classList.toggle('warn', isErrWarn);
+    }
+    if (bwIcon) {
+      bwIcon.className = 'kpi-icon ' + (isErrDanger ? 'crimson' : (isErrWarn ? 'amber' : 'emerald'));
+    }
     if (bwVal) bwVal.textContent = fmtBytes(bytesOut);
-    if (bwSub) bwSub.innerHTML = '<span>Tải+Cắt / Lượt xem</span><span class="text-cyan" style="font-weight:700;">' + esc(convPct) + '%</span>';
-
-    /* KPI 6: Health & Error Rate */
-    var errBase = Math.max(1, qrViews + pageViews + totalDownloadsCuts + aiAnalyzes + totalErrors);
-    var errRate = totalErrors > 0 ? (totalErrors / errBase) * 100 : 0;
-    var errCard = document.getElementById('akpi-err-card');
-    var errVal = document.getElementById('akpi-err-val');
-    var errSub = document.getElementById('akpi-err-sub');
-    if (errCard) {
-      errCard.classList.remove('warn', 'danger');
-      if (totalErrors >= 20 || errRate >= 3) errCard.classList.add('danger');
-      else if (totalErrors > 0) errCard.classList.add('warn');
+    if (bwSub) {
+      var errTxtCls = isErrDanger ? 'text-crimson' : (isErrWarn ? 'text-amber' : 'text-emerald');
+      bwSub.innerHTML = '<span>Lỗi: ' + esc(fmtInt(totalErrors)) + ' (HTTP ' + esc(fmtInt(httpErrors)) + ' · AI ' + esc(fmtInt(aiErrors)) + ')</span><span class="' + errTxtCls + '" style="font-weight:700;">' + esc(errRate.toFixed(2)) + '%</span>';
     }
-    if (errVal) {
-      errVal.textContent = fmtInt(totalErrors);
-      errVal.className = 'kpi-value ' + (totalErrors === 0 ? 'text-emerald' : ((totalErrors >= 20 || errRate >= 3) ? 'text-crimson' : 'text-amber'));
-    }
-    if (errSub) {
-      var healthLabel = totalErrors === 0
-        ? '<span class="text-emerald" style="font-weight:700;">0% Lỗi</span>'
-        : '<span class="' + ((totalErrors >= 20 || errRate >= 3) ? 'text-crimson' : 'text-amber') + '" style="font-weight:700;">' + esc(errRate.toFixed(2)) + '%</span>';
-      errSub.innerHTML = '<span>HTTP: ' + esc(fmtInt(httpErrors)) + ' · AI: ' + esc(fmtInt(aiErrors)) + '</span>' + healthLabel;
-    }
+    renderDeltaPill('akpi-bw-delta', deltas.bytes_out, showDelta);
+    renderMiniSparkline('akpi-bw-spark', series.map(function (d) { return d.bytes_out; }), 'var(--cyan)');
 
     var emptyBanner = document.getElementById('analytics-empty-banner');
     if (emptyBanner) {
       emptyBanner.style.display = totalActivity === 0 ? 'flex' : 'none';
     }
 
-    renderAnalyticsPeakHours(data);
     renderAnalyticsDailyTrend(data);
+    renderAnalyticsFunnel(data);
+    renderAnalyticsHeatmap(data);
+    renderAnalyticsPeakHours(data);
     renderAnalyticsBreakdowns(data);
     renderAnalyticsTopTable(data);
+  }
+
+  /* --------------------------------------------------------------------------
+     GA4 Visual Panel 1: Metric Switcher Trend Chart (+ Dashed Previous Period)
+     -------------------------------------------------------------------------- */
+  function renderAnalyticsDailyTrend(data) {
+    var wrap = document.getElementById('analytics-daily-chart');
+    if (!wrap) return;
+    var kpi = data.kpi || {};
+    var cohorts = data.cohorts || {};
+    var series = Array.isArray(data.daily_series) ? data.daily_series : [];
+    var comp = (state.analyticsCompare && data.comparison) ? data.comparison : null;
+    var prevSeries = (comp && Array.isArray(comp.daily_series)) ? comp.daily_series : [];
+
+    /* Populate metric switcher tab totals */
+    var tabVals = {
+      unique_visitors: Number(kpi.unique_visitors) || 0,
+      sessions: Number(kpi.sessions || cohorts.sessions) || 0,
+      qr_views: Number(kpi.qr_views) || 0,
+      downloads_cuts: Number(kpi.clips_total) || ((Number(kpi.clip_downloads) || 0) + (Number(kpi.cut_clips) || 0)),
+      ai_analyzes: Number(kpi.ai_analyzes) || 0
+    };
+    Object.keys(tabVals).forEach(function (k) {
+      var el = document.getElementById('ga-tab-val-' + k);
+      if (el) el.textContent = fmtCompact(tabVals[k]);
+    });
+
+    var metricKey = GA_TREND_METRICS[state.analyticsTrendMetric] ? state.analyticsTrendMetric : 'unique_visitors';
+    var meta = GA_TREND_METRICS[metricKey];
+
+    var curLegendLbl = document.getElementById('ga-trend-cur-label');
+    var prevLegendEl = document.getElementById('ga-trend-prev-legend');
+    var prevLegendLbl = document.getElementById('ga-trend-prev-label');
+    var solidLine = document.querySelector('#ga-trend-legend .ga-legend-line.solid');
+    if (solidLine) solidLine.style.borderTopColor = meta.color;
+    if (curLegendLbl) {
+      curLegendLbl.textContent = (data.from_date && data.to_date)
+        ? (meta.label + ' (' + fmtShortDateVN(data.from_date) + '–' + fmtShortDateVN(data.to_date) + ')')
+        : meta.label;
+    }
+    if (prevLegendEl && prevLegendLbl) {
+      if (comp && prevSeries.length) {
+        prevLegendEl.hidden = false;
+        prevLegendLbl.textContent = 'Kỳ trước (' + fmtShortDateVN(comp.from) + '–' + fmtShortDateVN(comp.to) + ')';
+      } else {
+        prevLegendEl.hidden = true;
+      }
+    }
+
+    var W = 620;
+    var H = 228;
+    var padL = 44;
+    var padR = 14;
+    var padT = 16;
+    var padB = 28;
+    var plotW = W - padL - padR;
+    var plotH = H - padT - padB;
+    var yBase = padT + plotH;
+
+    var maxVal = 0;
+    series.forEach(function (d) {
+      var v = Number(d[metricKey]) || 0;
+      if (v > maxVal) maxVal = v;
+    });
+    if (comp) {
+      prevSeries.forEach(function (d) {
+        var v = Number(d[metricKey]) || 0;
+        if (v > maxVal) maxVal = v;
+      });
+    }
+
+    var yMax = maxVal > 0 ? Math.ceil(maxVal * 1.15) : 4;
+    var gridLines = [];
+    for (var t = 0; t <= 4; t++) {
+      var frac = t / 4;
+      var y = padT + plotH * (1 - frac);
+      gridLines.push(
+        '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="var(--border)" stroke-width="1"' + (t > 0 ? ' stroke-dasharray="3 3"' : '') + '/>' +
+        '<text x="' + (padL - 8) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" font-size="10" font-family="var(--font-mono)" fill="var(--text-muted)">' + esc(fmtCompact(Math.round(yMax * frac))) + '</text>'
+      );
+    }
+
+    if (!series.length || maxVal === 0) {
+      wrap.innerHTML = '<svg class="analytics-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Xu hướng ' + esc(meta.label) + '">' +
+        gridLines.join('') +
+        '<text x="' + (padL + plotW / 2).toFixed(1) + '" y="' + (padT + plotH / 2).toFixed(1) + '" text-anchor="middle" font-size="12" fill="var(--text-muted)">Chưa có dữ liệu ' + esc(meta.label.toLowerCase()) + ' trong khung thời gian này</text>' +
+      '</svg>';
+      return;
+    }
+
+    var n = series.length;
+    var slotW = plotW / n;
+    var curPoints = [];
+    var prevPoints = [];
+    var groups = [];
+    var labelStep = Math.max(1, Math.ceil(n / 8));
+    var gradId = 'ga-trend-grad-' + metricKey;
+
+    series.forEach(function (d, idx) {
+      var curV = Number(d[metricKey]) || 0;
+      var prevRow = (comp && idx < prevSeries.length) ? prevSeries[idx] : null;
+      var prevV = prevRow ? (Number(prevRow[metricKey]) || 0) : null;
+
+      var xSlot = padL + idx * slotW;
+      var cx = xSlot + slotW / 2;
+      var cy = yBase - (curV / yMax) * plotH;
+      curPoints.push(cx.toFixed(1) + ',' + cy.toFixed(1));
+
+      var py = null;
+      if (prevV !== null) {
+        py = yBase - (prevV / yMax) * plotH;
+        prevPoints.push(cx.toFixed(1) + ',' + py.toFixed(1));
+      }
+
+      var dateStr = String(d.date || '');
+      var shortDate = fmtShortDateVN(dateStr);
+      var showTick = (idx % labelStep === 0 || idx === n - 1);
+
+      var tipLines = [meta.label + ': ' + fmtInt(curV)];
+      if (prevRow) {
+        var dPct = prevV > 0 ? (((curV - prevV) / prevV) * 100) : (curV > 0 ? 100 : 0);
+        var dSign = dPct > 0 ? '+' : '';
+        tipLines.push('Kỳ trước (' + fmtShortDateVN(prevRow.date) + '): ' + fmtInt(prevV) + ' (' + dSign + dPct.toFixed(1) + '%)');
+      }
+      var tipBody = tipLines.join(' | ');
+
+      var singleBars = '';
+      if (n === 1) {
+        var bw = Math.min(48, slotW * 0.22);
+        var hCur = curV > 0 ? Math.max(4, (curV / yMax) * plotH) : 0;
+        singleBars += '<rect x="' + (cx - bw - 4).toFixed(1) + '" y="' + (yBase - hCur).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hCur.toFixed(1) + '" rx="4" fill="' + meta.color + '"/>';
+        if (prevV !== null && prevV > 0) {
+          var hPrev = Math.max(4, (prevV / yMax) * plotH);
+          singleBars += '<rect x="' + (cx + 4).toFixed(1) + '" y="' + (yBase - hPrev).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hPrev.toFixed(1) + '" rx="4" fill="var(--text-muted)" opacity="0.45" stroke="var(--text-secondary)" stroke-dasharray="3 2"/>';
+        }
+      }
+
+      groups.push(
+        '<g class="svg-bar-group" tabindex="0" data-ga-tip-title="' + esc(dateStr) + '" data-ga-tip-body="' + esc(tipBody) + '">' +
+          '<title>' + esc(dateStr + ' — ' + tipBody) + '</title>' +
+          '<rect class="svg-hover-bg" x="' + xSlot.toFixed(1) + '" y="' + padT + '" width="' + slotW.toFixed(1) + '" height="' + plotH + '" rx="3" fill="transparent"/>' +
+          singleBars +
+          (n >= 2 && py !== null ? '<circle cx="' + cx.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="' + (n > 31 ? '1.8' : '2.6') + '" fill="var(--surface)" stroke="var(--text-secondary)" stroke-width="1.4"/>' : '') +
+          (n >= 2 ? '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + (n > 31 ? '2.2' : '3.4') + '" fill="' + meta.color + '" stroke="var(--surface)" stroke-width="1.5"/>' : '') +
+          (showTick ? '<text x="' + cx.toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--text-muted)">' + esc(shortDate) + '</text>' : '') +
+        '</g>'
+      );
+    });
+
+    var linesHtml = '';
+    if (n >= 2) {
+      var firstX = (padL + slotW / 2).toFixed(1);
+      var lastX = (padL + (n - 0.5) * slotW).toFixed(1);
+      var polyCoords = firstX + ',' + yBase + ' ' + curPoints.join(' ') + ' ' + lastX + ',' + yBase;
+      linesHtml += '<defs><linearGradient id="' + gradId + '" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0%" stop-color="' + meta.color + '" stop-opacity="0.22"/>' +
+        '<stop offset="100%" stop-color="' + meta.color + '" stop-opacity="0.02"/>' +
+      '</linearGradient></defs>' +
+      '<polygon points="' + polyCoords + '" fill="url(#' + gradId + ')"/>';
+
+      if (prevPoints.length >= 2) {
+        linesHtml += '<polyline class="ga-compare-line" fill="none" stroke="var(--text-secondary)" stroke-width="1.8" stroke-dasharray="5 4" stroke-linecap="round" stroke-linejoin="round" opacity="0.8" points="' + prevPoints.join(' ') + '"/>';
+      }
+      linesHtml += '<polyline fill="none" stroke="' + meta.color + '" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" points="' + curPoints.join(' ') + '"/>';
+    }
+
+    wrap.innerHTML = '<svg class="analytics-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Biểu đồ xu hướng ' + esc(meta.label) + '">' +
+      gridLines.join('') +
+      linesHtml +
+      groups.join('') +
+    '</svg>';
+  }
+
+  /* --------------------------------------------------------------------------
+     GA4 Visual Panel 2: Conversion Funnel (Phễu Hành Trình Khách)
+     -------------------------------------------------------------------------- */
+  function renderAnalyticsFunnel(data) {
+    var wrap = document.getElementById('ga-funnel-chart');
+    var e2eBadge = document.getElementById('ga-funnel-e2e-badge');
+    if (!wrap) return;
+
+    var steps = Array.isArray(data.funnel) && data.funnel.length ? data.funnel : [
+      { step: 'qr_views', label: 'Quét QR / Mở trang', count: 0, pct_of_top: 0, drop_pct: 0 },
+      { step: 'watch_timeline', label: 'Xem Live / Timeline', count: 0, pct_of_top: 0, drop_pct: 0 },
+      { step: 'download_cut', label: 'Tải Clip / Cắt CheckVAR', count: 0, pct_of_top: 0, drop_pct: 0 },
+      { step: 'ai_studio', label: 'AI Studio / Xuất Video', count: 0, pct_of_top: 0, drop_pct: 0 }
+    ];
+
+    var topCount = Number(steps[0].count) || 0;
+    var clipStep = steps[2] || steps[steps.length - 1];
+    var e2ePct = Number(clipStep && clipStep.pct_of_top) || 0;
+    if (e2eBadge) {
+      e2eBadge.textContent = e2ePct.toFixed(1) + '% CĐ Clip';
+    }
+
+    wrap.innerHTML = steps.map(function (st, idx) {
+      var cnt = Number(st.count) || 0;
+      var pct = Number(st.pct_of_top) || 0;
+      var drop = Number(st.drop_pct) || 0;
+      var barW = topCount > 0 && cnt > 0 ? Math.max(3, Math.min(100, pct)) : (idx === 0 && cnt > 0 ? 100 : 0);
+      var prevCount = idx > 0 ? (Number(steps[idx - 1].count) || 0) : cnt;
+      var stepKeep = idx > 0 ? (prevCount > 0 ? Math.min(100, (cnt / prevCount) * 100) : 0) : 100;
+
+      var dropRow = idx > 0
+        ? '<div class="ga-funnel-drop-row mono">' +
+            '<span>↳ Giữ chân từ bước ' + idx + ': <strong class="text-emerald">' + esc(stepKeep.toFixed(1)) + '%</strong></span>' +
+            '<span>·</span>' +
+            '<span>Rơi: <strong class="' + (drop > 65 ? 'text-amber' : 'text-secondary') + '">-' + esc(drop.toFixed(1)) + '%</strong></span>' +
+          '</div>'
+        : '';
+
+      return dropRow +
+        '<div class="ga-funnel-step">' +
+          '<div class="ga-funnel-step-head">' +
+            '<span class="ga-funnel-step-left">' +
+              '<span class="ga-funnel-idx">' + (idx + 1) + '</span>' +
+              '<span class="ga-funnel-step-name">' + esc(st.label || st.step) + '</span>' +
+            '</span>' +
+            '<span class="ga-funnel-step-nums mono">' +
+              '<strong>' + esc(fmtInt(cnt)) + '</strong>' +
+              '<span class="badge badge-neutral">' + esc(pct.toFixed(1)) + '%</span>' +
+            '</span>' +
+          '</div>' +
+          '<div class="ga-funnel-track" title="' + esc((st.label || '') + ': ' + fmtInt(cnt) + ' (' + pct.toFixed(1) + '%)') + '">' +
+            '<div class="ga-funnel-bar step-' + idx + '" style="width:' + barW.toFixed(1) + '%"></div>' +
+          '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  /* --------------------------------------------------------------------------
+     GA4 Visual Panel 3: 7x24 Heatmap Matrix (Thứ 2 -> CN x 0h -> 23h GMT+7)
+     -------------------------------------------------------------------------- */
+  function renderAnalyticsHeatmap(data) {
+    var gridEl = document.getElementById('ga-heatmap-grid');
+    var badge = document.getElementById('analytics-peak-badge');
+    var readout = document.getElementById('ga-heatmap-readout');
+    if (!gridEl) return;
+
+    var hm = data.heatmap_7x24 || {};
+    var days = Array.isArray(hm.days) && hm.days.length === 7 ? hm.days : ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+    var matrix = Array.isArray(hm.matrix) && hm.matrix.length === 7 ? hm.matrix : days.map(function () { return new Array(24).fill(0); });
+    var maxCell = Number(hm.max_cell) || 0;
+    if (maxCell === 0) {
+      matrix.forEach(function (row) {
+        if (Array.isArray(row)) row.forEach(function (v) { if (Number(v) > maxCell) maxCell = Number(v); });
+      });
+    }
+    var peak = hm.peak_day_hour || {};
+    var peakDayIdx = peak.value > 0 ? Number(peak.day_index) : -1;
+    var peakHour = peak.value > 0 ? Number(peak.hour) : -1;
+
+    if (badge && state.analyticsHeatMode === 'heatmap') {
+      if (peak && Number(peak.value) > 0) {
+        var hp = (Number(peak.hour) < 10 ? '0' : '') + Number(peak.hour);
+        badge.className = 'badge badge-amber';
+        badge.innerHTML = svgIcon('flame', 'ui-icon-sm') + '<span>Đỉnh: ' + esc(peak.day_label || days[peakDayIdx] || '') + ' · ' + esc(hp) + ':00 (' + esc(fmtInt(peak.value)) + ')</span>';
+      } else {
+        badge.className = 'badge badge-neutral';
+        badge.textContent = 'Đỉnh: Chưa có dữ liệu';
+      }
+    }
+
+    if (readout) {
+      if (peak && Number(peak.value) > 0) {
+        var ph = (Number(peak.hour) < 10 ? '0' : '') + Number(peak.hour);
+        readout.textContent = 'Giờ vàng nhất: ' + (peak.day_label || '') + ' lúc ' + ph + ':00–' + ph + ':59 (' + fmtInt(peak.value) + ' hoạt động)';
+      } else {
+        readout.textContent = 'Chưa có dữ liệu phân bổ theo 7×24 giờ trong khung này';
+      }
+    }
+
+    var dayNamesFull = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật'];
+    var rowsHtml = days.map(function (dayLbl, dIdx) {
+      var row = Array.isArray(matrix[dIdx]) ? matrix[dIdx] : [];
+      var isWeekend = dIdx >= 5;
+      var cells = [];
+      for (var h = 0; h < 24; h++) {
+        var v = Number(row[h]) || 0;
+        var lv = 0;
+        if (v > 0 && maxCell > 0) {
+          var ratio = v / maxCell;
+          if (ratio > 0.78) lv = 4;
+          else if (ratio > 0.50) lv = 3;
+          else if (ratio > 0.24) lv = 2;
+          else lv = 1;
+        }
+        var isPeakCell = (dIdx === peakDayIdx && h === peakHour && v > 0);
+        var hPad = (h < 10 ? '0' : '') + h;
+        var tipTitle = (dayNamesFull[dIdx] || dayLbl) + ' · ' + hPad + ':00–' + hPad + ':59 (GMT+7)';
+        var tipBody = fmtInt(v) + ' lượt hoạt động' + (maxCell > 0 ? (' · ' + Math.round((v / maxCell) * 100) + '% đỉnh') : '');
+        cells.push(
+          '<div class="ga-heat-cell lv-' + lv + (isPeakCell ? ' is-peak' : '') + '" tabindex="0" role="gridcell" aria-label="' + esc(tipTitle + ': ' + tipBody) + '" data-ga-tip-title="' + esc(tipTitle) + '" data-ga-tip-body="' + esc(tipBody) + '" data-ga-heat-readout="' + esc(tipTitle + ' — ' + tipBody) + '"></div>'
+        );
+      }
+      return '<div class="ga-heat-row" role="row">' +
+        '<span class="ga-heat-day' + (isWeekend ? ' weekend' : '') + '">' + esc(dayLbl) + '</span>' +
+        cells.join('') +
+      '</div>';
+    }).join('');
+
+    var axisTicks = [0, 3, 6, 9, 12, 15, 18, 21, 23];
+    var axisHours = axisTicks.map(function (hr) {
+      var mobHide = (hr === 3 || hr === 9 || hr === 15 || hr === 21);
+      return '<span class="ga-heat-hour' + (mobHide ? ' mob-hide' : '') + '">' + hr + 'h</span>';
+    });
+
+    gridEl.innerHTML = rowsHtml + '<div class="ga-heat-axis">' + axisHours.join('') + '</div>';
   }
 
   function buildPeakHoursSvgHtml(peakHours, opts) {
@@ -2667,18 +3481,13 @@
       var yAi = yDc - hAi;
 
       var hrPad = (item.hour < 10 ? '0' : '') + item.hour;
-      var tip = hrPad + ':00–' + hrPad + ':59 (GMT+7)\n' +
-        'QR Views: ' + fmtInt(item.qr) + '\n' +
-        'Khách duy nhất: ' + fmtInt(item.uv) + '\n' +
-        'Tải & Cắt Clip: ' + fmtInt(item.dc) + '\n' +
-        'AI Studio Runs: ' + fmtInt(item.ai) + '\n' +
-        'Băng thông: ' + fmtBytes(item.bo);
+      var tipTitle = hrPad + ':00–' + hrPad + ':59 (GMT+7)';
+      var tipBody = 'QR: ' + fmtInt(item.qr) + ' · Khách: ' + fmtInt(item.uv) + ' · Tải/Cắt: ' + fmtInt(item.dc) + ' · AI: ' + fmtInt(item.ai);
 
       var peakBg = isPeak
         ? '<rect x="' + (xSlot + 1).toFixed(1) + '" y="' + padT + '" width="' + (slotW - 2).toFixed(1) + '" height="' + plotH + '" rx="4" fill="var(--amber-bg)" stroke="var(--amber-border)" stroke-width="1"/>'
         : '';
 
-      /* Collision-free X-axis ticks: always show peak, suppress adjacent ticks within +/-1h */
       var nearPeak = (peakHour >= 0 && peakVal > 0 && Math.abs(idx - peakHour) <= 1);
       var showLbl = isPeak || (!nearPeak && (idx % 3 === 0 || idx === 23));
       var xLbl = showLbl
@@ -2686,8 +3495,8 @@
         : '';
 
       bars.push(
-        '<g class="svg-bar-group">' +
-          '<title>' + esc(tip) + '</title>' +
+        '<g class="svg-bar-group" tabindex="0" data-ga-tip-title="' + esc(tipTitle) + '" data-ga-tip-body="' + esc(tipBody) + '">' +
+          '<title>' + esc(tipTitle + ' — ' + tipBody) + '</title>' +
           peakBg +
           '<rect class="svg-hover-bg" x="' + (xSlot + 1).toFixed(1) + '" y="' + padT + '" width="' + (slotW - 2).toFixed(1) + '" height="' + plotH + '" rx="3" fill="transparent"/>' +
           (hQr > 0 ? '<rect x="' + xBar.toFixed(1) + '" y="' + yQr.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + hQr.toFixed(1) + '" rx="2" fill="var(--cyan)"/>' : '') +
@@ -2719,7 +3528,7 @@
     if (!wrap) return;
     var res = buildPeakHoursSvgHtml(data.peak_hours || [], { width: 640, height: 225 });
     wrap.innerHTML = res.svg;
-    if (badge) {
+    if (badge && state.analyticsHeatMode === 'bars') {
       if (res.peakHour >= 0 && res.peakVal > 0) {
         var hp = (res.peakHour < 10 ? '0' : '') + res.peakHour;
         badge.className = 'badge badge-amber';
@@ -2731,120 +3540,9 @@
     }
   }
 
-  function renderAnalyticsDailyTrend(data) {
-    var wrap = document.getElementById('analytics-daily-chart');
-    if (!wrap) return;
-    var series = Array.isArray(data.daily_series) ? data.daily_series : [];
-
-    var W = 560;
-    var H = 225;
-    var padL = 44;
-    var padR = 14;
-    var padT = 14;
-    var padB = 28;
-    var plotW = W - padL - padR;
-    var plotH = H - padT - padB;
-
-    var maxVal = 0;
-    series.forEach(function (d) {
-      maxVal = Math.max(maxVal, Number(d.qr_views) || 0, Number(d.downloads_cuts) || 0, Number(d.ai_analyzes) || 0);
-    });
-
-    var yMax = maxVal > 0 ? Math.ceil(maxVal * 1.15) : 4;
-    var gridLines = [];
-    for (var t = 0; t <= 4; t++) {
-      var frac = t / 4;
-      var y = padT + plotH * (1 - frac);
-      gridLines.push(
-        '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="var(--border)" stroke-width="1" ' + (t > 0 ? 'stroke-dasharray="3 3"' : '') + '/>' +
-        '<text x="' + (padL - 8) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" font-size="10" font-family="var(--font-mono)" fill="var(--text-muted)">' + esc(fmtCompact(Math.round(yMax * frac))) + '</text>'
-      );
-    }
-
-    if (!series.length || maxVal === 0) {
-      wrap.innerHTML = '<svg class="analytics-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Xu hướng theo ngày">' +
-        gridLines.join('') +
-        '<text x="' + (padL + plotW / 2).toFixed(1) + '" y="' + (padT + plotH / 2).toFixed(1) + '" text-anchor="middle" font-size="12" fill="var(--text-muted)">Chưa có chuỗi dữ liệu theo ngày trong khung này</text>' +
-      '</svg>';
-      return;
-    }
-
-    var n = series.length;
-    var slotW = plotW / n;
-    var subBarW = Math.max(3, Math.min(12, slotW * 0.28));
-    var yBase = padT + plotH;
-    var qrPoints = [];
-    var areaPoints = [];
-    var groups = [];
-    var labelStep = Math.max(1, Math.ceil(n / 8));
-
-    series.forEach(function (d, idx) {
-      var qr = Number(d.qr_views) || 0;
-      var dc = Number(d.downloads_cuts) || 0;
-      var ai = Number(d.ai_analyzes) || 0;
-      var uv = Number(d.unique_visitors) || 0;
-      var exp = Number(d.ai_exports) || 0;
-      var bo = Number(d.bytes_out) || 0;
-
-      var xSlot = padL + idx * slotW;
-      var cx = xSlot + slotW / 2;
-      var yQr = yBase - (qr / yMax) * plotH;
-      qrPoints.push(cx.toFixed(1) + ',' + yQr.toFixed(1));
-      areaPoints.push(cx.toFixed(1) + ',' + yQr.toFixed(1));
-
-      var hDc = dc > 0 ? Math.max(2, (dc / yMax) * plotH) : 0;
-      var hAi = ai > 0 ? Math.max(2, (ai / yMax) * plotH) : 0;
-
-      var dateStr = String(d.date || '');
-      var shortDate = dateStr.length >= 10 ? (dateStr.slice(8, 10) + '/' + dateStr.slice(5, 7)) : dateStr;
-      var showTick = (idx % labelStep === 0 || idx === n - 1);
-
-      var tip = dateStr + '\n' +
-        'QR Views: ' + fmtInt(qr) + '\n' +
-        'Khách duy nhất: ' + fmtInt(uv) + '\n' +
-        'Tải & Cắt Clip: ' + fmtInt(dc) + '\n' +
-        'AI Phân tích: ' + fmtInt(ai) + '\n' +
-        'AI Xuất video: ' + fmtInt(exp) + '\n' +
-        'Băng thông: ' + fmtBytes(bo);
-
-      var singleQrBar = (n === 1 && qr > 0)
-        ? '<rect x="' + (cx - subBarW * 1.6).toFixed(1) + '" y="' + yQr.toFixed(1) + '" width="' + subBarW.toFixed(1) + '" height="' + (yBase - yQr).toFixed(1) + '" rx="2" fill="var(--cyan)" opacity="0.85"/>'
-        : '';
-
-      groups.push(
-        '<g class="svg-bar-group">' +
-          '<title>' + esc(tip) + '</title>' +
-          '<rect class="svg-hover-bg" x="' + xSlot.toFixed(1) + '" y="' + padT + '" width="' + slotW.toFixed(1) + '" height="' + plotH + '" rx="3" fill="transparent"/>' +
-          singleQrBar +
-          (hDc > 0 ? '<rect x="' + (cx - subBarW - 1).toFixed(1) + '" y="' + (yBase - hDc).toFixed(1) + '" width="' + subBarW.toFixed(1) + '" height="' + hDc.toFixed(1) + '" rx="2" fill="var(--emerald)" opacity="0.9"/>' : '') +
-          (hAi > 0 ? '<rect x="' + (cx + 1).toFixed(1) + '" y="' + (yBase - hAi).toFixed(1) + '" width="' + subBarW.toFixed(1) + '" height="' + hAi.toFixed(1) + '" rx="2" fill="var(--purple)" opacity="0.9"/>' : '') +
-          '<circle cx="' + cx.toFixed(1) + '" cy="' + yQr.toFixed(1) + '" r="' + (n > 31 ? '2.2' : '3.2') + '" fill="var(--cyan)" stroke="var(--surface)" stroke-width="1.4"/>' +
-          (showTick ? '<text x="' + cx.toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" font-family="var(--font-mono)" fill="var(--text-muted)">' + esc(shortDate) + '</text>' : '') +
-        '</g>'
-      );
-    });
-
-    var trendLineHtml = '';
-    if (n >= 2) {
-      var firstX = (padL + slotW / 2).toFixed(1);
-      var lastX = (padL + (n - 0.5) * slotW).toFixed(1);
-      var polyCoords = firstX + ',' + yBase + ' ' + areaPoints.join(' ') + ' ' + lastX + ',' + yBase;
-      trendLineHtml =
-        '<defs><linearGradient id="analytics-qr-grad" x1="0" y1="0" x2="0" y2="1">' +
-          '<stop offset="0%" stop-color="var(--cyan)" stop-opacity="0.24"/>' +
-          '<stop offset="100%" stop-color="var(--cyan)" stop-opacity="0.02"/>' +
-        '</linearGradient></defs>' +
-        '<polygon points="' + polyCoords + '" fill="url(#analytics-qr-grad)"/>' +
-        '<polyline fill="none" stroke="var(--cyan)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" points="' + qrPoints.join(' ') + '"/>';
-    }
-
-    wrap.innerHTML = '<svg class="analytics-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Biểu đồ xu hướng theo ngày">' +
-      gridLines.join('') +
-      trendLineHtml +
-      groups.join('') +
-    '</svg>';
-  }
-
+  /* --------------------------------------------------------------------------
+     GA4 Visual Panel 4: Acquisition Channels + OS/Device + AI Studio Pills
+     -------------------------------------------------------------------------- */
   function renderProgressRow(iconName, label, count, total, colorClass, extraText) {
     var pct = total > 0 ? ((count / total) * 100) : 0;
     var widthPct = count > 0 ? Math.max(2, Math.min(100, pct)) : 0;
@@ -2860,8 +3558,27 @@
   }
 
   function renderAnalyticsBreakdowns(data) {
+    var acq = data.acquisition || {};
     var os = data.os_breakdown || {};
     var kpi = data.kpi || {};
+
+    var acqQr = Number(acq.qr) || 0;
+    var acqShare = Number(acq.share) || 0;
+    var acqApp = Number(acq.app) || 0;
+    var acqDirect = Number(acq.direct) || 0;
+    var acqTotal = acqQr + acqShare + acqApp + acqDirect;
+
+    var acqTotalEl = document.getElementById('ga-acq-total');
+    if (acqTotalEl) acqTotalEl.textContent = fmtInt(acqTotal) + ' phiên';
+
+    var acqEl = document.getElementById('ga-acquisition-breakdown');
+    if (acqEl) {
+      acqEl.innerHTML =
+        renderProgressRow('qr', 'QR Tại Bàn', acqQr, acqTotal, 'cyan') +
+        renderProgressRow('share', 'Link Chia Sẻ', acqShare, acqTotal, 'emerald') +
+        renderProgressRow('tablet', 'Kiosk App', acqApp, acqTotal, 'amber') +
+        renderProgressRow('compass', 'Trực tiếp / AI', acqDirect, acqTotal, 'purple');
+    }
 
     var ios = Number(os.ios) || 0;
     var android = Number(os.android) || 0;
@@ -2876,55 +3593,36 @@
     var osEl = document.getElementById('analytics-os-breakdown');
     if (osEl) {
       osEl.innerHTML =
-        renderProgressRow('phone', 'iOS (iPhone / iPad)', ios, osTotal, 'cyan') +
+        renderProgressRow('phone', 'iOS', ios, osTotal, 'cyan') +
         renderProgressRow('phone', 'Android', android, osTotal, 'emerald') +
-        renderProgressRow('monitor', 'Desktop (PC / Mac)', desktop, osTotal, 'purple') +
-        renderProgressRow('tablet', 'App Kiosk / Tablet', app, osTotal, 'amber') +
-        renderProgressRow('globe', 'Thiết bị khác', other, osTotal, 'muted');
+        renderProgressRow('monitor', 'Desktop', desktop, osTotal, 'purple') +
+        renderProgressRow('tablet', 'Kiosk', app, osTotal, 'amber') +
+        (other > 0 ? renderProgressRow('globe', 'Khác', other, osTotal, 'muted') : '');
     }
-
-    var poolRuns = Number(kpi.ai_pool_runs) || 0;
-    var caromRuns = Number(kpi.ai_carom_runs) || 0;
-    var modeTotal = poolRuns + caromRuns;
-
-    var expIos = Number(kpi.ai_exports_ios) || 0;
-    var expDesktop = Number(kpi.ai_exports_desktop) || 0;
-    var expRelay = Number(kpi.ai_export_relay) || 0;
-    var expTotal = expIos + expDesktop;
 
     var aiBoxesBadge = document.getElementById('analytics-ai-boxes-badge');
     if (aiBoxesBadge) aiBoxesBadge.textContent = fmtInt(kpi.ai_active_boxes || 0) + ' Box AI';
 
-    var aiEl = document.getElementById('analytics-ai-breakdown');
-    if (aiEl) {
-      aiEl.innerHTML =
-        renderProgressRow('pool', 'AI Pool (8/9/10-Ball)', poolRuns, modeTotal, 'emerald') +
-        renderProgressRow('carom', 'AI Carom (3C / Libre)', caromRuns, modeTotal, 'amber') +
-        renderProgressRow('phone', 'Xuất iPhone (iOS Relay)', expIos, expTotal, 'cyan', expRelay > 0 ? ('· Relay: ' + fmtInt(expRelay)) : '') +
-        renderProgressRow('monitor', 'Xuất Desktop (Blob MP4)', expDesktop, expTotal, 'purple');
-    }
-
     var pillsEl = document.getElementById('analytics-ai-pills');
     if (pillsEl) {
       pillsEl.innerHTML =
-        '<span class="badge badge-neutral">Mở AI Studio: ' + esc(fmtInt(kpi.ai_studio_opens || 0)) + '</span>' +
-        '<span class="badge badge-neutral">Tải DS Video: ' + esc(fmtInt(kpi.ai_videos_loads || 0)) + '</span>' +
-        '<span class="badge badge-emerald">Tổng cú đánh: ' + esc(fmtInt(kpi.ai_shots || 0)) + '</span>' +
-        '<span class="badge badge-cyan">Bi vào lỗ: ' + esc(fmtInt(kpi.ai_pots || 0)) + '</span>' +
-        '<span class="badge ' + ((Number(kpi.ai_errors) || 0) > 0 ? 'badge-crimson' : 'badge-neutral') + '">Lỗi AI: ' + esc(fmtInt(kpi.ai_errors || 0)) + '</span>';
+        '<span class="badge badge-emerald">Pool: ' + esc(fmtInt(kpi.ai_pool_runs || 0)) + '</span>' +
+        '<span class="badge badge-amber">Carom: ' + esc(fmtInt(kpi.ai_carom_runs || 0)) + '</span>' +
+        '<span class="badge badge-cyan">Pickleball: ' + esc(fmtInt(kpi.ai_pickleball_runs || 0)) + '</span>' +
+        '<span class="badge badge-neutral">Cú đánh: ' + esc(fmtInt(kpi.ai_shots || 0)) + ' · Lỗ: ' + esc(fmtInt(kpi.ai_pots || 0)) + '</span>' +
+        '<span class="badge badge-purple">Xuất iOS ' + esc(fmtInt(kpi.ai_exports_ios || 0)) + ' / PC ' + esc(fmtInt(kpi.ai_exports_desktop || 0)) + '</span>';
     }
   }
 
+  /* --------------------------------------------------------------------------
+     Searchable, Paginated Drill-Down Tables (Desktop Table + 50px Compact Mobile Rows)
+     -------------------------------------------------------------------------- */
   function renderSourceBadges(item, isClub) {
     var sources = [];
     if (isClub) {
-      if (Array.isArray(item.sources)) {
-        sources = item.sources;
-      } else if (typeof item.sources === 'string' && item.sources.trim()) {
-        sources = item.sources.split(',');
-      } else if (item.source) {
-        sources = [item.source];
-      }
+      if (Array.isArray(item.sources)) sources = item.sources;
+      else if (typeof item.sources === 'string' && item.sources.trim()) sources = item.sources.split(',');
+      else if (item.source) sources = [item.source];
     } else if (item.source) {
       sources = [item.source];
     }
@@ -2936,17 +3634,11 @@
       if (!clean || seen[clean]) return;
       seen[clean] = true;
       var low = clean.toLowerCase();
-      if (low === 'redbida-go') {
-        out.push('<span class="badge badge-cyan">redbida-go</span>');
-      } else if (low === 'nodered' || low === 'node-red') {
-        out.push('<span class="badge badge-neutral">Node-RED</span>');
-      } else {
-        out.push('<span class="badge badge-neutral">' + esc(clean) + '</span>');
-      }
+      if (low === 'redbida-go') out.push('<span class="badge badge-cyan">redbida-go</span>');
+      else if (low === 'nodered' || low === 'node-red') out.push('<span class="badge badge-neutral">Node-RED</span>');
+      else out.push('<span class="badge badge-neutral">' + esc(clean) + '</span>');
     });
-    if (!out.length) {
-      out.push('<span class="badge badge-neutral">--</span>');
-    }
+    if (!out.length) out.push('<span class="badge badge-neutral">--</span>');
     if (item.ai_enabled) {
       out.push('<span class="badge badge-purple">' + svgIcon('cpu', 'ui-icon-sm') + '<span>AI</span></span>');
     }
@@ -2971,22 +3663,25 @@
       ? (Array.isArray(data.top_clubs) ? data.top_clubs : [])
       : (Array.isArray(data.top_boxes) ? data.top_boxes : []);
 
+    raw.forEach(function (item) {
+      indexItemSearch(item, [item.club_name, item.club_id, item.box_name, item.box_id, item.branding, item.source, Array.isArray(item.sources) ? item.sources.join(' ') : '']);
+    });
+
+    var tokens = parseSearchQuery(state.analyticsTopSearch);
+    var filtered = tokens ? raw.filter(function (item) { return matchesSearch(item, tokens); }) : raw;
+    syncSearchBoxState('analytics-top-search', 'analytics-top-match-count', filtered.length, raw.length);
+
     var titleEl = document.getElementById('analytics-top-title');
     if (titleEl) {
       titleEl.innerHTML = svgIcon('trophy', 'text-amber') + '<span>' +
-        (isClub ? ('Top Quán / CLB (' + esc(raw.length) + ')') : ('Top Thiết Bị Box (' + esc(raw.length) + ')')) +
+        (isClub ? ('Top Quán / CLB (' + esc(fmtInt(filtered.length)) + ')') : ('Top Thiết Bị Box (' + esc(fmtInt(filtered.length)) + ')')) +
       '</span>';
     }
 
-    var sorted = raw.slice().sort(function (a, b) {
+    var sorted = filtered.slice().sort(function (a, b) {
       var va = getAnalyticsSortValue(a, state.analyticsSortCol, isClub);
       var vb = getAnalyticsSortValue(b, state.analyticsSortCol, isClub);
-      var cmp = 0;
-      if (typeof va === 'string' && typeof vb === 'string') {
-        cmp = va.localeCompare(vb, 'vi');
-      } else {
-        cmp = (va - vb);
-      }
+      var cmp = (typeof va === 'string' && typeof vb === 'string') ? va.localeCompare(vb, 'vi') : (va - vb);
       return state.analyticsSortDir === 'asc' ? cmp : -cmp;
     });
 
@@ -2998,25 +3693,34 @@
 
     var pgTop = paginateItems(sorted, 'analyticsTop');
     var rowsHtml = '';
+    var mobileRowsHtml = '';
+
     if (!sorted.length) {
-      rowsHtml = '<tr><td colspan="10" class="analytics-empty-cell">Chưa có dữ liệu trong khung thời gian này — box sẽ tự động đẩy rollup mỗi 5 phút.</td></tr>';
+      rowsHtml = '<tr><td colspan="10" class="analytics-empty-cell">Không tìm thấy quán/box nào phù hợp trong khung thời gian này.</td></tr>';
+      mobileRowsHtml = '<div class="empty-state" style="padding:20px 12px;">Không tìm thấy quán/box nào phù hợp.</div>';
     } else {
       rowsHtml = pgTop.items.map(function (item) {
         var isSelected = isClub
-          ? (state.analyticsDrillClubId && !state.analyticsDrillBoxId && state.analyticsDrillClubId === item.club_id)
-          : (state.analyticsDrillBoxId && state.analyticsDrillBoxId === item.box_id);
+          ? (state.analyticsClubId && !state.analyticsBoxId && state.analyticsClubId === item.club_id)
+          : (state.analyticsBoxId && state.analyticsBoxId === item.box_id);
         var errs = (Number(item.http_errors) || 0) + (Number(item.ai_errors) || 0);
         var dcTotal = (Number(item.clip_downloads) || 0) + (Number(item.cut_clips) || 0);
+        var sessions = Number(item.sessions) || 0;
+        var engaged = Number(item.engaged_sessions) || 0;
+        var engPct = sessions > 0 ? Math.round((engaged / sessions) * 100) : 0;
         var drillClub = item.club_id || '';
         var drillBox = isClub ? '' : (item.box_id || '');
         var drillLabel = isClub
           ? (item.club_name || item.club_id || '')
           : ((item.box_name || item.box_id || '') + (item.club_name ? (' · ' + item.club_name) : ''));
 
+        var brandTag = item.branding === 'pickleball'
+          ? ' <span class="badge badge-amber">Pickleball</span>'
+          : '';
         var nameCell = isClub
-          ? ('<td><div class="cell-primary">' + esc(item.club_name || item.club_id || '--') + '</div>' +
+          ? ('<td><div class="cell-primary">' + esc(item.club_name || item.club_id || '--') + brandTag + '</div>' +
              '<div class="cell-sub mono">' + esc(item.club_id || '') + ' · ' + esc(fmtInt(item.boxes_count || 0)) + ' Box</div></td>')
-          : ('<td><div class="mono cell-primary">' + esc(item.box_id || '--') + '</div>' +
+          : ('<td><div class="mono cell-primary">' + esc(item.box_id || '--') + brandTag + '</div>' +
              '<div class="cell-sub">' + esc(item.box_name || '') + (item.club_name ? (' · ' + esc(item.club_name)) : '') + '</div></td>');
 
         return '<tr class="clickable-row' + (isSelected ? ' row-selected' : '') + '"' +
@@ -3025,9 +3729,11 @@
           ' data-drill-label="' + esc(drillLabel) + '">' +
           nameCell +
           '<td>' + renderSourceBadges(item, isClub) + '</td>' +
+          '<td><strong>' + esc(fmtInt(item.unique_visitors)) + '</strong>' +
+            '<div class="cell-sub">Quay lại ' + esc(fmtInt(item.returning_visitors || 0)) + '</div></td>' +
+          '<td><strong>' + esc(fmtInt(sessions)) + '</strong>' +
+            '<div class="cell-sub">' + esc(engPct) + '% tương tác</div></td>' +
           '<td><strong class="text-cyan">' + esc(fmtInt(item.qr_views)) + '</strong></td>' +
-          '<td>' + esc(fmtInt(item.unique_visitors)) + '</td>' +
-          '<td>' + esc(fmtInt(item.live_hls)) + ' <span class="text-muted">/</span> ' + esc(fmtInt(item.vod_plays)) + '</td>' +
           '<td>' +
             '<strong class="text-emerald">' + esc(fmtInt(dcTotal)) + '</strong>' +
             '<div class="cell-sub">Tải ' + esc(fmtInt(item.clip_downloads)) + ' · Cắt ' + esc(fmtInt(item.cut_clips)) + '</div>' +
@@ -3044,42 +3750,98 @@
           '<td class="mono text-muted" style="font-size:12px;">' + esc(fmtIngestTime(item.last_ingest_at)) + '</td>' +
         '</tr>';
       }).join('');
+
+      /* Compact 50px Mobile Expandable Rows */
+      mobileRowsHtml = pgTop.items.map(function (item) {
+        var rowId = (isClub ? 'club:' : 'box:') + (isClub ? (item.club_id || item.club_name) : (item.box_id || item.box_name));
+        var isExp = !!state.expandedAnalyticsTopIds[rowId];
+        var dcTotal = (Number(item.clip_downloads) || 0) + (Number(item.cut_clips) || 0);
+        var sessions = Number(item.sessions) || 0;
+        var engaged = Number(item.engaged_sessions) || 0;
+        var engPct = sessions > 0 ? Math.round((engaged / sessions) * 100) : 0;
+        var errs = (Number(item.http_errors) || 0) + (Number(item.ai_errors) || 0);
+        var title = isClub ? (item.club_name || item.club_id || '--') : (item.box_id || '--');
+        var drillClub = item.club_id || '';
+        var drillBox = isClub ? '' : (item.box_id || '');
+        var drillLabel = isClub ? title : ((item.box_name || item.box_id || '') + (item.club_name ? (' · ' + item.club_name) : ''));
+
+        return '<article class="analytics-mcard compact-mrow' + (isExp ? ' is-expanded' : '') + '">' +
+          '<div class="mrow-head" role="button" tabindex="0" aria-expanded="' + (isExp ? 'true' : 'false') + '" data-toggle-mrow="analyticsTop" data-mrow-id="' + esc(rowId) + '">' +
+            '<div class="mrow-line1">' +
+              '<div class="mrow-primary"><span class="mrow-name">' + esc(title) + '</span></div>' +
+              '<div class="mrow-pills">' +
+                '<span class="mrow-pill pill-cyan">QR ' + esc(fmtCompact(item.qr_views)) + '</span>' +
+                '<span class="mrow-pill pill-ok">' + esc(fmtCompact(item.unique_visitors)) + ' kh</span>' +
+                '<span class="mrow-chevron" aria-hidden="true">' + svgIcon('chevronDown', 'ui-icon-sm') + '</span>' +
+              '</div>' +
+            '</div>' +
+            '<div class="mrow-line2 no-indent mono">' +
+              '<span class="mrow-metrics">' +
+                '<span>Phiên ' + esc(fmtCompact(sessions)) + '</span>' +
+                '<span class="mrow-sep">·</span><span>Cắt/Tải ' + esc(fmtCompact(dcTotal)) + '</span>' +
+                '<span class="mrow-sep">·</span><span>AI ' + esc(fmtCompact(item.ai_analyzes)) + '</span>' +
+                '<span class="mrow-sep">·</span><span>' + esc(fmtBytes(item.bytes_out)) + '</span>' +
+              '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="mrow-body">' +
+            '<div class="mcard-tel-grid">' +
+              '<div class="mcard-tel-cell"><span class="mcard-tel-label">Khách &amp; Quay lại</span><span class="mcard-tel-val">' + esc(fmtInt(item.unique_visitors)) + '</span><span class="mcard-tel-sub">Quay lại: ' + esc(fmtInt(item.returning_visitors || 0)) + '</span></div>' +
+              '<div class="mcard-tel-cell"><span class="mcard-tel-label">Phiên &amp; Tương tác</span><span class="mcard-tel-val">' + esc(fmtInt(sessions)) + '</span><span class="mcard-tel-sub">' + esc(engPct) + '% tương tác</span></div>' +
+              '<div class="mcard-tel-cell"><span class="mcard-tel-label">Clip &amp; CheckVAR</span><span class="mcard-tel-val text-emerald">' + esc(fmtInt(dcTotal)) + '</span><span class="mcard-tel-sub">Tải ' + esc(fmtInt(item.clip_downloads)) + ' · Cắt ' + esc(fmtInt(item.cut_clips)) + '</span></div>' +
+              '<div class="mcard-tel-cell"><span class="mcard-tel-label">AI Studio &amp; Lỗi</span><span class="mcard-tel-val text-purple">' + esc(fmtInt(item.ai_analyzes)) + '</span><span class="mcard-tel-sub">Xuất ' + esc(fmtInt(item.ai_exports)) + ' · Lỗi ' + esc(fmtInt(errs)) + '</span></div>' +
+            '</div>' +
+            '<div class="mrow-meta-line">' + renderSourceBadges(item, isClub) + '<span class="mono text-muted">' + esc(fmtIngestTime(item.last_ingest_at)) + '</span></div>' +
+            '<div class="mrow-actions">' +
+              '<button type="button" class="btn btn-cyan mrow-act-btn" data-ga-drill-club="' + esc(drillClub) + '" data-ga-drill-box="' + esc(drillBox) + '" data-ga-drill-label="' + esc(drillLabel) + '">Lọc chi tiết ' + (isClub ? 'quán này' : 'box này') + '</button>' +
+            '</div>' +
+          '</div>' +
+        '</article>';
+      }).join('');
     }
 
-    wrap.innerHTML = '<div class="table-scroll"><table class="scada-table tabular-nums">' +
-      '<thead><tr>' +
-        thSort('name', isClub ? 'CLB / Quán' : 'Box / CLB') +
-        '<th>Nguồn &amp; AI</th>' +
-        thSort('qr_views', 'Quét QR') +
-        thSort('unique_visitors', 'Khách') +
-        thSort('live_vod', 'Live / VOD') +
-        thSort('downloads_cuts', 'Tải & Cắt') +
-        thSort('ai_analyzes', 'AI Studio') +
-        thSort('bytes_out', 'Băng Thông') +
-        thSort('errors', 'Lỗi') +
-        '<th>Đẩy Gần Nhất</th>' +
-      '</tr></thead>' +
-      '<tbody>' + rowsHtml + '</tbody>' +
-    '</table></div>' +
-    renderPaginationBar('analyticsTop', pgTop, isClub ? 'CLB' : 'Box');
+    wrap.innerHTML =
+      '<div class="table-scroll desktop-only-table"><table class="scada-table tabular-nums">' +
+        '<thead><tr>' +
+          thSort('name', isClub ? 'CLB / Quán' : 'Box / CLB') +
+          '<th>Nguồn &amp; AI</th>' +
+          thSort('unique_visitors', 'Khách') +
+          thSort('sessions', 'Phiên') +
+          thSort('qr_views', 'Quét QR') +
+          thSort('downloads_cuts', 'Tải & Cắt') +
+          thSort('ai_analyzes', 'AI Studio') +
+          thSort('bytes_out', 'Băng Thông') +
+          thSort('errors', 'Lỗi') +
+          '<th>Đẩy Gần Nhất</th>' +
+        '</tr></thead>' +
+        '<tbody>' + rowsHtml + '</tbody>' +
+      '</table></div>' +
+      '<div class="mobile-card-list compact-list mobile-only-cards tabular-nums">' + mobileRowsHtml + '</div>' +
+      renderPaginationBar('analyticsTop', pgTop, isClub ? 'CLB' : 'Box');
   }
 
   function renderAnalyticsCamerasTable() {
     var wrap = document.getElementById('analytics-cameras-table-wrap');
     var countBadge = document.getElementById('analytics-cameras-count');
     if (!wrap) return;
-    var cams = Array.isArray(state.analyticsCameras) ? state.analyticsCameras : [];
+    var raw = Array.isArray(state.analyticsCameras) ? state.analyticsCameras : [];
+    var tokens = parseSearchQuery(state.analyticsCamerasSearch);
+    var cams = tokens ? raw.filter(function (c) { return matchesSearch(c, tokens); }) : raw;
+    syncSearchBoxState('analytics-cameras-search', 'analytics-cameras-match-count', cams.length, raw.length);
     if (countBadge) countBadge.textContent = fmtInt(cams.length) + ' bàn';
 
     var pgCam = paginateItems(cams, 'analyticsCameras');
     var rowsHtml = '';
+    var mobileRowsHtml = '';
+
     if (!cams.length) {
-      rowsHtml = '<tr><td colspan="10" class="analytics-empty-cell">Chưa có dữ liệu từng bàn / camera trong khung thời gian này — box sẽ tự động đẩy rollup mỗi 5 phút.</td></tr>';
+      rowsHtml = '<tr><td colspan="10" class="analytics-empty-cell">Chưa có dữ liệu từng bàn / camera phù hợp trong khung thời gian này.</td></tr>';
+      mobileRowsHtml = '<div class="empty-state" style="padding:20px 12px;">Chưa có dữ liệu bàn / camera phù hợp.</div>';
     } else {
       rowsHtml = pgCam.items.map(function (c, idx) {
         var rankNum = pgCam.start + idx;
         var aiErr = Number(c.ai_errors) || 0;
-        return '<tr>' +
+        return '<tr class="clickable-row" data-ga-drill-club="' + esc(c.club_id || '') + '" data-ga-drill-box="" data-ga-drill-label="' + esc(c.club_name || c.club_id || '') + '">' +
           '<td class="mono text-muted" style="font-weight:700;">#' + rankNum + '</td>' +
           '<td>' +
             '<div class="cell-primary">' + esc(c.table_name || c.camera_id || 'Camera') + '</div>' +
@@ -3106,24 +3868,137 @@
           '<td class="mono">' + esc(fmtBytes(c.bytes_out)) + '</td>' +
         '</tr>';
       }).join('');
+
+      /* Compact 50px Mobile Expandable Rows */
+      mobileRowsHtml = pgCam.items.map(function (c, idx) {
+        var rankNum = pgCam.start + idx;
+        var rowId = (c.box_id || 'b') + ':' + (c.camera_id || idx);
+        var isExp = !!state.expandedAnalyticsCamIds[rowId];
+        var dcTotal = (Number(c.clip_downloads) || 0) + (Number(c.cut_clips) || 0);
+        return '<article class="analytics-mcard compact-mrow' + (isExp ? ' is-expanded' : '') + '">' +
+          '<div class="mrow-head" role="button" tabindex="0" aria-expanded="' + (isExp ? 'true' : 'false') + '" data-toggle-mrow="analyticsCam" data-mrow-id="' + esc(rowId) + '">' +
+            '<div class="mrow-line1">' +
+              '<div class="mrow-primary"><span class="mono text-muted" style="font-size:11px;font-weight:700;">#' + rankNum + '</span><span class="mrow-name">' + esc(c.table_name || c.camera_id || 'Camera') + '</span></div>' +
+              '<div class="mrow-pills">' +
+                '<span class="mrow-pill pill-cyan">QR ' + esc(fmtCompact(c.qr_views)) + '</span>' +
+                '<span class="mrow-pill pill-ok">Clip ' + esc(fmtCompact(dcTotal)) + '</span>' +
+                '<span class="mrow-chevron" aria-hidden="true">' + svgIcon('chevronDown', 'ui-icon-sm') + '</span>' +
+              '</div>' +
+            '</div>' +
+            '<div class="mrow-line2 no-indent mono">' +
+              '<span class="mrow-id">' + esc(c.club_name || c.club_id || '--') + '</span>' +
+              '<span class="mrow-metrics">' +
+                '<span class="mrow-sep">·</span><span>' + esc(fmtCompact(c.unique_visitors)) + ' kh</span>' +
+                '<span class="mrow-sep">·</span><span>AI ' + esc(fmtCompact(c.ai_analyzes)) + '</span>' +
+                '<span class="mrow-sep">·</span><span>' + esc(fmtBytes(c.bytes_out)) + '</span>' +
+              '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="mrow-body">' +
+            '<div class="mcard-tel-grid">' +
+              '<div class="mcard-tel-cell"><span class="mcard-tel-label">Live / VOD</span><span class="mcard-tel-val">' + esc(fmtInt(c.live_hls)) + ' / ' + esc(fmtInt(c.vod_plays)) + '</span><span class="mcard-tel-sub">Khách: ' + esc(fmtInt(c.unique_visitors)) + '</span></div>' +
+              '<div class="mcard-tel-cell"><span class="mcard-tel-label">Tải &amp; CheckVAR</span><span class="mcard-tel-val text-emerald">' + esc(fmtInt(c.clip_downloads)) + ' / ' + esc(fmtInt(c.cut_clips)) + '</span><span class="mcard-tel-sub">' + esc(fmtCutMinutes(c.cut_seconds)) + '</span></div>' +
+              '<div class="mcard-tel-cell"><span class="mcard-tel-label">AI Studio</span><span class="mcard-tel-val text-purple">' + esc(fmtInt(c.ai_analyzes)) + '</span><span class="mcard-tel-sub">' + esc(fmtInt(c.ai_shots)) + ' cú · ' + esc(fmtInt(c.ai_exports)) + ' xuất</span></div>' +
+              '<div class="mcard-tel-cell"><span class="mcard-tel-label">Camera / Box</span><span class="mcard-tel-val mono">' + esc(c.camera_id || '--') + '</span><span class="mcard-tel-sub mono">' + esc(c.box_id || '--') + '</span></div>' +
+            '</div>' +
+            (c.club_id ? ('<div class="mrow-actions"><button type="button" class="btn btn-cyan mrow-act-btn" data-ga-drill-club="' + esc(c.club_id) + '" data-ga-drill-box="" data-ga-drill-label="' + esc(c.club_name || c.club_id) + '">Lọc CLB: ' + esc(c.club_name || c.club_id) + '</button></div>') : '') +
+          '</div>' +
+        '</article>';
+      }).join('');
     }
 
-    wrap.innerHTML = '<div class="table-scroll"><table class="scada-table tabular-nums">' +
-      '<thead><tr>' +
-        '<th>#</th>' +
-        '<th>Bàn / Camera</th>' +
-        '<th>CLB / Box</th>' +
-        '<th>Quét QR</th>' +
-        '<th>Khách</th>' +
-        '<th>Live / VOD</th>' +
-        '<th>Tải Clip</th>' +
-        '<th>Cắt CheckVAR</th>' +
-        '<th>AI Studio (Chạy / Cú / Xuất)</th>' +
-        '<th>Băng Thông</th>' +
-      '</tr></thead>' +
-      '<tbody>' + rowsHtml + '</tbody>' +
-    '</table></div>' +
-    renderPaginationBar('analyticsCameras', pgCam, 'bàn');
+    wrap.innerHTML =
+      '<div class="table-scroll desktop-only-table"><table class="scada-table tabular-nums">' +
+        '<thead><tr>' +
+          '<th>#</th>' +
+          '<th>Bàn / Camera</th>' +
+          '<th>CLB / Box</th>' +
+          '<th>Quét QR</th>' +
+          '<th>Khách</th>' +
+          '<th>Live / VOD</th>' +
+          '<th>Tải Clip</th>' +
+          '<th>Cắt CheckVAR</th>' +
+          '<th>AI Studio (Chạy / Cú / Xuất)</th>' +
+          '<th>Băng Thông</th>' +
+        '</tr></thead>' +
+        '<tbody>' + rowsHtml + '</tbody>' +
+      '</table></div>' +
+      '<div class="mobile-card-list compact-list mobile-only-cards tabular-nums">' + mobileRowsHtml + '</div>' +
+      renderPaginationBar('analyticsCameras', pgCam, 'bàn');
+  }
+
+  /* --------------------------------------------------------------------------
+     Shared Floating Tooltip Controller for GA4 SVG Charts & 7x24 Heatmap
+     -------------------------------------------------------------------------- */
+  function initAnalyticsTooltip() {
+    var view = document.getElementById('view-analytics');
+    var tip = document.getElementById('ga-float-tooltip');
+    if (!view || !tip) return;
+
+    function placeTip(x, y) {
+      var pad = 12;
+      var vw = window.innerWidth || 1024;
+      var vh = window.innerHeight || 768;
+      var w = tip.offsetWidth || 200;
+      var h = tip.offsetHeight || 52;
+      var left = x + 14;
+      if (left + w + pad > vw) left = Math.max(pad, x - w - 14);
+      var top = y - h - 12;
+      if (top < pad) top = Math.min(vh - h - pad, y + 16);
+      tip.style.left = Math.round(left) + 'px';
+      tip.style.top = Math.round(top) + 'px';
+    }
+
+    function showTipFor(target, clientX, clientY) {
+      var title = target.getAttribute('data-ga-tip-title') || '';
+      var body = target.getAttribute('data-ga-tip-body') || '';
+      if (!title && !body) return;
+      var lines = body.split(' | ').map(function (ln) {
+        return '<div class="ga-tip-line">' + esc(ln) + '</div>';
+      }).join('');
+      tip.innerHTML = '<div class="ga-tip-title">' + esc(title) + '</div>' + lines;
+      tip.hidden = false;
+      if (clientX !== undefined && clientY !== undefined) {
+        placeTip(clientX, clientY);
+      } else {
+        var r = target.getBoundingClientRect();
+        placeTip(r.left + r.width / 2, r.top);
+      }
+      var heatMsg = target.getAttribute('data-ga-heat-readout');
+      if (heatMsg) {
+        var ro = document.getElementById('ga-heatmap-readout');
+        if (ro) ro.textContent = heatMsg;
+      }
+    }
+
+    function hideTip() {
+      tip.hidden = true;
+    }
+
+    view.addEventListener('mouseover', function (e) {
+      var target = e.target.closest('[data-ga-tip-title]');
+      if (target) showTipFor(target, e.clientX, e.clientY);
+    });
+    view.addEventListener('mousemove', function (e) {
+      if (tip.hidden) return;
+      var target = e.target.closest('[data-ga-tip-title]');
+      if (!target) { hideTip(); return; }
+      placeTip(e.clientX, e.clientY);
+    });
+    view.addEventListener('mouseout', function (e) {
+      if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('[data-ga-tip-title]')) {
+        hideTip();
+      }
+    });
+    view.addEventListener('focusin', function (e) {
+      var target = e.target.closest('[data-ga-tip-title]');
+      if (target) showTipFor(target);
+    });
+    view.addEventListener('focusout', hideTip);
+    view.addEventListener('click', function (e) {
+      var cell = e.target.closest('[data-ga-heat-readout]');
+      if (cell) showTipFor(cell, e.clientX, e.clientY);
+    });
   }
 
   /* --------------------------------------------------------------------------
@@ -3135,7 +4010,8 @@
       hardening: 'hardening-search',
       cameras: 'cam-search-input',
       redbida: 'redbida-search',
-      handover: 'handover-club-search'
+      handover: 'handover-club-search',
+      analytics: 'analytics-top-search'
     };
     var id = map[state.activeView];
     var input = id ? document.getElementById(id) : null;
@@ -3167,12 +4043,19 @@
       history.replaceState(null, '', '#' + viewName);
     }
 
+    if (viewName !== 'analytics') {
+      stopAnalyticsRealtimePolling();
+    }
+
     if (viewName === 'fleet') loadFleetSummary();
     else if (viewName === 'hardening') loadHardeningView();
     else if (viewName === 'cameras') loadCamerasView();
     else if (viewName === 'redbida') loadRedbidaView();
     else if (viewName === 'handover') loadHandoverView();
-    else if (viewName === 'analytics') loadAnalyticsView();
+    else if (viewName === 'analytics') {
+      loadAnalyticsView();
+      startAnalyticsRealtimePolling(false);
+    }
   }
 
   function handleHashRoute() {
@@ -3639,8 +4522,20 @@
         es.onopen = function () {
           setSseBadge(true);
         };
-        var onEvent = function () {
+        var onEvent = function (ev) {
           setSseBadge(true);
+          if (ev && ev.data) {
+            try {
+              var parsed = JSON.parse(ev.data);
+              var rs = parsed && parsed.realtime_summary;
+              if (rs && typeof rs.active_5m === 'number') {
+                var navBadge = document.getElementById('nav-badge-analytics');
+                if (navBadge && rs.active_5m > 0) {
+                  navBadge.textContent = fmtCompact(rs.active_5m) + ' LIVE';
+                }
+              }
+            } catch (_ignore) {}
+          }
           scheduleRealtimeSummaryRefresh();
         };
         es.addEventListener('fleet_update', onEvent);
@@ -3669,6 +4564,8 @@
     if (kind === 'camera') return state.expandedCameraIds;
     if (kind === 'rbDomain') return state.expandedRedbidaDomainIds;
     if (kind === 'rbBox') return state.expandedRedbidaBoxIds;
+    if (kind === 'analyticsTop') return state.expandedAnalyticsTopIds;
+    if (kind === 'analyticsCam') return state.expandedAnalyticsCamIds;
     return null;
   }
 
@@ -3789,6 +4686,14 @@
         state.handoverSearch = '';
         resetTabPage('handoverClubs');
         renderHandoverClubPicker();
+      } else if (targetId === 'analytics-top-search') {
+        state.analyticsTopSearch = '';
+        resetTabPage('analyticsTop');
+        renderAnalyticsTopTable(state.analyticsOverview || {});
+      } else if (targetId === 'analytics-cameras-search') {
+        state.analyticsCamerasSearch = '';
+        resetTabPage('analyticsCameras');
+        renderAnalyticsCamerasTable();
       }
       inp.focus();
     });
@@ -4338,13 +5243,15 @@
       });
     }
 
-    /* Analytics events */
+    /* Analytics GA4 events */
     var aRangeChips = document.getElementById('analytics-range-chips');
     if (aRangeChips) {
       aRangeChips.addEventListener('click', function (e) {
         var chip = e.target.closest('.filter-chip[data-range]');
         if (!chip) return;
         state.analyticsRange = chip.getAttribute('data-range') || '7d';
+        state.analyticsFrom = '';
+        state.analyticsTo = '';
         aRangeChips.querySelectorAll('.filter-chip').forEach(function (c) {
           c.classList.toggle('active', c === chip);
         });
@@ -4354,14 +5261,61 @@
       });
     }
 
+    var aDateFrom = document.getElementById('analytics-date-from');
+    var aDateTo = document.getElementById('analytics-date-to');
+    function onAnalyticsCustomDateChange() {
+      var f = aDateFrom ? aDateFrom.value : '';
+      var t = aDateTo ? aDateTo.value : '';
+      if (!f || !t || f > t) return;
+      state.analyticsRange = 'custom';
+      state.analyticsFrom = f;
+      state.analyticsTo = t;
+      if (aRangeChips) {
+        aRangeChips.querySelectorAll('.filter-chip').forEach(function (c) {
+          c.classList.remove('active');
+        });
+      }
+      resetTabPage('analyticsTop');
+      resetTabPage('analyticsCameras');
+      loadAnalyticsView();
+    }
+    if (aDateFrom) aDateFrom.addEventListener('change', onAnalyticsCustomDateChange);
+    if (aDateTo) aDateTo.addEventListener('change', onAnalyticsCustomDateChange);
+
+    var aCompareToggle = document.getElementById('analytics-compare-toggle');
+    if (aCompareToggle) {
+      aCompareToggle.addEventListener('change', function () {
+        state.analyticsCompare = !!aCompareToggle.checked;
+        loadAnalyticsView();
+      });
+    }
+
     var aClubFilter = document.getElementById('analytics-club-filter');
     if (aClubFilter) {
       aClubFilter.addEventListener('change', function () {
-        state.analyticsClubId = aClubFilter.value || '';
-        state.analyticsBoxId = '';
-        state.analyticsDrillClubId = '';
-        state.analyticsDrillBoxId = '';
-        state.analyticsDrillLabel = '';
+        var val = aClubFilter.value || '';
+        if (val) {
+          drillDownAnalytics(val, '', resolveAnalyticsClubName(val));
+        } else {
+          clearAnalyticsDrillDown();
+        }
+      });
+    }
+
+    var aSportFilter = document.getElementById('analytics-sport-filter');
+    if (aSportFilter) {
+      aSportFilter.addEventListener('change', function () {
+        state.analyticsSport = aSportFilter.value || 'all';
+        resetTabPage('analyticsTop');
+        resetTabPage('analyticsCameras');
+        loadAnalyticsView();
+      });
+    }
+
+    var aSourceFilter = document.getElementById('analytics-source-filter');
+    if (aSourceFilter) {
+      aSourceFilter.addEventListener('change', function () {
+        state.analyticsSource = aSourceFilter.value || 'all';
         resetTabPage('analyticsTop');
         resetTabPage('analyticsCameras');
         loadAnalyticsView();
@@ -4382,6 +5336,125 @@
     if (aRefreshBtn) {
       aRefreshBtn.addEventListener('click', function () {
         loadAnalyticsView();
+      });
+    }
+
+    var aCrumbReset = document.getElementById('analytics-breadcrumb-reset');
+    if (aCrumbReset) {
+      aCrumbReset.addEventListener('click', clearAnalyticsDrillDown);
+    }
+    var aCrumbTrail = document.getElementById('analytics-breadcrumb-trail');
+    if (aCrumbTrail) {
+      aCrumbTrail.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-ga-crumb]');
+        if (!btn) return;
+        var kind = btn.getAttribute('data-ga-crumb');
+        if (kind === 'all') clearAnalyticsDrillDown();
+        else if (kind === 'club') {
+          var cid = btn.getAttribute('data-crumb-club') || '';
+          if (cid) drillDownAnalytics(cid, '', resolveAnalyticsClubName(cid));
+        }
+      });
+    }
+
+    var aRtHotTabs = document.getElementById('ga-rt-hot-tabs');
+    if (aRtHotTabs) {
+      aRtHotTabs.addEventListener('click', function (e) {
+        var btn = e.target.closest('.segmented-btn[data-rt-hot]');
+        if (!btn) return;
+        state.analyticsRtHotTab = btn.getAttribute('data-rt-hot') || 'clubs';
+        syncRtHotTabsUi();
+        renderAnalyticsRealtime();
+      });
+    }
+
+    var aRtHotList = document.getElementById('ga-rt-hot-list');
+    if (aRtHotList) {
+      aRtHotList.addEventListener('click', function (e) {
+        var item = e.target.closest('[data-ga-drill-club]');
+        if (!item) return;
+        drillDownAnalytics(
+          item.getAttribute('data-ga-drill-club') || '',
+          item.getAttribute('data-ga-drill-box') || '',
+          item.getAttribute('data-ga-drill-label') || ''
+        );
+      });
+    }
+
+    var aMetricTabs = document.getElementById('ga-trend-metric-tabs');
+    if (aMetricTabs) {
+      aMetricTabs.addEventListener('click', function (e) {
+        var tab = e.target.closest('.ga-metric-tab[data-trend-metric]');
+        if (!tab) return;
+        state.analyticsTrendMetric = tab.getAttribute('data-trend-metric') || 'unique_visitors';
+        aMetricTabs.querySelectorAll('.ga-metric-tab').forEach(function (b) {
+          var isAct = b === tab;
+          b.classList.toggle('active', isAct);
+          b.setAttribute('aria-selected', isAct ? 'true' : 'false');
+        });
+        renderAnalyticsDailyTrend(state.analyticsOverview || {});
+      });
+    }
+
+    var aHeatTabs = document.getElementById('ga-heat-mode-tabs');
+    if (aHeatTabs) {
+      aHeatTabs.addEventListener('click', function (e) {
+        var btn = e.target.closest('.segmented-btn[data-heat-mode]');
+        if (!btn) return;
+        state.analyticsHeatMode = btn.getAttribute('data-heat-mode') || 'heatmap';
+        aHeatTabs.querySelectorAll('.segmented-btn').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+        var hmView = document.getElementById('ga-heatmap-view');
+        var barView = document.getElementById('analytics-peak-chart');
+        if (hmView) hmView.hidden = state.analyticsHeatMode !== 'heatmap';
+        if (barView) barView.hidden = state.analyticsHeatMode !== 'bars';
+        if (state.analyticsHeatMode === 'heatmap') renderAnalyticsHeatmap(state.analyticsOverview || {});
+        else renderAnalyticsPeakHours(state.analyticsOverview || {});
+      });
+    }
+
+    var aTopSearch = document.getElementById('analytics-top-search');
+    if (aTopSearch) {
+      var applyATopSearch = makeDebounced(function () {
+        state.analyticsTopSearch = aTopSearch.value;
+        resetTabPage('analyticsTop');
+        renderAnalyticsTopTable(state.analyticsOverview || {});
+      }, 80);
+      aTopSearch.addEventListener('input', function () {
+        var wrap = aTopSearch.closest('.search-box');
+        if (wrap) {
+          var hasVal = aTopSearch.value.length > 0;
+          wrap.classList.toggle('has-value', hasVal);
+          var cb = wrap.querySelector('.search-clear-btn');
+          if (cb) cb.hidden = !hasVal;
+        }
+        applyATopSearch();
+      });
+      aTopSearch.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); applyATopSearch.flush(); }
+      });
+    }
+
+    var aCamSearch = document.getElementById('analytics-cameras-search');
+    if (aCamSearch) {
+      var applyACamSearch = makeDebounced(function () {
+        state.analyticsCamerasSearch = aCamSearch.value;
+        resetTabPage('analyticsCameras');
+        renderAnalyticsCamerasTable();
+      }, 80);
+      aCamSearch.addEventListener('input', function () {
+        var wrap = aCamSearch.closest('.search-box');
+        if (wrap) {
+          var hasVal = aCamSearch.value.length > 0;
+          wrap.classList.toggle('has-value', hasVal);
+          var cb = wrap.querySelector('.search-clear-btn');
+          if (cb) cb.hidden = !hasVal;
+        }
+        applyACamSearch();
+      });
+      aCamSearch.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); applyACamSearch.flush(); }
       });
     }
 
@@ -4415,40 +5488,66 @@
           renderAnalyticsTopTable(state.analyticsOverview || {});
           return;
         }
+        var mDrillBtn = e.target.closest('button[data-ga-drill-club]');
+        if (mDrillBtn) {
+          drillDownAnalytics(
+            mDrillBtn.getAttribute('data-ga-drill-club') || '',
+            mDrillBtn.getAttribute('data-ga-drill-box') || '',
+            mDrillBtn.getAttribute('data-ga-drill-label') || ''
+          );
+          return;
+        }
         var row = e.target.closest('tr[data-drill-club], tr[data-drill-box]');
         if (!row) return;
         var dClub = row.getAttribute('data-drill-club') || '';
         var dBox = row.getAttribute('data-drill-box') || '';
         var dLabel = row.getAttribute('data-drill-label') || '';
 
-        var sameClub = (dClub === state.analyticsDrillClubId && !dBox && !state.analyticsDrillBoxId);
-        var sameBox = (dBox && dBox === state.analyticsDrillBoxId);
+        var sameClub = (dClub === state.analyticsClubId && !dBox && !state.analyticsBoxId);
+        var sameBox = (dBox && dBox === state.analyticsBoxId);
         if (sameClub || sameBox) {
-          state.analyticsDrillClubId = '';
-          state.analyticsDrillBoxId = '';
-          state.analyticsDrillLabel = '';
+          clearAnalyticsDrillDown();
         } else {
-          state.analyticsDrillClubId = dClub;
-          state.analyticsDrillBoxId = dBox;
-          state.analyticsDrillLabel = dLabel;
+          drillDownAnalytics(dClub, dBox, dLabel);
         }
-        resetTabPage('analyticsCameras');
-        renderAnalyticsTopTable(state.analyticsOverview || {});
-        loadAnalyticsCameras();
+      });
+    }
+
+    var aCamWrap = document.getElementById('analytics-cameras-table-wrap');
+    if (aCamWrap) {
+      aCamWrap.addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-ga-drill-club]');
+        if (btn) {
+          drillDownAnalytics(
+            btn.getAttribute('data-ga-drill-club') || '',
+            '',
+            btn.getAttribute('data-ga-drill-label') || ''
+          );
+          return;
+        }
+        var row = e.target.closest('tr[data-ga-drill-club]');
+        if (row) {
+          var cid = row.getAttribute('data-ga-drill-club') || '';
+          if (cid && cid !== state.analyticsClubId) {
+            drillDownAnalytics(cid, '', row.getAttribute('data-ga-drill-label') || '');
+          }
+        }
       });
     }
 
     var aClearDrillBtn = document.getElementById('analytics-clear-drill-btn');
     if (aClearDrillBtn) {
-      aClearDrillBtn.addEventListener('click', function () {
-        state.analyticsDrillClubId = '';
-        state.analyticsDrillBoxId = '';
-        state.analyticsDrillLabel = '';
-        resetTabPage('analyticsCameras');
-        renderAnalyticsTopTable(state.analyticsOverview || {});
-        loadAnalyticsCameras();
-      });
+      aClearDrillBtn.addEventListener('click', clearAnalyticsDrillDown);
     }
+
+    /* Pause/Resume GA4 Realtime polling on tab visibility changes (Zero background spam) */
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) {
+        stopAnalyticsRealtimePolling();
+      } else if (state.activeView === 'analytics') {
+        startAnalyticsRealtimePolling(true);
+      }
+    });
 
     window.addEventListener('hashchange', handleHashRoute);
   }
@@ -4460,6 +5559,7 @@
     initChangePasswordModal();
     initMobileKpiToggle();
     initStickyCockpitBar();
+    initAnalyticsTooltip();
     bindEvents();
     loadFleetSummary().then(function () {
       handleHashRoute();
