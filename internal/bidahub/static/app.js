@@ -61,8 +61,7 @@
     return '<svg class="' + className + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + body + '</svg>';
   }
 
-  var initialMobile = (typeof window !== 'undefined' && window.innerWidth < 768);
-  var defaultListPageSize = initialMobile ? 10 : 20;
+  var defaultListPageSize = 20;
 
   var VIEW_LABELS = {
     fleet: 'Đội Box',
@@ -80,6 +79,11 @@
     fleetSearch: '',
     groupByClub: true,
     collapsedClubs: {},
+    expandedMobileBoxIds: {},
+    expandedHardeningIds: {},
+    expandedCameraIds: {},
+    expandedRedbidaDomainIds: {},
+    expandedRedbidaBoxIds: {},
     lastFleetRenderSig: '',
     openCardMenuId: null,
     pendingFleetRender: false,
@@ -890,43 +894,57 @@
         grp.boxes.forEach(function (b) { visibleBoxes.push(b); });
       });
 
+      var expandedFlags = visibleBoxes.filter(function (b) {
+        return !!state.expandedMobileBoxIds[b.id || b.box_id || ''];
+      }).map(function (b) { return b.id || b.box_id || ''; });
+
       var sig = buildFleetRenderSignature(visibleBoxes, [
         'CLUB', state.fleetFilter, state.fleetSearch, pg.page, pg.pageSize,
-        filtered.length, groupOrder.length, collapsedFlags.join(',')
+        filtered.length, groupOrder.length, collapsedFlags.join(','), expandedFlags.join(',')
       ].join('|'));
 
       if (!force && sig === state.lastFleetRenderSig) return;
       state.lastFleetRenderSig = sig;
 
+      var anyRowExpanded = expandedFlags.length > 0;
+      var anyClubOpen = expandedCount > 0;
       var ledgerHtml = '<div class="club-ledger-strip">' +
         '<div class="club-ledger-meta">' +
           '<span><strong>' + esc(fmtInt(groupOrder.length)) + '</strong> CLB</span>' +
           '<span class="mkpi-sep">·</span>' +
           '<span><strong>' + esc(fmtInt(filtered.length)) + '</strong> Box</span>' +
-          '<span class="mkpi-sep">·</span>' +
-          '<span>Đang mở <strong>' + esc(expandedCount) + '/' + esc(pageGroups.length) + '</strong> CLB trên trang</span>' +
+          '<span class="ledger-desktop-only"><span class="mkpi-sep">·</span> <span>Đang mở <strong>' + esc(expandedCount) + '/' + esc(pageGroups.length) + '</strong> CLB trên trang</span></span>' +
         '</div>' +
-        '<div class="toolbar-group">' +
+        '<div class="toolbar-group desktop-only-inline">' +
           '<button type="button" class="btn btn-xs" data-clubs-action="expand-all">Mở toàn bộ</button>' +
           '<button type="button" class="btn btn-xs" data-clubs-action="collapse-all">Thu gọn</button>' +
+        '</div>' +
+        '<div class="mobile-only-inline">' +
+          '<button type="button" class="btn btn-xs ledger-mini-btn" data-mobile-rows-action="toggle-all">' + (anyRowExpanded ? 'Thu dòng' : 'Mở dòng') + '</button>' +
+          '<button type="button" class="btn btn-xs ledger-mini-btn" data-clubs-action="' + (anyClubOpen ? 'collapse-all' : 'expand-all') + '">' + (anyClubOpen ? 'Thu CLB' : 'Mở CLB') + '</button>' +
         '</div>' +
       '</div>';
 
       var groupsHtml = pageGroups.map(function (grp) {
         var isPickle = String(grp.branding || '').toLowerCase() === 'pickleball' || grp.club_name.toLowerCase().indexOf('pickle') !== -1;
         var brandBadge = isPickle
-          ? '<span class="badge badge-amber">' + svgIcon('pickle', 'ui-icon-sm') + '<span>Pickleball</span></span>'
-          : '<span class="badge badge-cyan">' + svgIcon('pool', 'ui-icon-sm') + '<span>Billiards</span></span>';
+          ? '<span class="badge badge-amber club-badge-desktop">' + svgIcon('pickle', 'ui-icon-sm') + '<span>Pickleball</span></span>'
+          : '<span class="badge badge-cyan club-badge-desktop">' + svgIcon('pool', 'ui-icon-sm') + '<span>Billiards</span></span>';
+        var mobileBrandIcon = isPickle
+          ? '<span class="club-brand-dot-mobile text-amber" title="Pickleball">' + svgIcon('pickle', 'ui-icon-sm') + '</span>'
+          : '';
         var onlineInClub = grp.boxes.filter(function (x) { return x.online; }).length;
         var offlineInClub = grp.boxes.length - onlineInClub;
         var multiBadge = grp.boxes.length > 1
-          ? '<span class="badge badge-purple">' + grp.boxes.length + ' Box (' + onlineInClub + '/' + grp.boxes.length + ' Online)</span>'
-          : '<span class="badge ' + (onlineInClub > 0 ? 'badge-emerald' : 'badge-crimson') + '">' + (onlineInClub > 0 ? '1/1 Online' : '0/1 Offline') + '</span>';
+          ? '<span class="badge badge-purple club-badge-desktop">' + grp.boxes.length + ' Box (' + onlineInClub + '/' + grp.boxes.length + ' Online)</span>'
+          : '<span class="badge club-badge-desktop ' + (onlineInClub > 0 ? 'badge-emerald' : 'badge-crimson') + '">' + (onlineInClub > 0 ? '1/1 Online' : '0/1 Offline') + '</span>';
         var clubOffBadge = offlineInClub > 0
-          ? '<span class="badge badge-crimson">' + offlineInClub + ' Offline</span>'
+          ? '<span class="badge badge-crimson club-badge-desktop">' + offlineInClub + ' Offline</span>'
           : '';
+        var mobileCountTone = offlineInClub > 0 ? 'badge-crimson' : (grp.boxes.length > 1 ? 'badge-purple' : 'badge-emerald');
+        var mobileCountBadge = '<span class="badge club-count-mobile ' + mobileCountTone + '">' + esc(onlineInClub) + '/' + esc(grp.boxes.length) + '</span>';
         var portalBtn = grp.portal_token
-          ? '<a href="/portal/' + encodeURIComponent(grp.portal_token) + '/" target="_blank" rel="noopener" class="btn btn-xs">' + svgIcon('key', 'ui-icon-sm') + '<span>Cổng Chủ Quán</span></a>'
+          ? '<a href="/portal/' + encodeURIComponent(grp.portal_token) + '/" target="_blank" rel="noopener" class="btn btn-xs club-portal-btn" title="Mở Cổng Chủ Quán: ' + esc(grp.club_name) + '" aria-label="Cổng Chủ Quán ' + esc(grp.club_name) + '">' + svgIcon('key', 'ui-icon-sm') + '<span class="club-portal-label">Cổng Chủ Quán</span></a>'
           : '';
         var isCollapsed = !hasActiveFilter && !!state.collapsedClubs[grp.club_id];
 
@@ -934,18 +952,20 @@
           '<div class="club-header is-collapsible" data-toggle-club="' + esc(grp.club_id) + '" role="button" tabindex="0" aria-expanded="' + (!isCollapsed ? 'true' : 'false') + '">' +
             '<div class="club-title-group">' +
               '<span class="club-chevron" aria-hidden="true">' + svgIcon('chevronDown', 'ui-icon-sm') + '</span>' +
+              mobileBrandIcon +
               '<h3 class="club-title">' + esc(grp.club_name) + '</h3>' +
               brandBadge +
               multiBadge +
               clubOffBadge +
             '</div>' +
-            '<div class="toolbar-group">' +
+            '<div class="club-header-right">' +
+              mobileCountBadge +
               portalBtn +
             '</div>' +
           '</div>' +
           '<div class="club-body">' +
             renderBoxesTableHtml(grp.boxes) +
-            renderBoxesMobileCardsHtml(grp.boxes) +
+            renderBoxesMobileCardsHtml(grp.boxes, true) +
           '</div>' +
         '</div>';
       }).join('');
@@ -955,17 +975,32 @@
     } else {
       var pgFlat = paginateItems(filtered, 'fleet');
       var flatBoxes = pgFlat.items;
+      var flatExpandedFlags = flatBoxes.filter(function (b) {
+        return !!state.expandedMobileBoxIds[b.id || b.box_id || ''];
+      }).map(function (b) { return b.id || b.box_id || ''; });
       var flatSig = buildFleetRenderSignature(flatBoxes, [
-        'FLAT', state.fleetFilter, state.fleetSearch, pgFlat.page, pgFlat.pageSize, filtered.length
+        'FLAT', state.fleetFilter, state.fleetSearch, pgFlat.page, pgFlat.pageSize, filtered.length, flatExpandedFlags.join(',')
       ].join('|'));
 
       if (!force && flatSig === state.lastFleetRenderSig) return;
       state.lastFleetRenderSig = flatSig;
 
+      var flatLedgerHtml = '<div class="club-ledger-strip mobile-only-ledger">' +
+        '<div class="club-ledger-meta">' +
+          '<span><strong>' + esc(fmtInt(filtered.length)) + '</strong> Box</span>' +
+          '<span class="mkpi-sep">·</span>' +
+          '<span>Trang ' + esc(pgFlat.page) + '/' + esc(pgFlat.totalPages) + '</span>' +
+        '</div>' +
+        '<div class="mobile-only-inline">' +
+          '<button type="button" class="btn btn-xs ledger-mini-btn" data-mobile-rows-action="toggle-all">' + (flatExpandedFlags.length > 0 ? 'Thu dòng' : 'Mở dòng') + '</button>' +
+        '</div>' +
+      '</div>';
+
       container.innerHTML =
+        flatLedgerHtml +
         '<div class="club-section">' +
           renderBoxesTableHtml(flatBoxes) +
-          renderBoxesMobileCardsHtml(flatBoxes) +
+          renderBoxesMobileCardsHtml(flatBoxes, false) +
         '</div>' +
         renderPaginationBar('fleet', pgFlat, 'Box');
     }
@@ -1069,14 +1104,27 @@
     '</table></div>';
   }
 
-  /* /device/86 NodeProTableMobileCard Anatomy — Mobile (<768px) */
-  function renderBoxesMobileCardsHtml(boxList) {
+  /* Compact Scan-First Expandable Accordion Rows — Mobile (<768px) */
+  function formatCompactBoxName(b, isGrouped) {
+    var boxId = b.id || b.box_id || '';
+    var rawName = String(b.name || '').trim();
+    var clubName = String(b.club_name || '').trim();
+    if (!rawName) return clubName || boxId;
+    if (isGrouped && clubName && rawName.length > clubName.length && rawName.indexOf(clubName) === 0) {
+      var trimmed = rawName.slice(clubName.length).replace(/^[\s\-—–·:]+/, '').trim();
+      if (trimmed) return trimmed;
+    }
+    return rawName;
+  }
+
+  function renderBoxesMobileCardsHtml(boxList, isGrouped) {
     var cards = boxList.map(function (b) {
       var boxId = b.id || b.box_id || '';
       var isOnline = !!b.online;
+      var isExpanded = !!state.expandedMobileBoxIds[boxId];
       var cpuPctVal = Number(b.cpu_pct || 0);
       var cpuBarClass = cpuPctVal >= 85 ? 'danger' : (cpuPctVal >= 65 ? 'warn' : 'ok');
-      var tempC = b.temp_c || 54;
+      var tempC = Number(b.temp_c || 54);
       var cpuCores = b.cpu_cores || 4;
 
       var ramTotal = b.ram_total_mb || 1945;
@@ -1087,89 +1135,113 @@
 
       var swapTotal = b.swap_total_mb || b.zram_total_mb || 0;
       var swapUsed = b.swap_used_mb !== undefined ? b.swap_used_mb : (b.zram_used_mb || 0);
-      var sdPct = b.sd_used_pct || 38;
+      var sdPct = Number(b.sd_used_pct || 38);
       var sdFs = b.sd_fs_type || 'f2fs';
       var sdTone = sdPct >= 88 ? 'text-crimson' : (sdPct >= 75 ? 'text-amber' : 'text-emerald');
 
       var ffAct = b.ffmpeg_count !== undefined ? b.ffmpeg_count : (b.cameras_count || 6) * 2;
       var ffExp = b.ffmpeg_expected !== undefined ? b.ffmpeg_expected : (b.cameras_count || 6) * 2;
+      var ffOk = ffAct >= ffExp && ffExp > 0;
       var hScore = b.hardening_score !== undefined ? b.hardening_score : 8;
       var hMax = b.hardening_max || 8;
+      var hOk = hScore >= hMax;
       var rxMbps = b.rx_mbps !== undefined ? Number(b.rx_mbps).toFixed(1) : '0.0';
       var camCount = b.cameras_count || 0;
-      var titleText = b.name || b.club_name || boxId;
-      var statusText = isOnline
-        ? ('ONLINE · ' + esc(b.rtt_ms || 0) + 'ms · ' + esc(b.uptime_human || '--'))
-        : 'OFFLINE · Mất kết nối';
+      var rttMs = Number(b.rtt_ms || 0);
 
-      var portalLink = b.portal_token
-        ? '<a href="/portal/' + encodeURIComponent(b.portal_token) + '/" target="_blank" rel="noopener">' + svgIcon('key', 'ui-icon-sm text-amber') + '<span>Cổng Chủ Quán</span></a>'
+      /* Threshold-only tinting on Line 2 so anomalies pop immediately while scanning 8-15 nodes */
+      var rttCls = rttMs >= 300 ? 'text-crimson mrow-alert-txt' : (rttMs >= 150 ? 'text-amber mrow-alert-txt' : '');
+      var ramCls = ramPct >= 88 ? 'text-crimson mrow-alert-txt' : (ramPct >= 75 ? 'text-amber mrow-alert-txt' : '');
+      var sdCls = sdPct >= 88 ? 'text-crimson mrow-alert-txt' : (sdPct >= 75 ? 'text-amber mrow-alert-txt' : '');
+      var tempCls = tempC >= 75 ? 'text-crimson mrow-alert-txt' : (tempC >= 65 ? 'text-amber mrow-alert-txt' : '');
+
+      var displayName = formatCompactBoxName(b, isGrouped);
+
+      var metricsLine = isOnline
+        ? ('<span class="mrow-sep">·</span>' +
+           '<span class="' + rttCls + '">' + esc(Math.round(rttMs)) + 'ms</span>' +
+           '<span class="mrow-sep">·</span>' +
+           '<span class="' + ramCls + '">RAM ' + esc(ramPct) + '%</span>' +
+           '<span class="mrow-sep">·</span>' +
+           '<span class="' + sdCls + '">SD ' + esc(Math.round(sdPct)) + '%</span>' +
+           '<span class="mrow-sep">·</span>' +
+           '<span class="' + tempCls + '">' + esc(Math.round(tempC)) + '°C</span>')
+        : ('<span class="mrow-sep">·</span>' +
+           '<span class="text-crimson mrow-alert-txt">OFFLINE</span>' +
+           '<span class="mrow-sep">·</span>' +
+           '<span>' + esc(b.vpn_ip || '--') + '</span>' +
+           '<span class="mrow-sep">·</span>' +
+           '<span class="' + sdCls + '">SD ' + esc(Math.round(sdPct)) + '%</span>');
+
+      var portalAction = b.portal_token
+        ? '<a href="/portal/' + encodeURIComponent(b.portal_token) + '/" target="_blank" rel="noopener" class="btn mrow-act-btn">' + svgIcon('key', 'ui-icon-sm text-amber') + '<span>Cổng CQ</span></a>'
         : '';
 
-      return '<article class="fleet-mcard' + (isOnline ? '' : ' is-offline') + '" data-card-box="' + esc(boxId) + '">' +
-        '<div class="mcard-head" data-open-box="' + esc(boxId) + '">' +
-          '<div class="mcard-head-left">' +
-            '<span class="led-dot ' + (isOnline ? 'emerald' : 'crimson') + '"></span>' +
-            '<div class="mcard-title-wrap">' +
-              '<div class="mcard-title">' + esc(titleText) + '</div>' +
-              '<div class="mcard-sub mono">' + esc(boxId) + ' · ' + statusText + '</div>' +
+      return '<article class="fleet-mcard mobile-box-card' + (isOnline ? '' : ' is-offline') + (isExpanded ? ' is-expanded' : '') + '" data-card-box="' + esc(boxId) + '" data-compact-row="fleet">' +
+        '<div class="mrow-head" data-toggle-mrow="fleet" data-mrow-id="' + esc(boxId) + '" role="button" tabindex="0" aria-expanded="' + (isExpanded ? 'true' : 'false') + '">' +
+          '<div class="mrow-line1">' +
+            '<div class="mrow-primary">' +
+              '<span class="led-dot ' + (isOnline ? 'emerald' : 'crimson') + '"></span>' +
+              '<span class="mrow-name">' + esc(displayName) + '</span>' +
+            '</div>' +
+            '<div class="mrow-pills">' +
+              (!isOnline ? '<span class="mrow-pill pill-crimson">OFF</span>' : '') +
+              '<span class="mrow-pill ' + (ffOk ? 'pill-ok' : 'pill-amber') + '">FF ' + esc(ffAct) + '/' + esc(ffExp) + '</span>' +
+              '<span class="mrow-pill ' + (hOk ? 'pill-quiet' : 'pill-amber') + '">' + esc(hScore) + '/' + esc(hMax) + '</span>' +
+              '<span class="mrow-chevron" aria-hidden="true">' + svgIcon('chevronDown', 'ui-icon-sm') + '</span>' +
             '</div>' +
           '</div>' +
-          '<div class="mcard-head-right">' +
-            '<span class="badge ' + ((ffAct >= ffExp && ffExp > 0) ? 'badge-emerald' : 'badge-amber') + '">FF ' + esc(ffAct) + '/' + esc(ffExp) + '</span>' +
-            '<span class="badge ' + (hScore >= hMax ? 'badge-emerald' : 'badge-amber') + '">' + esc(hScore) + '/' + esc(hMax) + '</span>' +
-            svgIcon('chevronRight', 'ui-icon-sm text-muted') +
+          '<div class="mrow-line2 mono">' +
+            '<span class="mrow-id">' + esc(boxId) + '</span>' +
+            '<span class="mrow-metrics">' + metricsLine + '</span>' +
           '</div>' +
         '</div>' +
 
-        '<div class="mcard-tel-grid">' +
-          '<div class="mcard-tel-cell">' +
-            '<span class="mcard-tel-label">RAM</span>' +
-            '<span class="mcard-tel-val mono">' + esc(ramPct) + '%</span>' +
-            '<div class="mini-meter" style="max-width:100%;"><div class="mini-meter-fill ' + ramBarClass + '" style="width:' + Math.min(100, Math.max(0, ramPct)) + '%"></div></div>' +
-            '<span class="mcard-tel-sub mono">' + esc(ramUsed) + '/' + esc(ramTotal) + 'M · Avail ' + esc(ramAvail) + 'M</span>' +
-          '</div>' +
-          '<div class="mcard-tel-cell">' +
-            '<span class="mcard-tel-label">CPU / Nhiệt</span>' +
-            '<span class="mcard-tel-val mono">' + fmtNum(b.cpu_pct, 1) + '% · ' + fmtNum(tempC, 1) + '°C</span>' +
-            '<div class="mini-meter" style="max-width:100%;"><div class="mini-meter-fill ' + cpuBarClass + '" style="width:' + Math.min(100, Math.max(0, cpuPctVal)) + '%"></div></div>' +
-            '<span class="mcard-tel-sub mono">Load ' + fmtNum(b.load_avg_1m, 2) + ' (' + esc(cpuCores) + 'C)</span>' +
-          '</div>' +
-          '<div class="mcard-tel-cell">' +
-            '<span class="mcard-tel-label">SD / Swap</span>' +
-            '<span class="mcard-tel-val mono"><span class="' + sdTone + '">SD ' + esc(sdPct) + '%</span> · ' + esc(b.sd_total_gb || 64) + 'G ' + esc(sdFs) + '</span>' +
-            '<span class="mcard-tel-sub mono">Swap ' + esc(swapUsed) + '/' + esc(swapTotal) + 'M</span>' +
-          '</div>' +
-          '<div class="mcard-tel-cell">' +
-            '<span class="mcard-tel-label">Lưu lượng / Heap</span>' +
-            '<span class="mcard-tel-val mono">RX ' + esc(rxMbps) + ' Mbps</span>' +
-            '<span class="mcard-tel-sub mono">Heap ' + fmtNum(b.heap_alloc_mb, 1) + 'M · ' + esc(camCount) + ' Cam</span>' +
-          '</div>' +
-        '</div>' +
-
-        '<div class="mcard-net-strip">' +
-          '<span class="mcard-net-chip">VPN ' + esc(b.vpn_ip || '--') + '</span>' +
-          '<span class="mcard-net-chip">LAN ' + esc(b.lan_ip || '--') + '</span>' +
-          '<span class="mcard-net-chip">grp ' + esc(b.shinobi_group_key || '--') + '</span>' +
-        '</div>' +
-
-        '<div class="mcard-foot">' +
-          '<span class="mcard-foot-meta mono">' + esc(b.soc_model || 'ARM64') + ' · ' + esc(camCount) + ' Cam</span>' +
-          '<div class="mcard-foot-actions">' +
-            '<button type="button" class="btn btn-cyan mcard-btn" data-open-box="' + esc(boxId) + '">Chi tiết</button>' +
-            '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/kspcam/" target="_blank" rel="noopener" class="btn mcard-btn">kspcam</a>' +
-            '<button type="button" class="btn mcard-more-btn" data-card-menu-btn="' + esc(boxId) + '" aria-expanded="false" aria-label="Thao tác thêm cho ' + esc(boxId) + '">' + svgIcon('more', 'ui-icon') + '</button>' +
-            '<div class="mcard-popover" data-card-menu="' + esc(boxId) + '">' +
-              '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/shinobi/" target="_blank" rel="noopener">' + svgIcon('video', 'ui-icon-sm text-cyan') + '<span>Mở Shinobi (:8080)</span></a>' +
-              '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/nodered/" target="_blank" rel="noopener">' + svgIcon('zap', 'ui-icon-sm text-emerald') + '<span>Mở Node-RED (:1880)</span></a>' +
-              portalLink +
+        '<div class="mrow-body">' +
+          '<div class="mcard-tel-grid">' +
+            '<div class="mcard-tel-cell">' +
+              '<span class="mcard-tel-label">RAM</span>' +
+              '<span class="mcard-tel-val mono">' + esc(ramPct) + '%</span>' +
+              '<div class="mini-meter" style="max-width:100%;"><div class="mini-meter-fill ' + ramBarClass + '" style="width:' + Math.min(100, Math.max(0, ramPct)) + '%"></div></div>' +
+              '<span class="mcard-tel-sub mono">' + esc(ramUsed) + '/' + esc(ramTotal) + 'M · Avail ' + esc(ramAvail) + 'M</span>' +
             '</div>' +
+            '<div class="mcard-tel-cell">' +
+              '<span class="mcard-tel-label">CPU / Nhiệt</span>' +
+              '<span class="mcard-tel-val mono">' + fmtNum(b.cpu_pct, 1) + '% · ' + fmtNum(tempC, 1) + '°C</span>' +
+              '<div class="mini-meter" style="max-width:100%;"><div class="mini-meter-fill ' + cpuBarClass + '" style="width:' + Math.min(100, Math.max(0, cpuPctVal)) + '%"></div></div>' +
+              '<span class="mcard-tel-sub mono">Load ' + fmtNum(b.load_avg_1m, 2) + ' (' + esc(cpuCores) + 'C)</span>' +
+            '</div>' +
+            '<div class="mcard-tel-cell">' +
+              '<span class="mcard-tel-label">SD / Swap</span>' +
+              '<span class="mcard-tel-val mono"><span class="' + sdTone + '">SD ' + esc(Math.round(sdPct)) + '%</span> · ' + esc(b.sd_total_gb || 64) + 'G ' + esc(sdFs) + '</span>' +
+              '<span class="mcard-tel-sub mono">Swap ' + esc(swapUsed) + '/' + esc(swapTotal) + 'M</span>' +
+            '</div>' +
+            '<div class="mcard-tel-cell">' +
+              '<span class="mcard-tel-label">Lưu lượng / Heap</span>' +
+              '<span class="mcard-tel-val mono">RX ' + esc(rxMbps) + ' Mbps</span>' +
+              '<span class="mcard-tel-sub mono">Heap ' + fmtNum(b.heap_alloc_mb, 1) + 'M · ' + esc(camCount) + ' Cam</span>' +
+            '</div>' +
+          '</div>' +
+
+          '<div class="mcard-net-strip">' +
+            '<span class="mcard-net-chip">VPN ' + esc(b.vpn_ip || '--') + '</span>' +
+            '<span class="mcard-net-chip">LAN ' + esc(b.lan_ip || '--') + '</span>' +
+            '<span class="mcard-net-chip">grp ' + esc(b.shinobi_group_key || '--') + '</span>' +
+            '<span class="mcard-net-chip">' + esc(b.soc_model || 'ARM64') + ' · ' + esc(b.uptime_human || (isOnline ? '--' : 'Offline')) + '</span>' +
+          '</div>' +
+
+          '<div class="mrow-actions">' +
+            '<button type="button" class="btn btn-cyan mrow-act-btn" data-open-box="' + esc(boxId) + '">Chi tiết</button>' +
+            '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/kspcam/" target="_blank" rel="noopener" class="btn mrow-act-btn">kspcam</a>' +
+            '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/shinobi/" target="_blank" rel="noopener" class="btn mrow-act-btn">Shinobi</a>' +
+            '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/nodered/" target="_blank" rel="noopener" class="btn mrow-act-btn">Node-RED</a>' +
+            portalAction +
           '</div>' +
         '</div>' +
       '</article>';
     }).join('');
 
-    return '<div class="mobile-card-list mobile-only-cards">' + cards + '</div>';
+    return '<div class="mobile-card-list compact-list mobile-only-cards">' + cards + '</div>';
   }
 
   /* --------------------------------------------------------------------------
@@ -1447,29 +1519,46 @@
       pillars.forEach(function (p) { pillarMap[p.id || ('step_' + p.step)] = p; });
       var score = item.score !== undefined ? item.score : 8;
       var maxScore = item.max_score || 8;
+      var isOk = score >= maxScore;
+      var isExpanded = !!state.expandedHardeningIds[boxId];
+      var failedSteps = [];
 
       var miniPills = GOLDEN_PILLAR_META.map(function (meta) {
         var p = pillarMap[meta.id] || pillars[meta.step - 1] || { status: 'pass', detail: meta.name };
         var ok = p.status === 'pass' || p.status === 'ok' || p.ok === true;
+        if (!ok) failedSteps.push('B' + meta.step);
         return '<span class="pillar-mini-pill ' + (ok ? 'ok' : 'warn') + '" title="' + esc(meta.name + ': ' + (p.detail || '')) + '">' +
           svgIcon(ok ? 'check' : 'warn', 'ui-icon-sm') + '<span>B' + esc(meta.step) + '</span>' +
         '</span>';
       }).join('');
 
-      return '<article class="hardening-mcard">' +
-        '<div class="mcard-head" data-open-box="' + esc(boxId) + '">' +
-          '<div class="mcard-title-wrap">' +
-            '<div class="mcard-title">' + esc(item.club_name || item.box_name || boxId) + '</div>' +
-            '<div class="mcard-sub mono">' + esc(boxId) + (item.vpn_ip ? (' · ' + esc(item.vpn_ip)) : '') + '</div>' +
+      var statusMeta = failedSteps.length
+        ? '<span class="text-amber mrow-alert-txt">Thiếu ' + esc(failedSteps.join(',')) + '</span>'
+        : '<span>Đủ 8/8 · 0-Format</span>';
+
+      return '<article class="hardening-mcard compact-mrow' + (isExpanded ? ' is-expanded' : '') + '" data-compact-row="hardening" data-mrow-key="' + esc(boxId) + '">' +
+        '<div class="mrow-head" data-toggle-mrow="hardening" data-mrow-id="' + esc(boxId) + '" role="button" tabindex="0" aria-expanded="' + (isExpanded ? 'true' : 'false') + '">' +
+          '<div class="mrow-line1">' +
+            '<div class="mrow-primary">' +
+              '<span class="led-dot ' + (isOk ? 'emerald' : 'amber') + '"></span>' +
+              '<span class="mrow-name">' + esc(item.club_name || item.box_name || boxId) + '</span>' +
+            '</div>' +
+            '<div class="mrow-pills">' +
+              '<span class="mrow-pill ' + (isOk ? 'pill-ok' : 'pill-amber') + '">' + esc(score) + '/' + esc(maxScore) + '</span>' +
+              '<span class="mrow-chevron" aria-hidden="true">' + svgIcon('chevronDown', 'ui-icon-sm') + '</span>' +
+            '</div>' +
           '</div>' +
-          '<span class="badge ' + (score >= maxScore ? 'badge-emerald' : 'badge-amber') + '">' + esc(score) + '/' + esc(maxScore) + '</span>' +
+          '<div class="mrow-line2 mono">' +
+            '<span class="mrow-id">' + esc(boxId) + (item.vpn_ip ? (' · ' + esc(item.vpn_ip)) : '') + '</span>' +
+            '<span class="mrow-metrics"><span class="mrow-sep">·</span>' + statusMeta + '</span>' +
+          '</div>' +
         '</div>' +
-        '<div class="pillar-mini-grid">' + miniPills + '</div>' +
-        '<div class="mcard-foot">' +
-          '<span class="mcard-foot-meta">0-Format SOP</span>' +
-          '<div class="mcard-foot-actions">' +
-            '<button type="button" class="btn btn-primary mcard-btn" data-remediate-box="' + esc(boxId) + '">' + svgIcon('wrench', 'ui-icon-sm') + '<span>Vá 8 Bước</span></button>' +
-            '<button type="button" class="btn mcard-btn" data-inspect-box="' + esc(boxId) + '">' + svgIcon('search', 'ui-icon-sm') + '<span>Kiểm tra</span></button>' +
+        '<div class="mrow-body">' +
+          '<div class="pillar-mini-grid">' + miniPills + '</div>' +
+          '<div class="mrow-actions">' +
+            '<button type="button" class="btn btn-primary mrow-act-btn" data-remediate-box="' + esc(boxId) + '">' + svgIcon('wrench', 'ui-icon-sm') + '<span>Vá 8 Bước</span></button>' +
+            '<button type="button" class="btn mrow-act-btn" data-inspect-box="' + esc(boxId) + '">' + svgIcon('search', 'ui-icon-sm') + '<span>Kiểm tra</span></button>' +
+            '<button type="button" class="btn btn-cyan mrow-act-btn" data-open-box="' + esc(boxId) + '">Chi tiết</button>' +
           '</div>' +
         '</div>' +
       '</article>';
@@ -1489,7 +1578,7 @@
         '</tr></thead>' +
         '<tbody>' + rowsHtml + '</tbody>' +
       '</table></div>' +
-      '<div class="mobile-card-list mobile-only-cards">' + mobileCardsHtml + '</div>' +
+      '<div class="mobile-card-list compact-list mobile-only-cards">' + mobileCardsHtml + '</div>' +
       renderPaginationBar('hardening', pg, 'Box');
   }
 
@@ -1699,29 +1788,56 @@
         var cid = getCameraId(c);
         var checked = state.selectedCameraIds[cid] ? 'checked' : '';
         var isH265 = String(c.codec || '').toUpperCase() === 'H.265';
-        return '<article class="cam-mcard">' +
-          '<div class="cam-mcard-head">' +
-            '<label class="cam-mcard-check-wrap">' +
-              '<input type="checkbox" class="cam-row-check" data-cam-id="' + esc(cid) + '" ' + checked + '>' +
-              '<div class="mcard-title-wrap">' +
-                '<div class="mcard-title">' + esc(c.table_name || c.name || 'Bàn Bida') + '</div>' +
-                '<div class="mcard-sub mono">' + esc(cid) + '</div>' +
+        var isOnline = c.online !== false;
+        var isExpanded = !!state.expandedCameraIds[cid];
+        var hostPort = (c.host || '--') + ':' + (c.port || 37777);
+        var fpsVal = c.fps || 30;
+        var kbpsVal = c.bitrate_kbps || 1536;
+
+        return '<article class="cam-mcard compact-mrow' + (isExpanded ? ' is-expanded' : '') + '" data-compact-row="camera" data-mrow-key="' + esc(cid) + '">' +
+          '<div class="mrow-head" data-toggle-mrow="camera" data-mrow-id="' + esc(cid) + '" role="button" tabindex="0" aria-expanded="' + (isExpanded ? 'true' : 'false') + '">' +
+            '<div class="mrow-line1">' +
+              '<div class="mrow-primary">' +
+                '<label class="cam-mrow-check-stop" aria-label="Chọn ' + esc(c.table_name || c.name || cid) + '">' +
+                  '<input type="checkbox" class="cam-row-check" data-cam-id="' + esc(cid) + '" ' + checked + '>' +
+                '</label>' +
+                '<span class="led-dot ' + (isOnline ? 'emerald' : 'crimson') + '"></span>' +
+                '<span class="mrow-name">' + esc(c.table_name || c.name || 'Bàn Bida') + '</span>' +
               '</div>' +
-            '</label>' +
-            (c.online !== false
-              ? '<span class="badge badge-emerald"><span class="led-dot emerald"></span>ONLINE</span>'
-              : '<span class="badge badge-crimson"><span class="led-dot crimson"></span>OFFLINE</span>') +
+              '<div class="mrow-pills">' +
+                (c.double_streaming ? '<span class="mrow-pill pill-amber">2x</span>' : '') +
+                '<span class="mrow-pill ' + (isH265 ? 'pill-ok' : 'pill-amber') + '">' + esc(c.codec || 'H.264') + '</span>' +
+                '<span class="mrow-chevron" aria-hidden="true">' + svgIcon('chevronDown', 'ui-icon-sm') + '</span>' +
+              '</div>' +
+            '</div>' +
+            '<div class="mrow-line2 mono">' +
+              '<span class="mrow-id">' + esc(c.club_name || c.box_id || '--') + '</span>' +
+              '<span class="mrow-metrics">' +
+                '<span class="mrow-sep">·</span>' +
+                '<span>' + esc(hostPort) + '</span>' +
+                '<span class="mrow-sep">·</span>' +
+                '<span class="' + (c.double_streaming ? 'text-amber mrow-alert-txt' : '') + '">' + esc(fpsVal) + 'f/' + esc(kbpsVal) + 'k</span>' +
+              '</span>' +
+            '</div>' +
           '</div>' +
-          '<div class="mcard-sub">' + esc(c.club_name || '--') + ' · <span class="mono">' + esc(c.box_id || '--') + '</span> · ' + (c.nvr_host ? ('NVR ' + esc(c.nvr_host) + ' CH' + esc(c.nvr_channel || 1)) : 'Direct LAN') + '</div>' +
-          '<div class="badge-row">' +
-            '<span class="badge badge-neutral">' + esc(c.vendor || 'Dahua') + '</span>' +
-            (isH265
-              ? '<span class="badge badge-emerald">H.265</span>'
-              : '<span class="badge badge-amber">' + esc(c.codec || 'H.264') + '</span>') +
-            '<span class="badge badge-neutral mono">' + esc(c.fps || 30) + 'fps · ' + esc(c.bitrate_kbps || 1536) + 'k · ' + esc(c.audio_codec || 'AAC') + '</span>' +
-            (c.double_streaming
-              ? '<span class="badge badge-amber">' + svgIcon('warn', 'ui-icon-sm') + '<span>DOUBLE-STREAM</span></span>'
-              : '<span class="badge badge-emerald">' + svgIcon('check', 'ui-icon-sm') + '<span>Đơn luồng</span></span>') +
+          '<div class="mrow-body">' +
+            '<div class="mrow-meta-line mono">' +
+              '<span>' + esc(cid) + '</span>' +
+              '<span>' + (c.nvr_host ? ('NVR ' + esc(c.nvr_host) + ' CH' + esc(c.nvr_channel || 1)) : 'Direct LAN') + '</span>' +
+            '</div>' +
+            '<div class="badge-row">' +
+              (isOnline
+                ? '<span class="badge badge-emerald"><span class="led-dot emerald"></span>ONLINE' + (c.recording !== false ? ' · REC' : '') + '</span>'
+                : '<span class="badge badge-crimson"><span class="led-dot crimson"></span>OFFLINE</span>') +
+              '<span class="badge badge-neutral">' + esc(c.vendor || 'Dahua') + '</span>' +
+              '<span class="badge badge-neutral mono">' + esc(fpsVal) + 'fps · ' + esc(kbpsVal) + 'k ' + esc(c.rc_mode || 'CBR') + ' · GOP ' + esc(c.gop || 50) + ' · ' + esc(c.audio_codec || 'AAC') + '</span>' +
+              (c.double_streaming
+                ? '<span class="badge badge-amber">' + svgIcon('warn', 'ui-icon-sm') + '<span>DOUBLE-STREAM</span></span>'
+                : '<span class="badge badge-emerald">' + svgIcon('check', 'ui-icon-sm') + '<span>Đơn luồng</span></span>') +
+            '</div>' +
+            (c.box_id
+              ? '<div class="mrow-actions"><button type="button" class="btn btn-cyan mrow-act-btn" data-open-box="' + esc(c.box_id) + '">Chi tiết Box ' + esc(c.box_id) + '</button></div>'
+              : '') +
           '</div>' +
         '</article>';
       }).join('');
@@ -1927,23 +2043,44 @@
         var domMobileCards = domPg.items.map(function (d) {
           var sCode = d.store_http_code || 200;
           var cCode = d.cstore_http_code || 200;
-          return '<article class="redbida-mcard">' +
-            '<div class="mcard-head">' +
-              '<div class="mcard-title-wrap">' +
-                '<div class="mcard-title">' + esc(d.club_name || d.box_id) + '</div>' +
-                '<div class="mcard-sub mono">' + esc(d.box_id) + '</div>' +
+          var domKey = d.box_id || d.club_name || '';
+          var isExpanded = !!state.expandedRedbidaDomainIds[domKey];
+          var httpOk = sCode === 200 && cCode === 200;
+          var dotTone = d.conflict ? 'crimson' : (httpOk ? 'emerald' : 'amber');
+          var httpLabel = httpOk ? '200' : (sCode + '/' + cCode);
+
+          return '<article class="redbida-mcard compact-mrow' + (isExpanded ? ' is-expanded' : '') + '" data-compact-row="rbDomain" data-mrow-key="' + esc(domKey) + '">' +
+            '<div class="mrow-head" data-toggle-mrow="rbDomain" data-mrow-id="' + esc(domKey) + '" role="button" tabindex="0" aria-expanded="' + (isExpanded ? 'true' : 'false') + '">' +
+              '<div class="mrow-line1">' +
+                '<div class="mrow-primary">' +
+                  '<span class="led-dot ' + dotTone + '"></span>' +
+                  '<span class="mrow-name">' + esc(d.club_name || d.box_id) + '</span>' +
+                '</div>' +
+                '<div class="mrow-pills">' +
+                  '<span class="mrow-pill ' + (httpOk ? 'pill-quiet' : 'pill-amber') + '">' + esc(httpLabel) + '</span>' +
+                  (d.conflict
+                    ? '<span class="mrow-pill pill-crimson">Trùng</span>'
+                    : '<span class="mrow-pill pill-ok">OK</span>') +
+                  '<span class="mrow-chevron" aria-hidden="true">' + svgIcon('chevronDown', 'ui-icon-sm') + '</span>' +
+                '</div>' +
               '</div>' +
-              (d.conflict
-                ? '<span class="badge badge-crimson">' + svgIcon('warn', 'ui-icon-sm') + '<span>Trùng</span></span>'
-                : '<span class="badge badge-emerald">' + svgIcon('check', 'ui-icon-sm') + '<span>Duy nhất</span></span>') +
+              '<div class="mrow-line2 mono">' +
+                '<span class="mrow-id">' + esc(d.box_id) + ' · ' + esc(d.store_domain || '--') + '</span>' +
+              '</div>' +
             '</div>' +
-            '<div class="redbida-domain-row">' +
-              '<span class="redbida-domain-host">' + esc(d.store_domain || '--') + '</span>' +
-              '<span class="badge ' + (sCode === 200 ? 'badge-emerald' : 'badge-amber') + '">HTTP ' + esc(sCode) + '</span>' +
-            '</div>' +
-            '<div class="redbida-domain-row">' +
-              '<span class="redbida-domain-host">' + esc(d.cstore_domain || '--') + '</span>' +
-              '<span class="badge ' + (cCode === 200 ? 'badge-emerald' : 'badge-amber') + '">HTTP ' + esc(cCode) + '</span>' +
+            '<div class="mrow-body">' +
+              '<div class="redbida-domain-row">' +
+                '<span class="redbida-domain-host">' + esc(d.store_domain || '--') + '</span>' +
+                '<span class="badge ' + (sCode === 200 ? 'badge-emerald' : 'badge-amber') + '">HTTP ' + esc(sCode) + '</span>' +
+              '</div>' +
+              '<div class="redbida-domain-row">' +
+                '<span class="redbida-domain-host">' + esc(d.cstore_domain || '--') + '</span>' +
+                '<span class="badge ' + (cCode === 200 ? 'badge-emerald' : 'badge-amber') + '">HTTP ' + esc(cCode) + '</span>' +
+              '</div>' +
+              '<div class="mrow-actions">' +
+                '<button type="button" class="btn btn-cyan mrow-act-btn" data-open-redbida-edit="' + esc(d.box_id) + '">' + svgIcon('unlock', 'ui-icon-sm') + '<span>Mở Khóa</span></button>' +
+                '<button type="button" class="btn mrow-act-btn" data-open-box="' + esc(d.box_id) + '">Chi tiết</button>' +
+              '</div>' +
             '</div>' +
           '</article>';
         }).join('');
@@ -1953,7 +2090,7 @@
             '<thead><tr><th>Box ID / CLB</th><th>Subdomain Store</th><th>HTTP</th><th>Subdomain C-Store</th><th>HTTP</th><th>Kiểm Toán</th></tr></thead>' +
             '<tbody>' + domDesktopRows + '</tbody>' +
           '</table></div>' +
-          '<div class="mobile-card-list mobile-only-cards">' + domMobileCards + '</div>' +
+          '<div class="mobile-card-list compact-list mobile-only-cards">' + domMobileCards + '</div>' +
           renderPaginationBar('redbidaDomains', domPg, 'tên miền');
       }
     }
@@ -2007,32 +2144,43 @@
           var isPickle = String(b.branding || '').toLowerCase() === 'pickleball';
           var score = b.score !== undefined ? b.score : (b.redbida_score || 17);
           var maxScore = b.max_score || 17;
+          var isOk = score >= maxScore;
+          var isExpanded = !!state.expandedRedbidaBoxIds[boxId];
           var keys = b.keys || {};
           var vip = keys.eth0_virtual_ip || keys.end0_virtual_ip || b.virtual_ip || '192.168.1.250';
           var grp = keys.shinobi_group_key || b.shinobi_group_key || '--';
           var gg = keys.ggcode || b.ggcode || 'GG-BIDA';
 
-          return '<article class="redbida-mcard">' +
-            '<div class="mcard-head">' +
-              '<div class="mcard-title-wrap">' +
-                '<div class="mcard-title">' + esc(b.club_name || b.box_name || boxId) + '</div>' +
-                '<div class="mcard-sub mono">' + esc(boxId) + '</div>' +
+          return '<article class="redbida-mcard compact-mrow' + (isExpanded ? ' is-expanded' : '') + '" data-compact-row="rbBox" data-mrow-key="' + esc(boxId) + '">' +
+            '<div class="mrow-head" data-toggle-mrow="rbBox" data-mrow-id="' + esc(boxId) + '" role="button" tabindex="0" aria-expanded="' + (isExpanded ? 'true' : 'false') + '">' +
+              '<div class="mrow-line1">' +
+                '<div class="mrow-primary">' +
+                  svgIcon(isPickle ? 'pickle' : 'pool', 'ui-icon-sm ' + (isPickle ? 'text-amber' : 'text-cyan')) +
+                  '<span class="mrow-name">' + esc(b.club_name || b.box_name || boxId) + '</span>' +
+                '</div>' +
+                '<div class="mrow-pills">' +
+                  '<span class="mrow-pill ' + (isOk ? 'pill-ok' : 'pill-amber') + '">' + esc(score) + '/' + esc(maxScore) + '</span>' +
+                  '<span class="mrow-chevron" aria-hidden="true">' + svgIcon('chevronDown', 'ui-icon-sm') + '</span>' +
+                '</div>' +
               '</div>' +
-              '<span class="badge ' + (score >= maxScore ? 'badge-emerald' : 'badge-amber') + '">' + esc(score) + '/' + esc(maxScore) + '</span>' +
+              '<div class="mrow-line2 mono">' +
+                '<span class="mrow-id">' + esc(boxId) + ' · ' + esc(vip) + ' · ' + esc(grp) + '</span>' +
+              '</div>' +
             '</div>' +
-            '<div class="badge-row">' +
-              (isPickle
-                ? '<span class="badge badge-amber">' + svgIcon('pickle', 'ui-icon-sm') + '<span>Pickleball</span></span>'
-                : '<span class="badge badge-cyan">' + svgIcon('pool', 'ui-icon-sm') + '<span>Billiards</span></span>') +
-              '<span class="mcard-net-chip">VIP ' + esc(vip) + '</span>' +
-              '<span class="mcard-net-chip">Grp ' + esc(grp) + '</span>' +
-              '<span class="mcard-net-chip">GG ' + esc(gg) + '</span>' +
-            '</div>' +
-            '<div class="mcard-foot">' +
-              '<span class="mcard-foot-meta mono">[C01..C20]</span>' +
-              '<div class="mcard-foot-actions">' +
-                '<button type="button" class="btn btn-cyan mcard-btn" data-open-redbida-edit="' + esc(boxId) + '">' + svgIcon('unlock', 'ui-icon-sm') + '<span>Mở Khóa</span></button>' +
-                '<button type="button" class="btn btn-primary mcard-btn" data-autofix-redbida="' + esc(boxId) + '">' + svgIcon('zap', 'ui-icon-sm') + '<span>Auto-Fix 17</span></button>' +
+            '<div class="mrow-body">' +
+              '<div class="badge-row">' +
+                (isPickle
+                  ? '<span class="badge badge-amber">' + svgIcon('pickle', 'ui-icon-sm') + '<span>Pickleball</span></span>'
+                  : '<span class="badge badge-cyan">' + svgIcon('pool', 'ui-icon-sm') + '<span>Billiards</span></span>') +
+                '<span class="mcard-net-chip">VIP ' + esc(vip) + '</span>' +
+                '<span class="mcard-net-chip">Grp ' + esc(grp) + '</span>' +
+                '<span class="mcard-net-chip">GG ' + esc(gg) + '</span>' +
+                '<span class="mcard-net-chip">[C01..C20]</span>' +
+              '</div>' +
+              '<div class="mrow-actions">' +
+                '<button type="button" class="btn btn-cyan mrow-act-btn" data-open-redbida-edit="' + esc(boxId) + '">' + svgIcon('unlock', 'ui-icon-sm') + '<span>Mở Khóa</span></button>' +
+                '<button type="button" class="btn btn-primary mrow-act-btn" data-autofix-redbida="' + esc(boxId) + '">' + svgIcon('zap', 'ui-icon-sm') + '<span>Auto-Fix 17</span></button>' +
+                '<button type="button" class="btn mrow-act-btn" data-open-box="' + esc(boxId) + '">Chi tiết</button>' +
               '</div>' +
             '</div>' +
           '</article>';
@@ -2049,7 +2197,7 @@
             '</tr></thead>' +
             '<tbody>' + boxDesktopRows + '</tbody>' +
           '</table></div>' +
-          '<div class="mobile-card-list mobile-only-cards">' + boxMobileCards + '</div>' +
+          '<div class="mobile-card-list compact-list mobile-only-cards">' + boxMobileCards + '</div>' +
           renderPaginationBar('redbidaBoxes', boxPg, 'Box');
       }
     }
@@ -3515,6 +3663,44 @@
 
   var initRealtimeSseAndPoller = connectSSE;
 
+  function getCompactRowMap(kind) {
+    if (kind === 'fleet') return state.expandedMobileBoxIds;
+    if (kind === 'hardening') return state.expandedHardeningIds;
+    if (kind === 'camera') return state.expandedCameraIds;
+    if (kind === 'rbDomain') return state.expandedRedbidaDomainIds;
+    if (kind === 'rbBox') return state.expandedRedbidaBoxIds;
+    return null;
+  }
+
+  function syncFleetMobileRowsToggleBtn() {
+    var matrixContainer = document.getElementById('fleet-matrix-container');
+    if (!matrixContainer) return;
+    var toggleBtn = matrixContainer.querySelector('[data-mobile-rows-action="toggle-all"]');
+    if (!toggleBtn) return;
+    var anyOpen = !!matrixContainer.querySelector('.mobile-box-card.is-expanded');
+    toggleBtn.textContent = anyOpen ? 'Thu dòng' : 'Mở dòng';
+  }
+
+  function toggleCompactMobileRow(headEl) {
+    if (!headEl) return;
+    var kind = headEl.getAttribute('data-toggle-mrow');
+    var id = headEl.getAttribute('data-mrow-id');
+    var map = getCompactRowMap(kind);
+    if (!map || !id) return;
+    var nextExpanded = !map[id];
+    if (nextExpanded) map[id] = true;
+    else delete map[id];
+
+    var rowEl = headEl.closest('article');
+    if (rowEl) rowEl.classList.toggle('is-expanded', nextExpanded);
+    headEl.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+
+    if (kind === 'fleet') {
+      state.lastFleetRenderSig = '';
+      syncFleetMobileRowsToggleBtn();
+    }
+  }
+
   /* --------------------------------------------------------------------------
      Wire Event Listeners & Boot
      -------------------------------------------------------------------------- */
@@ -3526,7 +3712,7 @@
       });
     });
 
-    /* Global Delegated Pagination Controls (Page Buttons & Page Size Selector) */
+    /* Global Delegated Controls: Compact Mobile Accordion Rows + Pagination */
     document.addEventListener('click', function (e) {
       var pageBtn = e.target.closest('[data-pager-key][data-pager-page]');
       if (pageBtn && !pageBtn.disabled) {
@@ -3539,10 +3725,28 @@
         return;
       }
 
+      /* Compact mobile row tap-to-expand across Fleet, Hardening, Cameras & RedBida */
+      if (!e.target.closest('a, button, input, .cam-mrow-check-stop')) {
+        var mrowHead = e.target.closest('[data-toggle-mrow]');
+        if (mrowHead) {
+          toggleCompactMobileRow(mrowHead);
+          return;
+        }
+      }
+
       /* Mobile card overflow popover close when clicking outside */
       if (state.openCardMenuId && !e.target.closest('.mcard-foot-actions')) {
         closeAllCardMenus();
       }
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'A')) return;
+      var mrowHead = e.target.closest ? e.target.closest('[data-toggle-mrow]') : null;
+      if (!mrowHead) return;
+      e.preventDefault();
+      toggleCompactMobileRow(mrowHead);
     });
 
     document.addEventListener('change', function (e) {
@@ -3718,6 +3922,28 @@
           }
           resetTabPage('fleet');
           renderFleetMatrix({ force: true });
+          return;
+        }
+
+        var mobileRowsBtn = e.target.closest('[data-mobile-rows-action]');
+        if (mobileRowsBtn) {
+          var cards = matrixContainer.querySelectorAll('.mobile-box-card[data-card-box]');
+          var anyExpanded = !!matrixContainer.querySelector('.mobile-box-card.is-expanded');
+          cards.forEach(function (card) {
+            var bid = card.getAttribute('data-card-box');
+            if (!bid) return;
+            if (anyExpanded) {
+              delete state.expandedMobileBoxIds[bid];
+              card.classList.remove('is-expanded');
+            } else {
+              state.expandedMobileBoxIds[bid] = true;
+              card.classList.add('is-expanded');
+            }
+            var hd = card.querySelector('.mrow-head');
+            if (hd) hd.setAttribute('aria-expanded', anyExpanded ? 'false' : 'true');
+          });
+          state.lastFleetRenderSig = '';
+          syncFleetMobileRowsToggleBtn();
           return;
         }
 
@@ -3928,7 +4154,15 @@
     var camTbody = document.getElementById('cameras-tbody');
     var camMobileCards = document.getElementById('cameras-mobile-cards');
     if (camTbody) camTbody.addEventListener('change', onCameraRowCheckChange);
-    if (camMobileCards) camMobileCards.addEventListener('change', onCameraRowCheckChange);
+    if (camMobileCards) {
+      camMobileCards.addEventListener('change', onCameraRowCheckChange);
+      camMobileCards.addEventListener('click', function (e) {
+        var openBtn = e.target.closest('[data-open-box]');
+        if (openBtn) {
+          openBoxDrawer(openBtn.getAttribute('data-open-box'), true);
+        }
+      });
+    }
 
     var bulkH265Btn = document.getElementById('bulk-golden-h265-btn');
     if (bulkH265Btn) {
@@ -3976,6 +4210,21 @@
       });
     }
 
+    var rbDomainsContainer = document.getElementById('redbida-domains-container');
+    if (rbDomainsContainer) {
+      rbDomainsContainer.addEventListener('click', function (e) {
+        var editBtn = e.target.closest('[data-open-redbida-edit]');
+        if (editBtn) {
+          openRedbidaModal(editBtn.getAttribute('data-open-redbida-edit'));
+          return;
+        }
+        var openBtn = e.target.closest('[data-open-box]');
+        if (openBtn) {
+          openBoxDrawer(openBtn.getAttribute('data-open-box'), true);
+        }
+      });
+    }
+
     var rbBoxesContainer = document.getElementById('redbida-boxes-container');
     if (rbBoxesContainer) {
       rbBoxesContainer.addEventListener('click', function (e) {
@@ -3987,6 +4236,11 @@
         var autoBtn = e.target.closest('[data-autofix-redbida]');
         if (autoBtn) {
           submitRedbidaApply(autoBtn.getAttribute('data-autofix-redbida'), true);
+          return;
+        }
+        var openBtn = e.target.closest('[data-open-box]');
+        if (openBtn) {
+          openBoxDrawer(openBtn.getAttribute('data-open-box'), true);
         }
       });
     }
