@@ -47,7 +47,12 @@
     moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
     trophy: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
     info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
-    building: '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/>'
+    building: '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/>',
+    x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    chevronDown: '<polyline points="6 9 12 15 18 9"/>',
+    chevronRight: '<polyline points="9 18 15 12 9 6"/>',
+    chevronLeft: '<polyline points="15 18 9 12 15 6"/>',
+    more: '<circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="19" cy="12" r="1.2" fill="currentColor"/><circle cx="5" cy="12" r="1.2" fill="currentColor"/>'
   };
 
   function svgIcon(name, cls) {
@@ -56,12 +61,29 @@
     return '<svg class="' + className + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + body + '</svg>';
   }
 
+  var initialMobile = (typeof window !== 'undefined' && window.innerWidth < 768);
+  var defaultListPageSize = initialMobile ? 10 : 20;
+
+  var VIEW_LABELS = {
+    fleet: 'Đội Box',
+    hardening: '8 Bước',
+    cameras: 'Camera',
+    redbida: 'RedBida',
+    handover: 'Bàn Giao',
+    analytics: 'Thống Kê'
+  };
+
   var state = {
     activeView: 'fleet',
     drawerBoxId: null,
     fleetFilter: 'all',
     fleetSearch: '',
     groupByClub: true,
+    collapsedClubs: {},
+    lastFleetRenderSig: '',
+    openCardMenuId: null,
+    pendingFleetRender: false,
+    mobileKpiExpanded: false,
     kpi: {},
     clubs: [],
     boxes: [],
@@ -74,10 +96,12 @@
     selectedCameraIds: {},
     redbidaBoxes: [],
     redbidaDomains: [],
+    redbidaMergedDomains: [],
     redbidaConflicts: [],
     redbidaBrandFilter: 'all',
     redbidaSearch: '',
     handoverPacks: [],
+    handoverSearch: '',
     activeHandoverPack: null,
     analyticsRange: '7d',
     analyticsClubId: '',
@@ -93,9 +117,20 @@
     analyticsCameras: [],
     analyticsReqSeq: 0,
     analyticsCamReqSeq: 0,
+    lastAnalyticsClubSig: '',
     cmdSelectedIdx: 0,
     sseConnected: false,
-    pollTimer: null
+    pollTimer: null,
+    pagination: {
+      fleet: { page: 1, pageSize: defaultListPageSize },
+      hardening: { page: 1, pageSize: defaultListPageSize },
+      cameras: { page: 1, pageSize: 20 },
+      redbidaDomains: { page: 1, pageSize: defaultListPageSize },
+      redbidaBoxes: { page: 1, pageSize: defaultListPageSize },
+      handoverClubs: { page: 1, pageSize: 10 },
+      analyticsTop: { page: 1, pageSize: 20 },
+      analyticsCameras: { page: 1, pageSize: 20 }
+    }
   };
 
   /* --------------------------------------------------------------------------
@@ -112,6 +147,213 @@
   }
 
   var escapeHtml = esc;
+
+  /* --------------------------------------------------------------------------
+     Fast Vietnamese Diacritic-Insensitive Search & Reusable Pagination Engine
+     -------------------------------------------------------------------------- */
+  function normalizeVN(str) {
+    return String(str || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[đĐ]/g, 'd');
+  }
+
+  function indexItemSearch(item, fields) {
+    if (!item) return item;
+    var parts = [];
+    for (var i = 0; i < fields.length; i++) {
+      var v = fields[i];
+      if (v !== null && v !== undefined && v !== '') parts.push(String(v));
+    }
+    var raw = parts.join(' ').toLowerCase();
+    item._searchRaw = raw;
+    item._searchNorm = normalizeVN(raw);
+    return item;
+  }
+
+  function parseSearchQuery(query) {
+    var trimmed = String(query || '').trim().toLowerCase();
+    if (!trimmed) return null;
+    var words = trimmed.split(/\s+/).filter(Boolean);
+    if (!words.length) return null;
+    return words.map(function (w) {
+      return { raw: w, norm: normalizeVN(w) };
+    });
+  }
+
+  function matchesSearch(item, tokens, fallbackFields) {
+    if (!tokens || !tokens.length) return true;
+    if (!item) return false;
+    if (item._searchNorm === undefined && fallbackFields) {
+      indexItemSearch(item, fallbackFields);
+    }
+    var raw = item._searchRaw || '';
+    var norm = item._searchNorm || '';
+    for (var i = 0; i < tokens.length; i++) {
+      var t = tokens[i];
+      if (raw.indexOf(t.raw) === -1 && (!t.norm || norm.indexOf(t.norm) === -1)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function makeDebounced(fn, waitMs) {
+    var timer = null;
+    var wrapped = function () {
+      var ctx = this;
+      var args = arguments;
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        timer = null;
+        fn.apply(ctx, args);
+      }, waitMs);
+    };
+    wrapped.flush = function () {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      fn();
+    };
+    return wrapped;
+  }
+
+  function syncSearchBoxState(inputId, matchCountId, matched, total) {
+    var input = document.getElementById(inputId);
+    if (input) {
+      var wrap = input.closest('.search-box');
+      var hasVal = String(input.value || '').length > 0;
+      if (wrap) {
+        wrap.classList.toggle('has-value', hasVal);
+        var clearBtn = wrap.querySelector('.search-clear-btn');
+        if (clearBtn) clearBtn.hidden = !hasVal;
+      }
+    }
+    if (matchCountId) {
+      var pill = document.getElementById(matchCountId);
+      if (pill) pill.textContent = fmtInt(matched) + '/' + fmtInt(total);
+    }
+  }
+
+  function resetTabPage(tabKey) {
+    if (state.pagination[tabKey]) {
+      state.pagination[tabKey].page = 1;
+    }
+  }
+
+  function paginateItems(items, tabKey) {
+    var pg = state.pagination[tabKey];
+    if (!pg) {
+      pg = { page: 1, pageSize: 20 };
+      state.pagination[tabKey] = pg;
+    }
+    var total = items.length;
+    var pageSize = Number(pg.pageSize) || 20;
+    var totalPages = Math.max(1, Math.ceil(total / pageSize));
+    if (pg.page > totalPages) pg.page = totalPages;
+    if (pg.page < 1) pg.page = 1;
+    var startIdx = (pg.page - 1) * pageSize;
+    var endIdx = Math.min(total, startIdx + pageSize);
+    return {
+      items: items.slice(startIdx, endIdx),
+      page: pg.page,
+      pageSize: pageSize,
+      total: total,
+      totalPages: totalPages,
+      start: total === 0 ? 0 : startIdx + 1,
+      end: endIdx
+    };
+  }
+
+  function buildPageNumbers(page, totalPages, isMobile) {
+    if (totalPages <= 1) return [1];
+    var sibling = isMobile ? 0 : 1;
+    var set = {};
+    set[1] = true;
+    set[totalPages] = true;
+    for (var p = Math.max(1, page - sibling); p <= Math.min(totalPages, page + sibling); p++) {
+      set[p] = true;
+    }
+    if (!isMobile && totalPages <= 7) {
+      for (var k = 1; k <= totalPages; k++) set[k] = true;
+    }
+    var nums = Object.keys(set).map(Number).sort(function (a, b) { return a - b; });
+    var out = [];
+    for (var i = 0; i < nums.length; i++) {
+      if (i > 0) {
+        var gap = nums[i] - nums[i - 1];
+        if (gap === 2) out.push(nums[i - 1] + 1);
+        else if (gap > 2) out.push('...');
+      }
+      out.push(nums[i]);
+    }
+    return out;
+  }
+
+  function renderPaginationBar(tabKey, meta, unitLabel, extraSuffix) {
+    if (!meta || meta.total === 0) return '';
+    var isMob = typeof window !== 'undefined' && window.innerWidth < 768;
+    var pages = buildPageNumbers(meta.page, meta.totalPages, isMob);
+    var sizes = [10, 20, 50, 100];
+
+    var optionsHtml = sizes.map(function (sz) {
+      return '<option value="' + sz + '"' + (sz === meta.pageSize ? ' selected' : '') + '>' + sz + '</option>';
+    }).join('');
+
+    var pageBtnsHtml = pages.map(function (p) {
+      if (p === '...') return '<span class="pager-ellipsis" aria-hidden="true">…</span>';
+      var isAct = p === meta.page;
+      return '<button type="button" class="pager-btn' + (isAct ? ' active' : '') + '" data-pager-key="' + esc(tabKey) + '" data-pager-page="' + p + '"' + (isAct ? ' aria-current="page"' : '') + '>' + p + '</button>';
+    }).join('');
+
+    return '<div class="pagination-bar tabular-nums" data-pagination-bar="' + esc(tabKey) + '">' +
+      '<div class="pager-info">' +
+        '<span class="pager-summary">Hiển thị <strong>' + esc(fmtInt(meta.start)) + '–' + esc(fmtInt(meta.end)) + '</strong> / <strong>' + esc(fmtInt(meta.total)) + '</strong> ' + esc(unitLabel || 'mục') + (extraSuffix ? (' <span class="text-muted">' + esc(extraSuffix) + '</span>') : '') + '</span>' +
+        '<label class="pager-size-wrap">' +
+          '<span>Số dòng</span>' +
+          '<select class="select pager-size-select" data-pager-size="' + esc(tabKey) + '" aria-label="Số mục mỗi trang">' + optionsHtml + '</select>' +
+        '</label>' +
+      '</div>' +
+      '<div class="pager-nav" role="navigation" aria-label="Phân trang ' + esc(unitLabel || '') + '">' +
+        '<button type="button" class="pager-btn" data-pager-key="' + esc(tabKey) + '" data-pager-page="' + (meta.page - 1) + '"' + (meta.page <= 1 ? ' disabled' : '') + ' aria-label="Trang trước">' + svgIcon('chevronLeft', 'ui-icon-sm') + '</button>' +
+        pageBtnsHtml +
+        '<button type="button" class="pager-btn" data-pager-key="' + esc(tabKey) + '" data-pager-page="' + (meta.page + 1) + '"' + (meta.page >= meta.totalPages ? ' disabled' : '') + ' aria-label="Trang sau">' + svgIcon('chevronRight', 'ui-icon-sm') + '</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function scrollToPagerSection(tabKey) {
+    var targetMap = {
+      fleet: 'fleet-command-dock',
+      hardening: 'hardening-matrix-container',
+      cameras: 'view-cameras',
+      redbidaDomains: 'redbida-domains-container',
+      redbidaBoxes: 'redbida-boxes-container',
+      handoverClubs: 'handover-club-picker',
+      analyticsTop: 'analytics-top-table-wrap',
+      analyticsCameras: 'analytics-cameras-table-wrap'
+    };
+    var el = document.getElementById(targetMap[tabKey]);
+    if (!el) return;
+    var rect = el.getBoundingClientRect();
+    var offset = (window.innerWidth < 768) ? 50 : 108;
+    var targetY = Math.max(0, window.scrollY + rect.top - offset);
+    window.scrollTo({ top: targetY, behavior: 'smooth' });
+  }
+
+  function renderByPagerKey(tabKey, shouldScroll) {
+    if (tabKey === 'fleet') renderFleetMatrix({ force: true });
+    else if (tabKey === 'hardening') renderHardeningMatrix();
+    else if (tabKey === 'cameras') renderCamerasTable();
+    else if (tabKey === 'redbidaDomains' || tabKey === 'redbidaBoxes') renderRedbidaView();
+    else if (tabKey === 'handoverClubs') renderHandoverClubPicker();
+    else if (tabKey === 'analyticsTop') renderAnalyticsTopTable(state.analyticsOverview || {});
+    else if (tabKey === 'analyticsCameras') renderAnalyticsCamerasTable();
+    if (shouldScroll) scrollToPagerSection(tabKey);
+  }
 
   function fmtNum(val, decimals) {
     var n = Number(val);
@@ -299,18 +541,34 @@
   }
 
   /* --------------------------------------------------------------------------
-     View 1: #fleet — KPI Cards & Fleet Overview Matrix
+     View 1: #fleet — KPI Cards, Sticky Cockpit, Club-Aware Pagination & /device/86 Mobile Cards
      -------------------------------------------------------------------------- */
-  function loadFleetSummary() {
+  function loadFleetSummary(opts) {
+    var fromSSE = !!(opts && opts.fromSSE);
     return apiFetch('/fleet/api/summary').then(function (data) {
       state.kpi = data.kpi || {};
       state.clubs = Array.isArray(data.clubs) ? data.clubs : [];
-      state.boxes = Array.isArray(data.boxes) ? data.boxes : [];
+      var boxes = Array.isArray(data.boxes) ? data.boxes : [];
+      boxes.forEach(function (b) {
+        indexItemSearch(b, [
+          b.id, b.box_id, b.name, b.club_name, b.club_id,
+          b.vpn_ip, b.lan_ip, b.shinobi_group_key,
+          b.store_domain, b.cstore_domain, b.soc_model, b.branding,
+          b.online ? 'online truc tuyen' : 'offline mat ket noi'
+        ]);
+      });
+      state.boxes = boxes;
       renderTopbarLedsAndKpis();
-      renderFleetMatrix();
+      if (fromSSE && state.openCardMenuId) {
+        state.pendingFleetRender = true;
+      } else {
+        renderFleetMatrix({ force: !fromSSE });
+      }
       populateAnalyticsClubFilter();
     }).catch(function (err) {
-      showToast('Không thể tải tổng quan đội thiết bị: ' + err.message, true);
+      if (!fromSSE) {
+        showToast('Không thể tải tổng quan đội thiết bị: ' + err.message, true);
+      }
     });
   }
 
@@ -414,7 +672,7 @@
       kpi5Sub.innerHTML = '<span>store-* / c-store-*</span><span class="' + (domConflict > 0 ? 'text-crimson' : 'text-emerald') + '">Xung đột: ' + esc(domConflict) + '</span>';
     }
 
-    /* KPI 6: Average RTT (clean instrument readout, no fake sparkline) */
+    /* KPI 6: Average RTT */
     var onlineBoxes = boxes.filter(function (b) { return b.online && b.rtt_ms > 0; });
     var avgRtt = onlineBoxes.length ? Math.round(onlineBoxes.reduce(function (s, b) { return s + (b.rtt_ms || 18); }, 0) / onlineBoxes.length) : 0;
     var maxRtt = onlineBoxes.length ? Math.round(onlineBoxes.reduce(function (m, b) { return Math.max(m, b.rtt_ms || 0); }, 0)) : 0;
@@ -422,9 +680,104 @@
     var kpi6Sub = document.getElementById('kpi-rtt-sub');
     if (kpi6Val) kpi6Val.innerHTML = esc(avgRtt) + '<span class="kpi-val-sub">ms TB</span>';
     if (kpi6Sub) kpi6Sub.innerHTML = '<span>Yamux · VPN 77.88.x</span><span>Max ' + esc(maxRtt) + 'ms</span>';
+
+    /* Sync Compact Mobile KPI Bar + 42px Sticky Cockpit Bar (/device/86) */
+    var onlinePct = boxesTotal > 0 ? Math.round((boxesOnline * 100) / boxesTotal) : 0;
+    var mkpiDot = document.getElementById('mkpi-led-dot');
+    var mkpiOnline = document.getElementById('mkpi-online');
+    var mkpiClubs = document.getElementById('mkpi-clubs');
+    var mkpiCams = document.getElementById('mkpi-cams');
+    var mkpiHard = document.getElementById('mkpi-hardening');
+    if (mkpiDot) mkpiDot.className = 'led-dot ' + (boxesOffline > 0 ? 'amber' : 'emerald');
+    if (mkpiOnline) mkpiOnline.textContent = boxesOnline + '/' + boxesTotal + ' Online';
+    if (mkpiClubs) mkpiClubs.textContent = clubsTotal + ' CLB';
+    if (mkpiCams) mkpiCams.textContent = fmtInt(camsTotal) + ' Cam';
+    if (mkpiHard) mkpiHard.textContent = fullHardened + '/' + boxesTotal + ' 8/8';
+
+    var cDot = document.getElementById('cockpit-status-dot');
+    var cRatio = document.getElementById('cockpit-online-ratio');
+    var cPct = document.getElementById('cockpit-online-pct');
+    var cOff = document.getElementById('cockpit-offline-pill');
+    if (cDot) cDot.className = 'led-dot ' + (boxesOffline > 0 ? 'crimson' : 'emerald');
+    if (cRatio) cRatio.textContent = boxesOnline + '/' + boxesTotal;
+    if (cPct) cPct.textContent = '(' + onlinePct + '%)';
+    if (cOff) {
+      if (boxesOffline > 0) {
+        cOff.style.display = 'inline-flex';
+        cOff.textContent = boxesOffline + ' Off';
+      } else {
+        cOff.style.display = 'none';
+      }
+    }
   }
 
-  function renderFleetMatrix() {
+  function buildFleetRenderSignature(visibleBoxes, extraKey) {
+    var parts = [extraKey];
+    for (var i = 0; i < visibleBoxes.length; i++) {
+      var b = visibleBoxes[i];
+      parts.push([
+        b.id || b.box_id || '',
+        b.online ? '1' : '0',
+        b.rtt_ms || 0,
+        b.cpu_pct || 0,
+        b.temp_c || 0,
+        b.ram_used_mb || 0,
+        b.ram_available_mb || 0,
+        b.swap_used_mb || 0,
+        b.sd_used_pct || 0,
+        b.ffmpeg_count || 0,
+        b.ffmpeg_expected || 0,
+        b.hardening_score !== undefined ? b.hardening_score : 8,
+        b.rx_mbps || 0,
+        b.uptime_human || '',
+        b.portal_token || ''
+      ].join('|'));
+    }
+    return parts.join('\n');
+  }
+
+  function renderFleetActiveFilters(matchedCount) {
+    var bar = document.getElementById('fleet-active-filters');
+    if (!bar) return;
+    var chips = [];
+    var q = (state.fleetSearch || '').trim();
+    var filterLabels = {
+      online: 'Trực tuyến',
+      offline: 'Mất kết nối',
+      'ffmpeg-warn': 'Cảnh báo FFmpeg',
+      'hardening-warn': 'Cần vá Golden',
+      'multi-box': 'CLB Nhiều Box'
+    };
+    if (q) {
+      chips.push('<span class="active-filter-chip"><span>Từ khóa: "' + esc(q) + '" (' + esc(fmtInt(matchedCount)) + ')</span><button type="button" data-remove-fleet-filter="search" aria-label="Bỏ từ khóa">' + svgIcon('x', 'ui-icon-sm') + '</button></span>');
+    }
+    if (state.fleetFilter && state.fleetFilter !== 'all') {
+      chips.push('<span class="active-filter-chip"><span>Lọc: ' + esc(filterLabels[state.fleetFilter] || state.fleetFilter) + '</span><button type="button" data-remove-fleet-filter="status" aria-label="Bỏ lọc trạng thái">' + svgIcon('x', 'ui-icon-sm') + '</button></span>');
+    }
+    if (!chips.length) {
+      bar.hidden = true;
+      bar.innerHTML = '';
+      return;
+    }
+    bar.hidden = false;
+    bar.innerHTML = chips.join('') +
+      '<button type="button" class="btn btn-xs" data-remove-fleet-filter="all">Xóa lọc</button>';
+  }
+
+  function syncFleetModeControls() {
+    var cb = document.getElementById('group-by-club-toggle');
+    if (cb) cb.checked = !!state.groupByClub;
+    var modeWrap = document.getElementById('fleet-view-mode');
+    if (modeWrap) {
+      modeWrap.querySelectorAll('[data-fleet-mode]').forEach(function (el) {
+        var mode = el.getAttribute('data-fleet-mode');
+        el.classList.toggle('active', (mode === 'club') === !!state.groupByClub);
+      });
+    }
+  }
+
+  function renderFleetMatrix(opts) {
+    var force = !!(opts && opts.force);
     var container = document.getElementById('fleet-matrix-container');
     if (!container) return;
     var boxes = state.boxes || [];
@@ -462,7 +815,14 @@
     setChipCount('chip-count-hardening', countHardening);
     setChipCount('chip-count-multibox', countMultiBox);
 
-    var q = (state.fleetSearch || '').trim().toLowerCase();
+    var offBtn = document.getElementById('chip-btn-offline');
+    var ffBtn = document.getElementById('chip-btn-ffmpeg');
+    var hdBtn = document.getElementById('chip-btn-hardening');
+    if (offBtn) offBtn.classList.toggle('has-alert-crimson', countOffline > 0);
+    if (ffBtn) ffBtn.classList.toggle('has-alert-amber', countFfmpeg > 0);
+    if (hdBtn) hdBtn.classList.toggle('has-alert-amber', countHardening > 0);
+
+    var tokens = parseSearchQuery(state.fleetSearch);
     var filtered = boxes.filter(function (b) {
       var cid = b.club_id || b.club_name || 'default';
       var ffExp = b.ffmpeg_expected || (b.cameras_count ? b.cameras_count * 2 : 0);
@@ -471,23 +831,32 @@
       if (state.fleetFilter === 'ffmpeg-warn' && !(ffExp > 0 && (b.ffmpeg_count || 0) < ffExp)) return false;
       if (state.fleetFilter === 'hardening-warn' && !((b.hardening_score !== undefined ? b.hardening_score : 8) < 8)) return false;
       if (state.fleetFilter === 'multi-box' && !((clubCounts[cid] || 0) > 1)) return false;
-
-      if (!q) return true;
-      var hay = [
+      return matchesSearch(b, tokens, [
         b.id, b.name, b.club_name, b.club_id, b.vpn_ip, b.lan_ip,
-        b.shinobi_group_key, b.store_domain, b.cstore_domain, b.soc_model
-      ].join(' ').toLowerCase();
-      return hay.indexOf(q) !== -1;
+        b.shinobi_group_key, b.store_domain, b.cstore_domain, b.soc_model, b.branding
+      ]);
     });
 
+    syncSearchBoxState('fleet-search', 'fleet-match-count', filtered.length, boxes.length);
+    renderFleetActiveFilters(filtered.length);
+    syncFleetModeControls();
+
     if (filtered.length === 0) {
+      var emptySig = 'EMPTY|' + state.fleetFilter + '|' + state.fleetSearch;
+      if (!force && state.lastFleetRenderSig === emptySig) return;
+      state.lastFleetRenderSig = emptySig;
       container.innerHTML = '<div class="glass-panel"><div class="empty-state">' +
         '<div class="empty-state-icon">' + svgIcon('search') + '</div>' +
         '<div><strong>Không có Box nào khớp bộ lọc hiện tại.</strong></div>' +
         '<div class="text-muted" style="font-size:12.5px;">Thử xóa từ khóa tìm kiếm hoặc chọn bộ lọc "Tất cả".</div>' +
+        ((state.fleetSearch || state.fleetFilter !== 'all')
+          ? '<button type="button" class="btn btn-xs btn-cyan" data-remove-fleet-filter="all">Đặt lại bộ lọc</button>'
+          : '') +
       '</div></div>';
       return;
     }
+
+    var hasActiveFilter = !!(tokens && tokens.length) || state.fleetFilter !== 'all';
 
     if (state.groupByClub) {
       var groupsMap = {};
@@ -507,7 +876,43 @@
         groupsMap[cid].boxes.push(b);
       });
 
-      container.innerHTML = groupOrder.map(function (grp) {
+      /* Club-aware pagination: slice whole clubs so a club is NEVER split across pages */
+      var pg = paginateItems(groupOrder, 'fleet');
+      var pageGroups = pg.items;
+      var visibleBoxes = [];
+      var collapsedFlags = [];
+      var expandedCount = 0;
+
+      pageGroups.forEach(function (grp) {
+        var isCollapsed = !hasActiveFilter && !!state.collapsedClubs[grp.club_id];
+        if (!isCollapsed) expandedCount++;
+        collapsedFlags.push(grp.club_id + ':' + (isCollapsed ? '0' : '1'));
+        grp.boxes.forEach(function (b) { visibleBoxes.push(b); });
+      });
+
+      var sig = buildFleetRenderSignature(visibleBoxes, [
+        'CLUB', state.fleetFilter, state.fleetSearch, pg.page, pg.pageSize,
+        filtered.length, groupOrder.length, collapsedFlags.join(',')
+      ].join('|'));
+
+      if (!force && sig === state.lastFleetRenderSig) return;
+      state.lastFleetRenderSig = sig;
+
+      var ledgerHtml = '<div class="club-ledger-strip">' +
+        '<div class="club-ledger-meta">' +
+          '<span><strong>' + esc(fmtInt(groupOrder.length)) + '</strong> CLB</span>' +
+          '<span class="mkpi-sep">·</span>' +
+          '<span><strong>' + esc(fmtInt(filtered.length)) + '</strong> Box</span>' +
+          '<span class="mkpi-sep">·</span>' +
+          '<span>Đang mở <strong>' + esc(expandedCount) + '/' + esc(pageGroups.length) + '</strong> CLB trên trang</span>' +
+        '</div>' +
+        '<div class="toolbar-group">' +
+          '<button type="button" class="btn btn-xs" data-clubs-action="expand-all">Mở toàn bộ</button>' +
+          '<button type="button" class="btn btn-xs" data-clubs-action="collapse-all">Thu gọn</button>' +
+        '</div>' +
+      '</div>';
+
+      var groupsHtml = pageGroups.map(function (grp) {
         var isPickle = String(grp.branding || '').toLowerCase() === 'pickleball' || grp.club_name.toLowerCase().indexOf('pickle') !== -1;
         var brandBadge = isPickle
           ? '<span class="badge badge-amber">' + svgIcon('pickle', 'ui-icon-sm') + '<span>Pickleball</span></span>'
@@ -523,10 +928,12 @@
         var portalBtn = grp.portal_token
           ? '<a href="/portal/' + encodeURIComponent(grp.portal_token) + '/" target="_blank" rel="noopener" class="btn btn-xs">' + svgIcon('key', 'ui-icon-sm') + '<span>Cổng Chủ Quán</span></a>'
           : '';
+        var isCollapsed = !hasActiveFilter && !!state.collapsedClubs[grp.club_id];
 
-        return '<div class="club-section" data-club-id="' + esc(grp.club_id) + '">' +
-          '<div class="club-header">' +
+        return '<div class="club-section' + (isCollapsed ? ' is-collapsed' : '') + '" data-club-id="' + esc(grp.club_id) + '">' +
+          '<div class="club-header is-collapsible" data-toggle-club="' + esc(grp.club_id) + '" role="button" tabindex="0" aria-expanded="' + (!isCollapsed ? 'true' : 'false') + '">' +
             '<div class="club-title-group">' +
+              '<span class="club-chevron" aria-hidden="true">' + svgIcon('chevronDown', 'ui-icon-sm') + '</span>' +
               '<h3 class="club-title">' + esc(grp.club_name) + '</h3>' +
               brandBadge +
               multiBadge +
@@ -536,15 +943,35 @@
               portalBtn +
             '</div>' +
           '</div>' +
-          renderBoxesTableHtml(grp.boxes) +
+          '<div class="club-body">' +
+            renderBoxesTableHtml(grp.boxes) +
+            renderBoxesMobileCardsHtml(grp.boxes) +
+          '</div>' +
         '</div>';
       }).join('');
+
+      var extraSuffix = '(' + fmtInt(visibleBoxes.length) + ' / ' + fmtInt(filtered.length) + ' Box)';
+      container.innerHTML = ledgerHtml + groupsHtml + renderPaginationBar('fleet', pg, 'CLB', extraSuffix);
     } else {
-      container.innerHTML = '<div class="club-section">' + renderBoxesTableHtml(filtered) + '</div>';
+      var pgFlat = paginateItems(filtered, 'fleet');
+      var flatBoxes = pgFlat.items;
+      var flatSig = buildFleetRenderSignature(flatBoxes, [
+        'FLAT', state.fleetFilter, state.fleetSearch, pgFlat.page, pgFlat.pageSize, filtered.length
+      ].join('|'));
+
+      if (!force && flatSig === state.lastFleetRenderSig) return;
+      state.lastFleetRenderSig = flatSig;
+
+      container.innerHTML =
+        '<div class="club-section">' +
+          renderBoxesTableHtml(flatBoxes) +
+          renderBoxesMobileCardsHtml(flatBoxes) +
+        '</div>' +
+        renderPaginationBar('fleet', pgFlat, 'Box');
     }
   }
 
-  /* 7-column consolidated Fleet table — fits 100% inside 1440px, zero clipped actions */
+  /* 7-column consolidated Fleet table — Desktop (>=768px) */
   function renderBoxesTableHtml(boxList) {
     var rows = boxList.map(function (b) {
       var boxId = b.id || b.box_id || '';
@@ -628,7 +1055,7 @@
       '</tr>';
     }).join('');
 
-    return '<div class="table-scroll"><table class="scada-table fleet-table tabular-nums">' +
+    return '<div class="table-scroll desktop-only-table"><table class="scada-table fleet-table tabular-nums">' +
       '<thead><tr>' +
         '<th>Trạm / CLB</th>' +
         '<th>Mạng (VPN / LAN)</th>' +
@@ -640,6 +1067,109 @@
       '</tr></thead>' +
       '<tbody>' + rows + '</tbody>' +
     '</table></div>';
+  }
+
+  /* /device/86 NodeProTableMobileCard Anatomy — Mobile (<768px) */
+  function renderBoxesMobileCardsHtml(boxList) {
+    var cards = boxList.map(function (b) {
+      var boxId = b.id || b.box_id || '';
+      var isOnline = !!b.online;
+      var cpuPctVal = Number(b.cpu_pct || 0);
+      var cpuBarClass = cpuPctVal >= 85 ? 'danger' : (cpuPctVal >= 65 ? 'warn' : 'ok');
+      var tempC = b.temp_c || 54;
+      var cpuCores = b.cpu_cores || 4;
+
+      var ramTotal = b.ram_total_mb || 1945;
+      var ramUsed = b.ram_used_mb || (b.ram_available_mb > 0 && ramTotal > b.ram_available_mb ? (ramTotal - b.ram_available_mb) : 0);
+      var ramAvail = b.ram_available_mb || Math.max(0, ramTotal - ramUsed);
+      var ramPct = b.ram_used_pct || b.ram_pct || (ramTotal > 0 ? Math.round((ramUsed * 100) / ramTotal) : 0);
+      var ramBarClass = ramPct >= 88 ? 'danger' : (ramPct >= 75 ? 'warn' : 'ok');
+
+      var swapTotal = b.swap_total_mb || b.zram_total_mb || 0;
+      var swapUsed = b.swap_used_mb !== undefined ? b.swap_used_mb : (b.zram_used_mb || 0);
+      var sdPct = b.sd_used_pct || 38;
+      var sdFs = b.sd_fs_type || 'f2fs';
+      var sdTone = sdPct >= 88 ? 'text-crimson' : (sdPct >= 75 ? 'text-amber' : 'text-emerald');
+
+      var ffAct = b.ffmpeg_count !== undefined ? b.ffmpeg_count : (b.cameras_count || 6) * 2;
+      var ffExp = b.ffmpeg_expected !== undefined ? b.ffmpeg_expected : (b.cameras_count || 6) * 2;
+      var hScore = b.hardening_score !== undefined ? b.hardening_score : 8;
+      var hMax = b.hardening_max || 8;
+      var rxMbps = b.rx_mbps !== undefined ? Number(b.rx_mbps).toFixed(1) : '0.0';
+      var camCount = b.cameras_count || 0;
+      var titleText = b.name || b.club_name || boxId;
+      var statusText = isOnline
+        ? ('ONLINE · ' + esc(b.rtt_ms || 0) + 'ms · ' + esc(b.uptime_human || '--'))
+        : 'OFFLINE · Mất kết nối';
+
+      var portalLink = b.portal_token
+        ? '<a href="/portal/' + encodeURIComponent(b.portal_token) + '/" target="_blank" rel="noopener">' + svgIcon('key', 'ui-icon-sm text-amber') + '<span>Cổng Chủ Quán</span></a>'
+        : '';
+
+      return '<article class="fleet-mcard' + (isOnline ? '' : ' is-offline') + '" data-card-box="' + esc(boxId) + '">' +
+        '<div class="mcard-head" data-open-box="' + esc(boxId) + '">' +
+          '<div class="mcard-head-left">' +
+            '<span class="led-dot ' + (isOnline ? 'emerald' : 'crimson') + '"></span>' +
+            '<div class="mcard-title-wrap">' +
+              '<div class="mcard-title">' + esc(titleText) + '</div>' +
+              '<div class="mcard-sub mono">' + esc(boxId) + ' · ' + statusText + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="mcard-head-right">' +
+            '<span class="badge ' + ((ffAct >= ffExp && ffExp > 0) ? 'badge-emerald' : 'badge-amber') + '">FF ' + esc(ffAct) + '/' + esc(ffExp) + '</span>' +
+            '<span class="badge ' + (hScore >= hMax ? 'badge-emerald' : 'badge-amber') + '">' + esc(hScore) + '/' + esc(hMax) + '</span>' +
+            svgIcon('chevronRight', 'ui-icon-sm text-muted') +
+          '</div>' +
+        '</div>' +
+
+        '<div class="mcard-tel-grid">' +
+          '<div class="mcard-tel-cell">' +
+            '<span class="mcard-tel-label">RAM</span>' +
+            '<span class="mcard-tel-val mono">' + esc(ramPct) + '%</span>' +
+            '<div class="mini-meter" style="max-width:100%;"><div class="mini-meter-fill ' + ramBarClass + '" style="width:' + Math.min(100, Math.max(0, ramPct)) + '%"></div></div>' +
+            '<span class="mcard-tel-sub mono">' + esc(ramUsed) + '/' + esc(ramTotal) + 'M · Avail ' + esc(ramAvail) + 'M</span>' +
+          '</div>' +
+          '<div class="mcard-tel-cell">' +
+            '<span class="mcard-tel-label">CPU / Nhiệt</span>' +
+            '<span class="mcard-tel-val mono">' + fmtNum(b.cpu_pct, 1) + '% · ' + fmtNum(tempC, 1) + '°C</span>' +
+            '<div class="mini-meter" style="max-width:100%;"><div class="mini-meter-fill ' + cpuBarClass + '" style="width:' + Math.min(100, Math.max(0, cpuPctVal)) + '%"></div></div>' +
+            '<span class="mcard-tel-sub mono">Load ' + fmtNum(b.load_avg_1m, 2) + ' (' + esc(cpuCores) + 'C)</span>' +
+          '</div>' +
+          '<div class="mcard-tel-cell">' +
+            '<span class="mcard-tel-label">SD / Swap</span>' +
+            '<span class="mcard-tel-val mono"><span class="' + sdTone + '">SD ' + esc(sdPct) + '%</span> · ' + esc(b.sd_total_gb || 64) + 'G ' + esc(sdFs) + '</span>' +
+            '<span class="mcard-tel-sub mono">Swap ' + esc(swapUsed) + '/' + esc(swapTotal) + 'M</span>' +
+          '</div>' +
+          '<div class="mcard-tel-cell">' +
+            '<span class="mcard-tel-label">Lưu lượng / Heap</span>' +
+            '<span class="mcard-tel-val mono">RX ' + esc(rxMbps) + ' Mbps</span>' +
+            '<span class="mcard-tel-sub mono">Heap ' + fmtNum(b.heap_alloc_mb, 1) + 'M · ' + esc(camCount) + ' Cam</span>' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="mcard-net-strip">' +
+          '<span class="mcard-net-chip">VPN ' + esc(b.vpn_ip || '--') + '</span>' +
+          '<span class="mcard-net-chip">LAN ' + esc(b.lan_ip || '--') + '</span>' +
+          '<span class="mcard-net-chip">grp ' + esc(b.shinobi_group_key || '--') + '</span>' +
+        '</div>' +
+
+        '<div class="mcard-foot">' +
+          '<span class="mcard-foot-meta mono">' + esc(b.soc_model || 'ARM64') + ' · ' + esc(camCount) + ' Cam</span>' +
+          '<div class="mcard-foot-actions">' +
+            '<button type="button" class="btn btn-cyan mcard-btn" data-open-box="' + esc(boxId) + '">Chi tiết</button>' +
+            '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/kspcam/" target="_blank" rel="noopener" class="btn mcard-btn">kspcam</a>' +
+            '<button type="button" class="btn mcard-more-btn" data-card-menu-btn="' + esc(boxId) + '" aria-expanded="false" aria-label="Thao tác thêm cho ' + esc(boxId) + '">' + svgIcon('more', 'ui-icon') + '</button>' +
+            '<div class="mcard-popover" data-card-menu="' + esc(boxId) + '">' +
+              '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/shinobi/" target="_blank" rel="noopener">' + svgIcon('video', 'ui-icon-sm text-cyan') + '<span>Mở Shinobi (:8080)</span></a>' +
+              '<a href="/fleet/proxy/' + encodeURIComponent(boxId) + '/nodered/" target="_blank" rel="noopener">' + svgIcon('zap', 'ui-icon-sm text-emerald') + '<span>Mở Node-RED (:1880)</span></a>' +
+              portalLink +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</article>';
+    }).join('');
+
+    return '<div class="mobile-card-list mobile-only-cards">' + cards + '</div>';
   }
 
   /* --------------------------------------------------------------------------
@@ -828,7 +1358,13 @@
      -------------------------------------------------------------------------- */
   function loadHardeningView() {
     return apiFetch('/fleet/api/hardening').then(function (data) {
-      state.hardeningBoxes = Array.isArray(data.boxes) ? data.boxes : [];
+      var list = Array.isArray(data.boxes) ? data.boxes : [];
+      list.forEach(function (item) {
+        indexItemSearch(item, [
+          item.box_id, item.id, item.box_name, item.club_name, item.vpn_ip
+        ]);
+      });
+      state.hardeningBoxes = list;
       state.hardeningSummary = data.summary || {};
       renderHardeningMatrix();
     }).catch(function (err) {
@@ -840,17 +1376,19 @@
     var container = document.getElementById('hardening-matrix-container');
     if (!container) return;
     var list = state.hardeningBoxes || [];
-    var q = (state.hardeningSearch || '').trim().toLowerCase();
+    var tokens = parseSearchQuery(state.hardeningSearch);
 
     var filtered = list.filter(function (item) {
       var sc = item.score !== undefined ? item.score : 8;
       var mx = item.max_score || 8;
       if (state.hardeningFilter === 'needs_fix' && sc >= mx) return false;
       if (state.hardeningFilter === 'compliant' && sc < mx) return false;
-      if (!q) return true;
-      var hay = ((item.box_id || '') + ' ' + (item.box_name || '') + ' ' + (item.club_name || '') + ' ' + (item.vpn_ip || '')).toLowerCase();
-      return hay.indexOf(q) !== -1;
+      return matchesSearch(item, tokens, [
+        item.box_id, item.id, item.box_name, item.club_name, item.vpn_ip
+      ]);
     });
+
+    syncSearchBoxState('hardening-search', 'hardening-match-count', filtered.length, list.length);
 
     if (!filtered.length) {
       container.innerHTML = '<div class="empty-state">' +
@@ -860,7 +1398,10 @@
       return;
     }
 
-    var rowsHtml = filtered.map(function (item) {
+    var pg = paginateItems(filtered, 'hardening');
+    var pageItems = pg.items;
+
+    var rowsHtml = pageItems.map(function (item) {
       var boxId = item.box_id || item.id || '';
       var pillars = Array.isArray(item.pillars) ? item.pillars : [];
       var pillarMap = {};
@@ -899,19 +1440,57 @@
       '</tr>';
     }).join('');
 
+    var mobileCardsHtml = pageItems.map(function (item) {
+      var boxId = item.box_id || item.id || '';
+      var pillars = Array.isArray(item.pillars) ? item.pillars : [];
+      var pillarMap = {};
+      pillars.forEach(function (p) { pillarMap[p.id || ('step_' + p.step)] = p; });
+      var score = item.score !== undefined ? item.score : 8;
+      var maxScore = item.max_score || 8;
+
+      var miniPills = GOLDEN_PILLAR_META.map(function (meta) {
+        var p = pillarMap[meta.id] || pillars[meta.step - 1] || { status: 'pass', detail: meta.name };
+        var ok = p.status === 'pass' || p.status === 'ok' || p.ok === true;
+        return '<span class="pillar-mini-pill ' + (ok ? 'ok' : 'warn') + '" title="' + esc(meta.name + ': ' + (p.detail || '')) + '">' +
+          svgIcon(ok ? 'check' : 'warn', 'ui-icon-sm') + '<span>B' + esc(meta.step) + '</span>' +
+        '</span>';
+      }).join('');
+
+      return '<article class="hardening-mcard">' +
+        '<div class="mcard-head" data-open-box="' + esc(boxId) + '">' +
+          '<div class="mcard-title-wrap">' +
+            '<div class="mcard-title">' + esc(item.club_name || item.box_name || boxId) + '</div>' +
+            '<div class="mcard-sub mono">' + esc(boxId) + (item.vpn_ip ? (' · ' + esc(item.vpn_ip)) : '') + '</div>' +
+          '</div>' +
+          '<span class="badge ' + (score >= maxScore ? 'badge-emerald' : 'badge-amber') + '">' + esc(score) + '/' + esc(maxScore) + '</span>' +
+        '</div>' +
+        '<div class="pillar-mini-grid">' + miniPills + '</div>' +
+        '<div class="mcard-foot">' +
+          '<span class="mcard-foot-meta">0-Format SOP</span>' +
+          '<div class="mcard-foot-actions">' +
+            '<button type="button" class="btn btn-primary mcard-btn" data-remediate-box="' + esc(boxId) + '">' + svgIcon('wrench', 'ui-icon-sm') + '<span>Vá 8 Bước</span></button>' +
+            '<button type="button" class="btn mcard-btn" data-inspect-box="' + esc(boxId) + '">' + svgIcon('search', 'ui-icon-sm') + '<span>Kiểm tra</span></button>' +
+          '</div>' +
+        '</div>' +
+      '</article>';
+    }).join('');
+
     var headersHtml = GOLDEN_PILLAR_META.map(function (m) {
       return '<th title="' + esc(m.name) + '">' + esc(m.short) + '</th>';
     }).join('');
 
-    container.innerHTML = '<div class="table-scroll"><table class="scada-table tabular-nums">' +
-      '<thead><tr>' +
-        '<th>Box / CLB</th>' +
-        '<th>Điểm</th>' +
-        headersHtml +
-        '<th>Thao Tác An Toàn</th>' +
-      '</tr></thead>' +
-      '<tbody>' + rowsHtml + '</tbody>' +
-    '</table></div>';
+    container.innerHTML =
+      '<div class="table-scroll desktop-only-table"><table class="scada-table tabular-nums">' +
+        '<thead><tr>' +
+          '<th>Box / CLB</th>' +
+          '<th>Điểm</th>' +
+          headersHtml +
+          '<th>Thao Tác An Toàn</th>' +
+        '</tr></thead>' +
+        '<tbody>' + rowsHtml + '</tbody>' +
+      '</table></div>' +
+      '<div class="mobile-card-list mobile-only-cards">' + mobileCardsHtml + '</div>' +
+      renderPaginationBar('hardening', pg, 'Box');
   }
 
   function remediateBox(boxId) {
@@ -947,7 +1526,14 @@
      -------------------------------------------------------------------------- */
   function loadCamerasView() {
     return apiFetch('/fleet/api/cameras').then(function (data) {
-      state.cameras = Array.isArray(data.cameras) ? data.cameras : [];
+      var list = Array.isArray(data.cameras) ? data.cameras : [];
+      list.forEach(function (c) {
+        indexItemSearch(c, [
+          c.id, c.box_id, c.club_name, c.club_id, c.name, c.table_name,
+          c.host, c.port, c.nvr_host, c.vendor, c.codec, c.audio_codec
+        ]);
+      });
+      state.cameras = list;
       state.camerasSummary = data.summary || { double_stream_count: data.double_stream_count || 0 };
       var navBadgeCam = document.getElementById('nav-badge-cameras');
       if (navBadgeCam) navBadgeCam.textContent = String(state.cameras.length);
@@ -991,36 +1577,66 @@
     var boxVal = (document.getElementById('cam-box-filter') || {}).value || '';
     var vendorVal = (document.getElementById('cam-vendor-filter') || {}).value || '';
     var onlyDouble = !!(document.getElementById('cam-doublestream-filter') || {}).checked;
-    var q = ((document.getElementById('cam-search-input') || {}).value || '').trim().toLowerCase();
+    var q = (document.getElementById('cam-search-input') || {}).value || '';
+    var tokens = parseSearchQuery(q);
 
     return (state.cameras || []).filter(function (c) {
       if (clubVal && c.club_name !== clubVal && c.club_id !== clubVal) return false;
       if (boxVal && c.box_id !== boxVal) return false;
       if (vendorVal && String(c.vendor || '').toLowerCase() !== vendorVal.toLowerCase()) return false;
       if (onlyDouble && !c.double_streaming) return false;
-      if (!q) return true;
-      var hay = [c.id, c.box_id, c.club_name, c.name, c.table_name, c.host, c.vendor, c.codec].join(' ').toLowerCase();
-      return hay.indexOf(q) !== -1;
+      return matchesSearch(c, tokens, [
+        c.id, c.box_id, c.club_name, c.club_id, c.name, c.table_name,
+        c.host, c.port, c.nvr_host, c.vendor, c.codec, c.audio_codec
+      ]);
     });
+  }
+
+  function getCameraId(c) {
+    return c.id || (c.box_id + ':' + c.host + ':' + (c.port || 37777));
+  }
+
+  function syncCameraSelectAllState(pageItems) {
+    var camSelectAll = document.getElementById('cam-select-all');
+    if (!camSelectAll) return;
+    if (!pageItems.length) {
+      camSelectAll.checked = false;
+      camSelectAll.indeterminate = false;
+      return;
+    }
+    var checkedOnPage = 0;
+    pageItems.forEach(function (c) {
+      if (state.selectedCameraIds[getCameraId(c)]) checkedOnPage++;
+    });
+    camSelectAll.checked = checkedOnPage === pageItems.length;
+    camSelectAll.indeterminate = checkedOnPage > 0 && checkedOnPage < pageItems.length;
   }
 
   function renderCamerasTable() {
     var tbody = document.getElementById('cameras-tbody');
+    var mobileWrap = document.getElementById('cameras-mobile-cards');
+    var pagerWrap = document.getElementById('cameras-pagination');
     var sumBar = document.getElementById('cameras-summary-bar');
     if (!tbody) return;
 
     var filtered = getFilteredCameras();
     var doubleCount = filtered.filter(function (c) { return c.double_streaming; }).length;
     var h265Count = filtered.filter(function (c) { return String(c.codec || '').toUpperCase() === 'H.265'; }).length;
+    var selectedCount = Object.keys(state.selectedCameraIds).filter(function (k) { return state.selectedCameraIds[k]; }).length;
+
+    syncSearchBoxState('cam-search-input', 'cameras-match-count', filtered.length, state.cameras.length);
 
     if (sumBar) {
       sumBar.innerHTML =
         '<div class="badge-row">' +
-          '<span class="badge badge-cyan">Hiển thị: ' + esc(filtered.length) + ' / ' + esc(state.cameras.length) + ' Camera</span>' +
-          '<span class="badge badge-emerald">Chuẩn H.265: ' + esc(h265Count) + '</span>' +
+          '<span class="badge badge-cyan">Khớp lọc: ' + esc(fmtInt(filtered.length)) + ' / ' + esc(fmtInt(state.cameras.length)) + ' Camera</span>' +
+          '<span class="badge badge-emerald">Chuẩn H.265: ' + esc(fmtInt(h265Count)) + '</span>' +
           (doubleCount > 0
-            ? '<span class="badge badge-amber">' + svgIcon('warn', 'ui-icon-sm') + '<span>Phát hiện Double-Streaming: ' + esc(doubleCount) + ' kênh</span></span>'
+            ? '<span class="badge badge-amber">' + svgIcon('warn', 'ui-icon-sm') + '<span>Phát hiện Double-Streaming: ' + esc(fmtInt(doubleCount)) + ' kênh</span></span>'
             : '<span class="badge badge-emerald">' + svgIcon('check', 'ui-icon-sm') + '<span>0 Double-Streaming</span></span>') +
+          (selectedCount > 0
+            ? '<span class="badge badge-purple">Đã chọn: ' + esc(fmtInt(selectedCount)) + '</span>'
+            : '') +
         '</div>' +
         '<div class="mono text-secondary" style="font-size:12px;">' +
           'Chuẩn Bida Golden: H.265 · 30 FPS · 1536 Kbps CBR · GOP 50 · AAC' +
@@ -1029,11 +1645,23 @@
 
     if (!filtered.length) {
       tbody.innerHTML = '<tr><td colspan="10" class="analytics-empty-cell">Không có camera nào khớp bộ lọc hiện tại.</td></tr>';
+      if (mobileWrap) {
+        mobileWrap.innerHTML = '<div class="empty-state">' +
+          '<div class="empty-state-icon">' + svgIcon('video') + '</div>' +
+          '<div><strong>Không có camera nào khớp bộ lọc hiện tại.</strong></div>' +
+        '</div>';
+      }
+      if (pagerWrap) pagerWrap.innerHTML = '';
+      syncCameraSelectAllState([]);
       return;
     }
 
-    tbody.innerHTML = filtered.map(function (c) {
-      var cid = c.id || (c.box_id + ':' + c.host + ':' + (c.port || 37777));
+    var pg = paginateItems(filtered, 'cameras');
+    var pageItems = pg.items;
+    syncCameraSelectAllState(pageItems);
+
+    tbody.innerHTML = pageItems.map(function (c) {
+      var cid = getCameraId(c);
       var checked = state.selectedCameraIds[cid] ? 'checked' : '';
       var isH265 = String(c.codec || '').toUpperCase() === 'H.265';
       return '<tr>' +
@@ -1065,6 +1693,43 @@
         '</td>' +
       '</tr>';
     }).join('');
+
+    if (mobileWrap) {
+      mobileWrap.innerHTML = pageItems.map(function (c) {
+        var cid = getCameraId(c);
+        var checked = state.selectedCameraIds[cid] ? 'checked' : '';
+        var isH265 = String(c.codec || '').toUpperCase() === 'H.265';
+        return '<article class="cam-mcard">' +
+          '<div class="cam-mcard-head">' +
+            '<label class="cam-mcard-check-wrap">' +
+              '<input type="checkbox" class="cam-row-check" data-cam-id="' + esc(cid) + '" ' + checked + '>' +
+              '<div class="mcard-title-wrap">' +
+                '<div class="mcard-title">' + esc(c.table_name || c.name || 'Bàn Bida') + '</div>' +
+                '<div class="mcard-sub mono">' + esc(cid) + '</div>' +
+              '</div>' +
+            '</label>' +
+            (c.online !== false
+              ? '<span class="badge badge-emerald"><span class="led-dot emerald"></span>ONLINE</span>'
+              : '<span class="badge badge-crimson"><span class="led-dot crimson"></span>OFFLINE</span>') +
+          '</div>' +
+          '<div class="mcard-sub">' + esc(c.club_name || '--') + ' · <span class="mono">' + esc(c.box_id || '--') + '</span> · ' + (c.nvr_host ? ('NVR ' + esc(c.nvr_host) + ' CH' + esc(c.nvr_channel || 1)) : 'Direct LAN') + '</div>' +
+          '<div class="badge-row">' +
+            '<span class="badge badge-neutral">' + esc(c.vendor || 'Dahua') + '</span>' +
+            (isH265
+              ? '<span class="badge badge-emerald">H.265</span>'
+              : '<span class="badge badge-amber">' + esc(c.codec || 'H.264') + '</span>') +
+            '<span class="badge badge-neutral mono">' + esc(c.fps || 30) + 'fps · ' + esc(c.bitrate_kbps || 1536) + 'k · ' + esc(c.audio_codec || 'AAC') + '</span>' +
+            (c.double_streaming
+              ? '<span class="badge badge-amber">' + svgIcon('warn', 'ui-icon-sm') + '<span>DOUBLE-STREAM</span></span>'
+              : '<span class="badge badge-emerald">' + svgIcon('check', 'ui-icon-sm') + '<span>Đơn luồng</span></span>') +
+          '</div>' +
+        '</article>';
+      }).join('');
+    }
+
+    if (pagerWrap) {
+      pagerWrap.innerHTML = renderPaginationBar('cameras', pg, 'Camera');
+    }
   }
 
   function applyBulkGoldenH265() {
@@ -1110,10 +1775,97 @@
   /* --------------------------------------------------------------------------
      View 5: #redbida — 17-Rule Inspector, Branding Guard & FRPC Auditor
      -------------------------------------------------------------------------- */
+  function buildMergedRedbidaDomains(boxes, domains) {
+    var byBoxMap = {};
+    var domList = [];
+
+    function ensureDomRow(boxId, clubName, branding) {
+      var key = boxId || clubName || 'unknown';
+      if (!byBoxMap[key]) {
+        byBoxMap[key] = {
+          box_id: boxId || '--',
+          club_name: clubName || '',
+          branding: String(branding || 'billiards').toLowerCase(),
+          store_domain: '',
+          cstore_domain: '',
+          store_http_code: 200,
+          cstore_http_code: 200,
+          conflict: false,
+          shinobi_group_key: '',
+          ggcode: '',
+          virtual_ip: ''
+        };
+        domList.push(byBoxMap[key]);
+      }
+      return byBoxMap[key];
+    }
+
+    (boxes || []).forEach(function (b) {
+      var row = ensureDomRow(b.box_id || b.id, b.club_name || b.name, b.branding);
+      if (b.store_domain) row.store_domain = b.store_domain;
+      if (b.cstore_domain) row.cstore_domain = b.cstore_domain;
+      if (b.store_http_code) row.store_http_code = b.store_http_code;
+      if (b.cstore_http_code) row.cstore_http_code = b.cstore_http_code;
+      if (b.domain_conflict) row.conflict = true;
+      var keys = b.keys || {};
+      if (keys.shinobi_group_key || b.shinobi_group_key) row.shinobi_group_key = keys.shinobi_group_key || b.shinobi_group_key;
+      if (keys.ggcode || b.ggcode) row.ggcode = keys.ggcode || b.ggcode;
+      if (keys.eth0_virtual_ip || b.virtual_ip) row.virtual_ip = keys.eth0_virtual_ip || b.virtual_ip;
+    });
+
+    (domains || []).forEach(function (d) {
+      var row = ensureDomRow(d.box_id, d.club_name || d.box_name, d.branding);
+      var kind = String(d.kind || '').toLowerCase();
+      var cleanHost = function (entry) {
+        var raw = entry.full_url || entry.domain || entry.subdomain || '';
+        return String(raw).replace(/^https?:\/\//i, '');
+      };
+      if (d.store_domain) {
+        row.store_domain = d.store_domain;
+        if (d.store_http_code) row.store_http_code = d.store_http_code;
+      }
+      if (d.cstore_domain) {
+        row.cstore_domain = d.cstore_domain;
+        if (d.cstore_http_code) row.cstore_http_code = d.cstore_http_code;
+      }
+      if (kind === 'store') {
+        var sh = cleanHost(d);
+        if (sh && !row.store_domain) row.store_domain = sh;
+        if (d.http_code) row.store_http_code = d.http_code;
+      } else if (kind === 'c-store' || kind === 'cstore') {
+        var ch = cleanHost(d);
+        if (ch && !row.cstore_domain) row.cstore_domain = ch;
+        if (d.http_code) row.cstore_http_code = d.http_code;
+      }
+      if (d.conflict) row.conflict = true;
+    });
+
+    domList.forEach(function (d) {
+      indexItemSearch(d, [
+        d.box_id, d.club_name, d.store_domain, d.cstore_domain,
+        d.shinobi_group_key, d.ggcode, d.virtual_ip, d.branding
+      ]);
+    });
+    return domList;
+  }
+
   function loadRedbidaView() {
     return apiFetch('/fleet/api/redbida').then(function (data) {
-      state.redbidaBoxes = Array.isArray(data.boxes) ? data.boxes : [];
-      state.redbidaDomains = Array.isArray(data.domains) ? data.domains : [];
+      var boxes = Array.isArray(data.boxes) ? data.boxes : [];
+      var domains = Array.isArray(data.domains) ? data.domains : [];
+      boxes.forEach(function (b) {
+        var keys = b.keys || {};
+        indexItemSearch(b, [
+          b.box_id, b.id, b.club_name, b.box_name, b.store_domain, b.cstore_domain,
+          keys.shinobi_group_key || b.shinobi_group_key,
+          keys.ggcode || b.ggcode,
+          keys.eth0_virtual_ip || keys.end0_virtual_ip || b.virtual_ip,
+          b.branding
+        ]);
+      });
+      state.redbidaBoxes = boxes;
+      state.redbidaDomains = domains;
+      state.redbidaMergedDomains = buildMergedRedbidaDomains(boxes, domains);
       state.redbidaConflicts = Array.isArray(data.conflicts) ? data.conflicts : [];
       renderRedbidaView();
     }).catch(function (err) {
@@ -1124,161 +1876,181 @@
   function renderRedbidaView() {
     var domContainer = document.getElementById('redbida-domains-container');
     var boxContainer = document.getElementById('redbida-boxes-container');
-    var q = (state.redbidaSearch || '').trim().toLowerCase();
+    var domCountEl = document.getElementById('redbida-domains-count');
+    var boxCountEl = document.getElementById('redbida-boxes-count');
+    var tokens = parseSearchQuery(state.redbidaSearch);
 
-    /* Render FRPC Subdomain Auditor (1 row per box, merged from redbidaBoxes + FRPCSubdomainEntry domains) */
+    var domList = state.redbidaMergedDomains || [];
+    var domFiltered = domList.filter(function (d) {
+      if (state.redbidaBrandFilter === 'billiards' && d.branding !== 'billiards') return false;
+      if (state.redbidaBrandFilter === 'pickleball' && d.branding !== 'pickleball') return false;
+      if (state.redbidaBrandFilter === 'conflict' && !d.conflict) return false;
+      return matchesSearch(d, tokens, [d.box_id, d.club_name, d.store_domain, d.cstore_domain, d.branding]);
+    });
+
+    var rBoxes = (state.redbidaBoxes || []).filter(function (b) {
+      var br = String(b.branding || 'billiards').toLowerCase();
+      if (state.redbidaBrandFilter === 'billiards' && br !== 'billiards') return false;
+      if (state.redbidaBrandFilter === 'pickleball' && br !== 'pickleball') return false;
+      if (state.redbidaBrandFilter === 'conflict' && !b.domain_conflict) return false;
+      return matchesSearch(b, tokens, [b.box_id || b.id, b.club_name, b.store_domain, b.cstore_domain, b.shinobi_group_key, b.branding]);
+    });
+
+    syncSearchBoxState('redbida-search', 'redbida-match-count', rBoxes.length, (state.redbidaBoxes || []).length);
+    if (domCountEl) domCountEl.textContent = fmtInt(domFiltered.length) + ' / ' + fmtInt(domList.length) + ' tên miền';
+    if (boxCountEl) boxCountEl.textContent = fmtInt(rBoxes.length) + ' / ' + fmtInt((state.redbidaBoxes || []).length) + ' Box';
+
+    /* Render FRPC Subdomain Auditor with independent pagination */
     if (domContainer) {
-      var byBoxMap = {};
-      var domList = [];
-
-      function ensureDomRow(boxId, clubName, branding) {
-        var key = boxId || clubName || 'unknown';
-        if (!byBoxMap[key]) {
-          byBoxMap[key] = {
-            box_id: boxId || '--',
-            club_name: clubName || '',
-            branding: String(branding || 'billiards').toLowerCase(),
-            store_domain: '',
-            cstore_domain: '',
-            store_http_code: 200,
-            cstore_http_code: 200,
-            conflict: false
-          };
-          domList.push(byBoxMap[key]);
-        }
-        return byBoxMap[key];
-      }
-
-      (state.redbidaBoxes || []).forEach(function (b) {
-        var row = ensureDomRow(b.box_id || b.id, b.club_name || b.name, b.branding);
-        if (b.store_domain) row.store_domain = b.store_domain;
-        if (b.cstore_domain) row.cstore_domain = b.cstore_domain;
-        if (b.store_http_code) row.store_http_code = b.store_http_code;
-        if (b.cstore_http_code) row.cstore_http_code = b.cstore_http_code;
-        if (b.domain_conflict) row.conflict = true;
-      });
-
-      (state.redbidaDomains || []).forEach(function (d) {
-        var row = ensureDomRow(d.box_id, d.club_name || d.box_name, d.branding);
-        var kind = String(d.kind || '').toLowerCase();
-        var cleanHost = function (entry) {
-          var raw = entry.full_url || entry.domain || entry.subdomain || '';
-          return String(raw).replace(/^https?:\/\//i, '');
-        };
-        if (d.store_domain) {
-          row.store_domain = d.store_domain;
-          if (d.store_http_code) row.store_http_code = d.store_http_code;
-        }
-        if (d.cstore_domain) {
-          row.cstore_domain = d.cstore_domain;
-          if (d.cstore_http_code) row.cstore_http_code = d.cstore_http_code;
-        }
-        if (kind === 'store') {
-          var sh = cleanHost(d);
-          if (sh && !row.store_domain) row.store_domain = sh;
-          if (d.http_code) row.store_http_code = d.http_code;
-        } else if (kind === 'c-store' || kind === 'cstore') {
-          var ch = cleanHost(d);
-          if (ch && !row.cstore_domain) row.cstore_domain = ch;
-          if (d.http_code) row.cstore_http_code = d.http_code;
-        }
-        if (d.conflict) row.conflict = true;
-      });
-
-      var domFiltered = domList.filter(function (d) {
-        if (state.redbidaBrandFilter === 'billiards' && d.branding !== 'billiards') return false;
-        if (state.redbidaBrandFilter === 'pickleball' && d.branding !== 'pickleball') return false;
-        if (state.redbidaBrandFilter === 'conflict' && !d.conflict) return false;
-        if (!q) return true;
-        var hay = [d.box_id, d.club_name, d.store_domain, d.cstore_domain].join(' ').toLowerCase();
-        return hay.indexOf(q) !== -1;
-      });
-
       if (!domFiltered.length) {
         domContainer.innerHTML = '<div class="empty-state">' +
           '<div class="empty-state-icon">' + svgIcon('globe') + '</div>' +
           '<div><strong>Không có tên miền FRPC nào khớp bộ lọc.</strong></div>' +
         '</div>';
       } else {
-        domContainer.innerHTML = '<div class="table-scroll"><table class="scada-table tabular-nums">' +
-          '<thead><tr><th>Box ID / CLB</th><th>Subdomain Store</th><th>HTTP</th><th>Subdomain C-Store</th><th>HTTP</th><th>Kiểm Toán</th></tr></thead>' +
-          '<tbody>' + domFiltered.map(function (d) {
-            var sCode = d.store_http_code || 200;
-            var cCode = d.cstore_http_code || 200;
-            return '<tr>' +
-              '<td><strong class="mono">' + esc(d.box_id) + '</strong> · ' + esc(d.club_name || '') + '</td>' +
-              '<td class="mono">' + esc(d.store_domain || '--') + '</td>' +
-              '<td><span class="badge ' + (sCode === 200 ? 'badge-emerald' : 'badge-amber') + '">HTTP ' + esc(sCode) + '</span></td>' +
-              '<td class="mono">' + esc(d.cstore_domain || '--') + '</td>' +
-              '<td><span class="badge ' + (cCode === 200 ? 'badge-emerald' : 'badge-amber') + '">HTTP ' + esc(cCode) + '</span></td>' +
-              '<td>' + (d.conflict
-                ? '<span class="badge badge-crimson">' + svgIcon('warn', 'ui-icon-sm') + '<span>TRÙNG SUBDOMAIN</span></span>'
-                : '<span class="badge badge-emerald">' + svgIcon('check', 'ui-icon-sm') + '<span>DUY NHẤT</span></span>') + '</td>' +
-            '</tr>';
-          }).join('') + '</tbody></table></div>';
+        var domPg = paginateItems(domFiltered, 'redbidaDomains');
+        var domDesktopRows = domPg.items.map(function (d) {
+          var sCode = d.store_http_code || 200;
+          var cCode = d.cstore_http_code || 200;
+          return '<tr>' +
+            '<td><strong class="mono">' + esc(d.box_id) + '</strong> · ' + esc(d.club_name || '') + '</td>' +
+            '<td class="mono">' + esc(d.store_domain || '--') + '</td>' +
+            '<td><span class="badge ' + (sCode === 200 ? 'badge-emerald' : 'badge-amber') + '">HTTP ' + esc(sCode) + '</span></td>' +
+            '<td class="mono">' + esc(d.cstore_domain || '--') + '</td>' +
+            '<td><span class="badge ' + (cCode === 200 ? 'badge-emerald' : 'badge-amber') + '">HTTP ' + esc(cCode) + '</span></td>' +
+            '<td>' + (d.conflict
+              ? '<span class="badge badge-crimson">' + svgIcon('warn', 'ui-icon-sm') + '<span>TRÙNG SUBDOMAIN</span></span>'
+              : '<span class="badge badge-emerald">' + svgIcon('check', 'ui-icon-sm') + '<span>DUY NHẤT</span></span>') + '</td>' +
+          '</tr>';
+        }).join('');
+
+        var domMobileCards = domPg.items.map(function (d) {
+          var sCode = d.store_http_code || 200;
+          var cCode = d.cstore_http_code || 200;
+          return '<article class="redbida-mcard">' +
+            '<div class="mcard-head">' +
+              '<div class="mcard-title-wrap">' +
+                '<div class="mcard-title">' + esc(d.club_name || d.box_id) + '</div>' +
+                '<div class="mcard-sub mono">' + esc(d.box_id) + '</div>' +
+              '</div>' +
+              (d.conflict
+                ? '<span class="badge badge-crimson">' + svgIcon('warn', 'ui-icon-sm') + '<span>Trùng</span></span>'
+                : '<span class="badge badge-emerald">' + svgIcon('check', 'ui-icon-sm') + '<span>Duy nhất</span></span>') +
+            '</div>' +
+            '<div class="redbida-domain-row">' +
+              '<span class="redbida-domain-host">' + esc(d.store_domain || '--') + '</span>' +
+              '<span class="badge ' + (sCode === 200 ? 'badge-emerald' : 'badge-amber') + '">HTTP ' + esc(sCode) + '</span>' +
+            '</div>' +
+            '<div class="redbida-domain-row">' +
+              '<span class="redbida-domain-host">' + esc(d.cstore_domain || '--') + '</span>' +
+              '<span class="badge ' + (cCode === 200 ? 'badge-emerald' : 'badge-amber') + '">HTTP ' + esc(cCode) + '</span>' +
+            '</div>' +
+          '</article>';
+        }).join('');
+
+        domContainer.innerHTML =
+          '<div class="table-scroll desktop-only-table"><table class="scada-table tabular-nums">' +
+            '<thead><tr><th>Box ID / CLB</th><th>Subdomain Store</th><th>HTTP</th><th>Subdomain C-Store</th><th>HTTP</th><th>Kiểm Toán</th></tr></thead>' +
+            '<tbody>' + domDesktopRows + '</tbody>' +
+          '</table></div>' +
+          '<div class="mobile-card-list mobile-only-cards">' + domMobileCards + '</div>' +
+          renderPaginationBar('redbidaDomains', domPg, 'tên miền');
       }
     }
 
-    /* Render 17-Rule Inspector & Branding Guard */
+    /* Render 17-Rule Inspector & Branding Guard with independent pagination */
     if (boxContainer) {
-      var rBoxes = state.redbidaBoxes.filter(function (b) {
-        var br = String(b.branding || 'billiards').toLowerCase();
-        if (state.redbidaBrandFilter === 'billiards' && br !== 'billiards') return false;
-        if (state.redbidaBrandFilter === 'pickleball' && br !== 'pickleball') return false;
-        if (state.redbidaBrandFilter === 'conflict' && !b.domain_conflict) return false;
-        if (!q) return true;
-        var hay = [b.box_id || b.id, b.club_name, b.store_domain, b.cstore_domain, b.shinobi_group_key].join(' ').toLowerCase();
-        return hay.indexOf(q) !== -1;
-      });
-
       if (!rBoxes.length) {
         boxContainer.innerHTML = '<div class="empty-state">' +
           '<div class="empty-state-icon">' + svgIcon('sliders') + '</div>' +
           '<div><strong>Không có Box nào khớp bộ lọc RedBida.</strong></div>' +
         '</div>';
       } else {
-        boxContainer.innerHTML = '<div class="table-scroll"><table class="scada-table tabular-nums">' +
-          '<thead><tr>' +
-            '<th>Box ID / CLB</th>' +
-            '<th>Thương Hiệu (Branding Guard)</th>' +
-            '<th>Điểm 17-Rule</th>' +
-            '<th>Khóa Mở Kiểm Soát (VIP / Group / GGCode / C01..C20)</th>' +
-            '<th>Thao Tác</th>' +
-          '</tr></thead>' +
-          '<tbody>' + rBoxes.map(function (b) {
-            var boxId = b.box_id || b.id || '';
-            var isPickle = String(b.branding || '').toLowerCase() === 'pickleball';
-            var score = b.score !== undefined ? b.score : (b.redbida_score || 17);
-            var maxScore = b.max_score || 17;
-            var keys = b.keys || {};
-            var vip = keys.eth0_virtual_ip || keys.end0_virtual_ip || b.virtual_ip || '192.168.1.250';
-            var grp = keys.shinobi_group_key || b.shinobi_group_key || '--';
-            var gg = keys.ggcode || b.ggcode || 'GG-BIDA';
+        var boxPg = paginateItems(rBoxes, 'redbidaBoxes');
+        var boxDesktopRows = boxPg.items.map(function (b) {
+          var boxId = b.box_id || b.id || '';
+          var isPickle = String(b.branding || '').toLowerCase() === 'pickleball';
+          var score = b.score !== undefined ? b.score : (b.redbida_score || 17);
+          var maxScore = b.max_score || 17;
+          var keys = b.keys || {};
+          var vip = keys.eth0_virtual_ip || keys.end0_virtual_ip || b.virtual_ip || '192.168.1.250';
+          var grp = keys.shinobi_group_key || b.shinobi_group_key || '--';
+          var gg = keys.ggcode || b.ggcode || 'GG-BIDA';
 
-            return '<tr>' +
-              '<td>' +
-                '<div class="mono cell-primary">' + esc(boxId) + '</div>' +
-                '<div class="cell-sub">' + esc(b.club_name || b.box_name || '') + '</div>' +
-              '</td>' +
-              '<td>' +
-                (isPickle
-                  ? '<span class="badge badge-amber">' + svgIcon('pickle', 'ui-icon-sm') + '<span>Pickleball (Preserved)</span></span>'
-                  : '<span class="badge badge-cyan">' + svgIcon('pool', 'ui-icon-sm') + '<span>Billiards (RedBida)</span></span>') +
-              '</td>' +
-              '<td>' +
-                '<span class="badge ' + (score >= maxScore ? 'badge-emerald' : 'badge-amber') + '">' + esc(score) + '/' + esc(maxScore) + '</span>' +
-              '</td>' +
-              '<td class="mono" style="font-size:12px;">' +
-                'VIP: <code>' + esc(vip) + '</code> · Grp: <code>' + esc(grp) + '</code> · GG: <code>' + esc(gg) + '</code> · [C01..C20]' +
-              '</td>' +
-              '<td>' +
-                '<div class="action-btn-row">' +
-                  '<button type="button" class="btn btn-xs btn-cyan" data-open-redbida-edit="' + esc(boxId) + '">' + svgIcon('unlock', 'ui-icon-sm') + '<span>Mở Khóa</span></button>' +
-                  '<button type="button" class="btn btn-xs btn-primary" data-autofix-redbida="' + esc(boxId) + '">' + svgIcon('zap', 'ui-icon-sm') + '<span>Auto-Fix 17</span></button>' +
-                '</div>' +
-              '</td>' +
-            '</tr>';
-          }).join('') + '</tbody></table></div>';
+          return '<tr>' +
+            '<td>' +
+              '<div class="mono cell-primary">' + esc(boxId) + '</div>' +
+              '<div class="cell-sub">' + esc(b.club_name || b.box_name || '') + '</div>' +
+            '</td>' +
+            '<td>' +
+              (isPickle
+                ? '<span class="badge badge-amber">' + svgIcon('pickle', 'ui-icon-sm') + '<span>Pickleball (Preserved)</span></span>'
+                : '<span class="badge badge-cyan">' + svgIcon('pool', 'ui-icon-sm') + '<span>Billiards (RedBida)</span></span>') +
+            '</td>' +
+            '<td>' +
+              '<span class="badge ' + (score >= maxScore ? 'badge-emerald' : 'badge-amber') + '">' + esc(score) + '/' + esc(maxScore) + '</span>' +
+            '</td>' +
+            '<td class="mono" style="font-size:12px;">' +
+              'VIP: <code>' + esc(vip) + '</code> · Grp: <code>' + esc(grp) + '</code> · GG: <code>' + esc(gg) + '</code> · [C01..C20]' +
+            '</td>' +
+            '<td>' +
+              '<div class="action-btn-row">' +
+                '<button type="button" class="btn btn-xs btn-cyan" data-open-redbida-edit="' + esc(boxId) + '">' + svgIcon('unlock', 'ui-icon-sm') + '<span>Mở Khóa</span></button>' +
+                '<button type="button" class="btn btn-xs btn-primary" data-autofix-redbida="' + esc(boxId) + '">' + svgIcon('zap', 'ui-icon-sm') + '<span>Auto-Fix 17</span></button>' +
+              '</div>' +
+            '</td>' +
+          '</tr>';
+        }).join('');
+
+        var boxMobileCards = boxPg.items.map(function (b) {
+          var boxId = b.box_id || b.id || '';
+          var isPickle = String(b.branding || '').toLowerCase() === 'pickleball';
+          var score = b.score !== undefined ? b.score : (b.redbida_score || 17);
+          var maxScore = b.max_score || 17;
+          var keys = b.keys || {};
+          var vip = keys.eth0_virtual_ip || keys.end0_virtual_ip || b.virtual_ip || '192.168.1.250';
+          var grp = keys.shinobi_group_key || b.shinobi_group_key || '--';
+          var gg = keys.ggcode || b.ggcode || 'GG-BIDA';
+
+          return '<article class="redbida-mcard">' +
+            '<div class="mcard-head">' +
+              '<div class="mcard-title-wrap">' +
+                '<div class="mcard-title">' + esc(b.club_name || b.box_name || boxId) + '</div>' +
+                '<div class="mcard-sub mono">' + esc(boxId) + '</div>' +
+              '</div>' +
+              '<span class="badge ' + (score >= maxScore ? 'badge-emerald' : 'badge-amber') + '">' + esc(score) + '/' + esc(maxScore) + '</span>' +
+            '</div>' +
+            '<div class="badge-row">' +
+              (isPickle
+                ? '<span class="badge badge-amber">' + svgIcon('pickle', 'ui-icon-sm') + '<span>Pickleball</span></span>'
+                : '<span class="badge badge-cyan">' + svgIcon('pool', 'ui-icon-sm') + '<span>Billiards</span></span>') +
+              '<span class="mcard-net-chip">VIP ' + esc(vip) + '</span>' +
+              '<span class="mcard-net-chip">Grp ' + esc(grp) + '</span>' +
+              '<span class="mcard-net-chip">GG ' + esc(gg) + '</span>' +
+            '</div>' +
+            '<div class="mcard-foot">' +
+              '<span class="mcard-foot-meta mono">[C01..C20]</span>' +
+              '<div class="mcard-foot-actions">' +
+                '<button type="button" class="btn btn-cyan mcard-btn" data-open-redbida-edit="' + esc(boxId) + '">' + svgIcon('unlock', 'ui-icon-sm') + '<span>Mở Khóa</span></button>' +
+                '<button type="button" class="btn btn-primary mcard-btn" data-autofix-redbida="' + esc(boxId) + '">' + svgIcon('zap', 'ui-icon-sm') + '<span>Auto-Fix 17</span></button>' +
+              '</div>' +
+            '</div>' +
+          '</article>';
+        }).join('');
+
+        boxContainer.innerHTML =
+          '<div class="table-scroll desktop-only-table"><table class="scada-table tabular-nums">' +
+            '<thead><tr>' +
+              '<th>Box ID / CLB</th>' +
+              '<th>Thương Hiệu (Branding Guard)</th>' +
+              '<th>Điểm 17-Rule</th>' +
+              '<th>Khóa Mở Kiểm Soát (VIP / Group / GGCode / C01..C20)</th>' +
+              '<th>Thao Tác</th>' +
+            '</tr></thead>' +
+            '<tbody>' + boxDesktopRows + '</tbody>' +
+          '</table></div>' +
+          '<div class="mobile-card-list mobile-only-cards">' + boxMobileCards + '</div>' +
+          renderPaginationBar('redbidaBoxes', boxPg, 'Box');
       }
     }
   }
@@ -1329,12 +2101,18 @@
   }
 
   /* --------------------------------------------------------------------------
-     View 6: #handover — 1-Click Handover Pack Generator + Inline SVG QR Codes
+     View 6: #handover — 1-Click Handover Pack Generator + Paginated Club Quick-Pick + SVG QR
      -------------------------------------------------------------------------- */
   function loadHandoverView(clubId) {
     var url = clubId ? ('/fleet/api/handover/' + encodeURIComponent(clubId)) : '/fleet/api/handover';
     return apiFetch(url).then(function (data) {
       if (Array.isArray(data.packs) && data.packs.length > 0) {
+        data.packs.forEach(function (p) {
+          indexItemSearch(p, [
+            p.club_id, p.id, p.club_name, p.name, p.store_url, p.cstore_url,
+            p.box_id, Array.isArray(p.box_ids) ? p.box_ids.join(' ') : ''
+          ]);
+        });
         state.handoverPacks = data.packs;
       }
       var pack = data.pack || (state.handoverPacks && state.handoverPacks[0]) || data;
@@ -1343,6 +2121,50 @@
     }).catch(function (err) {
       showToast('Lỗi tải Gói Bàn Giao: ' + err.message, true);
     });
+  }
+
+  function renderHandoverClubPicker() {
+    var picker = document.getElementById('handover-club-picker');
+    var packs = state.handoverPacks || [];
+    var pack = state.activeHandoverPack || packs[0] || {};
+    var currentId = pack.club_id || pack.id || '';
+    var tokens = parseSearchQuery(state.handoverSearch);
+
+    var filtered = packs.filter(function (p) {
+      return matchesSearch(p, tokens, [p.club_id, p.id, p.club_name, p.name, p.store_url, p.cstore_url]);
+    });
+
+    syncSearchBoxState('handover-club-search', 'handover-match-count', filtered.length, packs.length);
+    if (!picker) return;
+
+    if (!packs.length) {
+      picker.innerHTML = '';
+      return;
+    }
+
+    if (!filtered.length) {
+      picker.innerHTML = '<div class="empty-state" style="padding:14px;">' +
+        '<div><strong>Không tìm thấy CLB bàn giao nào khớp từ khóa.</strong></div>' +
+      '</div>';
+      return;
+    }
+
+    var pg = paginateItems(filtered, 'handoverClubs');
+    var pillsHtml = pg.items.map(function (p) {
+      var pid = p.club_id || p.id || '';
+      var isAct = pid === currentId;
+      var domain = String(p.store_url || '').replace(/^https?:\/\//i, '');
+      var boxCnt = Array.isArray(p.box_ids) ? p.box_ids.length : (p.boxes_count || 0);
+      var subText = (boxCnt > 0 ? (boxCnt + ' Box · ') : '') + (domain || pid);
+      return '<button type="button" class="handover-club-pill' + (isAct ? ' active' : '') + '" data-pick-handover-club="' + esc(pid) + '">' +
+        '<span class="handover-club-pill-name">' + esc(p.club_name || p.name || pid) + '</span>' +
+        '<span class="handover-club-pill-sub mono">' + esc(subText) + '</span>' +
+      '</button>';
+    }).join('');
+
+    picker.innerHTML =
+      '<div class="handover-club-grid">' + pillsHtml + '</div>' +
+      renderPaginationBar('handoverClubs', pg, 'CLB');
   }
 
   function renderHandoverView() {
@@ -1359,6 +2181,8 @@
         '</option>';
       }).join('');
     }
+
+    renderHandoverClubPicker();
 
     var storeUrl = pack.store_url || 'https://store-bida.video.io.vn';
     var cstoreUrl = pack.cstore_url || 'https://c-store-bida.video.io.vn';
@@ -1425,6 +2249,12 @@
     list.sort(function (a, b) {
       return String(a.name).localeCompare(String(b.name), 'vi');
     });
+
+    var sig = list.map(function (c) { return c.id + ':' + c.name; }).join('|');
+    if (sig === state.lastAnalyticsClubSig && sel.options.length > 1) {
+      return;
+    }
+    state.lastAnalyticsClubSig = sig;
 
     sel.innerHTML = '<option value="">Tất cả CLB (' + list.length + ')</option>' +
       list.map(function (c) {
@@ -2018,11 +2848,12 @@
       return '<th class="sortable-th' + (active ? ' sort-active' : '') + '" data-analytics-sort="' + esc(col) + '">' + esc(label) + arrow + '</th>';
     }
 
+    var pgTop = paginateItems(sorted, 'analyticsTop');
     var rowsHtml = '';
     if (!sorted.length) {
       rowsHtml = '<tr><td colspan="10" class="analytics-empty-cell">Chưa có dữ liệu trong khung thời gian này — box sẽ tự động đẩy rollup mỗi 5 phút.</td></tr>';
     } else {
-      rowsHtml = sorted.map(function (item) {
+      rowsHtml = pgTop.items.map(function (item) {
         var isSelected = isClub
           ? (state.analyticsDrillClubId && !state.analyticsDrillBoxId && state.analyticsDrillClubId === item.club_id)
           : (state.analyticsDrillBoxId && state.analyticsDrillBoxId === item.box_id);
@@ -2081,7 +2912,8 @@
         '<th>Đẩy Gần Nhất</th>' +
       '</tr></thead>' +
       '<tbody>' + rowsHtml + '</tbody>' +
-    '</table></div>';
+    '</table></div>' +
+    renderPaginationBar('analyticsTop', pgTop, isClub ? 'CLB' : 'Box');
   }
 
   function renderAnalyticsCamerasTable() {
@@ -2091,14 +2923,16 @@
     var cams = Array.isArray(state.analyticsCameras) ? state.analyticsCameras : [];
     if (countBadge) countBadge.textContent = fmtInt(cams.length) + ' bàn';
 
+    var pgCam = paginateItems(cams, 'analyticsCameras');
     var rowsHtml = '';
     if (!cams.length) {
       rowsHtml = '<tr><td colspan="10" class="analytics-empty-cell">Chưa có dữ liệu từng bàn / camera trong khung thời gian này — box sẽ tự động đẩy rollup mỗi 5 phút.</td></tr>';
     } else {
-      rowsHtml = cams.map(function (c, idx) {
+      rowsHtml = pgCam.items.map(function (c, idx) {
+        var rankNum = pgCam.start + idx;
         var aiErr = Number(c.ai_errors) || 0;
         return '<tr>' +
-          '<td class="mono text-muted" style="font-weight:700;">#' + (idx + 1) + '</td>' +
+          '<td class="mono text-muted" style="font-weight:700;">#' + rankNum + '</td>' +
           '<td>' +
             '<div class="cell-primary">' + esc(c.table_name || c.camera_id || 'Camera') + '</div>' +
             '<div class="cell-sub mono">' + esc(c.camera_id || '--') + '</div>' +
@@ -2140,12 +2974,32 @@
         '<th>Băng Thông</th>' +
       '</tr></thead>' +
       '<tbody>' + rowsHtml + '</tbody>' +
-    '</table></div>';
+    '</table></div>' +
+    renderPaginationBar('analyticsCameras', pgCam, 'bàn');
   }
 
   /* --------------------------------------------------------------------------
-     Navigation, Command Palette (Ctrl+K) & Real-Time SSE Connection
+     Navigation, Command Palette (Ctrl+K + / Shortcut) & Real-Time SSE Connection
      -------------------------------------------------------------------------- */
+  function focusActiveViewSearch() {
+    var map = {
+      fleet: 'fleet-search',
+      hardening: 'hardening-search',
+      cameras: 'cam-search-input',
+      redbida: 'redbida-search',
+      handover: 'handover-club-search'
+    };
+    var id = map[state.activeView];
+    var input = id ? document.getElementById(id) : null;
+    if (input) {
+      input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      input.focus();
+      if (typeof input.select === 'function' && input.value) input.select();
+      return true;
+    }
+    return false;
+  }
+
   function switchView(viewName, updateHash) {
     var validViews = ['fleet', 'hardening', 'cameras', 'redbida', 'handover', 'analytics'];
     if (validViews.indexOf(viewName) === -1) viewName = 'fleet';
@@ -2157,6 +3011,9 @@
     document.querySelectorAll('.view-panel[data-view-panel]').forEach(function (panel) {
       panel.classList.toggle('active', panel.getAttribute('data-view-panel') === viewName);
     });
+
+    var cockpitLabel = document.getElementById('cockpit-view-label');
+    if (cockpitLabel) cockpitLabel.textContent = VIEW_LABELS[viewName] || 'Đội Box';
 
     if (updateHash !== false) {
       history.replaceState(null, '', '#' + viewName);
@@ -2182,12 +3039,15 @@
     switchView(h || 'fleet', false);
   }
 
+  var openCmdPaletteFn = null;
+
   function initCommandPalette() {
     var modal = document.getElementById('cmd-palette');
     var input = document.getElementById('cmd-search-input');
     var results = document.getElementById('cmd-results');
     var openBtn = document.getElementById('cmd-palette-btn');
     var closeBtn = document.getElementById('cmd-close-btn');
+    var macroBar = document.getElementById('cmd-macro-bar');
 
     function openCmd() {
       if (!modal) return;
@@ -2199,8 +3059,18 @@
         input.focus();
       }
     }
+    openCmdPaletteFn = openCmd;
+
     function closeCmd() {
       if (modal) modal.classList.remove('open');
+    }
+
+    function applyFleetFilterChipUi(filterVal) {
+      var chipsWrap = document.getElementById('fleet-filter-chips');
+      if (!chipsWrap) return;
+      chipsWrap.querySelectorAll('.filter-chip[data-filter]').forEach(function (c) {
+        c.classList.toggle('active', c.getAttribute('data-filter') === filterVal);
+      });
     }
 
     function selectCmdRow(row) {
@@ -2208,13 +3078,25 @@
       var t = row.getAttribute('data-cmd-type');
       var target = row.getAttribute('data-cmd-target');
       closeCmd();
-      if (t === 'box') openBoxDrawer(target, true);
-      else switchView(target, true);
+      if (t === 'box') {
+        openBoxDrawer(target, true);
+      } else if (t === 'club') {
+        state.fleetFilter = 'all';
+        state.fleetSearch = target;
+        applyFleetFilterChipUi('all');
+        resetTabPage('fleet');
+        var fs = document.getElementById('fleet-search');
+        if (fs) fs.value = target;
+        switchView('fleet', true);
+        renderFleetMatrix({ force: true });
+      } else {
+        switchView(target, true);
+      }
     }
 
     function renderCmdResults(query) {
       if (!results) return;
-      var q = (query || '').trim().toLowerCase();
+      var tokens = parseSearchQuery(query);
       var items = [
         { type: 'view', icon: 'server', target: 'fleet', title: 'Đội Box (Fleet Matrix)', sub: '#fleet' },
         { type: 'view', icon: 'shield', target: 'hardening', title: 'Chuẩn Hóa 8 Bước (Golden Hardening)', sub: '#hardening' },
@@ -2223,20 +3105,35 @@
         { type: 'view', icon: 'qr', target: 'handover', title: 'Gói Bàn Giao Zalo & Mã QR Chủ Quán', sub: '#handover' },
         { type: 'view', icon: 'chart', target: 'analytics', title: 'Thống Kê & Analytics (QR · CheckVAR · AI)', sub: '#analytics' }
       ];
+
+      (state.clubs || []).forEach(function (c) {
+        var cname = c.name || c.club_name || c.id || '';
+        if (!cname) return;
+        var bCount = Array.isArray(c.box_ids) ? c.box_ids.length : (c.boxes_count || 0);
+        items.push({
+          type: 'club',
+          icon: 'building',
+          target: cname,
+          title: 'CLB: ' + cname,
+          sub: (bCount ? (bCount + ' Box · ') : '') + (c.id || '')
+        });
+      });
+
       (state.boxes || []).forEach(function (b) {
         items.push({
           type: 'box',
           icon: 'box',
           target: b.id,
           title: b.id + ' — ' + (b.club_name || b.name || ''),
-          sub: 'VPN: ' + (b.vpn_ip || '--') + ' · grp: ' + (b.shinobi_group_key || '--')
+          sub: 'VPN: ' + (b.vpn_ip || '--') + ' · grp: ' + (b.shinobi_group_key || '--'),
+          _searchRaw: b._searchRaw,
+          _searchNorm: b._searchNorm
         });
       });
 
       var matched = items.filter(function (it) {
-        if (!q) return true;
-        return (it.title + ' ' + it.sub).toLowerCase().indexOf(q) !== -1;
-      }).slice(0, 18);
+        return matchesSearch(it, tokens, [it.title, it.sub, it.target]);
+      }).slice(0, 20);
 
       if (!matched.length) {
         results.innerHTML = '<div class="empty-state" style="padding:24px 12px;">Không tìm thấy kết quả phù hợp.</div>';
@@ -2259,6 +3156,37 @@
     if (modal) {
       modal.addEventListener('click', function (e) {
         if (e.target === modal) closeCmd();
+      });
+    }
+    if (macroBar) {
+      macroBar.addEventListener('click', function (e) {
+        var chip = e.target.closest('[data-cmd-macro]');
+        if (!chip) return;
+        var macro = chip.getAttribute('data-cmd-macro');
+        closeCmd();
+        if (macro === 'pickleball') {
+          state.redbidaBrandFilter = 'pickleball';
+          resetTabPage('redbidaDomains');
+          resetTabPage('redbidaBoxes');
+          var rbChips = document.getElementById('redbida-brand-chips');
+          if (rbChips) {
+            rbChips.querySelectorAll('.filter-chip[data-brand]').forEach(function (c) {
+              c.classList.toggle('active', c.getAttribute('data-brand') === 'pickleball');
+            });
+          }
+          switchView('redbida', true);
+          return;
+        }
+        state.fleetFilter = macro || 'all';
+        if (macro === 'all') {
+          state.fleetSearch = '';
+          var fs = document.getElementById('fleet-search');
+          if (fs) fs.value = '';
+        }
+        applyFleetFilterChipUi(state.fleetFilter);
+        resetTabPage('fleet');
+        switchView('fleet', true);
+        renderFleetMatrix({ force: true });
       });
     }
     if (input) {
@@ -2296,9 +3224,23 @@
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         openCmd();
-      } else if (e.key === 'Escape') {
+        return;
+      }
+      if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        var active = document.activeElement;
+        var tag = active ? active.tagName : '';
+        var isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (active && active.isContentEditable);
+        var anyModalOpen = !!document.querySelector('.modal-backdrop.open');
+        if (!isTyping && !anyModalOpen) {
+          e.preventDefault();
+          if (!focusActiveViewSearch()) openCmd();
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
         closeCmd();
         closeBoxDrawer();
+        closeAllCardMenus();
         var rbModal = document.getElementById('redbida-editor-modal');
         if (rbModal) rbModal.classList.remove('open');
         closeChangePasswordModal();
@@ -2447,12 +3389,93 @@
     }
   }
 
+  function closeAllCardMenus() {
+    var wasOpen = !!state.openCardMenuId;
+    state.openCardMenuId = null;
+    document.querySelectorAll('.mcard-popover.open').forEach(function (pop) {
+      pop.classList.remove('open');
+    });
+    document.querySelectorAll('[data-card-menu-btn][aria-expanded="true"]').forEach(function (btn) {
+      btn.setAttribute('aria-expanded', 'false');
+    });
+    if (wasOpen && state.pendingFleetRender) {
+      state.pendingFleetRender = false;
+      renderFleetMatrix({ force: false });
+    }
+  }
+
+  function initMobileKpiToggle() {
+    var btn = document.getElementById('mobile-kpi-toggle');
+    var grid = document.getElementById('fleet-kpi-grid');
+    var lbl = document.getElementById('mobile-kpi-toggle-label');
+    if (!btn || !grid) return;
+    btn.addEventListener('click', function () {
+      state.mobileKpiExpanded = !state.mobileKpiExpanded;
+      grid.classList.toggle('mobile-expanded', state.mobileKpiExpanded);
+      btn.setAttribute('aria-expanded', state.mobileKpiExpanded ? 'true' : 'false');
+      if (lbl) lbl.textContent = state.mobileKpiExpanded ? 'Thu gọn' : 'KPI';
+    });
+  }
+
+  function initStickyCockpitBar() {
+    var bar = document.getElementById('sticky-cockpit-bar');
+    var sentinel = document.getElementById('cockpit-sentinel');
+    var findBtn = document.getElementById('cockpit-search-btn');
+    if (!bar) return;
+
+    var shown = false;
+    function setCockpitVisible(val) {
+      var isMobile = window.innerWidth < 768;
+      var next = isMobile && val;
+      if (next === shown) return;
+      shown = next;
+      bar.classList.toggle('visible', next);
+      bar.setAttribute('aria-hidden', next ? 'false' : 'true');
+    }
+
+    function checkScrollHysteresis() {
+      if (window.innerWidth >= 768) {
+        setCockpitVisible(false);
+        return;
+      }
+      var y = window.scrollY || window.pageYOffset || 0;
+      if (!shown && y > 110) setCockpitVisible(true);
+      else if (shown && y < 90) setCockpitVisible(false);
+    }
+
+    if ('IntersectionObserver' in window && sentinel) {
+      var obs = new IntersectionObserver(function (entries) {
+        if (!entries || !entries.length) return;
+        var entry = entries[0];
+        if (window.innerWidth >= 768) {
+          setCockpitVisible(false);
+          return;
+        }
+        var y = window.scrollY || window.pageYOffset || 0;
+        if (!entry.isIntersecting && y > 95) setCockpitVisible(true);
+        else if (entry.isIntersecting && y < 90) setCockpitVisible(false);
+      }, { threshold: 0 });
+      obs.observe(sentinel);
+    }
+
+    window.addEventListener('scroll', checkScrollHysteresis, { passive: true });
+    window.addEventListener('resize', checkScrollHysteresis, { passive: true });
+
+    if (findBtn) {
+      findBtn.addEventListener('click', function () {
+        if (!focusActiveViewSearch() && openCmdPaletteFn) {
+          openCmdPaletteFn();
+        }
+      });
+    }
+  }
+
   var sseRefreshTimer = null;
   function scheduleRealtimeSummaryRefresh() {
     clearTimeout(sseRefreshTimer);
     sseRefreshTimer = setTimeout(function () {
       sseRefreshTimer = null;
-      fetchSummary();
+      fetchSummary({ fromSSE: true });
       if (state.drawerBoxId) {
         apiFetch('/fleet/api/boxes/' + encodeURIComponent(state.drawerBoxId)).then(function (data) {
           renderBoxDrawerContent(state.drawerBoxId, data);
@@ -2486,7 +3509,7 @@
     }
 
     state.pollTimer = setInterval(function () {
-      if (state.activeView === 'fleet') fetchSummary();
+      if (state.activeView === 'fleet') fetchSummary({ fromSSE: true });
     }, 15000);
   }
 
@@ -2501,6 +3524,69 @@
       btn.addEventListener('click', function () {
         switchView(btn.getAttribute('data-view'), true);
       });
+    });
+
+    /* Global Delegated Pagination Controls (Page Buttons & Page Size Selector) */
+    document.addEventListener('click', function (e) {
+      var pageBtn = e.target.closest('[data-pager-key][data-pager-page]');
+      if (pageBtn && !pageBtn.disabled) {
+        var key = pageBtn.getAttribute('data-pager-key');
+        var page = Number(pageBtn.getAttribute('data-pager-page')) || 1;
+        if (state.pagination[key] && state.pagination[key].page !== page) {
+          state.pagination[key].page = Math.max(1, page);
+          renderByPagerKey(key, true);
+        }
+        return;
+      }
+
+      /* Mobile card overflow popover close when clicking outside */
+      if (state.openCardMenuId && !e.target.closest('.mcard-foot-actions')) {
+        closeAllCardMenus();
+      }
+    });
+
+    document.addEventListener('change', function (e) {
+      var sizeSel = e.target.closest('[data-pager-size]');
+      if (!sizeSel) return;
+      var key = sizeSel.getAttribute('data-pager-size');
+      var val = Number(sizeSel.value) || 20;
+      if (state.pagination[key]) {
+        state.pagination[key].pageSize = val;
+        state.pagination[key].page = 1;
+        renderByPagerKey(key, false);
+      }
+    });
+
+    /* Instant Clear (×) Buttons for All 5 Search Boxes */
+    document.addEventListener('click', function (e) {
+      var clearBtn = e.target.closest('[data-clear-search]');
+      if (!clearBtn) return;
+      var targetId = clearBtn.getAttribute('data-clear-search');
+      var inp = document.getElementById(targetId);
+      if (!inp) return;
+      inp.value = '';
+      if (targetId === 'fleet-search') {
+        state.fleetSearch = '';
+        resetTabPage('fleet');
+        renderFleetMatrix({ force: true });
+      } else if (targetId === 'hardening-search') {
+        state.hardeningSearch = '';
+        resetTabPage('hardening');
+        renderHardeningMatrix();
+      } else if (targetId === 'cam-search-input') {
+        resetTabPage('cameras');
+        renderCamerasTable();
+      } else if (targetId === 'redbida-search') {
+        state.redbidaSearch = '';
+        resetTabPage('redbidaDomains');
+        resetTabPage('redbidaBoxes');
+        renderRedbidaView();
+      } else if (targetId === 'handover-club-search') {
+        state.handoverSearch = '';
+        resetTabPage('handoverClubs');
+        renderHandoverClubPicker();
+      }
+      inp.focus();
     });
 
     /* Poll Now button */
@@ -2519,7 +3605,7 @@
       });
     }
 
-    /* Fleet Filter Chips, Search, Group Toggle */
+    /* Fleet Filter Chips, Fast Debounced Search, Mode Switch & Active Filter Removal */
     var chipsWrap = document.getElementById('fleet-filter-chips');
     if (chipsWrap) {
       chipsWrap.addEventListener('click', function (e) {
@@ -2529,34 +3615,173 @@
         chipsWrap.querySelectorAll('.filter-chip').forEach(function (c) {
           c.classList.toggle('active', c === chip);
         });
-        renderFleetMatrix();
+        resetTabPage('fleet');
+        renderFleetMatrix({ force: true });
       });
     }
 
     var fleetSearch = document.getElementById('fleet-search');
     if (fleetSearch) {
-      fleetSearch.addEventListener('input', function () {
+      var applyFleetSearch = makeDebounced(function () {
         state.fleetSearch = fleetSearch.value;
-        renderFleetMatrix();
+        resetTabPage('fleet');
+        renderFleetMatrix({ force: true });
+      }, 80);
+      fleetSearch.addEventListener('input', function () {
+        var wrap = fleetSearch.closest('.search-box');
+        if (wrap) {
+          var hasVal = fleetSearch.value.length > 0;
+          wrap.classList.toggle('has-value', hasVal);
+          var cb = wrap.querySelector('.search-clear-btn');
+          if (cb) cb.hidden = !hasVal;
+        }
+        applyFleetSearch();
+      });
+      fleetSearch.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          applyFleetSearch.flush();
+        }
+      });
+    }
+
+    var fleetActiveFilters = document.getElementById('fleet-active-filters');
+    if (fleetActiveFilters) {
+      fleetActiveFilters.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-remove-fleet-filter]');
+        if (!btn) return;
+        var which = btn.getAttribute('data-remove-fleet-filter');
+        if (which === 'search' || which === 'all') {
+          state.fleetSearch = '';
+          if (fleetSearch) fleetSearch.value = '';
+        }
+        if (which === 'status' || which === 'all') {
+          state.fleetFilter = 'all';
+          if (chipsWrap) {
+            chipsWrap.querySelectorAll('.filter-chip[data-filter]').forEach(function (c) {
+              c.classList.toggle('active', c.getAttribute('data-filter') === 'all');
+            });
+          }
+        }
+        resetTabPage('fleet');
+        renderFleetMatrix({ force: true });
       });
     }
 
     var grpToggle = document.getElementById('group-by-club-toggle');
     if (grpToggle) {
       grpToggle.addEventListener('change', function () {
-        state.groupByClub = grpToggle.checked;
-        renderFleetMatrix();
+        state.groupByClub = !!grpToggle.checked;
+        resetTabPage('fleet');
+        renderFleetMatrix({ force: true });
       });
     }
 
-    /* Delegated click for opening Box Drawer — ignores proxy <a> links, works for both row & Chi tiết button */
+    var fleetViewMode = document.getElementById('fleet-view-mode');
+    if (fleetViewMode) {
+      fleetViewMode.addEventListener('click', function (e) {
+        if (e.target && e.target.id === 'group-by-club-toggle') return;
+        var flatBtn = e.target.closest('button[data-fleet-mode="flat"]');
+        if (flatBtn) {
+          if (state.groupByClub) {
+            state.groupByClub = false;
+            resetTabPage('fleet');
+            renderFleetMatrix({ force: true });
+          }
+          return;
+        }
+        var clubLbl = e.target.closest('[data-fleet-mode="club"]');
+        if (clubLbl) {
+          e.preventDefault();
+          if (!state.groupByClub) {
+            state.groupByClub = true;
+            resetTabPage('fleet');
+            renderFleetMatrix({ force: true });
+          }
+        }
+      });
+    }
+
+    /* Delegated click inside #fleet-matrix-container (Clubs Collapse, Ledger Actions, Mobile Popover, Open Box Drawer) */
     var matrixContainer = document.getElementById('fleet-matrix-container');
     if (matrixContainer) {
       matrixContainer.addEventListener('click', function (e) {
+        var resetBtn = e.target.closest('[data-remove-fleet-filter]');
+        if (resetBtn) {
+          state.fleetSearch = '';
+          state.fleetFilter = 'all';
+          if (fleetSearch) fleetSearch.value = '';
+          if (chipsWrap) {
+            chipsWrap.querySelectorAll('.filter-chip[data-filter]').forEach(function (c) {
+              c.classList.toggle('active', c.getAttribute('data-filter') === 'all');
+            });
+          }
+          resetTabPage('fleet');
+          renderFleetMatrix({ force: true });
+          return;
+        }
+
+        var ledgerBtn = e.target.closest('[data-clubs-action]');
+        if (ledgerBtn) {
+          var act = ledgerBtn.getAttribute('data-clubs-action');
+          var sections = matrixContainer.querySelectorAll('.club-section[data-club-id]');
+          sections.forEach(function (sec) {
+            var cid = sec.getAttribute('data-club-id');
+            if (!cid) return;
+            if (act === 'collapse-all') state.collapsedClubs[cid] = true;
+            else delete state.collapsedClubs[cid];
+          });
+          renderFleetMatrix({ force: true });
+          return;
+        }
+
+        var moreBtn = e.target.closest('[data-card-menu-btn]');
+        if (moreBtn) {
+          e.stopPropagation();
+          var bid = moreBtn.getAttribute('data-card-menu-btn');
+          var wasSame = state.openCardMenuId === bid;
+          closeAllCardMenus();
+          if (!wasSame) {
+            var pop = moreBtn.parentElement ? moreBtn.parentElement.querySelector('[data-card-menu="' + bid + '"]') : null;
+            if (pop) {
+              pop.classList.add('open');
+              moreBtn.setAttribute('aria-expanded', 'true');
+              state.openCardMenuId = bid;
+            }
+          }
+          return;
+        }
+
         if (e.target.closest('a')) return;
+
+        var clubToggle = e.target.closest('[data-toggle-club]');
+        if (clubToggle) {
+          var clubId = clubToggle.getAttribute('data-toggle-club');
+          if (clubId) {
+            if (state.collapsedClubs[clubId]) delete state.collapsedClubs[clubId];
+            else state.collapsedClubs[clubId] = true;
+            renderFleetMatrix({ force: true });
+          }
+          return;
+        }
+
         var trigger = e.target.closest('[data-open-box]');
         if (!trigger) return;
+        closeAllCardMenus();
         openBoxDrawer(trigger.getAttribute('data-open-box'), true);
+      });
+
+      matrixContainer.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        var clubToggle = e.target.closest('[data-toggle-club]');
+        if (!clubToggle) return;
+        e.preventDefault();
+        var clubId = clubToggle.getAttribute('data-toggle-club');
+        if (clubId) {
+          if (state.collapsedClubs[clubId]) delete state.collapsedClubs[clubId];
+          else state.collapsedClubs[clubId] = true;
+          renderFleetMatrix({ force: true });
+        }
       });
     }
 
@@ -2578,13 +3803,31 @@
     if (hardFilter) {
       hardFilter.addEventListener('change', function () {
         state.hardeningFilter = hardFilter.value;
+        resetTabPage('hardening');
         renderHardeningMatrix();
       });
     }
     if (hardSearch) {
-      hardSearch.addEventListener('input', function () {
+      var applyHardSearch = makeDebounced(function () {
         state.hardeningSearch = hardSearch.value;
+        resetTabPage('hardening');
         renderHardeningMatrix();
+      }, 80);
+      hardSearch.addEventListener('input', function () {
+        var wrap = hardSearch.closest('.search-box');
+        if (wrap) {
+          var hasVal = hardSearch.value.length > 0;
+          wrap.classList.toggle('has-value', hasVal);
+          var cb = wrap.querySelector('.search-clear-btn');
+          if (cb) cb.hidden = !hasVal;
+        }
+        applyHardSearch();
+      });
+      hardSearch.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          applyHardSearch.flush();
+        }
       });
     }
 
@@ -2599,6 +3842,11 @@
         var inspBtn = e.target.closest('[data-inspect-box]');
         if (inspBtn) {
           inspectBoxHardening(inspBtn.getAttribute('data-inspect-box'));
+          return;
+        }
+        var openBtn = e.target.closest('[data-open-box]');
+        if (openBtn) {
+          openBoxDrawer(openBtn.getAttribute('data-open-box'), true);
         }
       });
     }
@@ -2628,30 +3876,59 @@
     /* Cameras events */
     ['cam-club-filter', 'cam-box-filter', 'cam-vendor-filter', 'cam-doublestream-filter'].forEach(function (id) {
       var el = document.getElementById(id);
-      if (el) el.addEventListener('change', renderCamerasTable);
+      if (el) {
+        el.addEventListener('change', function () {
+          resetTabPage('cameras');
+          renderCamerasTable();
+        });
+      }
     });
+
     var camSearch = document.getElementById('cam-search-input');
-    if (camSearch) camSearch.addEventListener('input', renderCamerasTable);
+    if (camSearch) {
+      var applyCamSearch = makeDebounced(function () {
+        resetTabPage('cameras');
+        renderCamerasTable();
+      }, 80);
+      camSearch.addEventListener('input', function () {
+        var wrap = camSearch.closest('.search-box');
+        if (wrap) {
+          var hasVal = camSearch.value.length > 0;
+          wrap.classList.toggle('has-value', hasVal);
+          var cb = wrap.querySelector('.search-clear-btn');
+          if (cb) cb.hidden = !hasVal;
+        }
+        applyCamSearch();
+      });
+      camSearch.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          applyCamSearch.flush();
+        }
+      });
+    }
 
     var camSelectAll = document.getElementById('cam-select-all');
     if (camSelectAll) {
       camSelectAll.addEventListener('change', function () {
-        getFilteredCameras().forEach(function (c) {
-          var cid = c.id || (c.box_id + ':' + c.host + ':' + (c.port || 37777));
-          state.selectedCameraIds[cid] = camSelectAll.checked;
+        var pg = paginateItems(getFilteredCameras(), 'cameras');
+        pg.items.forEach(function (c) {
+          state.selectedCameraIds[getCameraId(c)] = camSelectAll.checked;
         });
         renderCamerasTable();
       });
     }
 
-    var camTbody = document.getElementById('cameras-tbody');
-    if (camTbody) {
-      camTbody.addEventListener('change', function (e) {
-        var cb = e.target.closest('.cam-row-check');
-        if (!cb) return;
-        state.selectedCameraIds[cb.getAttribute('data-cam-id')] = cb.checked;
-      });
+    function onCameraRowCheckChange(e) {
+      var cb = e.target.closest('.cam-row-check');
+      if (!cb) return;
+      state.selectedCameraIds[cb.getAttribute('data-cam-id')] = cb.checked;
+      renderCamerasTable();
     }
+    var camTbody = document.getElementById('cameras-tbody');
+    var camMobileCards = document.getElementById('cameras-mobile-cards');
+    if (camTbody) camTbody.addEventListener('change', onCameraRowCheckChange);
+    if (camMobileCards) camMobileCards.addEventListener('change', onCameraRowCheckChange);
 
     var bulkH265Btn = document.getElementById('bulk-golden-h265-btn');
     if (bulkH265Btn) {
@@ -2668,14 +3945,34 @@
         rbChips.querySelectorAll('.filter-chip').forEach(function (c) {
           c.classList.toggle('active', c === chip);
         });
+        resetTabPage('redbidaDomains');
+        resetTabPage('redbidaBoxes');
         renderRedbidaView();
       });
     }
     var rbSearch = document.getElementById('redbida-search');
     if (rbSearch) {
-      rbSearch.addEventListener('input', function () {
+      var applyRbSearch = makeDebounced(function () {
         state.redbidaSearch = rbSearch.value;
+        resetTabPage('redbidaDomains');
+        resetTabPage('redbidaBoxes');
         renderRedbidaView();
+      }, 80);
+      rbSearch.addEventListener('input', function () {
+        var wrap = rbSearch.closest('.search-box');
+        if (wrap) {
+          var hasVal = rbSearch.value.length > 0;
+          wrap.classList.toggle('has-value', hasVal);
+          var cb = wrap.querySelector('.search-clear-btn');
+          if (cb) cb.hidden = !hasVal;
+        }
+        applyRbSearch();
+      });
+      rbSearch.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          applyRbSearch.flush();
+        }
       });
     }
 
@@ -2720,13 +4017,47 @@
       });
     }
 
-    /* Handover events */
+    /* Handover events (Select + Fast Diacritic-Insensitive Club Search + Quick-Pick Strip) */
     var handoverSel = document.getElementById('handover-club-select');
     if (handoverSel) {
       handoverSel.addEventListener('change', function () {
         loadHandoverView(handoverSel.value);
       });
     }
+    var handoverSearch = document.getElementById('handover-club-search');
+    if (handoverSearch) {
+      var applyHandoverSearch = makeDebounced(function () {
+        state.handoverSearch = handoverSearch.value;
+        resetTabPage('handoverClubs');
+        renderHandoverClubPicker();
+      }, 80);
+      handoverSearch.addEventListener('input', function () {
+        var wrap = handoverSearch.closest('.search-box');
+        if (wrap) {
+          var hasVal = handoverSearch.value.length > 0;
+          wrap.classList.toggle('has-value', hasVal);
+          var cb = wrap.querySelector('.search-clear-btn');
+          if (cb) cb.hidden = !hasVal;
+        }
+        applyHandoverSearch();
+      });
+      handoverSearch.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          applyHandoverSearch.flush();
+        }
+      });
+    }
+    var handoverPicker = document.getElementById('handover-club-picker');
+    if (handoverPicker) {
+      handoverPicker.addEventListener('click', function (e) {
+        var pill = e.target.closest('[data-pick-handover-club]');
+        if (!pill) return;
+        var cid = pill.getAttribute('data-pick-handover-club');
+        if (cid) loadHandoverView(cid);
+      });
+    }
+
     var copyHandoverBtn = document.getElementById('copy-handover-btn');
     if (copyHandoverBtn) {
       copyHandoverBtn.addEventListener('click', function () {
@@ -2763,6 +4094,8 @@
         aRangeChips.querySelectorAll('.filter-chip').forEach(function (c) {
           c.classList.toggle('active', c === chip);
         });
+        resetTabPage('analyticsTop');
+        resetTabPage('analyticsCameras');
         loadAnalyticsView();
       });
     }
@@ -2775,6 +4108,8 @@
         state.analyticsDrillClubId = '';
         state.analyticsDrillBoxId = '';
         state.analyticsDrillLabel = '';
+        resetTabPage('analyticsTop');
+        resetTabPage('analyticsCameras');
         loadAnalyticsView();
       });
     }
@@ -2783,6 +4118,8 @@
     if (aAiOnly) {
       aAiOnly.addEventListener('change', function () {
         state.analyticsAiOnly = !!aAiOnly.checked;
+        resetTabPage('analyticsTop');
+        resetTabPage('analyticsCameras');
         loadAnalyticsView();
       });
     }
@@ -2803,6 +4140,7 @@
         aGroupToggle.querySelectorAll('.segmented-btn').forEach(function (b) {
           b.classList.toggle('active', b === btn);
         });
+        resetTabPage('analyticsTop');
         renderAnalyticsTopTable(state.analyticsOverview || {});
       });
     }
@@ -2819,6 +4157,7 @@
             state.analyticsSortCol = col;
             state.analyticsSortDir = (col === 'name') ? 'asc' : 'desc';
           }
+          resetTabPage('analyticsTop');
           renderAnalyticsTopTable(state.analyticsOverview || {});
           return;
         }
@@ -2839,6 +4178,7 @@
           state.analyticsDrillBoxId = dBox;
           state.analyticsDrillLabel = dLabel;
         }
+        resetTabPage('analyticsCameras');
         renderAnalyticsTopTable(state.analyticsOverview || {});
         loadAnalyticsCameras();
       });
@@ -2850,6 +4190,7 @@
         state.analyticsDrillClubId = '';
         state.analyticsDrillBoxId = '';
         state.analyticsDrillLabel = '';
+        resetTabPage('analyticsCameras');
         renderAnalyticsTopTable(state.analyticsOverview || {});
         loadAnalyticsCameras();
       });
@@ -2863,6 +4204,8 @@
     initTheme();
     initCommandPalette();
     initChangePasswordModal();
+    initMobileKpiToggle();
+    initStickyCockpitBar();
     bindEvents();
     loadFleetSummary().then(function () {
       handleHashRoute();

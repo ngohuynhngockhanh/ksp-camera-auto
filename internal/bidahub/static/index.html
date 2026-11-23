@@ -47,7 +47,7 @@
             <strong id="led-online-count">0</strong>
             <span class="led-text">Online</span>
           </span>
-          <span class="led-item">
+          <span class="led-item led-item-warn">
             <span class="led-dot amber"></span>
             <strong id="led-warn-count">0</strong>
             <span class="led-text">Cảnh báo</span>
@@ -93,7 +93,7 @@
       </div>
     </div>
 
-    <!-- Primary 6-View Navigation Bar (fits cleanly inside 1440px) -->
+    <!-- Primary 6-View Navigation Bar (fits cleanly inside 1440px, horizontal scroll on mobile) -->
     <div class="scada-nav-wrap">
       <nav class="scada-nav" aria-label="Phân hệ điều hành chính">
         <button type="button" class="nav-tab active" data-view="fleet" id="nav-fleet">
@@ -130,6 +130,24 @@
     </div>
   </header>
 
+  <!-- Mobile 42px Sticky Cockpit Bar (/device/86 StickyCockpitBar pattern) -->
+  <div id="sticky-cockpit-bar" class="sticky-cockpit-bar tabular-nums" aria-hidden="true">
+    <div class="cockpit-left">
+      <span class="led-dot emerald" id="cockpit-status-dot"></span>
+      <strong id="cockpit-online-ratio">0/0</strong>
+      <span id="cockpit-online-pct" class="mono text-muted">(--%)</span>
+      <span id="cockpit-offline-pill" class="badge badge-crimson cockpit-off-badge" style="display:none;">0 Off</span>
+    </div>
+    <div class="cockpit-right">
+      <span id="cockpit-view-label" class="cockpit-view-chip">Đội Box</span>
+      <button type="button" id="cockpit-search-btn" class="btn btn-xs btn-cyan cockpit-find-btn" aria-label="Tìm nhanh">
+        <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <span>Tìm</span>
+      </button>
+    </div>
+  </div>
+  <div id="cockpit-sentinel" class="cockpit-sentinel" aria-hidden="true"></div>
+
   <!-- ========================================================================
        Main Workspace
        ======================================================================== -->
@@ -139,7 +157,27 @@
          VIEW 1: #fleet — Fleet Overview Matrix & 6 KPI Summary Cards
          ====================================================================== -->
     <section id="view-fleet" class="view-panel active" data-view-panel="fleet">
-      <div class="kpi-grid tabular-nums">
+      <!-- Compact Mobile KPI Summary Bar (collapsed KPIs by default on <768px so search + list sit above the fold) -->
+      <div class="mobile-kpi-bar tabular-nums" id="mobile-kpi-bar">
+        <button type="button" id="mobile-kpi-toggle" class="mobile-kpi-toggle" aria-expanded="false" aria-controls="fleet-kpi-grid">
+          <span class="mobile-kpi-summary">
+            <span class="led-dot emerald" id="mkpi-led-dot"></span>
+            <strong id="mkpi-online">0/0 Online</strong>
+            <span class="mkpi-sep" aria-hidden="true">·</span>
+            <span id="mkpi-clubs">0 CLB</span>
+            <span class="mkpi-sep" aria-hidden="true">·</span>
+            <span id="mkpi-cams">0 Cam</span>
+            <span class="mkpi-sep" aria-hidden="true">·</span>
+            <span id="mkpi-hardening">0/0 8/8</span>
+          </span>
+          <span class="mobile-kpi-chevron">
+            <span id="mobile-kpi-toggle-label">KPI</span>
+            <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </button>
+      </div>
+
+      <div class="kpi-grid tabular-nums mobile-kpi-collapsible" id="fleet-kpi-grid">
         <article class="kpi-card" id="kpi-clubs-boxes">
           <div class="kpi-label">
             <span>Tổng CLB &amp; Box</span>
@@ -219,50 +257,71 @@
         </article>
       </div>
 
-      <!-- Fleet Filter & Search Toolbar -->
-      <div class="toolbar-card">
-        <div class="filter-chips" id="fleet-filter-chips" role="group" aria-label="Bộ lọc đội Box">
+      <!-- Unified Fleet Command Dock (Search First on Mobile + Scrollable Status Pills + View Mode) -->
+      <div class="toolbar-card command-dock" id="fleet-command-dock">
+        <div class="dock-search-row">
+          <div class="search-box search-box-flex">
+            <svg class="ui-icon search-lead-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input type="search" id="fleet-search" class="input search-field" placeholder="Tìm nhanh không dấu: CLB, Box ID, IP VPN, LAN, group key..." autocomplete="off" aria-label="Tìm kiếm đội Box">
+            <span class="search-match-pill tabular-nums" id="fleet-match-count">0/0</span>
+            <span class="search-kbd-hint" aria-hidden="true">/</span>
+            <button type="button" class="search-clear-btn" data-clear-search="fleet-search" aria-label="Xóa tìm kiếm" hidden>
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          <div class="dock-mode-controls">
+            <div class="segmented-toggle" id="fleet-view-mode" role="group" aria-label="Chế độ hiển thị danh sách">
+              <label class="segmented-btn active" data-fleet-mode="club">
+                <input type="checkbox" id="group-by-club-toggle" class="segmented-check" checked>
+                <span>Gom CLB</span>
+              </label>
+              <button type="button" class="segmented-btn" data-fleet-mode="flat">Bảng phẳng</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="filter-chips filter-chips-scroll" id="fleet-filter-chips" role="group" aria-label="Bộ lọc đội Box">
           <button type="button" class="filter-chip active" data-filter="all">
             <span>Tất cả</span>
             <span class="chip-count" id="chip-count-all">0</span>
           </button>
           <button type="button" class="filter-chip" data-filter="online">
             <span class="led-dot emerald"></span>
-            <span>Trực tuyến</span>
+            <span class="chip-label-full">Trực tuyến</span>
+            <span class="chip-label-short">Online</span>
             <span class="chip-count" id="chip-count-online">0</span>
           </button>
-          <button type="button" class="filter-chip" data-filter="offline">
+          <button type="button" class="filter-chip" data-filter="offline" id="chip-btn-offline">
             <span class="led-dot crimson"></span>
-            <span>Mất kết nối</span>
+            <span class="chip-label-full">Mất kết nối</span>
+            <span class="chip-label-short">Offline</span>
             <span class="chip-count" id="chip-count-offline">0</span>
           </button>
-          <button type="button" class="filter-chip" data-filter="ffmpeg-warn">
+          <button type="button" class="filter-chip" data-filter="ffmpeg-warn" id="chip-btn-ffmpeg">
             <svg class="ui-icon-sm text-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            <span>Cảnh báo FFmpeg</span>
+            <span class="chip-label-full">Cảnh báo FFmpeg</span>
+            <span class="chip-label-short">FFmpeg</span>
             <span class="chip-count" id="chip-count-ffmpeg">0</span>
           </button>
-          <button type="button" class="filter-chip" data-filter="hardening-warn">
+          <button type="button" class="filter-chip" data-filter="hardening-warn" id="chip-btn-hardening">
             <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <span>Cần vá Golden</span>
+            <span class="chip-label-full">Cần vá Golden</span>
+            <span class="chip-label-short">Golden</span>
             <span class="chip-count" id="chip-count-hardening">0</span>
           </button>
           <button type="button" class="filter-chip" data-filter="multi-box">
             <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/></svg>
-            <span>CLB Nhiều Box</span>
+            <span class="chip-label-full">CLB Nhiều Box</span>
+            <span class="chip-label-short">Nhiều Box</span>
             <span class="chip-count" id="chip-count-multibox">0</span>
           </button>
         </div>
 
-        <div class="toolbar-group">
-          <label class="check-label">
-            <input type="checkbox" id="group-by-club-toggle" checked>
-            <span>Gom nhóm theo CLB</span>
-          </label>
-          <input type="search" id="fleet-search" class="input search-input-wide" placeholder="Tìm CLB, Box ID, IP VPN, group key...">
-        </div>
+        <div id="fleet-active-filters" class="active-filters-bar" hidden></div>
       </div>
 
-      <!-- Fleet Matrix Table / Club Groups -->
+      <!-- Fleet Matrix Table / Club Groups / Mobile Cards + Pagination -->
       <div id="fleet-matrix-container" class="tabular-nums"></div>
     </section>
 
@@ -291,13 +350,21 @@
               Kiểm toán trực tiếp: (1) ZRAM <code>mem_limit=0</code> · (2) PM2 Memory Guard + <code>/dev/null</code> · (3) <code>kernel.sysrq=0</code> · (4) Watchdog 60s · (5) Storage Guard 15m (90%→80%) · (6) udev <code>errors=continue</code> · (7) Clean <code>/etc/fstab</code> · (8) Shinobi <code>doSnapshot:false</code> + Fragmented MP4 <code>frag_keyframe+empty_moov</code>.
             </p>
           </div>
-          <div class="toolbar-group">
-            <select id="hardening-filter" class="select">
+          <div class="toolbar-group toolbar-search-controls">
+            <div class="search-box search-box-md">
+              <svg class="ui-icon search-lead-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <input type="search" id="hardening-search" class="input search-field" placeholder="Lọc theo CLB, Box ID, IP VPN..." autocomplete="off">
+              <span class="search-match-pill tabular-nums" id="hardening-match-count">0/0</span>
+              <span class="search-kbd-hint" aria-hidden="true">/</span>
+              <button type="button" class="search-clear-btn" data-clear-search="hardening-search" aria-label="Xóa tìm kiếm" hidden>
+                <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <select id="hardening-filter" class="select" aria-label="Lọc trạng thái chuẩn hóa">
               <option value="all">Tất cả Box</option>
               <option value="needs_fix">Cần vá lỗi (&lt; 8/8)</option>
               <option value="compliant">Đã đạt chuẩn 8/8</option>
             </select>
-            <input type="search" id="hardening-search" class="input" placeholder="Lọc theo CLB hoặc Box ID...">
           </div>
         </div>
 
@@ -309,15 +376,31 @@
          VIEW 4: #cameras — Multi-Box Camera & NVR Inventory + Bulk Golden H.265
          ====================================================================== -->
     <section id="view-cameras" class="view-panel" data-view-panel="cameras">
-      <div class="toolbar-card">
-        <div class="toolbar-group">
-          <select id="cam-club-filter" class="select">
+      <div class="toolbar-card command-dock">
+        <div class="dock-search-row">
+          <div class="search-box search-box-flex">
+            <svg class="ui-icon search-lead-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input type="search" id="cam-search-input" class="input search-field" placeholder="Tìm bàn, IP camera, box_id:host:port, hãng, codec..." autocomplete="off">
+            <span class="search-match-pill tabular-nums" id="cameras-match-count">0/0</span>
+            <span class="search-kbd-hint" aria-hidden="true">/</span>
+            <button type="button" class="search-clear-btn" data-clear-search="cam-search-input" aria-label="Xóa tìm kiếm" hidden>
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <button type="button" id="bulk-golden-h265-btn" class="btn btn-primary">
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Áp dụng Chuẩn Bida Golden H.265</span>
+          </button>
+        </div>
+
+        <div class="toolbar-group cam-filters-row">
+          <select id="cam-club-filter" class="select" aria-label="Lọc camera theo CLB">
             <option value="">Tất cả CLB</option>
           </select>
-          <select id="cam-box-filter" class="select">
+          <select id="cam-box-filter" class="select" aria-label="Lọc camera theo Box">
             <option value="">Tất cả Box</option>
           </select>
-          <select id="cam-vendor-filter" class="select">
+          <select id="cam-vendor-filter" class="select" aria-label="Lọc camera theo hãng">
             <option value="">Tất cả Hãng (Dahua / Hikvision / Tiandy)</option>
             <option value="Dahua">Dahua (DVRIP 37777)</option>
             <option value="Hikvision">Hikvision (ISAPI)</option>
@@ -327,24 +410,16 @@
             <input type="checkbox" id="cam-doublestream-filter">
             <span>Chỉ hiện Double-Streaming</span>
           </label>
-          <input type="search" id="cam-search-input" class="input" placeholder="Tìm bàn, IP camera, box_id:host:port...">
-        </div>
-
-        <div class="toolbar-group">
-          <button type="button" id="bulk-golden-h265-btn" class="btn btn-primary">
-            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            <span>Áp dụng Chuẩn Bida Golden H.265</span>
-          </button>
         </div>
       </div>
 
       <div class="glass-panel">
         <div id="cameras-summary-bar" class="panel-head"></div>
-        <div class="table-scroll">
+        <div class="table-scroll desktop-only-table">
           <table class="scada-table tabular-nums" id="cameras-table">
             <thead>
               <tr>
-                <th><input type="checkbox" id="cam-select-all" title="Chọn tất cả camera đang lọc"></th>
+                <th><input type="checkbox" id="cam-select-all" title="Chọn tất cả camera trên trang hiện tại"></th>
                 <th>Khóa Kép (Box:Host:Port)</th>
                 <th>CLB / Box</th>
                 <th>Bàn / Tên Camera</th>
@@ -359,6 +434,8 @@
             <tbody id="cameras-tbody"></tbody>
           </table>
         </div>
+        <div id="cameras-mobile-cards" class="mobile-card-list mobile-only-cards tabular-nums"></div>
+        <div id="cameras-pagination"></div>
       </div>
     </section>
 
@@ -366,8 +443,19 @@
          VIEW 5: #redbida — 17-Rule Inspector, Branding Guard & FRPC Auditor
          ====================================================================== -->
     <section id="view-redbida" class="view-panel" data-view-panel="redbida">
-      <div class="toolbar-card">
-        <div class="filter-chips" id="redbida-brand-chips">
+      <div class="toolbar-card command-dock">
+        <div class="dock-search-row">
+          <div class="search-box search-box-flex">
+            <svg class="ui-icon search-lead-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input type="search" id="redbida-search" class="input search-field" placeholder="Tìm store-*, c-store-*, CLB, Box ID, group key, GGCode..." autocomplete="off">
+            <span class="search-match-pill tabular-nums" id="redbida-match-count">0/0</span>
+            <span class="search-kbd-hint" aria-hidden="true">/</span>
+            <button type="button" class="search-clear-btn" data-clear-search="redbida-search" aria-label="Xóa tìm kiếm" hidden>
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="filter-chips filter-chips-scroll" id="redbida-brand-chips">
           <button type="button" class="filter-chip active" data-brand="all">Tất cả CLB</button>
           <button type="button" class="filter-chip" data-brand="billiards">
             <svg class="ui-icon-sm text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
@@ -382,9 +470,6 @@
             <span>Xung đột FRPC Subdomain</span>
           </button>
         </div>
-        <div class="toolbar-group">
-          <input type="search" id="redbida-search" class="input search-input-wide" placeholder="Tìm store-*, c-store-*, CLB, Box ID...">
-        </div>
       </div>
 
       <!-- FRPC Subdomain Conflict & HTTP 200 Auditor -->
@@ -396,6 +481,7 @@
               <span>Kiểm Toán Tên Miền FRPC (<code>store-*</code> / <code>c-store-*</code>) &amp; Xung Đột Subdomain</span>
             </h2>
           </div>
+          <span id="redbida-domains-count" class="badge badge-cyan tabular-nums">0 tên miền</span>
         </div>
         <div id="redbida-domains-container" class="tabular-nums"></div>
       </div>
@@ -412,6 +498,7 @@
               Bảo toàn tuyệt đối nhận diện thương hiệu <strong>Billiards</strong> vs <strong>Pickleball</strong> (Pika Sun, Kely, Heypick...). Hỗ trợ mở khóa có kiểm soát cho <code>frpc_config</code>, <code>eth0_virtual_ip</code>, <code>end0_virtual_ip</code>, <code>shinobi_group_key</code>, <code>ggcode</code> và 20 tab <code>[C01]..[C20]</code>.
             </p>
           </div>
+          <span id="redbida-boxes-count" class="badge badge-cyan tabular-nums">0 Box</span>
         </div>
         <div id="redbida-boxes-container" class="tabular-nums"></div>
       </div>
@@ -421,12 +508,26 @@
          VIEW 6: #handover — 1-Click Handover Pack Generator + Inline SVG QR
          ====================================================================== -->
     <section id="view-handover" class="view-panel" data-view-panel="handover">
-      <div class="toolbar-card">
-        <div class="toolbar-group">
-          <label for="handover-club-select" class="check-label">Chọn CLB / Quán Bàn Giao:</label>
-          <select id="handover-club-select" class="select select-club-wide"></select>
+      <div class="toolbar-card command-dock">
+        <div class="dock-search-row">
+          <div class="search-box search-box-flex">
+            <svg class="ui-icon search-lead-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input type="search" id="handover-club-search" class="input search-field" placeholder="Tìm nhanh CLB bàn giao (không dấu, tên miền store-*, mã CLB)..." autocomplete="off" aria-label="Tìm nhanh CLB bàn giao">
+            <span class="search-match-pill tabular-nums" id="handover-match-count">0/0</span>
+            <span class="search-kbd-hint" aria-hidden="true">/</span>
+            <button type="button" class="search-clear-btn" data-clear-search="handover-club-search" aria-label="Xóa tìm kiếm" hidden>
+              <svg class="ui-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="toolbar-group handover-select-wrap">
+            <label for="handover-club-select" class="check-label">CLB đang chọn:</label>
+            <select id="handover-club-select" class="select select-club-wide"></select>
+          </div>
         </div>
-        <div class="toolbar-group">
+
+        <div id="handover-club-picker" class="handover-club-picker tabular-nums"></div>
+
+        <div class="toolbar-group handover-action-bar">
           <a id="handover-open-portal-btn" href="#" target="_blank" rel="noopener" class="btn btn-cyan">
             <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
             <span>Mở Cổng Chủ Quán</span>
@@ -810,8 +911,15 @@
     <div class="cmd-modal">
       <div class="cmd-input-wrap">
         <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input type="search" id="cmd-search-input" placeholder="Gõ tên CLB, mã Box (inut_204_141), IP VPN, hoặc phân hệ..." autocomplete="off">
+        <input type="search" id="cmd-search-input" placeholder="Gõ không dấu tên CLB, Box (inut_204_141), IP VPN, group key..." autocomplete="off">
         <button type="button" id="cmd-close-btn" class="btn btn-xs">ESC</button>
+      </div>
+      <div class="cmd-macro-bar" id="cmd-macro-bar" role="group" aria-label="Lối tắt bộ lọc nhanh">
+        <button type="button" class="filter-chip cmd-macro-chip" data-cmd-macro="all">Tất cả</button>
+        <button type="button" class="filter-chip cmd-macro-chip" data-cmd-macro="offline"><span class="led-dot crimson"></span>Offline</button>
+        <button type="button" class="filter-chip cmd-macro-chip" data-cmd-macro="ffmpeg-warn">Cảnh báo FFmpeg</button>
+        <button type="button" class="filter-chip cmd-macro-chip" data-cmd-macro="hardening-warn">Cần vá Golden</button>
+        <button type="button" class="filter-chip cmd-macro-chip" data-cmd-macro="pickleball">Pickleball</button>
       </div>
       <div id="cmd-results" class="cmd-results tabular-nums"></div>
     </div>
