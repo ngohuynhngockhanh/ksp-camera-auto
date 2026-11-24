@@ -441,6 +441,10 @@ func (s *Server) handleRaysharpWebhook(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if !s.authorizeRaysharpWebhook(r) {
+		writeErr(w, http.StatusForbidden, "forbidden: webhook restricted to local LAN or configured camera hosts")
+		return
+	}
 	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		remoteHost = r.RemoteAddr

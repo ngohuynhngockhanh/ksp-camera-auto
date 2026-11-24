@@ -316,6 +316,10 @@ func (s *Server) handleSystemMetrics(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if !s.authorizeSystemMetrics(r) {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
