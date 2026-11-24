@@ -71,6 +71,11 @@ Mọi triển khai `go-shinobi-ksp` bắt buộc giữ nguyên chữ ký đườ
      4) Kiểm tra `make backup-shinobi <target>` và cập nhật node vào file `GO_SHINOBI_DEPLOYED.md`.
 3. **Quy tắc SSH Trực Tiếp Vào Edge Node (Không Nhảy Qua `172.16.5.180`)**:
    - Khi cần SSH/SCP tới bất kỳ Edge Node nào (`77.88.200.* .. 77.88.207.*`), kết nối **trực tiếp 1-hop** bằng khóa `~/.ssh/id_rsa_macbook` (public key `~/.ssh/id_rsa_macbook.pub`, đã cấu hình tự động trong `~/.ssh/config`): `ssh root@77.88.<subnet>.<host>`. Tuyệt đối không chạy SSH lồng qua `172.16.5.180`.
+4. **Hardening Bắt Buộc Cho Box Allwinner (`sunxi` / `sunxi64` — X96Q / H313 / H616)**:
+   - Mọi box Allwinner (`uname -r` chứa `sunxi` / `sunxi64`) dễ treo cứng ở xung `1.512 GHz` — bắt buộc áp dụng khi triển khai/onboarding:
+     - **Giới hạn trần CPU quanh `~800 MHz`**: tạo `/usr/local/sbin/inut-cpu-limit.sh` + `/etc/systemd/system/inut-cpu-limit.service` (`After=sysinit.target`, `Before=pm2-root.service multi-user.target`) ghi trực tiếp `scaling_governor=schedutil`, `scaling_min_freq=600000`, **`scaling_max_freq=792000`** (hoặc nấc lớn nhất `<= 816000` trong `scaling_available_frequencies`) và đồng bộ `/etc/default/cpufrequtils`. (Giữ áp `0.90V` cố định, 0 bão I2C `AXP313a`, vẫn dư ~85–92% CPU idle).
+     - **Bật Hardware Watchdog `sunxi-wdt`**: `/etc/systemd/system.conf.d/watchdog.conf` với **`RuntimeWatchdogSec=14s`** (bắt buộc `<= 15s` theo giới hạn `16s` của `sunxi-wdt`) và `RebootWatchdogSec=2min`.
+     - **Box chạy LAN `end0`/`eth0`**: blacklist `xradio_wlan`, `xr819`, `sprdwl_ng`, `uwe5622_bsp_sdio`, `sprdbt_tty`, `hci_uart`, `bluetooth`; mask `aw859a-wifi`, `aw859a-bluetooth`, `wpa_supplicant`, `ifup@wlan0`; dọn `rmmod` lỗi trong `/etc/rc.local`; thêm `nodiscard` vào `/etc/media-automount.d/f2fs` (trên kernel `>= 6.3`, không format thẻ).
 
 ---
 

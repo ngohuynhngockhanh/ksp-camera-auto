@@ -87,6 +87,12 @@
     pkill -9 -f netwatch_loop.sh 2>/dev/null || true
     rm -f /usr/local/bin/netwatch_loop.sh /root/netwatch_installer.sh 2>/dev/null || true
     ```
+- **QUY TẮC BẮT BUỘC CHO BOX ALLWINNER (`sunxi` / `sunxi64` — X96Q / H313 / H616 / H3 / H5 / H6) — GIỚI HẠN CPU QUANH `~800 MHz` + HARDWARE WATCHDOG (Chống Treo Cứng)**:
+  - **Nhận diện:** `uname -r` chứa `sunxi` / `sunxi64` hoặc `/proc/device-tree/model` là bo mạch Allwinner (đặc biệt `hechuang,x96-q DDR3L v5.1` bin `speed0` hay treo cứng khi nhảy lên `1.512 GHz @ 1.10V`).
+  - **Giới hạn trần CPU quanh `~800 MHz`:** Trên H313/H616 X96Q khóa `MIN=600000`, **`MAX=792000`** (`792 MHz`), `GOVERNOR=schedutil` (trên SoC Allwinner khác chọn nấc lớn nhất `<= 816000` kHz trong `scaling_available_frequencies`). Mức `600–792 MHz` giữ điện áp `vdd-cpu` cố định `0.90V`, cắt bão ngắt I2C vào `AXP313a` về `0` và vẫn dư `~85–92%` CPU idle khi ghi hình copy stream.
+  - **Không chỉ sửa `/etc/default/cpufrequtils`** (nhiều bản Armbian không bật service `cpufrequtils`) — **BẮT BUỘC** tạo script `/usr/local/sbin/inut-cpu-limit.sh` + systemd unit `/etc/systemd/system/inut-cpu-limit.service` (`After=sysinit.target`, `Before=pm2-root.service multi-user.target`, `Type=oneshot`, `RemainAfterExit=yes`) ghi trực tiếp vào `/sys/devices/system/cpu/cpufreq/policy*/{scaling_governor,scaling_min_freq,scaling_max_freq}` và `systemctl enable --now inut-cpu-limit.service`.
+  - **Kích hoạt Hardware Watchdog (`sunxi-wdt`, `/dev/watchdog0`):** Tạo `/etc/systemd/system.conf.d/watchdog.conf` với `[Manager]`, **`RuntimeWatchdogSec=14s`** (bắt buộc `<= 15s` vì giới hạn phần cứng `sunxi-wdt` là `16s`), `RebootWatchdogSec=2min` → nếu kernel/SoC treo cứng sẽ tự reset trong 14s, không phải rút cắm nguồn tay.
+  - **Dọn xung đột WiFi/BT SDIO (box chạy LAN `end0`/`eth0`) & F2FS `nodiscard`:** Nếu không dùng WiFi/BT, blacklist `xradio_wlan`, `xr819`, `sprdwl_ng`, `uwe5622_bsp_sdio`, `sprdbt_tty`, `hci_uart`, `bluetooth` trong `/etc/modprobe.d/blacklist-wifi-sdio.conf`, `disable + mask` `aw859a-wifi`, `aw859a-bluetooth`, `wpa_supplicant`, `ifup@wlan0`, dọn `rmmod` lỗi trong `/etc/rc.local`. Trên thẻ F2FS kernel `>= 6.3`, thêm `nodiscard` vào `/etc/media-automount.d/f2fs` (`errors=continue,noatime,nodiscard,users` — không đặt `nodiscard` cho `auto`/`exfat`, tuyệt đối không format thẻ).
 
 ### 1.4 Quy Tắc SSH Trực Tiếp Vào Edge Node (Direct SSH — TUYỆT ĐỐI KHÔNG Nhảy Qua Ansible)
 - **Kết nối trực tiếp qua mạng Tinc VPN (`tun0` — `77.88.0.0/16`)**:

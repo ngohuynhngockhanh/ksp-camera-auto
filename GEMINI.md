@@ -46,6 +46,12 @@
   ```
 - **Tuyệt đối không** chạy SSH lồng qua máy chủ Ansible (`ssh root@172.16.5.180 "ssh root@77.88.x.y ..."` ) để tránh lỗi vỡ dấu nháy shell và chạy nhầm lệnh trên máy chủ Ansible.
 
+### 1.4 Quy Tắc Hardening Bắt Buộc Cho Box Allwinner (`sunxi` / `sunxi64` — X96Q / H313 / H616)
+- Khi triển khai/tối ưu bất kỳ Edge Box dùng chip **Allwinner** (`uname -r` chứa `sunxi`/`sunxi64`, đặc biệt `X96Q DDR3L v5.1` dễ treo cứng ở `1.512 GHz`):
+  1. **Giới hạn trần CPU quanh `~800 MHz`**: Chọn `MAX=792000` (`792 MHz`, `MIN=600000`, `GOVERNOR=schedutil` trên H313/H616 — hoặc nấc lớn nhất `<= 816000` kHz trên SoC Allwinner khác) để khóa áp `vdd-cpu` phẳng ở `0.90V` (cắt bão I2C `AXP313a` về `0`). **Bắt buộc** cài unit systemd `/etc/systemd/system/inut-cpu-limit.service` (`After=sysinit.target`, `Before=pm2-root.service multi-user.target`) ghi thẳng sysfs `cpufreq/policy*` (không chỉ sửa `/etc/default/cpufrequtils`).
+  2. **Bật Hardware Watchdog (`sunxi-wdt`)**: Tạo `/etc/systemd/system.conf.d/watchdog.conf` với `RuntimeWatchdogSec=14s` (`<= 15s`, khớp trần `16s` của `sunxi-wdt`) và `RebootWatchdogSec=2min`.
+  3. **Chặn driver WiFi/BT SDIO xung đột & F2FS `nodiscard`**: Với box cắm dây LAN, blacklist `xradio_wlan`/`sprdwl_ng`/`uwe5622_bsp_sdio`/`sprdbt_tty`/`bluetooth` + mask `aw859a-wifi`/`aw859a-bluetooth`/`wpa_supplicant`/`ifup@wlan0`; trên F2FS kernel `>= 6.3` thêm `nodiscard` trong `/etc/media-automount.d/f2fs` (không format thẻ).
+
 ---
 
 ## 2. Bản đồ kiến trúc hệ thống (System Architecture)
