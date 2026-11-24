@@ -64,17 +64,15 @@ func (h *HTTPHandler) handleCORS(w http.ResponseWriter, r *http.Request) {
 
 // checkAuth validates the request against configured MCP security policies.
 func (h *HTTPHandler) checkAuth(r *http.Request) bool {
-	// If loopback requests are allowed unauthenticated, verify client IP
-	if h.cfg.AllowUnauthenticatedLoopback {
-		ip := clientIP(r)
-		if isLoopbackIP(ip) {
-			return true
-		}
+	// If loopback requests are allowed unauthenticated, verify direct loopback
+	// (reject WAN requests arriving via local reverse proxies such as FRPC).
+	if h.cfg.AllowUnauthenticatedLoopback && isDirectLoopback(r) {
+		return true
 	}
 
-	// If no API key is configured and loopback not required, allow (or fallback)
-	if h.cfg.APIKey == "" {
-		return true
+	// Never fail-open to remote/proxied callers when no API key is configured.
+	if strings.TrimSpace(h.cfg.APIKey) == "" {
+		return false
 	}
 
 	// Check header "X-MCP-Key"
@@ -107,6 +105,27 @@ func (h *HTTPHandler) checkAuth(r *http.Request) bool {
 	}
 
 	return false
+}
+
+func isDirectLoopback(r *http.Request) bool {
+	if !isLoopbackIP(clientIP(r)) {
+		return false
+	}
+	if strings.TrimSpace(r.Header.Get("X-Forwarded-For")) != "" ||
+		strings.TrimSpace(r.Header.Get("X-Real-IP")) != "" ||
+		strings.TrimSpace(r.Header.Get("Forwarded")) != "" {
+		return false
+	}
+	if hostHdr := strings.TrimSpace(r.Host); hostHdr != "" {
+		h := hostHdr
+		if sh, _, err := net.SplitHostPort(hostHdr); err == nil {
+			h = sh
+		}
+		if !isLoopbackIP(h) {
+			return false
+		}
+	}
+	return true
 }
 
 func clientIP(r *http.Request) string {

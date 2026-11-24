@@ -356,7 +356,7 @@ func (s *Server) authorizeBridge(r *http.Request) bool {
 	if provided != "" && (constantMatch(provided, shinobiKey) || constantMatch(provided, strings.TrimSpace(s.cfg.MCP.APIKey))) {
 		return true
 	}
-	return isLoopbackRequest(r)
+	return isLoopbackRequest(r) && !hasUntrustedForwardedClient(r) && isLoopbackHostHeader(r.Host)
 }
 
 type resolvedBridgeTarget struct {

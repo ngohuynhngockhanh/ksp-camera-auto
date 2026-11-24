@@ -434,15 +434,14 @@ func (s *Server) sessionRole(r *http.Request) string {
 		}
 	}
 	// Trusted local Yamux reverse-proxy from inut-bida-agent on loopback.
-	if r.Header.Get("X-Inut-Staff-Sig") != "" {
-		ip := clientIP(r)
-		if ip == "127.0.0.1" || ip == "::1" || ip == "localhost" {
-			role := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Inut-SSO-Role")))
-			if role == "viewer" {
-				return "viewer"
-			}
-			return "admin"
+	// Strictly requires loopback Host + well-formed HMAC/SSO metadata + fresh ts
+	// so external requests forwarded by FRPC HTTP vhost cannot forge staff SSO.
+	if isValidStaffProxyRequest(r) {
+		role := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Inut-SSO-Role")))
+		if role == "viewer" {
+			return "viewer"
 		}
+		return "admin"
 	}
 	if u, p, ok := r.BasicAuth(); ok {
 		if role, valid := s.checkCreds(u, p); valid {
@@ -462,7 +461,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		s.serveStatic(w, r, "login.html")
 	case http.MethodPost:
-		ip := clientIP(r)
+		ip := loginRateLimitIP(r)
 		if s.limiter.blocked(ip) {
 			http.Redirect(w, r, "/login?err=locked", http.StatusSeeOther)
 			return

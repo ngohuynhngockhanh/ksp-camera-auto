@@ -1,9 +1,12 @@
 package server
 
 import (
+	"encoding/hex"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 )
 
 var tincVPNNet = mustParseCIDR("77.88.0.0/16")
@@ -14,6 +17,78 @@ func mustParseCIDR(cidr string) *net.IPNet {
 		panic(err)
 	}
 	return n
+}
+
+// isLoopbackHostHeader reports whether Host header names loopback (127.0.0.1, ::1, localhost).
+// Local Yamux proxies (inut-bida-agent) rewrite req.Host to 127.0.0.1:<port>,
+// whereas FRPC HTTP vhost proxies always forward the public subdomain Host.
+func isLoopbackHostHeader(hostHdr string) bool {
+	h := strings.TrimSpace(hostHdr)
+	if h == "" {
+		return false
+	}
+	if sh, _, err := net.SplitHostPort(h); err == nil {
+		h = sh
+	}
+	h = strings.Trim(h, "[]")
+	if strings.EqualFold(h, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
+}
+
+// isValidStaffProxyRequest validates that a Yamux SSO staff request came from
+// the local inut-bida-agent (loopback socket + loopback Host + well-formed
+// 64-hex HMAC signature + fresh timestamp + SSO metadata), preventing forged
+// X-Inut-Staff-Sig headers over FRPC HTTP vhost tunnels.
+func isValidStaffProxyRequest(r *http.Request) bool {
+	ip := clientIP(r)
+	if ip != "127.0.0.1" && ip != "::1" && !strings.EqualFold(ip, "localhost") {
+		return false
+	}
+	if !isLoopbackHostHeader(r.Host) {
+		return false
+	}
+	sig := strings.TrimSpace(r.Header.Get("X-Inut-Staff-Sig"))
+	if len(sig) != 64 {
+		return false
+	}
+	if _, err := hex.DecodeString(sig); err != nil {
+		return false
+	}
+	if strings.TrimSpace(r.Header.Get("X-Inut-SSO-User")) == "" ||
+		strings.TrimSpace(r.Header.Get("X-Inut-Box-ID")) == "" {
+		return false
+	}
+	ts, err := strconv.ParseInt(strings.TrimSpace(r.Header.Get("X-Inut-SSO-Ts")), 10, 64)
+	if err != nil {
+		return false
+	}
+	diff := time.Now().Unix() - ts
+	if diff < -600 || diff > 600 {
+		return false
+	}
+	return true
+}
+
+// loginRateLimitIP extracts the real client IP for brute-force throttling when
+// requests arrive via a local reverse proxy (FRPC on 127.0.0.1), so one WAN
+// attacker cannot lock out 127.0.0.1 for every admin.
+func loginRateLimitIP(r *http.Request) string {
+	ip := clientIP(r)
+	if parsed := net.ParseIP(strings.Trim(ip, "[]")); parsed != nil && parsed.IsLoopback() {
+		if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
+			first := strings.TrimSpace(strings.Split(xff, ",")[0])
+			if net.ParseIP(first) != nil {
+				return first
+			}
+		}
+		if xri := strings.TrimSpace(r.Header.Get("X-Real-IP")); xri != "" && net.ParseIP(xri) != nil {
+			return xri
+		}
+	}
+	return ip
 }
 
 // isTrustedInternalIP reports whether raw IP belongs to loopback, private LAN

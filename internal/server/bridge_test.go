@@ -163,7 +163,7 @@ func TestBridgeVirtualFilenameAndSpoolRangeServing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/bridge/clip.mp4?mid=camera01&file=v_nvr_2026-11-08T17-35-00_300.mp4", nil)
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:2028/api/v1/bridge/clip.mp4?mid=camera01&file=v_nvr_2026-11-08T17-35-00_300.mp4", nil)
 	req.RemoteAddr = "127.0.0.1:51234"
 	req.Header.Set("Range", "bytes=0-31")
 	rec := httptest.NewRecorder()

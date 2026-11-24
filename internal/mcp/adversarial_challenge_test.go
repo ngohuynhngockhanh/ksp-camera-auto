@@ -561,7 +561,7 @@ func TestAdversarialChallenge_HTTPAndSSETransports(t *testing.T) {
 
 	t.Run("Loopback POST /mcp authorized without key", func(t *testing.T) {
 		body := `{"jsonrpc":"2.0","id":100,"method":"tools/call","params":{"name":"redbida_get_time_status","arguments":{}}}`
-		req := httptest.NewRequest("POST", "/mcp", bytes.NewBufferString(body))
+		req := httptest.NewRequest("POST", "http://127.0.0.1:2028/mcp", bytes.NewBufferString(body))
 		req.RemoteAddr = "127.0.0.1:45678"
 		rec := httptest.NewRecorder()
 
