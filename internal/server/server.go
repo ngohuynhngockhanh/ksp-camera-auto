@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/eventbus"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mcp"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/redbida"
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/scheduler"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/shinobi"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/traffic"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/web"
@@ -52,6 +54,7 @@ type Server struct {
 	uploadsDir  string
 	uploadsStop chan struct{}
 	bridge      *nvrBridge
+	scheduler   *scheduler.Scheduler
 }
 
 // New builds a Server with routes registered.
@@ -115,6 +118,24 @@ func New(cfg config.Config, inv *config.Inventory) (*Server, error) {
 	s.uploadsStop = make(chan struct{})
 	s.startUploadsCleaner(24 * time.Hour)
 	s.bridge = newNVRBridge(s)
+	if cfg.Scheduler.Enabled {
+		sFile := cfg.Scheduler.SchedulesFile
+		if sFile == "" {
+			sFile = "schedules.json"
+		}
+		if !filepath.IsAbs(sFile) && sFile == "schedules.json" && cfg.CamerasFile != "" {
+			if camDir := filepath.Dir(cfg.CamerasFile); camDir != "" && camDir != "." {
+				sFile = filepath.Join(camDir, sFile)
+			}
+		}
+		sched, err := scheduler.NewScheduler(sFile, inv)
+		if err != nil {
+			log.Printf("scheduler: init failed: %v", err)
+		} else {
+			s.scheduler = sched
+			s.scheduler.Start()
+		}
+	}
 	s.routes()
 	s.nvrWatch = newNVRWatchdog(s)
 	return s, nil
@@ -136,6 +157,9 @@ func (s *Server) Close() {
 	}
 	if s.bridge != nil {
 		s.bridge.Close()
+	}
+	if s.scheduler != nil {
+		s.scheduler.Stop()
 	}
 }
 
@@ -234,6 +258,12 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/events/stream", api(s.handleEventsStream))
 	s.mux.Handle("/api/events/poll", api(s.handleEventsPollNow))
 	s.mux.Handle("/api/events/webhook/raysharp", limitBody(8<<20, http.HandlerFunc(s.handleRaysharpWebhook)))
+	s.mux.Handle("/api/scheduler/jobs", api(s.handleSchedulerJobs))
+	s.mux.Handle("/api/scheduler/jobs/update", api(s.handleSchedulerJobUpdate))
+	s.mux.Handle("/api/scheduler/jobs/delete", api(s.handleSchedulerJobDelete))
+	s.mux.Handle("/api/scheduler/jobs/toggle", api(s.handleSchedulerJobToggle))
+	s.mux.Handle("/api/scheduler/jobs/run", api(s.handleSchedulerJobRun))
+	s.mux.Handle("/api/scheduler/history", api(s.handleSchedulerHistory))
 	s.mux.HandleFunc("/logo.png", s.handleLogoFile)
 	s.mux.Handle("/api/upload-logo", api(s.handleUploadLogo))
 	s.mux.HandleFunc("/uploads/", s.handleUploads)

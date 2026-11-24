@@ -64,3 +64,6 @@ bridge:
     max_spool_mb: 0
     clip_ttl_seconds: 600
     max_per_nvr: 2
+scheduler:
+    enabled: true
+    schedules_file: schedules.json

@@ -130,6 +130,7 @@
             <a href="#cameras/nvr" data-camera-task="nvr" data-testid="task-tab-nvr">Đầu ghi</a>
             <a href="#cameras/anti-a" data-camera-task="anti-a" data-testid="task-tab-anti-a">🛡️ Anti-A Guardian</a>
             <a href="#cameras/traffic" data-camera-task="traffic" data-testid="task-tab-traffic">🌐 Lưu Lượng (iftop)</a>
+            <a href="#cameras/scheduler" data-camera-task="scheduler" data-testid="task-tab-scheduler">⏰ Hẹn giờ</a>
             <a href="#cameras/results" data-camera-task="results" data-testid="task-tab-results">Kết quả</a>
           </div>
 
@@ -712,6 +713,91 @@
                   <tr><td colspan="7" class="empty-hint">Bấm "Bật Giám Sát" để bắt đầu theo dõi lưu lượng mạng thời gian thực.</td></tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- Camera Task Scheduler Panel -->
+          <div class="card" data-camera-panel="scheduler" id="camera-task-scheduler">
+            <div class="card-head-row">
+              <div>
+                <div class="card-title">⏰ Hẹn Giờ Tác Vụ (Camera Scheduler)</div>
+                <p class="card-sub">Lập lịch tự động chuyển chế độ màu Ngày/Đêm (Full Color ban ngày, Auto ban đêm) hoặc khởi động lại camera định kỳ theo lịch trình cấu hình.</p>
+              </div>
+              <div style="display:flex; gap:0.5rem; align-items:center;">
+                <button class="btn btn-primary" type="button" id="scheduler-add-btn" data-testid="scheduler-add-btn">+ Thêm lịch trình</button>
+                <button class="btn btn-secondary" type="button" id="scheduler-refresh-btn" data-testid="scheduler-refresh-btn">Làm mới</button>
+              </div>
+            </div>
+
+            <!-- Stats Overview Grid -->
+            <div class="scheduler-stats-grid section-gap">
+              <div class="scheduler-stat-card">
+                <span class="scheduler-stat-title">Tổng số lịch trình</span>
+                <span class="scheduler-stat-val" id="scheduler-stat-total">0</span>
+              </div>
+              <div class="scheduler-stat-card">
+                <span class="scheduler-stat-title">Đang kích hoạt</span>
+                <span class="scheduler-stat-val" id="scheduler-stat-active" style="color: var(--success, #10b981);">0</span>
+              </div>
+              <div class="scheduler-stat-card">
+                <span class="scheduler-stat-title">Lần chạy gần nhất</span>
+                <span class="scheduler-stat-val" id="scheduler-stat-last-run" style="font-size:0.95rem;">—</span>
+              </div>
+              <div class="scheduler-stat-card">
+                <span class="scheduler-stat-title">Trạng thái bộ lập lịch</span>
+                <span class="scheduler-stat-val" id="scheduler-stat-running">🟢 Đang chạy</span>
+              </div>
+            </div>
+
+            <div class="msg" id="scheduler-msg"></div>
+
+            <!-- Scheduled Jobs Table -->
+            <div class="section-gap">
+              <h4 style="margin: 0 0 0.5rem 0; font-size: 0.95rem;">📅 Danh sách Lịch Trình Tự Động</h4>
+              <div class="table-wrap" style="overflow-x: auto;">
+                <table class="reflow" id="scheduler-jobs-table">
+                  <thead>
+                    <tr>
+                      <th style="min-width: 140px;">Tên lịch trình</th>
+                      <th style="min-width: 180px;">Hành động</th>
+                      <th style="min-width: 130px;">Giờ chạy / Ngày</th>
+                      <th style="min-width: 140px;">Camera áp dụng</th>
+                      <th style="min-width: 120px;">Lần chạy tới</th>
+                      <th style="min-width: 110px;">Kết quả gần nhất</th>
+                      <th style="min-width: 110px;">Trạng thái</th>
+                      <th style="min-width: 200px; text-align: right;">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody id="scheduler-jobs-tbody">
+                    <tr><td colspan="8" class="empty-hint">Đang tải danh sách lịch trình...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Execution History Log Section -->
+            <div class="section-gap" style="margin-top: 1.5rem;">
+              <div class="card-head-row">
+                <h4 style="margin: 0; font-size: 0.95rem;">📋 Nhật ký thực thi gần nhất (Execution History)</h4>
+                <button class="btn btn-sm btn-secondary" type="button" id="scheduler-clear-history-btn">Xóa nhật ký</button>
+              </div>
+              <div class="table-wrap section-gap" style="max-height: 320px; overflow-y: auto;">
+                <table class="reflow" id="scheduler-history-table">
+                  <thead>
+                    <tr>
+                      <th style="min-width: 130px;">Thời gian</th>
+                      <th style="min-width: 140px;">Tác vụ</th>
+                      <th style="min-width: 120px;">Loại tác vụ</th>
+                      <th style="min-width: 90px;">Thời lượng</th>
+                      <th style="min-width: 110px;">Trạng thái</th>
+                      <th>Chi tiết kết quả / Phản hồi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="scheduler-history-tbody">
+                    <tr><td colspan="6" class="empty-hint">Chưa có lịch sử thực thi nào.</td></tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </section>
@@ -1631,9 +1717,115 @@
       </div>
     </dialog>
 
+    <!-- Modal Thêm / Sửa Lịch trình Scheduler -->
+    <dialog id="scheduler-job-modal" class="modal" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3 id="scheduler-modal-title">Thêm lịch trình mới</h3>
+        <button class="btn-icon" id="scheduler-modal-close" type="button">✕</button>
+      </div>
+      <form id="scheduler-job-form" class="modal-body" style="display:flex; flex-direction:column; gap:0.85rem;">
+        <input type="hidden" id="sched-form-id">
+
+        <div class="field field-sm">
+          <label for="sched-form-name">Tên lịch trình <span style="color:var(--danger)">*</span></label>
+          <input id="sched-form-name" type="text" placeholder="Ví dụ: Chuyển Full Color ban ngày" required>
+        </div>
+
+        <div class="row" style="gap: 1rem; align-items: flex-start; flex-wrap: wrap;">
+          <div class="field field-sm" style="flex: 1; min-width: 120px;">
+            <label for="sched-form-time">Giờ chạy (HH:MM) <span style="color:var(--danger)">*</span></label>
+            <input id="sched-form-time" type="time" value="07:00" required>
+          </div>
+          <div class="field field-sm" style="flex: 1; min-width: 160px;">
+            <label for="sched-form-action-type">Loại hành động</label>
+            <select id="sched-form-action-type">
+              <option value="picture_day_night">Chỉnh màu Ngày/Đêm (Picture Day/Night)</option>
+              <option value="reboot">Khởi động lại (Reboot)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field field-sm">
+          <label>Các ngày lặp lại:</label>
+          <div class="sched-day-picker" id="sched-form-days">
+            <label class="sched-day-label"><input type="checkbox" value="1" checked> <span>T2</span></label>
+            <label class="sched-day-label"><input type="checkbox" value="2" checked> <span>T3</span></label>
+            <label class="sched-day-label"><input type="checkbox" value="3" checked> <span>T4</span></label>
+            <label class="sched-day-label"><input type="checkbox" value="4" checked> <span>T5</span></label>
+            <label class="sched-day-label"><input type="checkbox" value="5" checked> <span>T6</span></label>
+            <label class="sched-day-label"><input type="checkbox" value="6" checked> <span>T7</span></label>
+            <label class="sched-day-label"><input type="checkbox" value="0" checked> <span>CN</span></label>
+            <button type="button" class="btn btn-sm btn-secondary" id="sched-days-all-btn" style="margin-left:auto; padding:2px 8px; font-size:0.75rem;">Hàng ngày</button>
+          </div>
+        </div>
+
+        <!-- Picture Day/Night settings -->
+        <div id="sched-daynight-fields" style="background:var(--surface-2, rgba(255,255,255,0.03)); border:1px solid var(--border); border-radius:8px; padding:10px 12px;">
+          <div class="row" style="gap: 1rem; align-items: center; flex-wrap: wrap;">
+            <div class="field field-sm" style="flex: 2; min-width: 180px;">
+              <label for="sched-form-daynight-color">Chế độ màu Ngày/Đêm (DayNightColor)</label>
+              <select id="sched-form-daynight-color">
+                <option value="0">0 - Full Color (Luôn màu sắc ban ngày)</option>
+                <option value="1">1 - Auto (Tự động chuyển ngày/đêm)</option>
+                <option value="2">2 - B&W (Luôn đen trắng ban đêm)</option>
+              </select>
+            </div>
+            <div class="field field-sm" style="flex: 2; min-width: 180px;">
+              <label for="sched-form-daynight-light">Đèn trợ sáng (Supplement Light)</label>
+              <select id="sched-form-daynight-light">
+                <option value="auto">Tự động (Ngày bật màu / Đêm hồng ngoại IR)</option>
+                <option value="keep">Giữ nguyên (Không can thiệp đèn LED/IR)</option>
+                <option value="InfraredMode">Hồng ngoại (InfraredMode)</option>
+                <option value="WhiteLightMode">Đèn LED trắng (WhiteLightMode)</option>
+                <option value="Off">Tắt hẳn đèn (Off)</option>
+              </select>
+            </div>
+            <div class="field field-sm" style="flex: 1; min-width: 90px;">
+              <label for="sched-form-channel">Kênh (Channel)</label>
+              <input id="sched-form-channel" type="number" min="0" max="64" value="0">
+            </div>
+          </div>
+          <p class="muted" style="margin: 4px 0 0; font-size: 0.78rem;">Tự động gửi lệnh thiết lập và đối chiếu phản hồi (read-back) để đảm bảo camera đã chuyển đúng chế độ.</p>
+        </div>
+
+        <!-- Reboot settings hint -->
+        <div id="sched-reboot-fields" style="display:none; background:var(--surface-2, rgba(255,255,255,0.03)); border:1px solid var(--border); border-radius:8px; padding:10px 12px;">
+          <p class="muted" style="margin:0; font-size:0.82rem;">Gửi lệnh khởi động lại (Reboot) an toàn đến các camera đã chọn.</p>
+        </div>
+
+        <!-- Camera selection -->
+        <div class="field field-sm">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label style="margin:0;">Camera áp dụng <span style="color:var(--danger)">*</span>:</label>
+            <div style="display:flex; gap:4px;">
+              <button type="button" class="btn btn-sm btn-secondary" id="sched-cam-all-btn" style="padding:2px 8px; font-size:0.75rem;">Chọn tất cả</button>
+              <button type="button" class="btn btn-sm btn-secondary" id="sched-cam-dahua-btn" style="padding:2px 8px; font-size:0.75rem;">Chỉ Dahua</button>
+              <button type="button" class="btn btn-sm btn-secondary" id="sched-cam-none-btn" style="padding:2px 8px; font-size:0.75rem;">Bỏ chọn</button>
+            </div>
+          </div>
+          <div class="sched-cam-picker" id="sched-form-cameras">
+            <span class="muted" style="padding:8px;">Đang tải danh sách camera...</span>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="sched-form-enabled" checked>
+          <label for="sched-form-enabled" style="cursor:pointer; margin:0; font-weight:500;">Kích hoạt lịch trình ngay sau khi lưu</label>
+        </div>
+
+        <div class="msg" id="sched-form-msg"></div>
+
+        <div class="modal-actions" style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:0.5rem;">
+          <button class="btn btn-secondary" type="button" id="sched-modal-cancel">Hủy</button>
+          <button class="btn btn-primary" type="submit" id="sched-modal-submit">Lưu lịch trình</button>
+        </div>
+      </form>
+    </dialog>
+
   </div>
   <script src="ui-core.js"></script>
   <script src="app.js"></script>
+  <script src="scheduler.js"></script>
   <script src="redbida.js"></script>
   <script src="help.js"></script>
   <script src="vis-timeline-graph2d.min.js"></script>

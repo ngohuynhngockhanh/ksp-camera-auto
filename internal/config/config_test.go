@@ -29,6 +29,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Redbida.Enabled || cfg.Redbida.BrokerPort != 12369 || cfg.Redbida.WriteTopic != "/private/i_sets" {
 		t.Errorf("unexpected Redbida defaults: %+v", cfg.Redbida)
 	}
+	if !cfg.Scheduler.Enabled || cfg.Scheduler.SchedulesFile != "schedules.json" {
+		t.Errorf("unexpected Scheduler defaults: %+v", cfg.Scheduler)
+	}
 }
 
 func TestLoadMissingFileReturnsDefaults(t *testing.T) {

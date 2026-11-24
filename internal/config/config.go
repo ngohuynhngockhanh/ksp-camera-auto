@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"gopkg.in/yaml.v3"
@@ -204,17 +205,40 @@ func (b *BridgeConfig) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// SchedulerConfig configures the periodic task scheduler for camera actions.
+type SchedulerConfig struct {
+	Enabled       bool   `yaml:"enabled" json:"enabled"`
+	SchedulesFile string `yaml:"schedules_file" json:"schedulesFile"`
+}
+
+func (s *SchedulerConfig) UnmarshalYAML(value *yaml.Node) error {
+	type rawScheduler SchedulerConfig
+	raw := rawScheduler{
+		Enabled:       true,
+		SchedulesFile: "schedules.json",
+	}
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	*s = SchedulerConfig(raw)
+	if s.SchedulesFile == "" {
+		s.SchedulesFile = "schedules.json"
+	}
+	return nil
+}
+
 // Config is the top-level configuration document.
 type Config struct {
-	Server      Server        `yaml:"server"`
-	CamerasFile string        `yaml:"cameras_file"`
-	Defaults    Defaults      `yaml:"defaults"`
-	Shinobi     ShinobiConfig `yaml:"shinobi"`
-	MCP         MCPConfig     `yaml:"mcp"`
-	Redbida     RedbidaConfig `yaml:"redbida"`
-	AntiA       AntiAConfig   `yaml:"anti_a"`
-	Events      EventsConfig  `yaml:"events"`
-	Bridge      BridgeConfig  `yaml:"bridge"`
+	Server      Server          `yaml:"server"`
+	CamerasFile string          `yaml:"cameras_file"`
+	Defaults    Defaults        `yaml:"defaults"`
+	Shinobi     ShinobiConfig   `yaml:"shinobi"`
+	MCP         MCPConfig       `yaml:"mcp"`
+	Redbida     RedbidaConfig   `yaml:"redbida"`
+	AntiA       AntiAConfig     `yaml:"anti_a"`
+	Events      EventsConfig    `yaml:"events"`
+	Bridge      BridgeConfig    `yaml:"bridge"`
+	Scheduler   SchedulerConfig `yaml:"scheduler"`
 }
 
 // Default returns a Config populated with built-in defaults.
@@ -284,6 +308,10 @@ func Default() Config {
 			ClipTTLSeconds: 600,
 			MaxPerNVR:      2,
 		},
+		Scheduler: SchedulerConfig{
+			Enabled:       true,
+			SchedulesFile: "schedules.json",
+		},
 	}
 }
 
@@ -314,6 +342,11 @@ func Load(path string) (Config, error) {
 		return cfg, fmt.Errorf("parse config %s: %w", path, err)
 	}
 	cfg.applyDefaults()
+	if !filepath.IsAbs(cfg.Scheduler.SchedulesFile) {
+		if dir := filepath.Dir(path); dir != "" && dir != "." {
+			cfg.Scheduler.SchedulesFile = filepath.Join(dir, cfg.Scheduler.SchedulesFile)
+		}
+	}
 	return cfg, nil
 }
 
@@ -433,5 +466,8 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Bridge.MaxPerNVR <= 0 {
 		c.Bridge.MaxPerNVR = d.Bridge.MaxPerNVR
+	}
+	if c.Scheduler.SchedulesFile == "" {
+		c.Scheduler.SchedulesFile = d.Scheduler.SchedulesFile
 	}
 }

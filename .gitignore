@@ -15,6 +15,8 @@
 # Runtime state / secrets
 /cameras.yaml
 /config.yaml
+schedules.json
+/schedules.json
 *.log
 
 # UI test dependencies and artifacts

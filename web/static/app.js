@@ -42,7 +42,7 @@ const HASH_ALIASES = {
   results: 'cameras/results',
   'cameras/devices': 'cameras/nvr',
 };
-const CAMERA_TASKS = ['list', 'bulk', 'nvr', 'anti-a', 'traffic', 'results'];
+const CAMERA_TASKS = ['list', 'bulk', 'nvr', 'anti-a', 'traffic', 'scheduler', 'results'];
 // Tabs of the camera detail page (#cameras/cam/<encodedId>/<tab>).
 const DETAIL_TABS = ['osd', 'picture', 'video', 'audio', 'network', 'ptz', 'ai', 'maint'];
 
@@ -260,7 +260,8 @@ function renderCameraTask() {
   if (task === 'nvr') renderNvrList();
   if (task === 'anti-a') renderAntiAPanel();
   if (task === 'traffic') renderTrafficPanel();
-  else if (typeof stopTrafficStream === 'function') stopTrafficStream();
+  if (task === 'scheduler' && typeof renderSchedulerPanel === 'function') renderSchedulerPanel();
+  if (task !== 'traffic' && typeof stopTrafficStream === 'function') stopTrafficStream();
 }
 
 function setRoute() {

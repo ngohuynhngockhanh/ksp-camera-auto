@@ -2,6 +2,7 @@ package dahua
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/isapi"
 	"io"
@@ -70,34 +71,43 @@ func (c *Client) SetPicture(ch int, colorChanges, optionsChanges map[string]any)
 		}
 	}
 	if len(optionsChanges) > 0 {
-		table, err := c.getTable("VideoInOptions")
-		if err != nil {
-			return nil, nil, err
+		suppLight, _ := optionsChanges["_SupplementLight"].(string)
+		cleanOpts := make(map[string]any, len(optionsChanges))
+		for k, v := range optionsChanges {
+			if k == "_SupplementLight" {
+				continue
+			}
+			cleanOpts[k] = v
 		}
-		obj, err := channelObj(table, "VideoInOptions", ch)
-		if err != nil {
-			return nil, nil, err
-		}
-		mergeNested(obj, optionsChanges)
-		// Mirror top-level DayNightColor into NightOptions/NormalOptions so
-		// active scheduled sub-profiles (e.g. Imou/Dahua VideoInMode) also
-		// honor Full-Color (0), Auto (1), or B&W (2) immediately.
-		if rawDNC, hasDNC := optionsChanges["DayNightColor"]; hasDNC {
-			dncVal := obj["DayNightColor"]
-			for _, subKey := range []string{"NightOptions", "NormalOptions"} {
-				if sub, ok := obj[subKey].(map[string]any); ok {
-					if _, exists := sub["DayNightColor"]; exists {
-						sub["DayNightColor"] = dncVal
+		if len(cleanOpts) > 0 {
+			table, err := c.getTable("VideoInOptions")
+			if err != nil {
+				return nil, nil, err
+			}
+			obj, err := channelObj(table, "VideoInOptions", ch)
+			if err != nil {
+				return nil, nil, err
+			}
+			mergeNested(obj, cleanOpts)
+			// Mirror top-level DayNightColor into NightOptions/NormalOptions so
+			// active scheduled sub-profiles (e.g. Imou/Dahua VideoInMode) also
+			// honor Full-Color (0), Auto (1), or B&W (2) immediately.
+			if _, hasDNC := cleanOpts["DayNightColor"]; hasDNC {
+				dncVal := obj["DayNightColor"]
+				for _, subKey := range []string{"NightOptions", "NormalOptions"} {
+					if sub, ok := obj[subKey].(map[string]any); ok {
+						if _, exists := sub["DayNightColor"]; exists {
+							sub["DayNightColor"] = dncVal
+						}
 					}
 				}
 			}
-			_ = rawDNC
-		}
-		if err := c.setTable("VideoInOptions", table); err != nil {
-			return nil, nil, err
-		}
-		if _, hasDNC := optionsChanges["DayNightColor"]; hasDNC {
-			c.syncDayNightAndSupplementLight(ch, toInt(obj["DayNightColor"]))
+			if err := c.setTable("VideoInOptions", table); err != nil {
+				return nil, nil, err
+			}
+			if _, hasDNC := cleanOpts["DayNightColor"]; hasDNC {
+				c.syncDayNightAndSupplementLight(ch, toInt(obj["DayNightColor"]), suppLight)
+			}
 		}
 	}
 	return c.GetPicture(ch)
@@ -134,14 +144,23 @@ func mergeNested(dst, src map[string]any) {
 
 // syncDayNightAndSupplementLight best-effort synchronizes auxiliary Dahua/Imou
 // day-night and dual-light tables (VideoInDayNight, LightGlobal, Lighting_V2,
-// LightingScheme) when DayNightColor changes:
+// LightingScheme) symmetrically when DayNightColor changes:
 //   - dnc == 0 (Full-Color / Always Color): sets VideoInDayNight[*].Mode = "Color",
 //     enables LightGlobal, sets WhiteLight PercentOfMaxBrightness = 100 in
-//     Lighting_V2 across Day/Night/Normal profiles, and attempts WhiteLightMode
-//     on Dual-Light models supporting writable LightingScheme.
-//   - dnc == 1 (Auto): sets VideoInDayNight[*].Mode = "Brightness".
-//   - dnc == 2 (Always B&W): sets VideoInDayNight[*].Mode = "BlackWhite".
-func (c *Client) syncDayNightAndSupplementLight(ch, dnc int) {
+//     Lighting_V2 across Day/Night/Normal profiles, and switches LightingScheme
+//     to WhiteLightMode (unless overridden by supplementLight).
+//   - dnc == 1 (Auto): sets VideoInDayNight[*].Mode = "Brightness" and restores
+//     LightingScheme to InfraredMode so Dual-Light cameras do not stay stuck on
+//     WhiteLightMode overnight.
+//   - dnc == 2 (Always B&W): sets VideoInDayNight[*].Mode = "BlackWhite" and
+//     restores LightingScheme to InfraredMode.
+//
+// Optional supplementLight override:
+//   - "" / "auto": automatic symmetry described above
+//   - "keep": only update VideoInDayNight, leave LED/IR light tables untouched
+//   - "Off": disable LightGlobal[ch].Enable = false
+//   - "InfraredMode" | "WhiteLightMode" | "AIMixLightMode": force LightingScheme mode
+func (c *Client) syncDayNightAndSupplementLight(ch, dnc int, supplementLight string) {
 	dnMode := "Brightness"
 	switch dnc {
 	case 0:
@@ -153,7 +172,7 @@ func (c *Client) syncDayNightAndSupplementLight(ch, dnc int) {
 		if profiles, ok := dnTable[ch].([]any); ok {
 			changed := false
 			for _, p := range profiles {
-				if pm, ok := p.(map[string]any); ok {
+				if pm, ok := p.(map[string]any); ok && pm["Mode"] != dnMode {
 					pm["Mode"] = dnMode
 					changed = true
 				}
@@ -163,54 +182,136 @@ func (c *Client) syncDayNightAndSupplementLight(ch, dnc int) {
 			}
 		}
 	}
-	if dnc != 0 {
+
+	sl := strings.TrimSpace(supplementLight)
+	if strings.EqualFold(sl, "keep") {
 		return
 	}
-	if lgTable, err := c.getTable("LightGlobal"); err == nil && ch >= 0 && ch < len(lgTable) {
-		if lgObj, ok := lgTable[ch].(map[string]any); ok {
-			lgObj["Enable"] = true
-			_ = c.setTable("LightGlobal", lgTable)
+	if strings.EqualFold(sl, "off") {
+		c.setLightGlobal(ch, false)
+		return
+	}
+
+	targetScheme := ""
+	switch {
+	case strings.EqualFold(sl, "InfraredMode"):
+		targetScheme = "InfraredMode"
+	case strings.EqualFold(sl, "WhiteLightMode"):
+		targetScheme = "WhiteLightMode"
+	case strings.EqualFold(sl, "AIMixLightMode"):
+		targetScheme = "AIMixLightMode"
+	default:
+		if dnc == 0 {
+			targetScheme = "WhiteLightMode"
+		} else {
+			targetScheme = "InfraredMode"
 		}
 	}
-	if v2Table, err := c.getTable("Lighting_V2"); err == nil && ch >= 0 && ch < len(v2Table) {
-		if profiles, ok := v2Table[ch].([]any); ok {
-			changed := false
-			for _, prof := range profiles {
-				entries, ok := prof.([]any)
-				if !ok {
-					continue
-				}
-				for _, item := range entries {
-					em, ok := item.(map[string]any)
-					if !ok || em["LightType"] != "WhiteLight" {
+
+	c.setLightGlobal(ch, true)
+
+	if targetScheme == "WhiteLightMode" {
+		if v2Table, err := c.getTable("Lighting_V2"); err == nil && ch >= 0 && ch < len(v2Table) {
+			if profiles, ok := v2Table[ch].([]any); ok {
+				changed := false
+				for _, prof := range profiles {
+					entries, ok := prof.([]any)
+					if !ok {
 						continue
 					}
-					if _, hasMode := em["Mode"]; hasMode {
-						em["Mode"] = "Auto"
+					for _, item := range entries {
+						em, ok := item.(map[string]any)
+						if !ok || em["LightType"] != "WhiteLight" {
+							continue
+						}
+						if curMode, hasMode := em["Mode"]; hasMode && curMode != "Auto" {
+							em["Mode"] = "Auto"
+							changed = true
+						}
+						if toInt(em["PercentOfMaxBrightness"]) == 0 {
+							em["PercentOfMaxBrightness"] = float64(100)
+							changed = true
+						}
 					}
-					if toInt(em["PercentOfMaxBrightness"]) == 0 {
-						em["PercentOfMaxBrightness"] = float64(100)
-					}
+				}
+				if changed {
+					_ = c.setTable("Lighting_V2", v2Table)
+				}
+			}
+		}
+	}
+
+	c.syncLightingScheme(ch, targetScheme)
+}
+
+func (c *Client) setLightGlobal(ch int, enable bool) {
+	if lgTable, err := c.getTable("LightGlobal"); err == nil && ch >= 0 && ch < len(lgTable) {
+		if lgObj, ok := lgTable[ch].(map[string]any); ok {
+			if cur, isBool := lgObj["Enable"].(bool); !isBool || cur != enable {
+				lgObj["Enable"] = enable
+				_ = c.setTable("LightGlobal", lgTable)
+			}
+		}
+	}
+}
+
+// syncLightingScheme performs GET-modify-SET on LightingScheme, supporting both
+// Dahua IPC array tables ([[{"LightingMode":...}]]) and Imou IPC object tables
+// ({"": [{"LightingMode":...}]}). Writes back only if a profile actually changed.
+func (c *Client) syncLightingScheme(ch int, targetMode string) {
+	if targetMode == "" {
+		return
+	}
+	resp, err := c.Call("configManager.getConfig", map[string]any{"name": "LightingScheme"})
+	if err != nil || !resp.ok() || len(resp.Params) == 0 {
+		return
+	}
+	var p struct {
+		Table any `json:"table"`
+	}
+	if err := json.Unmarshal(resp.Params, &p); err != nil || p.Table == nil {
+		return
+	}
+	if !mutateLightingSchemeTable(p.Table, ch, targetMode) {
+		return
+	}
+	_, _ = c.Call("configManager.setConfig", map[string]any{
+		"name":  "LightingScheme",
+		"table": p.Table,
+	})
+}
+
+func mutateLightingSchemeTable(table any, ch int, targetMode string) bool {
+	mutateSlice := func(entries []any) bool {
+		changed := false
+		for _, item := range entries {
+			if m, ok := item.(map[string]any); ok {
+				if cur, _ := m["LightingMode"].(string); cur != targetMode {
+					m["LightingMode"] = targetMode
 					changed = true
 				}
 			}
-			if changed {
-				_ = c.setTable("Lighting_V2", v2Table)
+		}
+		return changed
+	}
+
+	switch t := table.(type) {
+	case []any:
+		if ch >= 0 && ch < len(t) {
+			if entries, ok := t[ch].([]any); ok {
+				return mutateSlice(entries)
 			}
 		}
+	case map[string]any:
+		chKey := strconv.Itoa(ch)
+		if entries, ok := t[chKey].([]any); ok {
+			return mutateSlice(entries)
+		}
+		if entries, ok := t[""].([]any); ok {
+			return mutateSlice(entries)
+		}
 	}
-	// Best-effort switch Dual-Light cameras (Imou Cruiser/Bullet, Dahua Full-Color)
-	// from InfraredMode to WhiteLightMode if their firmware permits writing LightingScheme.
-	_, _ = c.Call("configManager.setConfig", map[string]any{
-		"name": "LightingScheme",
-		"table": []any{
-			[]any{
-				map[string]any{"LightingMode": "WhiteLightMode"},
-				map[string]any{"LightingMode": "WhiteLightMode"},
-				map[string]any{"LightingMode": "WhiteLightMode"},
-			},
-		},
-	})
+	return false
 }
 
 // videoColorObj navigates table[ch][0] to the color-config object.

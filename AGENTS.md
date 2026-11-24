@@ -267,6 +267,12 @@ graph TD
 | `/api/rescue/deactivate` | `POST` | Admin | `{peerName}` | `{ok, removedCameras, removedMonitors}` | Gỡ bỏ IP ảo & dọn sạch kênh cứu hộ khi Box hỏng đã sửa xong |
 | `/api/anti-a` | `GET`, `POST` | GET: Viewer/Admin, POST: Admin | GET: None / POST: `antiAConfigReq` | `antiAStatusView` | Giám sát & cấu hình Anti-A Guardian (H.265 Auto-Lock) |
 | `/api/anti-a/trigger` | `POST` | Admin | `{}` | `{ok: true, enforced: int, status}` | Kích hoạt quét & khóa toàn bộ camera về H.265/SmartCodec/AAC |
+| `/api/scheduler/jobs` | `GET`, `POST` | Admin | GET: None / POST: `Job` (JSON) | GET: `[]Job` / POST: `Job` | Lấy danh sách lịch trình / Tạo mới lịch hẹn giờ thực thi API |
+| `/api/scheduler/jobs/update` | `POST` | Admin | `Job` (JSON) | `Job` | Cập nhật cấu hình lịch trình hẹn giờ |
+| `/api/scheduler/jobs/delete` | `POST` | Admin | `{id}` | `{ok: true}` | Xóa lịch trình khỏi bộ lập lịch |
+| `/api/scheduler/jobs/toggle` | `POST` | Admin | `{id, enabled}` | `Job` | Bật / tắt nhanh một lịch trình hẹn giờ |
+| `/api/scheduler/jobs/run` | `POST` | Admin | `{id}` | `ExecutionRecord` | Kích hoạt chạy ngay lập tức để kiểm thử tác vụ hẹn giờ |
+| `/api/scheduler/history` | `GET` | Admin | None | `[]ExecutionRecord` | Đọc nhật ký lịch sử 50 lần thực thi gần nhất của scheduler |
 | `/api/network/traffic/interfaces` | `GET` | Viewer/Admin | None | `{interfaces: []string, default: string}` | Danh sách card mạng ethernet hợp lệ (loại trừ wlan0, lo) |
 | `/api/network/traffic/snapshot` | `GET` | Viewer/Admin | Query: `iface` | `traffic.Snapshot` | Lấy ảnh chụp lưu lượng mạng và socket tức thời |
 | `/api/network/traffic/stream` | `GET` | Viewer/Admin | Query: `iface` | `text/event-stream` (`traffic.Snapshot`) | Luồng SSE giám sát iftop thời gian thực (0% idle CPU) |
@@ -710,6 +716,33 @@ Khi Edge Box không gắn thẻ nhớ `/media/usb1` (chế độ `Diskless / NVR
 2. **Kho đệm RAM `/dev/shm/kspcam-clips` & Bảo vệ đầu ghi**: Tự động giới hạn LRU `120 MB` trên box RAM 1GB (`240 MB` trên box RAM 2–4GB, TTL `10 phút`), khóa semaphore tối đa `2` luồng đồng thời / IP đầu ghi NVR và `1` luồng tuần tự đối với camera cắm thẻ nhớ lẻ (`[Cam-SD]`).
 3. **Virtual 5-Minute Slicer & Cắt Clip Trực Tiếp**: `go-shinobi-ksp` tự băm lịch sử NVR thành các khung 5 phút `v_nvr_YYYY-MM-DDTHH-MM-SS_<dur>.mp4` (khung mới nhất sát `now - 3s` không cần chạy `date -s`) và hỗ trợ `Hybrid Merge` với thẻ nhớ cũ; `redbida-go` phát trực tiếp `HTTP 206 Byte-Range` và gộp khoảng cắt liên tiếp vào `/dev/shm/redbida-cuts`. Xem đặc tả chi tiết tại [`docs/PROTOCOL-NVR-BRIDGE.md`](./docs/PROTOCOL-NVR-BRIDGE.md).
 4. **Sổ tay Quy trình Triển khai Thực địa (`Diskless`, `Hybrid SD+NVR 72h`, `1-Click Box Rescue` & `Failback SOP`)**: Xem hướng dẫn từng bước và kịch bản tự động hóa tại [`docs/DEPLOYMENT-NVR-HYBRID-RESCUE.md`](./docs/DEPLOYMENT-NVR-HYBRID-RESCUE.md) và [`docs/PROTOCOL-BOX-RESCUE.md`](./docs/PROTOCOL-BOX-RESCUE.md).
+
+### 3.11 Bộ Lập Lịch & Hẹn Giờ Thực Thi API Hướng Đối Tượng (`internal/scheduler` — OOP Extensible Engine)
+
+Hệ thống `kspcam` tích hợp bộ lập lịch tác vụ độc lập, chuẩn hướng đối tượng (OOP) phục vụ việc tự động hóa điều khiển camera theo thời gian thực (ví dụ: chuyển chế độ màu Ngày/Đêm, khởi động lại, kích hoạt profile):
+1. **Kiến trúc Hướng Đối Tượng & Mở Rộng (`Action` Pattern & Registry)**:
+   - Interface `Action`:
+     ```go
+     type Action interface {
+         Type() string
+         Validate() error
+         Execute(ctx context.Context, inv *config.Inventory, timeout time.Duration) (string, error)
+         Summary() string
+     }
+     ```
+   - Cơ chế Action Registry (`RegisterAction`, `ParseAction`, `RegisteredActions`) cho phép cắm thêm bất kỳ hành động mới nào mà không phải sửa lõi scheduler.
+   - Các Action tích hợp sẵn:
+     - `PictureDayNightAction` (`picture_day_night`): Điều khiển chế độ màu (`DayNightColor`: `0` = Màu Full-Color, `1` = Tự động Auto, `2` = Trắng đen B&W) trên camera Dahua / Imou / KBVision thông qua `camera.PictureSettings.SetPicture`, tự động đồng bộ đèn trợ sáng (`syncDayNightAndSupplementLight`) và xác nhận đọc lại (`read-back verification`).
+     - `RebootAction` (`reboot`): Khởi động lại thiết bị theo danh sách ID.
+2. **Cơ Chế Kích Hoạt & Định Tuyến Thời Gian (`Schedule`)**:
+   - Hỗ trợ định dạng giờ 24h `"HH:MM"` hàng ngày kết hợp lọc theo ngày trong tuần (`daysOfWeek: [0..6]`, 0=Chủ nhật; để trống = chạy hàng ngày).
+   - Tự động tính toán thời điểm chạy tiếp theo (`NextRunAt`) và kiểm tra mỗi phút (`tickInterval`).
+3. **Lưu Trữ Bền Vững & Nhật Ký Lịch Sử (`schedules.json`)**:
+   - Tự động lưu cấu hình công việc ra file JSON (`schedules.json` nằm cùng thư mục `config.yaml` / `cameras.yaml`).
+   - Vòng đệm nhật ký lịch sử (`circular buffer`) lưu tối đa 50 lần chạy gần nhất (`ExecutionRecord`: trigger time, duration, status, message, error).
+4. **Cấu Hình Mặc Định Tự Động Gieo (Default Seeded Jobs)**:
+   - `07:00` hàng ngày: Chuyển Camera 2 & 3 sang chế độ Màu Full-Color (`DayNightColor: 0`).
+   - `17:00` hàng ngày: Chuyển Camera 2 & 3 về chế độ Tự động Auto (`DayNightColor: 1`).
 
 ---
 
