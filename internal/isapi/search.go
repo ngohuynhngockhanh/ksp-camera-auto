@@ -81,14 +81,18 @@ type cmMetadataList struct {
 }
 
 // cmSearchResult is the CMSearchResult response to a search POST.
-// responseStatus is "OK"/"MORE" on a page with matches, "NO MATCHES" when the
-// range has none (NOT an error — SearchTrack treats it as an empty result).
+// Older/newer Hikvision firmwares vary on status encoding: some place
+// "OK"/"MORE"/"NO MATCHES" directly in <responseStatus> with total matches in
+// <numOfMatches>, while DS-7632NI-K2 V4.30 puts "true" in <responseStatus>,
+// "OK"/"MORE"/"NO MATCHES" in <responseStatusStrg>, and the per-page count in
+// <numOfMatches>. Both shapes are handled below.
 type cmSearchResult struct {
-	XMLName        xml.Name    `xml:"CMSearchResult"`
-	SearchID       string      `xml:"searchID"`
-	ResponseStatus string      `xml:"responseStatus"`
-	NumOfMatches   int         `xml:"numOfMatches"`
-	MatchList      cmMatchList `xml:"matchList"`
+	XMLName            xml.Name    `xml:"CMSearchResult"`
+	SearchID           string      `xml:"searchID"`
+	ResponseStatus     string      `xml:"responseStatus"`
+	ResponseStatusStrg string      `xml:"responseStatusStrg"`
+	NumOfMatches       int         `xml:"numOfMatches"`
+	MatchList          cmMatchList `xml:"matchList"`
 }
 
 type cmMatchList struct {
@@ -153,7 +157,9 @@ func (c *Client) SearchTrack(ctx context.Context, trackID int, start, end time.T
 		if err := xml.Unmarshal(respBody, &res); err != nil {
 			return out, fmt.Errorf("isapi: decode CMSearchResult: %w (body: %s)", err, truncate(respBody, 300))
 		}
-		if strings.EqualFold(strings.TrimSpace(res.ResponseStatus), "NO MATCHES") {
+		status := strings.TrimSpace(res.ResponseStatus)
+		statusStrg := strings.TrimSpace(res.ResponseStatusStrg)
+		if strings.EqualFold(status, "NO MATCHES") || strings.EqualFold(statusStrg, "NO MATCHES") {
 			break
 		}
 
@@ -181,7 +187,13 @@ func (c *Client) SearchTrack(ctx context.Context, trackID int, start, end time.T
 		// Stop once every reported match has been collected, the device sent
 		// an empty page (avoids spinning forever on a miscounted numOfMatches),
 		// or we've hit a sanity ceiling far above any real recording history.
-		if got == 0 || pos >= res.NumOfMatches || len(out) >= 20000 {
+		// When responseStatusStrg is present (e.g. DS-7632NI-K2 V4.30), "MORE"
+		// indicates additional pages even when numOfMatches is only the current
+		// page's count, while "OK" signals the final page.
+		moreByStrg := strings.EqualFold(statusStrg, "MORE")
+		doneByStrg := statusStrg != "" && !moreByStrg
+		doneByCount := statusStrg == "" && pos >= res.NumOfMatches
+		if got == 0 || doneByStrg || doneByCount || len(out) >= 20000 {
 			break
 		}
 	}

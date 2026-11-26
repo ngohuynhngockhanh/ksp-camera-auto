@@ -383,3 +383,102 @@ func TestDeviceLocationParsesLocalTimeOffsetIgnoringTimeZoneTag(t *testing.T) {
 		t.Fatalf("offset = %d, want %d (7h, from localTime — NOT the inverted timeZone tag)", offset, 7*3600)
 	}
 }
+
+// TestSearchTrackPrefetchesDigestBeforePost verifies DigestTransport obtains a
+// Digest challenge via GET /ISAPI/System/deviceInfo before sending POST
+// /ISAPI/ContentMgmt/search, preventing hangs on Hikvision DS-7632NI-K2 V4.30
+// firmwares that wedge on unauthenticated POST /ISAPI/ContentMgmt/search.
+func TestSearchTrackPrefetchesDigestBeforePost(t *testing.T) {
+	const (
+		user  = "admin"
+		pass  = "duyanh68A"
+		realm = "DS-7632NI-K2"
+		nonce = "prefetchnonce1234"
+	)
+	var preProbed bool
+	var unauthPostSeen bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ISAPI/System/deviceInfo" && r.Method == http.MethodGet {
+			preProbed = true
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Digest realm="%s", nonce="%s", qop="auth"`, realm, nonce))
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path == "/ISAPI/ContentMgmt/search" && r.Method == http.MethodPost {
+			if r.Header.Get("Authorization") == "" {
+				unauthPostSeen = true
+				w.WriteHeader(http.StatusGatewayTimeout)
+				return
+			}
+			w.Header().Set("Content-Type", "application/xml")
+			_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>` +
+				`<CMSearchResult><searchID>1</searchID><responseStatus>true</responseStatus>` +
+				`<responseStatusStrg>OK</responseStatusStrg><numOfMatches>1</numOfMatches>` +
+				`<matchList><searchMatchItem><trackID>601</trackID>` +
+				`<timeSpan><startTime>2026-11-25T09:00:00Z</startTime><endTime>2026-11-25T09:05:00Z</endTime></timeSpan>` +
+				`<mediaSegmentDescriptor><contentType>video</contentType><codecType>H.265</codecType><size>500000</size>` +
+				`<playbackURI>rtsp://192.168.1.201/Streaming/tracks/601/?starttime=20261125T090000Z&amp;endtime=20261125T090500Z&amp;name=1&amp;size=500000</playbackURI>` +
+				`</mediaSegmentDescriptor></searchMatchItem></matchList></CMSearchResult>`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := newSearchTestClient(t, srv, user, pass)
+	start, _ := time.Parse(hikTimeLayout, "2026-11-25T08:00:00Z")
+	end, _ := time.Parse(hikTimeLayout, "2026-11-25T10:00:00Z")
+	segs, err := c.SearchTrack(context.Background(), 601, start, end, 40)
+	if err != nil {
+		t.Fatalf("SearchTrack: %v", err)
+	}
+	if !preProbed {
+		t.Fatalf("expected GET /ISAPI/System/deviceInfo Digest pre-probe before POST")
+	}
+	if unauthPostSeen {
+		t.Fatalf("received unauthenticated POST /ISAPI/ContentMgmt/search — must pre-probe Digest first")
+	}
+	if len(segs) != 1 || segs[0].Size != 500000 {
+		t.Fatalf("segs = %+v, want 1 segment of size 500000", segs)
+	}
+}
+
+// TestSearchTrackPaginationResponseStatusStrgMore verifies DS-7632NI-K2 V4.30
+// pagination where <responseStatus> is "true", <responseStatusStrg> is "MORE"
+// on non-final pages ("OK" on final), and <numOfMatches> is only the current
+// page's count rather than the grand total.
+func TestSearchTrackPaginationResponseStatusStrgMore(t *testing.T) {
+	fake := newFakeSearchServer("admin", "duyanh68A")
+	fake.searchPages = []cmSearchResult{
+		{
+			ResponseStatus:     "true",
+			ResponseStatusStrg: "MORE",
+			NumOfMatches:       2, // per-page count on DS-7632NI-K2, NOT total!
+			MatchList: cmMatchList{SearchMatchItem: []cmSearchMatchItem{
+				matchItem(601, "2026-11-25T09:00:00Z", "2026-11-25T09:05:00Z", 1000, "rtsp://x/1"),
+				matchItem(601, "2026-11-25T09:05:00Z", "2026-11-25T09:10:00Z", 2000, "rtsp://x/2"),
+			}},
+		},
+		{
+			ResponseStatus:     "true",
+			ResponseStatusStrg: "OK",
+			NumOfMatches:       1,
+			MatchList: cmMatchList{SearchMatchItem: []cmSearchMatchItem{
+				matchItem(601, "2026-11-25T09:10:00Z", "2026-11-25T09:15:00Z", 3000, "rtsp://x/3"),
+			}},
+		},
+	}
+	srv := httptest.NewServer(fake.handler())
+	defer srv.Close()
+	c := newSearchTestClient(t, srv, "admin", "duyanh68A")
+
+	start, _ := time.Parse(hikTimeLayout, "2026-11-25T09:00:00Z")
+	end, _ := time.Parse(hikTimeLayout, "2026-11-25T10:00:00Z")
+	segs, err := c.SearchTrack(context.Background(), 601, start, end, 2)
+	if err != nil {
+		t.Fatalf("SearchTrack: %v", err)
+	}
+	if len(segs) != 3 {
+		t.Fatalf("got %d segments, want 3 across MORE+OK pages", len(segs))
+	}
+}

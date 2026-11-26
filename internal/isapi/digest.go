@@ -168,6 +168,18 @@ func (t *DigestTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	chal, haveChal := t.chal[host]
 	t.mu.Unlock()
 
+	// Some Hikvision NVR firmwares (verified live on DS-7632NI-K2 V4.30.061)
+	// hang or drop the connection when receiving an unauthenticated POST to
+	// /ISAPI/ContentMgmt/search, whereas GET /ISAPI/System/deviceInfo returns
+	// a 401 Digest challenge immediately (~20ms). Pre-fetch the challenge on a
+	// lightweight GET before sending any non-GET/HEAD request with no cached
+	// nonce so the first POST/PUT arrives already authenticated.
+	if !haveChal && req.Method != http.MethodGet && req.Method != http.MethodHead {
+		if pre, ok := t.prefetchChallenge(req, base, host); ok {
+			chal, haveChal = pre, true
+		}
+	}
+
 	attempt, err := cloneRequest(req)
 	if err != nil {
 		return nil, err
@@ -230,6 +242,41 @@ func (t *DigestTransport) authorize(req *http.Request, chal Challenge, host stri
 	auth := BuildAuthorization(chal, req.Method, uri, t.Username, t.Password, cnonce, ncHex)
 	req.Header.Set("Authorization", auth)
 	return nil
+}
+
+// prefetchChallenge sends a lightweight unauthenticated GET /ISAPI/System/deviceInfo
+// to obtain a Digest WWW-Authenticate challenge before issuing a POST/PUT
+// request (e.g. POST /ISAPI/ContentMgmt/search). If the target does not return
+// a 401 Digest challenge (such as non-ISAPI test servers), it quietly returns
+// false so RoundTrip falls back to the standard challenge-retry path.
+func (t *DigestTransport) prefetchChallenge(orig *http.Request, base http.RoundTripper, host string) (Challenge, bool) {
+	u := *orig.URL
+	u.Path = "/ISAPI/System/deviceInfo"
+	u.RawPath = ""
+	u.RawQuery = ""
+	probeReq, err := http.NewRequestWithContext(orig.Context(), http.MethodGet, u.String(), nil)
+	if err != nil {
+		return Challenge{}, false
+	}
+	resp, err := base.RoundTrip(probeReq)
+	if err != nil {
+		return Challenge{}, false
+	}
+	wa := resp.Header.Get("WWW-Authenticate")
+	_, _ = io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized || wa == "" {
+		return Challenge{}, false
+	}
+	chal, err := ParseChallenge(wa)
+	if err != nil {
+		return Challenge{}, false
+	}
+	t.mu.Lock()
+	t.chal[host] = chal
+	t.nc[host] = 0
+	t.mu.Unlock()
+	return chal, true
 }
 
 // cloneRequest clones req (including its context) and rewinds the body via
