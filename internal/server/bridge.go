@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -753,16 +754,18 @@ func normalizeFullRangeMetadataZeroCPU(ctx context.Context, mp4Path string) erro
 
 	ffmpegBin := resolveExecutable("/usr/bin/ffmpeg", "ffmpeg")
 	fixedPath := mp4Path + ".vui.mp4"
-	cmd := exec.CommandContext(ctx, ffmpegBin,
+	args := []string{
 		"-nostdin", "-hide_banner", "-loglevel", "error",
 		"-i", mp4Path,
 		"-map", "0:v:0", "-map", "0:a:0?",
 		"-c", "copy",
 		"-bsf:v", bsf,
-		"-tag:v", "hvc1",
-		"-movflags", "+faststart",
-		"-y", fixedPath,
-	)
+	}
+	if st.CodecName == "hevc" {
+		args = append(args, "-tag:v", "hvc1")
+	}
+	args = append(args, "-movflags", "+faststart", "-y", fixedPath)
+	cmd := exec.CommandContext(ctx, ffmpegBin, args...)
 	if err := cmd.Run(); err != nil {
 		_ = os.Remove(fixedPath)
 		return nil // Keep original valid MP4 if older ffmpeg lacks bsf
@@ -801,6 +804,60 @@ func buildHikRTSPURL(host string, rtspPort int, user, pass string, channel1Based
 	}
 	u.RawQuery = fmt.Sprintf("starttime=%s&endtime=%s", start.Format(f), end.Format(f))
 	return u.String()
+}
+
+// hikRTSPChunkPlan chooses concurrent RTSP playback session count and chunk
+// duration for a Hikvision export while staying inside typical NVR connection
+// limits (8 max on DS-7732NI-K4 / 4 on low-RAM DS-76xx) with zero tiny tail chunk.
+func hikRTSPChunkPlan(isCamSD, lowRAMBox bool, durSec float64) (parallel, chunkSec int) {
+	if durSec < 1 {
+		durSec = 1
+	}
+	if isCamSD || durSec <= 22 {
+		return 1, int(math.Ceil(durSec))
+	}
+	switch {
+	case durSec <= 70:
+		parallel = 6
+		if lowRAMBox {
+			parallel = 4
+		}
+		chunkSec = int(math.Ceil(durSec / float64(parallel)))
+		if chunkSec < 10 {
+			chunkSec = 10
+		}
+		return parallel, chunkSec
+	case durSec <= 130:
+		parallel = 6
+		if lowRAMBox {
+			parallel = 4
+		}
+		chunkSec = int(math.Ceil(durSec / float64(parallel)))
+		if chunkSec < 15 {
+			chunkSec = 15
+		}
+		return parallel, chunkSec
+	case durSec <= 190:
+		parallel = 6
+		if lowRAMBox {
+			parallel = 4
+		}
+		chunkSec = int(math.Ceil(durSec / float64(parallel)))
+		if chunkSec < 20 {
+			chunkSec = 20
+		}
+		return parallel, chunkSec
+	default:
+		parallel = 6
+		if lowRAMBox {
+			parallel = 4
+		}
+		chunkSec = int(math.Ceil(durSec / float64(parallel)))
+		if chunkSec < 30 {
+			chunkSec = 30
+		}
+		return parallel, chunkSec
+	}
 }
 
 func (b *nvrBridge) resolveHikRTSPPort(ctx context.Context, d config.Device) int {
@@ -987,18 +1044,9 @@ func (b *nvrBridge) pullAndRemuxZeroCPU(ctx context.Context, tgt resolvedBridgeT
 			parallel = 1
 			chunkSec = int(durSec) + 1
 		}
-		outFile, err := os.Create(outMP4)
-		if err != nil {
-			return err
-		}
-		rtspErr := mediaexport.FastMP4Range(ctx, outFile, start, end, chunkSec, func(cs, ce time.Time) string {
+		return mediaexport.FastMP4RangeToFile(ctx, outMP4, start, end, chunkSec, func(cs, ce time.Time) string {
 			return buildDahuaRTSPURL(d.Host, d.Username, d.Password, tgt.Channel, cs, ce)
 		}, false, parallel)
-		_ = outFile.Close()
-		if rtspErr != nil {
-			return rtspErr
-		}
-		return normalizeFullRangeMetadataZeroCPU(ctx, outMP4)
 
 	case config.VendorHikvision:
 		hikCh := tgt.Channel + 1 // Hikvision channels are 1-based (101, 201...)
@@ -1065,42 +1113,14 @@ func (b *nvrBridge) pullAndRemuxZeroCPU(ctx context.Context, tgt resolvedBridgeT
 			}
 		}
 
-		// 2. RTSP Playback stream-copy (parallel=4 on NVR, sequential parallel=1 on [Hik-SD]),
-		//    auto-discovering custom RTSP ports (e.g. 1554) via ISAPI adminAccesses.
+		// 2. RTSP Playback stream-copy, auto-discovering custom RTSP ports (e.g. 1554).
 		rtspPort := b.resolveHikRTSPPort(ctx, d)
-		parallel := 4
-		chunkSec := 30
-		switch {
-		case tgt.IsCamSD:
-			parallel = 1
-			chunkSec = int(durSec) + 1
-		case durSec <= 40:
-			parallel = 1
-			chunkSec = int(durSec) + 1
-		case durSec <= 95:
-			parallel = 2
-			chunkSec = 40
-		case durSec <= 185:
-			parallel = 3
-			chunkSec = 60
-		default:
-			parallel = 4
-			chunkSec = 75
-		}
-		outFile, err := os.Create(outMP4)
-		if err != nil {
-			return err
-		}
+		parallel, chunkSec := hikRTSPChunkPlan(tgt.IsCamSD, b.lowRAMBox, durSec)
 		// Pass true (-an) on first pass so G.711 pcm_mulaw/pcm_alaw tracks on Hikvision NVRs
 		// never fail/retry chunk fetches or waste RTSP sessions.
-		rtspErr := mediaexport.FastMP4Range(ctx, outFile, start, end, chunkSec, func(cs, ce time.Time) string {
+		return mediaexport.FastMP4RangeToFile(ctx, outMP4, start, end, chunkSec, func(cs, ce time.Time) string {
 			return buildHikRTSPURL(d.Host, rtspPort, d.Username, d.Password, hikCh, cs, ce)
 		}, true, parallel)
-		_ = outFile.Close()
-		if rtspErr != nil {
-			return rtspErr
-		}
-		return normalizeFullRangeMetadataZeroCPU(ctx, outMP4)
 
 	case config.VendorTiandy:
 		cam, err := camera.Open(ctx, d, 30*time.Second)

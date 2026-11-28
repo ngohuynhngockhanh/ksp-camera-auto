@@ -11,6 +11,7 @@ package mediaexport
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -29,6 +30,18 @@ import (
 func FastMP4Range(ctx context.Context, w io.Writer, start, end time.Time, chunkSec int, urlFor func(cs, ce time.Time) string, transcodeAudio bool, maxParallel int) error {
 	chunks := splitRange(start, end, chunkSec, urlFor)
 	return fastRemux(ctx, w, chunks, remuxOpts{transcodeAudio: transcodeAudio, maxParallel: maxParallel})
+}
+
+// FastMP4RangeToFile fetches RTSP playback chunks in parallel and writes the
+// concatenated +faststart MP4 directly to outPath in a single ffmpeg pass
+// (including inline codec tag selection and VUI range normalization).
+func FastMP4RangeToFile(ctx context.Context, outPath string, start, end time.Time, chunkSec int, urlFor func(cs, ce time.Time) string, transcodeAudio bool, maxParallel int) error {
+	chunks := splitRange(start, end, chunkSec, urlFor)
+	return fastRemux(ctx, nil, chunks, remuxOpts{
+		transcodeAudio: transcodeAudio,
+		maxParallel:    maxParallel,
+		outFilePath:    outPath,
+	})
 }
 
 // FastNativeRange is FastMP4Range's original-bitstream sibling: same parallel
@@ -78,6 +91,7 @@ type remuxOpts struct {
 	// instead of the browser-oriented MP4.
 	matroska    bool
 	maxParallel int
+	outFilePath string
 }
 
 // fastRemux fetches chunks concurrently (bounded by opts.maxParallel),
@@ -172,8 +186,13 @@ func StreamFragmentedMP4(ctx context.Context, w io.Writer, buildArgs func(useHVC
 }
 
 func buildConcatArgs(listPath, outPath string, matroska, dropAudio, useHVC1Tag bool) []string {
+	return buildConcatArgsWithVUI(listPath, outPath, matroska, dropAudio, useHVC1Tag, "")
+}
+
+func buildConcatArgsWithVUI(listPath, outPath string, matroska, dropAudio, useHVC1Tag bool, vuiBSF string) []string {
 	args := []string{
 		"-nostdin",
+		"-probesize", "500000", "-analyzeduration", "500000",
 		"-f", "concat", "-safe", "0", "-i", listPath,
 	}
 	if !matroska && dropAudio {
@@ -181,15 +200,55 @@ func buildConcatArgs(listPath, outPath string, matroska, dropAudio, useHVC1Tag b
 	} else {
 		args = append(args, "-c", "copy")
 	}
+	if !matroska && vuiBSF != "" {
+		args = append(args, "-bsf:v", vuiBSF)
+	}
 	args = append(args, "-avoid_negative_ts", "make_zero")
 	if matroska {
 		return append(args, "-f", "matroska", "-y", outPath)
 	}
 	if useHVC1Tag {
-		// HEVC-in-MP4 for Safari/iOS; omitted on H.264 retry if rejected by older ffmpeg.
+		// HEVC-in-MP4 for Safari/iOS; omitted on H.264.
 		args = append(args, "-tag:v", "hvc1")
 	}
 	return append(args, "-movflags", "+faststart", "-y", outPath)
+}
+
+func probeChunkVideo(ctx context.Context, chunkPath string) (codecName, vuiBSF string) {
+	pctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(pctx, "ffprobe",
+		"-v", "error",
+		"-probesize", "500000", "-analyzeduration", "500000",
+		"-select_streams", "v:0",
+		"-show_entries", "stream=codec_name,color_range,pix_fmt",
+		"-of", "json",
+		chunkPath,
+	).Output()
+	if err != nil || len(out) == 0 {
+		return "", ""
+	}
+	var parsed struct {
+		Streams []struct {
+			CodecName  string `json:"codec_name"`
+			ColorRange string `json:"color_range"`
+			PixFmt     string `json:"pix_fmt"`
+		} `json:"streams"`
+	}
+	if json.Unmarshal(out, &parsed) != nil || len(parsed.Streams) == 0 {
+		return "", ""
+	}
+	st := parsed.Streams[0]
+	codecName = st.CodecName
+	if st.ColorRange == "pc" || strings.Contains(st.PixFmt, "yuvj") {
+		switch st.CodecName {
+		case "hevc":
+			vuiBSF = "hevc_metadata=video_full_range_flag=0:colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1"
+		case "h264":
+			vuiBSF = "h264_metadata=video_full_range_flag=0:colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1"
+		}
+	}
+	return codecName, vuiBSF
 }
 
 func runConcatFallbacks(ctx context.Context, matroska bool, firstErrText string, firstErr error, attempt func(dropAudio, useHVC1Tag bool) (string, error)) (string, error) {
@@ -332,21 +391,48 @@ func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts)
 		return fmt.Errorf("mediaexport: write list: %w", err)
 	}
 
-	outPath := filepath.Join(dir, "out.mp4")
-	if opts.matroska {
-		outPath = filepath.Join(dir, "out.mkv")
+	outPath := opts.outFilePath
+	if outPath == "" {
+		outPath = filepath.Join(dir, "out.mp4")
+		if opts.matroska {
+			outPath = filepath.Join(dir, "out.mkv")
+		}
 	}
-	runConcat := func(dropAudio, useHVC1Tag bool) (string, error) {
+	runConcat := func(dropAudio, useHVC1Tag bool, vuiBSF string) (string, error) {
 		var errBuf strings.Builder
-		cmd := exec.CommandContext(ctx, "ffmpeg", buildConcatArgs(listPath, outPath, opts.matroska, dropAudio, useHVC1Tag)...)
+		cmd := exec.CommandContext(ctx, "ffmpeg", buildConcatArgsWithVUI(listPath, outPath, opts.matroska, dropAudio, useHVC1Tag, vuiBSF)...)
 		cmd.Stderr = &errBuf
 		err := cmd.Run()
 		return errBuf.String(), err
 	}
-	errText, err := runConcat(false, true)
-	errText, err = runConcatFallbacks(ctx, opts.matroska, errText, err, runConcat)
+
+	wantHVC1 := !opts.matroska
+	vuiBSF := ""
+	if !opts.matroska && len(paths) > 0 {
+		var codecName string
+		codecName, vuiBSF = probeChunkVideo(ctx, paths[0])
+		if codecName != "" && codecName != "hevc" {
+			wantHVC1 = false
+		}
+	}
+
+	errText, err := runConcat(false, wantHVC1, vuiBSF)
+	if err != nil && ctx.Err() == nil && vuiBSF != "" {
+		errText, err = runConcat(false, wantHVC1, "")
+	}
+	errText, err = runConcatFallbacks(ctx, opts.matroska, errText, err, func(dropAudio, useHVC1Tag bool) (string, error) {
+		return runConcat(dropAudio, useHVC1Tag, "")
+	})
 	if err != nil {
+		if opts.outFilePath != "" {
+			_ = os.Remove(outPath)
+		}
 		return fmt.Errorf("mediaexport: concat: %w: %s", err, tail(errText, 300))
+	}
+
+	if w == nil {
+		report(len(chunks), len(chunks), "send")
+		return nil
 	}
 
 	f, err := os.Open(outPath)
@@ -420,14 +506,9 @@ func fetchChunk(ctx context.Context, c Chunk, outPath string, opts remuxOpts) er
 		}
 		return nil
 	}
-	if err := runOnce(false, true); err != nil {
+	if err := runOnce(false, false); err != nil {
 		if !opts.matroska && !opts.transcodeAudio && ctx.Err() == nil {
-			if errNoAudio := runOnce(true, true); errNoAudio == nil {
-				return nil
-			}
-		}
-		if ctx.Err() == nil && strings.Contains(c.URL, "/Streaming/tracks/") {
-			if errDirect := runOnce(true, false); errDirect == nil {
+			if errNoAudio := runOnce(true, false); errNoAudio == nil {
 				return nil
 			}
 		}

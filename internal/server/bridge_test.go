@@ -228,3 +228,29 @@ func TestBridgeMultiChannelHikvisionNVRDetection(t *testing.T) {
 		t.Fatalf("expected 0-based channel=30 for nvrChannel=31, got %d", tgt.Channel)
 	}
 }
+
+func TestHikRTSPChunkPlan(t *testing.T) {
+	cases := []struct {
+		name         string
+		isCamSD      bool
+		lowRAMBox    bool
+		durSec       float64
+		wantParallel int
+		wantChunkSec int
+	}{
+		{name: "camsd", isCamSD: true, lowRAMBox: false, durSec: 60, wantParallel: 1, wantChunkSec: 60},
+		{name: "short_22s", isCamSD: false, lowRAMBox: false, durSec: 20, wantParallel: 1, wantChunkSec: 20},
+		{name: "60s_4gb", isCamSD: false, lowRAMBox: false, durSec: 60, wantParallel: 6, wantChunkSec: 10},
+		{name: "60s_1gb", isCamSD: false, lowRAMBox: true, durSec: 60, wantParallel: 4, wantChunkSec: 15},
+		{name: "120s_4gb", isCamSD: false, lowRAMBox: false, durSec: 120, wantParallel: 6, wantChunkSec: 20},
+		{name: "180s_1gb", isCamSD: false, lowRAMBox: true, durSec: 180, wantParallel: 4, wantChunkSec: 45},
+		{name: "300s_4gb", isCamSD: false, lowRAMBox: false, durSec: 300, wantParallel: 6, wantChunkSec: 50},
+		{name: "300s_1gb", isCamSD: false, lowRAMBox: true, durSec: 300, wantParallel: 4, wantChunkSec: 75},
+	}
+	for _, tc := range cases {
+		p, c := hikRTSPChunkPlan(tc.isCamSD, tc.lowRAMBox, tc.durSec)
+		if p != tc.wantParallel || c != tc.wantChunkSec {
+			t.Fatalf("%s: got (%d, %d), want (%d, %d)", tc.name, p, c, tc.wantParallel, tc.wantChunkSec)
+		}
+	}
+}

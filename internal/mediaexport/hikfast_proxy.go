@@ -163,7 +163,12 @@ func runHikFastRTSPSession(ctx context.Context, cli net.Conn, hostPort, user, pa
 		method, reqURI := parts[0], parts[1]
 		targetURI := realURI
 		if idx := strings.Index(reqURI, "/trackID="); idx >= 0 {
-			targetURI = realURI + reqURI[idx:]
+			trackSuffix := reqURI[idx:]
+			if basePart, queryPart, hasQ := strings.Cut(realURI, "?"); hasQ {
+				targetURI = strings.TrimRight(basePart, "/") + trackSuffix + "?" + queryPart
+			} else {
+				targetURI = strings.TrimRight(realURI, "/") + trackSuffix
+			}
 		}
 
 		buildReq := func(authHeader string) []byte {
@@ -186,7 +191,7 @@ func runHikFastRTSPSession(ctx context.Context, cli net.Conn, hostPort, user, pa
 
 		var authHdr string
 		if wwwAuth != "" {
-			authHdr = buildRTSPDigestHeader(user, pass, method, realURI, wwwAuth)
+			authHdr = buildRTSPDigestHeader(user, pass, method, targetURI, wwwAuth)
 		}
 		if _, err := cam.Write(buildReq(authHdr)); err != nil {
 			return
@@ -205,7 +210,7 @@ func runHikFastRTSPSession(ctx context.Context, cli net.Conn, hostPort, user, pa
 				}
 			}
 			if wwwAuth != "" {
-				authHdr = buildRTSPDigestHeader(user, pass, method, realURI, wwwAuth)
+				authHdr = buildRTSPDigestHeader(user, pass, method, targetURI, wwwAuth)
 				if _, err := cam.Write(buildReq(authHdr)); err != nil {
 					return
 				}

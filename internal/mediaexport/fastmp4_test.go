@@ -53,3 +53,17 @@ func TestBuildFragmentedMP4Args(t *testing.T) {
 		t.Fatalf("unexpected h264-fallback args: %s", b)
 	}
 }
+
+func TestBuildConcatArgsWithVUI(t *testing.T) {
+	bsf := "h264_metadata=video_full_range_flag=0:colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1"
+	got := strings.Join(buildConcatArgsWithVUI("list.txt", "/dev/shm/out.mp4", false, false, false, bsf), " ")
+	if !strings.Contains(got, "-probesize 500000 -analyzeduration 500000") {
+		t.Fatalf("expected bounded probe flags, got: %s", got)
+	}
+	if !strings.Contains(got, "-bsf:v "+bsf) {
+		t.Fatalf("expected inline VUI bsf flag, got: %s", got)
+	}
+	if strings.Contains(got, "hvc1") {
+		t.Fatalf("did not expect -tag:v hvc1 on H.264 concat args: %s", got)
+	}
+}
