@@ -66,3 +66,27 @@ func TestPlaybackRTSPURLTrackIDFormula(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildPlaybackFFmpegArgsHVC1Toggle(t *testing.T) {
+	withTag := strings.Join(buildPlaybackFFmpegArgs("rtsp://x/101", true), " ")
+	if !strings.Contains(withTag, "-tag:v hvc1") {
+		t.Fatalf("expected -tag:v hvc1 when useHVC1Tag=true, got: %s", withTag)
+	}
+	noTag := strings.Join(buildPlaybackFFmpegArgs("rtsp://x/101", false), " ")
+	if strings.Contains(noTag, "hvc1") {
+		t.Fatalf("expected no hvc1 tag when useHVC1Tag=false, got: %s", noTag)
+	}
+	if !strings.Contains(noTag, "-c:v copy") || !strings.Contains(noTag, "-f mp4 -y pipe:1") {
+		t.Fatalf("expected valid stream-copy MP4 pipe args, got: %s", noTag)
+	}
+}
+
+func TestIsHVC1TagIncompatible(t *testing.T) {
+	const h264Err = "Tag hvc1 incompatible with output codec id '27' (avc1)\nCould not write header for output file #0"
+	if !isHVC1TagIncompatible(h264Err) {
+		t.Fatalf("expected H.264 avc1 error to match isHVC1TagIncompatible")
+	}
+	if isHVC1TagIncompatible("Server returned 400 Bad Request") {
+		t.Fatalf("did not expect HTTP 400 RTSP error to match isHVC1TagIncompatible")
+	}
+}

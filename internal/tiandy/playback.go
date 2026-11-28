@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"os/exec"
+	"time"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mediaexport"
-	"time"
 )
 
 // playbackSem bounds simultaneous Tiandy playback remux processes across the
@@ -84,30 +83,10 @@ func (c *Client) StreamPlayback(ctx context.Context, w io.Writer, channel int, s
 	if dur < 1 {
 		dur = 1
 	}
-	cmd := exec.CommandContext(ctx, "ffmpeg",
-		"-nostdin",
-		"-rtsp_transport", "tcp",
-		"-i", rtsp,
-		"-t", fmt.Sprintf("%d", dur),
-		// Zero-transcoding policy on iNut Edge Boxes: video is copied (-c:v copy)
-		// and incompatible G.711 PCM audio is omitted (-an) rather than CPU-encoded.
-		"-c:v", "copy",
-		"-an",
-		// Tiandy records HEVC/H.265. ffmpeg tags an HEVC MP4 track "hev1" by
-		// default, but Safari/iOS only play HEVC-in-MP4 tagged "hvc1" (Chrome/
-		// Firefox can't decode HEVC either way). Retagging is free — still a
-		// video copy, just rewriting the sample-entry fourcc.
-		"-tag:v", "hvc1",
-		"-fflags", "+genpts",
-		"-movflags", "frag_keyframe+empty_moov+default_base_moof",
-		"-f", "mp4",
-		"-y", "pipe:1",
-	)
-	cmd.Stdout = w
-	stderr := &tailBuf{max: 4096}
-	cmd.Stderr = stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("tiandy: ffmpeg playback %s: %w: %s", c.host, err, tail(stderr.buf, 300))
+	if err := mediaexport.StreamFragmentedMP4(ctx, w, func(useHVC1 bool) []string {
+		return mediaexport.BuildFragmentedMP4Args(rtsp, dur, false, useHVC1)
+	}); err != nil {
+		return fmt.Errorf("tiandy: ffmpeg playback %s: %w", c.host, err)
 	}
 	return nil
 }

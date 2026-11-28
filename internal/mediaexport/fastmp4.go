@@ -89,6 +89,130 @@ type remuxOpts struct {
 // The result is built to a temp file (a plain, faststart moov tolerates the
 // per-chunk timestamp resets that a fragmented moov rejects) then copied to w,
 // so this is a download path, not a live stream.
+// CountingWriter tracks how many bytes have been written to W.
+type CountingWriter struct {
+	W io.Writer
+	N int64
+}
+
+func (cw *CountingWriter) Write(p []byte) (int, error) {
+	n, err := cw.W.Write(p)
+	cw.N += int64(n)
+	return n, err
+}
+
+// IsHVC1TagIncompatible reports whether ffmpeg rejected -tag:v hvc1 because the
+// video stream is H.264 (avc1) or another non-HEVC codec.
+func IsHVC1TagIncompatible(errText string) bool {
+	low := strings.ToLower(errText)
+	return strings.Contains(low, "hvc1") || strings.Contains(low, "incompatible")
+}
+
+// BuildFragmentedMP4Args builds zero-CPU stream-copy fragmented MP4 ffmpeg args
+// for RTSP playback streaming.
+func BuildFragmentedMP4Args(rtsp string, durSec int, mapVideo0, useHVC1Tag bool) []string {
+	args := []string{"-nostdin", "-rtsp_transport", "tcp", "-i", rtsp}
+	if durSec > 0 {
+		args = append(args, "-t", strconv.Itoa(durSec))
+	}
+	if mapVideo0 {
+		args = append(args, "-map", "0:v:0")
+	}
+	args = append(args, "-c:v", "copy", "-an")
+	if useHVC1Tag {
+		args = append(args, "-tag:v", "hvc1")
+	}
+	return append(args,
+		"-fflags", "+genpts",
+		"-movflags", "frag_keyframe+empty_moov+default_base_moof",
+		"-f", "mp4",
+		"-y", "pipe:1",
+	)
+}
+
+type tailBuf struct {
+	max int
+	buf []byte
+}
+
+func (t *tailBuf) Write(p []byte) (int, error) {
+	t.buf = append(t.buf, p...)
+	if len(t.buf) > t.max {
+		t.buf = t.buf[len(t.buf)-t.max:]
+	}
+	return len(p), nil
+}
+
+// StreamFragmentedMP4 pipes an RTSP playback stream through ffmpeg using
+// buildArgs(true) (-tag:v hvc1 for Safari/iOS HEVC compatibility), and retries
+// once with buildArgs(false) if zero bytes were emitted and ffmpeg rejects
+// -tag:v hvc1 on an H.264 stream.
+func StreamFragmentedMP4(ctx context.Context, w io.Writer, buildArgs func(useHVC1Tag bool) []string) error {
+	cw := &CountingWriter{W: w}
+	runOnce := func(useHVC1Tag bool) (string, error) {
+		cmd := exec.CommandContext(ctx, "ffmpeg", buildArgs(useHVC1Tag)...)
+		cmd.Stdout = cw
+		stderr := &tailBuf{max: 4096}
+		cmd.Stderr = stderr
+		err := cmd.Run()
+		return string(stderr.buf), err
+	}
+	errText, err := runOnce(true)
+	if err != nil && cw.N == 0 && ctx.Err() == nil && IsHVC1TagIncompatible(errText) {
+		retryText, retryErr := runOnce(false)
+		if retryErr == nil {
+			return nil
+		}
+		err, errText = retryErr, retryText
+	}
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, tail(errText, 300))
+	}
+	return nil
+}
+
+func buildConcatArgs(listPath, outPath string, matroska, dropAudio, useHVC1Tag bool) []string {
+	args := []string{
+		"-nostdin",
+		"-f", "concat", "-safe", "0", "-i", listPath,
+	}
+	if !matroska && dropAudio {
+		args = append(args, "-map", "0:v:0", "-c:v", "copy", "-an")
+	} else {
+		args = append(args, "-c", "copy")
+	}
+	args = append(args, "-avoid_negative_ts", "make_zero")
+	if matroska {
+		return append(args, "-f", "matroska", "-y", outPath)
+	}
+	if useHVC1Tag {
+		// HEVC-in-MP4 for Safari/iOS; omitted on H.264 retry if rejected by older ffmpeg.
+		args = append(args, "-tag:v", "hvc1")
+	}
+	return append(args, "-movflags", "+faststart", "-y", outPath)
+}
+
+func runConcatFallbacks(ctx context.Context, matroska bool, firstErrText string, firstErr error, attempt func(dropAudio, useHVC1Tag bool) (string, error)) (string, error) {
+	if firstErr == nil || matroska || ctx.Err() != nil {
+		return firstErrText, firstErr
+	}
+	var seq [][2]bool
+	if IsHVC1TagIncompatible(firstErrText) {
+		seq = [][2]bool{{false, false}, {true, false}}
+	} else {
+		seq = [][2]bool{{true, true}, {true, false}}
+	}
+	for _, cfg := range seq {
+		if ctx.Err() != nil {
+			break
+		}
+		if _, err := attempt(cfg[0], cfg[1]); err == nil {
+			return "", nil
+		}
+	}
+	return firstErrText, firstErr
+}
+
 // buildSem serializes whole-file builds process-wide: one build already runs
 // up to 10 ffmpeg processes and holds hundreds of MB of /tmp (a ~1 GB tmpfs on
 // the deploy boxes), so concurrent builds — typically a user re-clicking the
@@ -209,45 +333,20 @@ func fastRemux(ctx context.Context, w io.Writer, chunks []Chunk, opts remuxOpts)
 	}
 
 	outPath := filepath.Join(dir, "out.mp4")
-	outArgs := []string{
-		"-nostdin",
-		"-f", "concat", "-safe", "0", "-i", listPath,
-		"-c", "copy",
-		"-avoid_negative_ts", "make_zero",
-	}
 	if opts.matroska {
 		outPath = filepath.Join(dir, "out.mkv")
-		outArgs = append(outArgs, "-f", "matroska")
-	} else {
-		outArgs = append(outArgs,
-			"-tag:v", "hvc1", // HEVC-in-MP4 for Safari/iOS; harmless for H.264
-			"-movflags", "+faststart",
-		)
 	}
-	cmd := exec.CommandContext(ctx, "ffmpeg", append(outArgs, "-y", outPath)...)
-	var errBuf strings.Builder
-	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil {
-		if !opts.matroska && ctx.Err() == nil {
-			noAudArgs := []string{
-				"-nostdin",
-				"-f", "concat", "-safe", "0", "-i", listPath,
-				"-map", "0:v:0", "-c:v", "copy", "-an",
-				"-avoid_negative_ts", "make_zero",
-				"-tag:v", "hvc1",
-				"-movflags", "+faststart",
-				"-y", outPath,
-			}
-			var retryBuf strings.Builder
-			retryCmd := exec.CommandContext(ctx, "ffmpeg", noAudArgs...)
-			retryCmd.Stderr = &retryBuf
-			if retryErr := retryCmd.Run(); retryErr == nil {
-				err = nil
-			}
-		}
-		if err != nil {
-			return fmt.Errorf("mediaexport: concat: %w: %s", err, tail(errBuf.String(), 300))
-		}
+	runConcat := func(dropAudio, useHVC1Tag bool) (string, error) {
+		var errBuf strings.Builder
+		cmd := exec.CommandContext(ctx, "ffmpeg", buildConcatArgs(listPath, outPath, opts.matroska, dropAudio, useHVC1Tag)...)
+		cmd.Stderr = &errBuf
+		err := cmd.Run()
+		return errBuf.String(), err
+	}
+	errText, err := runConcat(false, true)
+	errText, err = runConcatFallbacks(ctx, opts.matroska, errText, err, runConcat)
+	if err != nil {
+		return fmt.Errorf("mediaexport: concat: %w: %s", err, tail(errText, 300))
 	}
 
 	f, err := os.Open(outPath)

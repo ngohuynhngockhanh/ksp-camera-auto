@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"os/exec"
 	"time"
 
 	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mediaexport"
@@ -28,24 +27,6 @@ func StreamPlaybackFast(ctx context.Context, w io.Writer, host string, port int,
 // ffmpeg -c copy remux is light (no transcode) but can run for a while.
 var playbackSem = make(chan struct{}, 4)
 
-// tailWriter keeps only the last max bytes written to it, so ffmpeg's
-// continuous progress output on a long (hours) playback can be captured for
-// an error message without growing unbounded. Copied from dahua's tailWriter
-// rather than imported — internal/hik deliberately doesn't depend on
-// internal/dahua for anything but the shared dahua.Recording type.
-type tailWriter struct {
-	max int
-	buf []byte
-}
-
-func (t *tailWriter) Write(p []byte) (int, error) {
-	t.buf = append(t.buf, p...)
-	if len(t.buf) > t.max {
-		t.buf = t.buf[len(t.buf)-t.max:]
-	}
-	return len(p), nil
-}
-
 // playbackRTSPURL builds Hikvision's RTSP playback-by-time URL for a channel.
 // channel is the native (1-based) Hikvision channel number; trackID =
 // channel*100+1 (same convention as SearchTrack — verified live: 101 =
@@ -65,22 +46,23 @@ func playbackRTSPURL(host, user, pass string, channel int, start, end time.Time)
 	return u.String()
 }
 
+func buildPlaybackFFmpegArgs(rtsp string, useHVC1Tag bool) []string {
+	return mediaexport.BuildFragmentedMP4Args(rtsp, 0, true, useHVC1Tag)
+}
+
+func isHVC1TagIncompatible(errText string) bool {
+	return mediaexport.IsHVC1TagIncompatible(errText)
+}
+
 // StreamPlayback streams the recording for channel over [start,end] to w as a
 // fragmented MP4. It pulls Hikvision's RTSP playback-by-time and remuxes with
-// ffmpeg (-c copy, no transcode) — IDENTICAL args to dahua.StreamPlayback —
-// piping ffmpeg's stdout straight to w with nothing written to the box's own
-// disk. RTSP honors the exact start/end (unlike StreamNative's native
-// download, which is segment-coarse — see download.go), so this is the
-// accurate, browser-playable path.
+// ffmpeg (-c copy, no transcode), piping ffmpeg's stdout straight to w with
+// nothing written to the box's own disk. Starts with -tag:v hvc1 for Safari/iOS
+// HEVC playback and retries without the tag if ffmpeg rejects it for H.264.
 //
 // start/end are device-local wall-clock times (the review UI's convention),
-// sent to the NVR verbatim — no UTC conversion (the device reads its own
-// recordings in local time; see isapi.hikTimeLayout). port is accepted for
-// signature parity with StreamNative (which needs it to reach ISAPI over HTTP)
-// but unused here — Hikvision RTSP playback is always on the fixed port 554.
-//
-// Acquiring a concurrency slot can block; it respects ctx so a client that
-// disconnects while queued doesn't hold the request.
+// sent to the NVR verbatim — no UTC conversion. port is unused here (RTSP
+// playback is always on fixed port 554).
 func StreamPlayback(ctx context.Context, w io.Writer, host string, port int, user, pass string, channel int, start, end time.Time) error {
 	select {
 	case playbackSem <- struct{}{}:
@@ -90,38 +72,10 @@ func StreamPlayback(ctx context.Context, w io.Writer, host string, port int, use
 	}
 
 	rtsp := playbackRTSPURL(host, user, pass, channel, start, end)
-	cmd := exec.CommandContext(ctx, "ffmpeg",
-		"-nostdin",
-		"-rtsp_transport", "tcp",
-		"-i", rtsp,
-		"-map", "0:v:0",
-		"-c:v", "copy",
-		"-an",
-		// default fourcc for an HEVC track in MP4 is "hev1", but Safari/iOS
-		// only plays HEVC-in-MP4 when the track is tagged "hvc1" — hev1 is
-		// silently refused (Chrome/Firefox can't decode HEVC at all either
-		// way, tag notwithstanding). Retagging is free: it's still -c copy,
-		// no re-encode, just rewriting the sample entry fourcc.
-		"-tag:v", "hvc1",
-		"-fflags", "+genpts",
-		"-movflags", "frag_keyframe+empty_moov+default_base_moof",
-		"-f", "mp4",
-		"-y", "pipe:1",
-	)
-	cmd.Stdout = w
-	stderr := &tailWriter{max: 4096}
-	cmd.Stderr = stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("hik: ffmpeg playback %s: %w: %s", host, err, tail(stderr.buf, 300))
+	if err := mediaexport.StreamFragmentedMP4(ctx, w, func(useHVC1 bool) []string {
+		return buildPlaybackFFmpegArgs(rtsp, useHVC1)
+	}); err != nil {
+		return fmt.Errorf("hik: ffmpeg playback %s: %w", host, err)
 	}
 	return nil
-}
-
-// tail returns the last n bytes of buf as a string (for a short error-message
-// snippet of ffmpeg's captured stderr tail).
-func tail(buf []byte, n int) string {
-	if len(buf) > n {
-		buf = buf[len(buf)-n:]
-	}
-	return string(buf)
 }

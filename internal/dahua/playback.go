@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"os/exec"
 	"time"
+
+	"github.com/ngohuynhngockhanh/ksp-camera-auto/internal/mediaexport"
 )
 
 // playbackConcurrency bounds simultaneous playback remux processes across the
@@ -75,24 +76,10 @@ func StreamPlayback(ctx context.Context, w io.Writer, host, user, pass string, c
 	}
 
 	rtsp := playbackRTSPURL(host, user, pass, channel, start, end)
-	cmd := exec.CommandContext(ctx, "ffmpeg",
-		"-nostdin",
-		"-rtsp_transport", "tcp",
-		"-i", rtsp,
-		"-map", "0:v:0",
-		"-c:v", "copy",
-		"-tag:v", "hvc1",
-		"-an",
-		"-fflags", "+genpts",
-		"-movflags", "frag_keyframe+empty_moov+default_base_moof",
-		"-f", "mp4",
-		"-y", "pipe:1",
-	)
-	cmd.Stdout = w
-	stderr := &tailWriter{max: 4096}
-	cmd.Stderr = stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("dahua: ffmpeg playback %s: %w: %s", host, err, snapshotTail(stderr.buf, 300))
+	if err := mediaexport.StreamFragmentedMP4(ctx, w, func(useHVC1 bool) []string {
+		return mediaexport.BuildFragmentedMP4Args(rtsp, 0, true, useHVC1)
+	}); err != nil {
+		return fmt.Errorf("dahua: ffmpeg playback %s: %w", host, err)
 	}
 	return nil
 }
